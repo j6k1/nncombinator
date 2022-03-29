@@ -19,6 +19,22 @@ pub trait Train<U,OP>: ForwardAll where OP: Optimizer<U> {
     type OutStack: Stack<Head=Self::Output>;
     fn train(&mut self, input:Self::Input, optimizer:&mut OP) -> Self::OutStack;
 }
+pub trait AddLayer: ForwardAll where Self: Sized {
+    fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
+}
+pub trait AddLayerTrain<U,OP>: Train<U,OP> where OP: Optimizer<U>, Self: Sized {
+    fn add_layer_train<C,F>(self,f:F) -> C where C: Train<U,OP>, F: FnOnce(Self) -> C;
+}
+impl<T> AddLayer for T where T: ForwardAll + Sized {
+    fn add_layer<C, F>(self, f: F) -> C where C: ForwardAll, F: FnOnce(Self) -> C {
+        f(self)
+    }
+}
+impl<T,U,OP> AddLayerTrain<U,OP> for T where T: Train<U,OP> + Sized, OP: Optimizer<U> {
+    fn add_layer_train<C, F>(self, f: F) -> C where C: ForwardAll, F: FnOnce(Self) -> C {
+        f(self)
+    }
+}
 struct InputLayer<O> {
     o:PhantomData<O>
 }

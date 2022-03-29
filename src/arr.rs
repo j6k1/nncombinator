@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::path::Iter;
 use std::sync::Arc;
 
@@ -48,6 +48,28 @@ impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2> where T: Default {
         Arr2IterMut(&mut *self.arr)
     }
 }
+impl<T,const N1:usize, const N2:usize> Index<(usize,usize)> for Arr2<T,N1,N2> where T: Default {
+    type Output = T;
+
+    fn index(&self, (y,x): (usize, usize)) -> &Self::Output {
+        if y >= N1 {
+            panic!("index out of bounds: the len is {} but the index is {}",N1,y);
+        } else if x >= N2 {
+            panic!("index out of bounds: the len is {} but the index is {}",N2,x);
+        }
+        &self.arr[y * N2 + x]
+    }
+}
+impl<T,const N1:usize, const N2:usize> IndexMut<(usize,usize)> for Arr2<T,N1,N2> where T: Default {
+    fn index_mut(&mut self, (y,x): (usize, usize)) -> &mut Self::Output {
+        if y >= N1 {
+            panic!("index out of bounds: the len is {} but the index is {}",N1,y);
+        } else if x >= N2 {
+            panic!("index out of bounds: the len is {} but the index is {}",N2,x);
+        }
+        &mut self.arr[y * N2 + x]
+    }
+}
 pub struct Arr3<T,const N1:usize, const N2:usize, const N3:usize> where T: Default {
     arr:Box<[T]>
 }
@@ -69,6 +91,32 @@ impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: D
         Arr3IterMut(&mut *self.arr)
     }
 }
+impl<T,const N1:usize, const N2:usize, const N3:usize> Index<(usize,usize,usize)> for Arr3<T,N1,N2,N3> where T: Default {
+    type Output = T;
+
+    fn index(&self, (y,x,z): (usize, usize, usize)) -> &Self::Output {
+        if z >= N1 {
+            panic!("index out of bounds: the len is {} but the index is {}",N1,z);
+        } else if y >= N2 {
+            panic!("index out of bounds: the len is {} but the index is {}",N2,y);
+        } else if x >= N3 {
+            panic!("index out of bounds: the len is {} but the index is {}",N3,x);
+        }
+        &self.arr[z * N2 * N3 + y * N3 + x]
+    }
+}
+impl<T,const N1:usize, const N2:usize, const N3:usize> IndexMut<(usize,usize,usize)> for Arr3<T,N1,N2,N3> where T: Default {
+    fn index_mut(&mut self, (z,y,x): (usize, usize, usize)) -> &mut Self::Output {
+        if z >= N1 {
+            panic!("index out of bounds: the len is {} but the index is {}",N1,z);
+        } else if y >= N2 {
+            panic!("index out of bounds: the len is {} but the index is {}",N2,y);
+        } else if x >= N3 {
+            panic!("index out of bounds: the len is {} but the index is {}",N3,x);
+        }
+        &mut self.arr[z * N2 * N3 + y * N3 + x]
+    }
+}
 pub struct Arr4<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> where T: Default {
     arr:Box<[T]>
 }
@@ -88,6 +136,38 @@ impl<T,const N1:usize,const N2:usize,const N3:usize, const N4:usize> Arr4<T,N1,N
 
     pub fn iter_mut<'a>(&'a mut self) -> Arr4IterMut<'a,T,N2,N3,N4> {
         Arr4IterMut(&mut *self.arr)
+    }
+}
+impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> Index<(usize,usize,usize,usize)> for Arr4<T,N1,N2,N3,N4>
+    where T: Default {
+    type Output = T;
+
+    fn index(&self, (i,y,x,z): (usize, usize, usize, usize)) -> &Self::Output {
+        if i >= N1 {
+            panic!("index out of bounds: the len is {} but the index is {}",N1,i);
+        } else if z >= N2 {
+            panic!("index out of bounds: the len is {} but the index is {}",N2,z);
+        } else if y >= N3 {
+            panic!("index out of bounds: the len is {} but the index is {}",N3,y);
+        } else if x >= N4 {
+            panic!("index out of bounds: the len is {} but the index is {}",N4,x);
+        }
+        &self.arr[i * N2 * N3 * N4 + z * N3 * N4 + y * N4 + x]
+    }
+}
+impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> IndexMut<(usize,usize,usize,usize)> for Arr4<T,N1,N2,N3,N4>
+    where T: Default {
+    fn index_mut(&mut self, (i,y,x,z): (usize, usize, usize, usize)) -> &mut Self::Output {
+        if i >= N1 {
+            panic!("index out of bounds: the len is {} but the index is {}",N1,i);
+        } else if z >= N2 {
+            panic!("index out of bounds: the len is {} but the index is {}",N2,z);
+        } else if y >= N3 {
+            panic!("index out of bounds: the len is {} but the index is {}",N3,y);
+        } else if x >= N4 {
+            panic!("index out of bounds: the len is {} but the index is {}",N4,x);
+        }
+        &mut self.arr[i * N2 * N3 * N4 + z * N3 * N4 + y * N4 + x]
     }
 }
 pub struct ArrView<'a,T,const N:usize> {

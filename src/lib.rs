@@ -38,22 +38,6 @@ impl Stack for Nil {
         f(&())
     }
 }
-pub trait Forward<O> {
-    type Input;
-    fn forward(&self,input:&Self::Input) -> O;
-}
-pub trait ForwardAll {
-    type Input;
-    type Output;
-    fn forward_all(&self,input:Self::Input) -> Self::Output;
-}
-pub trait Backward<I,U,OP: Optimizer<U>> {
-    fn backward(&mut self,input:I,optimizer:&mut OP);
-}
-pub trait Train<U,OP>: ForwardAll where OP: Optimizer<U> {
-    type OutStack: Stack<Head=Self::Output>;
-    fn train(&mut self, input:Self::Input, optimizer:&mut OP) -> Self::OutStack;
-}
 pub trait Optimizer<U> {
     fn update(&mut self,w:&U,e:U) -> U;
 }

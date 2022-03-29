@@ -1,11 +1,24 @@
 use std::marker::PhantomData;
 use crate::arr::Arr;
-use crate::{Cons, Nil, Stack, Train};
-use crate::Forward;
-use crate::Backward;
+use crate::{Cons, Nil, Stack};
 use crate::Optimizer;
-use crate::ForwardAll;
 
+pub trait Forward<O> {
+    type Input;
+    fn forward(&self,input:&Self::Input) -> O;
+}
+pub trait ForwardAll {
+    type Input;
+    type Output;
+    fn forward_all(&self,input:Self::Input) -> Self::Output;
+}
+pub trait Backward<I,U,OP: Optimizer<U>> {
+    fn backward(&mut self,input:I,optimizer:&mut OP);
+}
+pub trait Train<U,OP>: ForwardAll where OP: Optimizer<U> {
+    type OutStack: Stack<Head=Self::Output>;
+    fn train(&mut self, input:Self::Input, optimizer:&mut OP) -> Self::OutStack;
+}
 struct InputLayer<O> {
     o:PhantomData<O>
 }

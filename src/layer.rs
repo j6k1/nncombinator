@@ -35,7 +35,7 @@ impl<T,U,OP> AddLayerTrain<U,OP> for T where T: Train<U,OP> + Sized, OP: Optimiz
         f(self)
     }
 }
-struct InputLayer<O> {
+pub struct InputLayer<O> {
     o:PhantomData<O>
 }
 impl<O> InputLayer<O> {
@@ -59,14 +59,14 @@ impl<U,O,OP> Train<U,OP> for InputLayer<O> where OP: Optimizer<U> {
         Cons(Nil,input)
     }
 }
-struct LinearLayer<U,P,const NI:usize,const NO:usize>
-    where P: Forward<Arr<U,NI>>, U: Default + Clone + Copy {
+pub struct LinearLayer<U,P,const NI:usize,const NO:usize>
+    where P: ForwardAll, U: Default + Clone + Copy {
     parent:P,
     units:Vec<Vec<U>>
 }
 impl<U,P,const NI:usize,const NO:usize> LinearLayer<U,P,NI,NO>
-    where P: Forward<Arr<U,NI>>, U: Default + Clone + Copy {
-    fn new<UI: FnMut() -> U, BI: FnMut() -> U>(parent:P,mut ui:UI,mut bi:BI) -> LinearLayer<U,P,NI,NO> {
+    where P: ForwardAll, U: Default + Clone + Copy {
+    pub fn new<UI: FnMut() -> U, BI: FnMut() -> U>(parent:P,mut ui:UI,mut bi:BI) -> LinearLayer<U,P,NI,NO> {
         let mut units:Vec<Vec<U>> = (0..(NI)).map(|_| (0..NO).map(|_| ui()).collect()).collect();
         units.push((0..NO).map(|_| bi()).collect());
 
@@ -77,7 +77,7 @@ impl<U,P,const NI:usize,const NO:usize> LinearLayer<U,P,NI,NO>
     }
 }
 impl<U,P,const NI:usize,const NO:usize> Forward<Arr<U,NO>> for LinearLayer<U,P,NI,NO>
-    where P: Forward<Arr<U,NI>> + ForwardAll<Output=Arr<U,NI>>, U: Default + Clone + Copy {
+    where P: ForwardAll<Output=Arr<U,NI>>, U: Default + Clone + Copy {
 
     type Input = Arr<U,NI>;
 
@@ -86,7 +86,7 @@ impl<U,P,const NI:usize,const NO:usize> Forward<Arr<U,NO>> for LinearLayer<U,P,N
     }
 }
 impl<U,P,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,P,NI,NO>
-    where P: Forward<Arr<U,NI>> + ForwardAll<Output=Arr<U,NI>>,
+    where P: ForwardAll<Output=Arr<U,NI>>,
           U: Default + Clone + Copy {
     type Input = <P as ForwardAll>::Input;
     type Output = Arr<U,NO>;

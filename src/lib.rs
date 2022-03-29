@@ -43,9 +43,12 @@ pub trait Optimizer<U> {
 }
 #[cfg(test)]
 mod tests {
+    use crate::arr::Arr;
+    use crate::layer::{AddLayer, InputLayer, LinearLayer};
+
     #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+    fn build_layers() {
+        let mut i:InputLayer<Arr<f32,4>> = InputLayer::new();
+        let l = i.add_layer(|l| LinearLayer::<_,_,4,1>::new(l,|| 1., || 0.));
     }
 }

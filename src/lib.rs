@@ -1,5 +1,9 @@
+use crate::ope::UnitValue;
+
 pub mod ope;
 pub mod arr;
+pub mod optimizer;
+pub mod lossfunction;
 pub mod layer;
 
 pub trait Stack {
@@ -38,9 +42,6 @@ impl Stack for Nil {
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
         f(&())
     }
-}
-pub trait Optimizer<U> {
-    fn update(&mut self,w:&U,e:U) -> U;
 }
 #[cfg(test)]
 mod tests {

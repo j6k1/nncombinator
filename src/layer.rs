@@ -2,7 +2,8 @@ use std::marker::PhantomData;
 use crate::arr::{Arr, Arr2};
 use crate::{Cons, Nil, Stack};
 use crate::ope::UnitValue;
-use crate::Optimizer;
+use crate::lossfunction::*;
+use crate::optimizer::*;
 
 pub trait Forward<O> {
     type Input;
@@ -21,7 +22,7 @@ pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     fn pre_train<OP: Optimizer<U>>(&mut self, input:Self::Input, optimizer:&mut OP) -> Self::OutStack;
 }
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
-    fn train<OP: Optimizer<U>>(&mut self, input:Self::Input, optimizer:&mut OP);
+    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::Input, optimizer:&mut OP, lossf:&L);
 }
 pub trait Activation<U,T> where U: UnitValue<U> {
     fn apply(&self,input:&T) -> T;
@@ -177,7 +178,7 @@ impl<U,P,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,NI,NO>
 impl<U,P,const NI:usize,const NO:usize> Train<U> for LinearLayer<U,P,NI,NO>
     where P: PreTrain<U> + ForwardAll<Output=Arr<U,NI>>,
           U: Default + Clone + Copy + UnitValue<U> {
-    fn train<OP: Optimizer<U>>(&mut self, input: Self::Input, optimizer: &mut OP) {
+    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::Input, optimizer: &mut OP, lossf:&L) {
         let r = self.pre_train(input, optimizer);
     }
 }

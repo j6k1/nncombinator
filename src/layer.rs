@@ -23,6 +23,42 @@ pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
     fn train<OP: Optimizer<U>>(&mut self, input:Self::Input, optimizer:&mut OP);
 }
+pub trait Activation<U,T> where U: UnitValue<U> {
+    fn apply(&self,input:&T) -> T;
+}
+pub struct ActivationLayer<U,P,A,T> where P: ForwardAll, U: UnitValue<U>, A: Activation<U,T> {
+    parent:P,
+    f:A,
+    u:PhantomData<U>,
+    t:PhantomData<T>
+}
+impl<U,P,A,T> ActivationLayer<U,P,A,T> where P: ForwardAll<Output=T>, U: UnitValue<U>, A: Activation<U,T> {
+    pub fn new(parent:P,f:A) -> ActivationLayer<U,P,A,T> {
+        ActivationLayer {
+            parent:parent,
+            f:f,
+            u:PhantomData::<U>,
+            t:PhantomData::<T>
+        }
+    }
+}
+impl<U,P,A,T> ForwardAll for ActivationLayer<U,P,A,T> where P: ForwardAll<Output=T>,
+                                   U: Default + Clone + Copy + UnitValue<U>,
+                                   A: Activation<U,T> {
+    type Input = <P as ForwardAll>::Input;
+    type Output = <P as ForwardAll>::Output;
+    fn forward_all(&self, input: Self::Input) -> Self::Output {
+        self.forward(&self.parent.forward_all(input))
+    }
+}
+impl<U,P,A,T> Forward<T> for ActivationLayer<U,P,A,T> where P: ForwardAll<Output=T>,
+                                                            U: Default + Clone + Copy + UnitValue<U>,
+                                                            A: Activation<U,T> {
+    type Input = <P as ForwardAll>::Output;
+    fn forward(&self, input: &Self::Input) -> T {
+        self.f.apply(input)
+    }
+}
 pub trait AddLayer: ForwardAll where Self: Sized {
     fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
 }

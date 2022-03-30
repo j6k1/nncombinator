@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use crate::arr::Arr;
 use crate::{Cons, Nil, Stack};
+use crate::ope::UnitValue;
 use crate::Optimizer;
 
 pub trait Forward<O> {
@@ -12,20 +13,20 @@ pub trait ForwardAll {
     type Output;
     fn forward_all(&self,input:Self::Input) -> Self::Output;
 }
-pub trait Backward<I,U> {
+pub trait Backward<I,U> where U: UnitValue<U> {
     fn backward<OP: Optimizer<U>>(&mut self,input:I,optimizer:&mut OP);
 }
-pub trait PreTrain<U>: ForwardAll {
+pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     type OutStack: Stack<Head=Self::Output>;
     fn pre_train<OP: Optimizer<U>>(&mut self, input:Self::Input, optimizer:&mut OP) -> Self::OutStack;
 }
-pub trait Train<U>: PreTrain<U> {
+pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
     fn train<OP: Optimizer<U>>(&mut self, input:Self::Input, optimizer:&mut OP);
 }
 pub trait AddLayer: ForwardAll where Self: Sized {
     fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
 }
-pub trait AddLayerTrain<U>: PreTrain<U> where Self: Sized {
+pub trait AddLayerTrain<U>: PreTrain<U> where Self: Sized, U: UnitValue<U> {
     fn add_layer_train<C,F>(self,f:F) -> C where C: Train<U>, F: FnOnce(Self) -> C;
 }
 impl<T> AddLayer for T where T: ForwardAll + Sized {
@@ -33,16 +34,16 @@ impl<T> AddLayer for T where T: ForwardAll + Sized {
         f(self)
     }
 }
-impl<T,U> AddLayerTrain<U> for T where T: PreTrain<U> + Sized {
+impl<T,U> AddLayerTrain<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
     fn add_layer_train<C, F>(self, f: F) -> C where C: Train<U>, F: FnOnce(Self) -> C {
         f(self)
     }
 }
-pub struct InputLayer<U,O> {
+pub struct InputLayer<U,O> where U: UnitValue<U> {
     u:PhantomData<U>,
     o:PhantomData<O>
 }
-impl<U,O> InputLayer<U,O> {
+impl<U,O> InputLayer<U,O> where U: UnitValue<U> {
     pub fn new() -> InputLayer<U,O> {
         InputLayer {
             u:PhantomData::<U>,
@@ -50,14 +51,14 @@ impl<U,O> InputLayer<U,O> {
         }
     }
 }
-impl<U,O> ForwardAll for InputLayer<U,O> {
+impl<U,O> ForwardAll for InputLayer<U,O> where U: UnitValue<U> {
     type Input = O;
     type Output = Self::Input;
     fn forward_all(&self,input:Self::Input) -> Self::Output {
         input
     }
 }
-impl<U,O> PreTrain<U> for InputLayer<U,O> {
+impl<U,O> PreTrain<U> for InputLayer<U,O> where U: UnitValue<U> {
     type OutStack = Cons<Nil,Self::Output>;
 
     fn pre_train<OP: Optimizer<U>>(&mut self, input:Self::Input, optimizer:&mut OP) -> Self::OutStack {
@@ -65,12 +66,12 @@ impl<U,O> PreTrain<U> for InputLayer<U,O> {
     }
 }
 pub struct LinearLayer<U,P,const NI:usize,const NO:usize>
-    where P: ForwardAll, U: Default + Clone + Copy {
+    where P: ForwardAll, U: Default + Clone + Copy + UnitValue<U> {
     parent:P,
     units:Vec<Vec<U>>
 }
 impl<U,P,const NI:usize,const NO:usize> LinearLayer<U,P,NI,NO>
-    where P: ForwardAll, U: Default + Clone + Copy {
+    where P: ForwardAll, U: Default + Clone + Copy + UnitValue<U> {
     pub fn new<UI: FnMut() -> U, BI: FnMut() -> U>(parent:P,mut ui:UI,mut bi:BI) -> LinearLayer<U,P,NI,NO> {
         let mut units:Vec<Vec<U>> = (0..(NI)).map(|_| (0..NO).map(|_| ui()).collect()).collect();
         units.push((0..NO).map(|_| bi()).collect());
@@ -82,7 +83,7 @@ impl<U,P,const NI:usize,const NO:usize> LinearLayer<U,P,NI,NO>
     }
 }
 impl<U,P,const NI:usize,const NO:usize> Forward<Arr<U,NO>> for LinearLayer<U,P,NI,NO>
-    where P: ForwardAll<Output=Arr<U,NI>>, U: Default + Clone + Copy {
+    where P: ForwardAll<Output=Arr<U,NI>>, U: Default + Clone + Copy + UnitValue<U> {
 
     type Input = Arr<U,NI>;
 
@@ -92,7 +93,7 @@ impl<U,P,const NI:usize,const NO:usize> Forward<Arr<U,NO>> for LinearLayer<U,P,N
 }
 impl<U,P,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,P,NI,NO>
     where P: ForwardAll<Output=Arr<U,NI>>,
-          U: Default + Clone + Copy {
+          U: Default + Clone + Copy + UnitValue<U> {
     type Input = <P as ForwardAll>::Input;
     type Output = Arr<U,NO>;
     fn forward_all(&self, input: Self::Input) -> Arr<U,NO> {
@@ -101,7 +102,7 @@ impl<U,P,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,P,NI,NO>
 }
 impl<U,P,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,NI,NO>
     where P: PreTrain<U> + ForwardAll<Output=Arr<U,NI>>,
-          U: Default + Clone + Copy {
+          U: Default + Clone + Copy + UnitValue<U> {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack,Self::Output>;
 
     fn pre_train<OP: Optimizer<U>>(&mut self, input: Self::Input, optimizer: &mut OP) -> Self::OutStack {
@@ -113,7 +114,7 @@ impl<U,P,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,NI,NO>
 }
 impl<U,P,const NI:usize,const NO:usize> Train<U> for LinearLayer<U,P,NI,NO>
     where P: PreTrain<U> + ForwardAll<Output=Arr<U,NI>>,
-          U: Default + Clone + Copy {
+          U: Default + Clone + Copy + UnitValue<U> {
     fn train<OP: Optimizer<U>>(&mut self, input: Self::Input, optimizer: &mut OP) {
         let r = self.pre_train(input, optimizer);
     }

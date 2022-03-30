@@ -15,6 +15,12 @@ impl Bias for f64 {
         1f64
     }
 }
+impl Bias for f32 {
+    #[inline]
+    fn bias() -> f32 {
+        1f32
+    }
+}
 pub trait Max {
     fn max(&self,other:&Self) -> Self;
 }
@@ -133,3 +139,5 @@ impl Abs for f32 {
         (*self).abs()
     }
 }
+impl UnitValue<f64> for f64 {}
+impl UnitValue<f32> for f32 {}

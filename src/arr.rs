@@ -1,7 +1,4 @@
-use std::cmp::Ordering;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
-use std::path::Iter;
-use std::sync::Arc;
 
 pub struct Arr<T,const N:usize> where T: Default {
     arr:Box<[T]>
@@ -204,7 +201,7 @@ impl<'a,T,const N:usize> Iterator for Arr2Iter<'a,T,N> {
     type Item = ArrView<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut slice = std::mem::replace(&mut self.0, &mut []);
+        let slice = std::mem::replace(&mut self.0, &mut []);
         if slice.is_empty() {
             None
         } else {
@@ -229,7 +226,7 @@ impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N> {
     type Item = ArrViewMut<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut slice = std::mem::replace(&mut self.0, &mut []);
+        let slice = std::mem::replace(&mut self.0, &mut []);
         if slice.is_empty() {
             None
         } else {
@@ -254,7 +251,7 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3Iter<'a,T,N1,N2> {
     type Item = Arr2Iter<'a,T,N2>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut slice = std::mem::replace(&mut self.0, &mut []);
+        let slice = std::mem::replace(&mut self.0, &mut []);
         if slice.is_empty() {
             None
         } else {
@@ -277,7 +274,7 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3IterMut<'a,T,N1,N2> {
     type Item = Arr2IterMut<'a,T,N2>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut slice = std::mem::replace(&mut self.0, &mut []);
+        let slice = std::mem::replace(&mut self.0, &mut []);
         if slice.is_empty() {
             None
         } else {
@@ -300,7 +297,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4Iter<'a
     type Item = Arr3Iter<'a,T,N2,N3>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut slice = std::mem::replace(&mut self.0, &mut []);
+        let slice = std::mem::replace(&mut self.0, &mut []);
         if slice.is_empty() {
             None
         } else {
@@ -323,7 +320,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4IterMut
     type Item = Arr3IterMut<'a,T,N2,N3>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut slice = std::mem::replace(&mut self.0, &mut []);
+        let slice = std::mem::replace(&mut self.0, &mut []);
         if slice.is_empty() {
             None
         } else {

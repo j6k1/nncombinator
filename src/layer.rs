@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use crate::arr::Arr;
+use crate::arr::{Arr, Arr2};
 use crate::{Cons, Nil, Stack};
 use crate::ope::UnitValue;
 use crate::Optimizer;
@@ -13,8 +13,8 @@ pub trait ForwardAll {
     type Output;
     fn forward_all(&self,input:Self::Input) -> Self::Output;
 }
-pub trait Backward<I,U> where U: UnitValue<U> {
-    fn backward<OP: Optimizer<U>>(&mut self,input:I,optimizer:&mut OP);
+pub trait Backward<I,U,S>: PreTrain<U> where U: UnitValue<U>, S: Stack {
+    fn backward<OP: Optimizer<U>>(&mut self,input:I,stack:S,optimizer:&mut OP);
 }
 pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     type OutStack: Stack<Head=Self::Output>;
@@ -68,17 +68,29 @@ impl<U,O> PreTrain<U> for InputLayer<U,O> where U: UnitValue<U> {
 pub struct LinearLayer<U,P,const NI:usize,const NO:usize>
     where P: ForwardAll, U: Default + Clone + Copy + UnitValue<U> {
     parent:P,
-    units:Vec<Vec<U>>
+    units:Arr2<U,NI,NO>,
+    bias:Arr<U,NO>
 }
 impl<U,P,const NI:usize,const NO:usize> LinearLayer<U,P,NI,NO>
     where P: ForwardAll, U: Default + Clone + Copy + UnitValue<U> {
     pub fn new<UI: FnMut() -> U, BI: FnMut() -> U>(parent:P,mut ui:UI,mut bi:BI) -> LinearLayer<U,P,NI,NO> {
-        let mut units:Vec<Vec<U>> = (0..(NI)).map(|_| (0..NO).map(|_| ui()).collect()).collect();
-        units.push((0..NO).map(|_| bi()).collect());
+        let mut units:Arr2<U,NI,NO> = Arr2::new();
+        let mut bias:Arr<U,NO> = Arr::new();
+
+        for mut it in units.iter_mut() {
+            for it in it.iter_mut() {
+                *it = ui();
+            }
+        }
+
+        for it in bias.iter_mut() {
+            *it = bi();
+        }
 
         LinearLayer {
             parent:parent,
-            units: units
+            units: units,
+            bias:bias
         }
     }
 }
@@ -88,7 +100,21 @@ impl<U,P,const NI:usize,const NO:usize> Forward<Arr<U,NO>> for LinearLayer<U,P,N
     type Input = Arr<U,NI>;
 
     fn forward(&self,input:&Self::Input) -> Arr<U,NO> {
-        Arr::new()
+        let mut output:Arr<U,NO> = Arr::new();
+
+        let bias = U::bias();
+
+        for (mut o,w) in output.iter_mut().zip(self.bias.iter()) {
+            *o += bias * *w;
+        }
+
+        for (i,u) in input.iter().zip(self.units.iter()) {
+            for (o,w) in output.iter_mut().skip(1).zip(u.iter()) {
+                *o += *i * *w;
+            }
+        }
+
+        output
     }
 }
 impl<U,P,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,P,NI,NO>

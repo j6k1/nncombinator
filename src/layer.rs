@@ -12,50 +12,55 @@ pub trait ForwardAll {
     type Output;
     fn forward_all(&self,input:Self::Input) -> Self::Output;
 }
-pub trait Backward<I,U,OP: Optimizer<U>> {
-    fn backward(&mut self,input:I,optimizer:&mut OP);
+pub trait Backward<I,U> {
+    fn backward<OP: Optimizer<U>>(&mut self,input:I,optimizer:&mut OP);
 }
-pub trait Train<U,OP>: ForwardAll where OP: Optimizer<U> {
+pub trait PreTrain<U>: ForwardAll {
     type OutStack: Stack<Head=Self::Output>;
-    fn train(&mut self, input:Self::Input, optimizer:&mut OP) -> Self::OutStack;
+    fn pre_train<OP: Optimizer<U>>(&mut self, input:Self::Input, optimizer:&mut OP) -> Self::OutStack;
+}
+pub trait Train<U>: PreTrain<U> {
+    fn train<OP: Optimizer<U>>(&mut self, input:Self::Input, optimizer:&mut OP);
 }
 pub trait AddLayer: ForwardAll where Self: Sized {
     fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
 }
-pub trait AddLayerTrain<U,OP>: Train<U,OP> where OP: Optimizer<U>, Self: Sized {
-    fn add_layer_train<C,F>(self,f:F) -> C where C: Train<U,OP>, F: FnOnce(Self) -> C;
+pub trait AddLayerTrain<U>: PreTrain<U> where Self: Sized {
+    fn add_layer_train<C,F>(self,f:F) -> C where C: Train<U>, F: FnOnce(Self) -> C;
 }
 impl<T> AddLayer for T where T: ForwardAll + Sized {
     fn add_layer<C, F>(self, f: F) -> C where C: ForwardAll, F: FnOnce(Self) -> C {
         f(self)
     }
 }
-impl<T,U,OP> AddLayerTrain<U,OP> for T where T: Train<U,OP> + Sized, OP: Optimizer<U> {
-    fn add_layer_train<C, F>(self, f: F) -> C where C: ForwardAll, F: FnOnce(Self) -> C {
+impl<T,U> AddLayerTrain<U> for T where T: PreTrain<U> + Sized {
+    fn add_layer_train<C, F>(self, f: F) -> C where C: Train<U>, F: FnOnce(Self) -> C {
         f(self)
     }
 }
-pub struct InputLayer<O> {
+pub struct InputLayer<U,O> {
+    u:PhantomData<U>,
     o:PhantomData<O>
 }
-impl<O> InputLayer<O> {
-    pub fn new() -> InputLayer<O> {
+impl<U,O> InputLayer<U,O> {
+    pub fn new() -> InputLayer<U,O> {
         InputLayer {
+            u:PhantomData::<U>,
             o:PhantomData::<O>
         }
     }
 }
-impl<O> ForwardAll for InputLayer<O> {
+impl<U,O> ForwardAll for InputLayer<U,O> {
     type Input = O;
     type Output = Self::Input;
     fn forward_all(&self,input:Self::Input) -> Self::Output {
         input
     }
 }
-impl<U,O,OP> Train<U,OP> for InputLayer<O> where OP: Optimizer<U> {
+impl<U,O> PreTrain<U> for InputLayer<U,O> {
     type OutStack = Cons<Nil,Self::Output>;
 
-    fn train(&mut self, input:Self::Input, optimizer:&mut OP) -> Self::OutStack {
+    fn pre_train<OP: Optimizer<U>>(&mut self, input:Self::Input, optimizer:&mut OP) -> Self::OutStack {
         Cons(Nil,input)
     }
 }
@@ -94,16 +99,22 @@ impl<U,P,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,P,NI,NO>
         self.forward(&self.parent.forward_all(input))
     }
 }
-impl<U,P,OP,const NI:usize,const NO:usize> Train<U,OP> for LinearLayer<U,P,NI,NO>
-    where P: Train<U,OP> + Forward<Arr<U,NI>> + ForwardAll<Output=Arr<U,NI>>,
-          U: Default + Clone + Copy,
-          OP: Optimizer<U> {
-    type OutStack = Cons<<P as Train<U,OP>>::OutStack,Self::Output>;
+impl<U,P,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,NI,NO>
+    where P: PreTrain<U> + ForwardAll<Output=Arr<U,NI>>,
+          U: Default + Clone + Copy {
+    type OutStack = Cons<<P as PreTrain<U>>::OutStack,Self::Output>;
 
-    fn train(&mut self, input: Self::Input, optimizer: &mut OP) -> Self::OutStack {
-        let r = self.parent.train(input, optimizer);
+    fn pre_train<OP: Optimizer<U>>(&mut self, input: Self::Input, optimizer: &mut OP) -> Self::OutStack {
+        let r = self.parent.pre_train(input, optimizer);
         let u = r.map(|r| self.forward(r));
 
         Cons(r,u)
+    }
+}
+impl<U,P,const NI:usize,const NO:usize> Train<U> for LinearLayer<U,P,NI,NO>
+    where P: PreTrain<U> + ForwardAll<Output=Arr<U,NI>>,
+          U: Default + Clone + Copy {
+    fn train<OP: Optimizer<U>>(&mut self, input: Self::Input, optimizer: &mut OP) {
+        let r = self.pre_train(input, optimizer);
     }
 }

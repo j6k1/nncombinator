@@ -45,11 +45,17 @@ pub trait Optimizer<U> {
 #[cfg(test)]
 mod tests {
     use crate::arr::Arr;
-    use crate::layer::{AddLayer, InputLayer, LinearLayer};
+    use crate::layer::{AddLayer, AddLayerTrain, InputLayer, LinearLayer};
 
     #[test]
     fn build_layers() {
-        let mut i:InputLayer<Arr<f32,4>> = InputLayer::new();
+        let mut i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
         let l = i.add_layer(|l| LinearLayer::<_,_,4,1>::new(l,|| 1., || 0.));
+    }
+
+    #[test]
+    fn build_train_layers() {
+        let mut i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
+        let l = i.add_layer_train(|l| LinearLayer::<_,_,4,1>::new(l,|| 1., || 0.));
     }
 }

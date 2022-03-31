@@ -18,9 +18,7 @@ pub trait ForwardAll {
 pub trait BackwardAll<U>: Train<U> where U: UnitValue<U> {
     type LossInput;
     fn backward_all<OP: Optimizer<U>>(&mut self,input:Self::LossInput, optimizer:&mut OP);
-    fn derive(&mut self,input:Self::LossInput) -> Self::LossInput {
-        input
-    }
+    fn derive(&mut self,input:&Self::LossInput) -> Self::LossInput;
 }
 pub trait Backward<U,I,O> where U: UnitValue<U> {
     fn backward(&mut self, loss:I) -> O;
@@ -123,8 +121,12 @@ impl<U,O> Train<U> for InputLayer<U,O> where U: UnitValue<U> {
 }
 impl<U,O> BackwardAll<U> for InputLayer<U,O> where U: UnitValue<U> {
     type LossInput = ();
+
     fn backward_all<OP: Optimizer<U>>(&mut self, input: Self::LossInput, optimizer: &mut OP) {
         
+    }
+    fn derive(&mut self,input:&Self::LossInput) -> Self::LossInput {
+        ()
     }
 }
 pub struct LinearLayer<U,P,D,const NI:usize,const NO:usize>
@@ -219,5 +221,15 @@ impl<U,P,D,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,N
 
     fn backward_all<OP: Optimizer<U>>(&mut self, input: Self::LossInput, optimizer: &mut OP) {
         self.backward(input);
+    }
+
+    fn derive(&mut self, input: &Self::LossInput) -> Self::LossInput {
+        let mut r = Arr::new();
+
+        for it in r.iter_mut() {
+            *it = U::one();
+        }
+
+        r
     }
 }

@@ -1,9 +1,9 @@
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
-pub struct Arr<T,const N:usize> where T: Default {
+pub struct Arr<T,const N:usize> where T: Default + Clone {
     arr:Box<[T]>
 }
-impl<T,const N:usize> Arr<T,N> where T: Default {
+impl<T,const N:usize> Arr<T,N> where T: Default + Clone {
     pub fn new() -> Arr<T,N> {
         let mut arr = Vec::with_capacity(N);
         arr.resize_with(N,Default::default);
@@ -13,15 +13,22 @@ impl<T,const N:usize> Arr<T,N> where T: Default {
         }
     }
 }
-impl<T,const N:usize> Deref for Arr<T,N> where T: Default {
+impl<T,const N:usize> Deref for Arr<T,N> where T: Default + Clone {
     type Target = Box<[T]>;
     fn deref(&self) -> &Self::Target {
         &self.arr
     }
 }
-impl<T,const N:usize> DerefMut for Arr<T,N> where T: Default  {
+impl<T,const N:usize> DerefMut for Arr<T,N> where T: Default + Clone  {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.arr
+    }
+}
+impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone {
+    fn clone(&self) -> Self {
+        Arr{
+            arr:self.arr.clone()
+        }
     }
 }
 pub struct Arr2<T,const N1:usize, const N2:usize> where T: Default {

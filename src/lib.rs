@@ -5,6 +5,7 @@ pub mod arr;
 pub mod optimizer;
 pub mod lossfunction;
 pub mod activation;
+pub mod device;
 pub mod layer;
 
 pub trait Stack {
@@ -47,17 +48,22 @@ impl Stack for Nil {
 #[cfg(test)]
 mod tests {
     use crate::arr::Arr;
+    use crate::device::DeviceCpu;
     use crate::layer::{AddLayer, AddLayerTrain, InputLayer, LinearLayer};
 
     #[test]
     fn build_layers() {
         let mut i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
-        let l = i.add_layer(|l| LinearLayer::<_,_,4,1>::new(l,|| 1., || 0.));
+        let device = DeviceCpu::new();
+
+        let l = i.add_layer(|l| LinearLayer::<_,_,_,4,1>::new(l,&device, || 1., || 0.));
     }
 
     #[test]
     fn build_train_layers() {
         let mut i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
-        let l = i.add_layer_train(|l| LinearLayer::<_,_,4,1>::new(l,|| 1., || 0.));
+        let device = DeviceCpu::new();
+
+        let l = i.add_layer_train(|l| LinearLayer::<_,_,_,4,1>::new(l,&device,|| 1., || 0.));
     }
 }

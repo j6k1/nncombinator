@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use crate::arr::{Arr, Arr2};
 use crate::{Cons, Nil, Stack};
+use crate::activation::Activation;
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
@@ -23,9 +24,6 @@ pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
 }
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
     fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::Input, optimizer:&mut OP, lossf:&L);
-}
-pub trait Activation<U,T> where U: UnitValue<U> {
-    fn apply(&self,input:&T) -> T;
 }
 pub struct ActivationLayer<U,P,A,T> where P: ForwardAll, U: UnitValue<U>, A: Activation<U,T> {
     parent:P,

@@ -4,6 +4,7 @@ pub mod ope;
 pub mod arr;
 pub mod optimizer;
 pub mod lossfunction;
+pub mod activation;
 pub mod layer;
 
 pub trait Stack {

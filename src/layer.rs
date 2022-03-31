@@ -15,8 +15,8 @@ pub trait ForwardAll {
     type Output;
     fn forward_all(&self,input:Self::Input) -> Self::Output;
 }
-pub trait Backward<I,U,S>: PreTrain<U> where U: UnitValue<U>, S: Stack {
-    fn backward<OP: Optimizer<U>>(&mut self,input:I,stack:S,optimizer:&mut OP);
+pub trait Backward<L,U>: PreTrain<U> where U: UnitValue<U> {
+    fn backward<OP: Optimizer<U>>(&mut self, loss:L, stack:Self::OutStack, optimizer:&mut OP) -> (L,Self::OutStack);
 }
 pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     type OutStack: Stack<Head=Self::Output>;

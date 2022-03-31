@@ -4,6 +4,19 @@ use crate::layer::{ForwardAll, LinearLayer};
 use crate::UnitValue;
 
 pub trait Device<U>: Clone where U: UnitValue<U> {
+    fn forward_linear<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NI>) -> Arr<U,NO>;
+}
+pub struct DeviceCpu<U> where U: UnitValue<U> {
+    u:PhantomData<U>
+}
+impl<U> DeviceCpu<U> where U: UnitValue<U> {
+    pub fn new() -> DeviceCpu<U> {
+        DeviceCpu {
+            u:PhantomData::<U>
+        }
+    }
+}
+impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
     fn forward_linear<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NI>) -> Arr<U,NO> {
         let mut output:Arr<U,NO> = Arr::new();
 
@@ -21,19 +34,6 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
 
         output
     }
-}
-pub struct DeviceCpu<U> where U: UnitValue<U> {
-    u:PhantomData<U>
-}
-impl<U> DeviceCpu<U> where U: UnitValue<U> {
-    pub fn new() -> DeviceCpu<U> {
-        DeviceCpu {
-            u:PhantomData::<U>
-        }
-    }
-}
-impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
-    
 }
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {

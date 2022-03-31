@@ -18,6 +18,9 @@ pub trait ForwardAll {
 pub trait BackwardAll<U>: Train<U> where U: UnitValue<U> {
     type LossInput;
     fn backward_all<OP: Optimizer<U>>(&mut self,input:Self::LossInput, optimizer:&mut OP);
+    fn derive(&mut self,input:Self::LossInput) -> Self::LossInput {
+        input
+    }
 }
 pub trait Backward<U,I,O> where U: UnitValue<U> {
     fn backward(&mut self, loss:I) -> O;
@@ -215,6 +218,6 @@ impl<U,P,D,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,N
     type LossInput = Arr<U,NO>;
 
     fn backward_all<OP: Optimizer<U>>(&mut self, input: Self::LossInput, optimizer: &mut OP) {
-        todo!()
+        self.backward(input);
     }
 }

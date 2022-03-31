@@ -55,19 +55,18 @@ impl<U,P,A,T,D> ActivationLayer<U,P,A,T,D> where P: ForwardAll<Output=T>,
         }
     }
 }
-impl<U,P,A,T,D> ForwardAll for ActivationLayer<U,P,A,T,D> where P: ForwardAll<Output=T>,
-                                                                U: Default + Clone + Copy + UnitValue<U>, D :Device<U>,
-                                                                A: Activation<U,T,D> {
+impl<U,P,A,T> ForwardAll for ActivationLayer<U,P,A,T,DeviceCpu<U>> where P: ForwardAll<Output=T>,
+                                                                U: Default + Clone + Copy + UnitValue<U>,
+                                                                A: Activation<U,T,DeviceCpu<U>> {
     type Input = <P as ForwardAll>::Input;
     type Output = <P as ForwardAll>::Output;
     fn forward_all(&self, input: Self::Input) -> Self::Output {
         self.forward(&self.parent.forward_all(input))
     }
 }
-impl<U,P,A,T,D> Forward<T> for ActivationLayer<U,P,A,T,D> where P: ForwardAll<Output=T>,
+impl<U,P,A,T> Forward<T> for ActivationLayer<U,P,A,T,DeviceCpu<U>> where P: ForwardAll<Output=T>,
                                                                 U: Default + Clone + Copy + UnitValue<U>,
-                                                                D: Device<U>,
-                                                                A: Activation<U,T,D> {
+                                                                A: Activation<U,T,DeviceCpu<U>> {
     type Input = <P as ForwardAll>::Output;
     fn forward(&self, input: &Self::Input) -> T {
         self.f.apply(&self.device,input)

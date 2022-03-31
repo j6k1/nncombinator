@@ -68,3 +68,44 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCp
         r
     }
 }
+pub struct ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
+    u:PhantomData<U>,
+    d:PhantomData<D>
+}
+impl<U,D> ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
+    pub fn new(device:&DeviceCpu<U>) -> ReLu<U,D> {
+        ReLu {
+            u: PhantomData::<U>,
+            d:PhantomData::<D>
+        }
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>> where U: UnitValue<U> {
+    fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
+        let mut r = Arr::new();
+
+        for (r,i) in r.iter_mut().zip(input.iter()) {
+            *r = if *i > U::default() {
+                *i
+            } else {
+                U::default()
+            };
+        }
+
+        r
+    }
+
+    fn derive(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
+        let mut r = Arr::new();
+
+        for (r,i) in r.iter_mut().zip(input.iter()) {
+            if *i > U::default() {
+                U::one()
+            } else {
+                U::default()
+            };
+        }
+
+        r
+    }
+}

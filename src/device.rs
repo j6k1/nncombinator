@@ -22,7 +22,7 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
 
         let b = U::bias();
 
-        for (mut o,w) in output.iter_mut().zip(bias.iter()) {
+        for (o,w) in output.iter_mut().zip(bias.iter()) {
             *o += b * *w;
         }
 

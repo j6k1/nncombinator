@@ -28,7 +28,7 @@ pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     fn pre_train(&mut self, input:Self::Input) -> Self::OutStack;
 }
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
-    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::Input, optimizer:&mut OP, lossf:&L);
+    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Input, input: Self::Input, optimizer:&mut OP, lossf:&L);
 }
 pub trait AddLayer: ForwardAll where Self: Sized {
     fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
@@ -237,6 +237,26 @@ impl<U,P,D,const N:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,N>
 
     fn derive(&mut self, input: &Self::LossInput) -> Self::LossInput {
         Arr::new()
+    }
+}
+impl<U,P,D,const N:usize> Train<U> for LinearOutputLayer<U,P,D,N>
+    where P: BackwardAll<U,LossInput=Arr<U,N>> + ForwardAll<Input=Arr<U,N>,Output=Arr<U,N>>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U> {
+    fn train<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, expected: Self::Input, input: Self::Input, optimizer: &mut OP, lossf: &L) {
+        let r = self.pre_train(input);
+
+        let (s,_) = r.pop();
+
+        let mut loss = Arr::new();
+
+        s.map(|actual| {
+            for ((a, e), loss) in actual.iter().zip(expected.iter()).zip(loss.iter_mut()) {
+                *loss = lossf.derive(*a, *e);
+            }
+        });
+
+        self.backward_all(loss,Cons(s,()),optimizer);
     }
 }
 pub struct LinearLayer<U,P,D,const NI:usize,const NO:usize>

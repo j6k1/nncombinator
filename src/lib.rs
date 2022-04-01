@@ -49,7 +49,7 @@ impl Stack for Nil {
 mod tests {
     use crate::arr::Arr;
     use crate::device::DeviceCpu;
-    use crate::layer::{AddLayer, AddLayerTrain, InputLayer, LinearLayer};
+    use crate::layer::{AddLayer, AddLayerTrain, InputLayer, LinearLayer, LinearOutputLayer};
 
     #[test]
     fn build_layers() {
@@ -64,6 +64,8 @@ mod tests {
         let mut i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
         let device = DeviceCpu::new();
 
-        let l = i.add_layer_train(|l| LinearLayer::<_,_,_,4,1>::new(l,&device,|| 1., || 0.));
+        let l = i.add_layer(|l| {
+            LinearLayer::<_,_,_,4,1>::new(l,&device,|| 1., || 0.)
+        }).add_layer_train(|l| LinearOutputLayer::<_,_,_,1>::new(l,&device));
     }
 }

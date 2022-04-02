@@ -10,12 +10,12 @@ pub trait Activation<U,T,D> where U: UnitValue<U>, D: Device<U> {
     fn derive(&self,device:&D,input:&T) -> T;
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;
 }
-pub struct Identity<'a,U,D> where U: UnitValue<U>, D: Device<U> {
+pub struct Identity<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>,
-    c:HashSet<&'a str>
+    c:HashSet<&'static str>
 }
-impl<'a,U,D> Identity<'a,U,D> where U: UnitValue<U>, D: Device<U> {
+impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
     pub fn new(_:&D) -> Identity<U,D> {
         let mut c = HashSet::new();
         c.insert("mse");
@@ -27,7 +27,7 @@ impl<'a,U,D> Identity<'a,U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<'a,U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Identity<'a,U,DeviceCpu<U>> where U: UnitValue<U> {
+impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>> where U: UnitValue<U> {
     fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
         (*input).clone()
     }
@@ -46,12 +46,12 @@ impl<'a,U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Identity<'a,U,D
         self.c.contains(l.name())
     }
 }
-pub struct Sigmoid<'a,U,D> where U: UnitValue<U>, D: Device<U> {
+pub struct Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>,
-    c:HashSet<&'a str>
+    c:HashSet<&'static str>
 }
-impl<'a,U,D> Sigmoid<'a,U,D> where U: UnitValue<U>, D: Device<U> {
+impl<U,D> Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
     pub fn new(_:&DeviceCpu<U>) -> Sigmoid<U,D> {
         let mut c = HashSet::new();
         c.insert("crossentropy");
@@ -63,7 +63,7 @@ impl<'a,U,D> Sigmoid<'a,U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<'a,U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Sigmoid<'a,U,DeviceCpu<U>> where U: UnitValue<U> {
+impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>> where U: UnitValue<U> {
     fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
         let mut r = Arr::new();
 
@@ -210,12 +210,12 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U
         false
     }
 }
-pub struct SoftMax<'a,U,D> where U: UnitValue<U>, D: Device<U> {
+pub struct SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>,
-    c:HashSet<&'a str>
+    c:HashSet<&'static str>
 }
-impl<'a,U,D> SoftMax<'a,U,D> where U: UnitValue<U>, D: Device<U> {
+impl<U,D> SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
     pub fn new(_:&DeviceCpu<U>) -> SoftMax<U,D> {
         let mut c = HashSet::new();
         c.insert("crossentropymulticlass");
@@ -227,7 +227,7 @@ impl<'a,U,D> SoftMax<'a,U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<'a,U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<'a,U,DeviceCpu<U>> where U: UnitValue<U> {
+impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>> where U: UnitValue<U> {
     fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
         let mut r = Arr::new();
 

@@ -16,7 +16,7 @@ pub struct Identity<'a,U,D> where U: UnitValue<U>, D: Device<U> {
     c:HashSet<&'a str>
 }
 impl<'a,U,D> Identity<'a,U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(device:&D) -> Identity<U,D> {
+    pub fn new(_:&D) -> Identity<U,D> {
         let mut c = HashSet::new();
         c.insert("mse");
 
@@ -32,7 +32,7 @@ impl<'a,U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Identity<'a,U,D
         (*input).clone()
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
+    fn derive(&self, _: &DeviceCpu<U>, _: &Arr<U, N>) -> Arr<U, N> {
         let mut r = Arr::new();
 
         for it in r.iter_mut() {
@@ -52,7 +52,7 @@ pub struct Sigmoid<'a,U,D> where U: UnitValue<U>, D: Device<U> {
     c:HashSet<&'a str>
 }
 impl<'a,U,D> Sigmoid<'a,U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(device:&DeviceCpu<U>) -> Sigmoid<U,D> {
+    pub fn new(_:&DeviceCpu<U>) -> Sigmoid<U,D> {
         let mut c = HashSet::new();
         c.insert("crossentropy");
 
@@ -94,7 +94,7 @@ pub struct ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>
 }
 impl<U,D> ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(device:&DeviceCpu<U>) -> ReLu<U,D> {
+    pub fn new(_:&DeviceCpu<U>) -> ReLu<U,D> {
         ReLu {
             u: PhantomData::<U>,
             d:PhantomData::<D>
@@ -121,16 +121,16 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U
 
         for (r,i) in r.iter_mut().zip(input.iter()) {
             if *i > U::default() {
-                U::one()
+                *r = U::one()
             } else {
-                U::default()
+                *r = U::default()
             };
         }
 
         r
     }
 
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
@@ -139,7 +139,7 @@ pub struct Swish<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>
 }
 impl<U,D> Swish<U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(device:&DeviceCpu<U>) -> Swish<U,D> {
+    pub fn new(_:&DeviceCpu<U>) -> Swish<U,D> {
         Swish {
             u: PhantomData::<U>,
             d:PhantomData::<D>
@@ -168,7 +168,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<
         r
     }
 
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
@@ -177,7 +177,7 @@ pub struct Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>
 }
 impl<U,D> Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(device:&DeviceCpu<U>) -> Tanh<U,D> {
+    pub fn new(_:&DeviceCpu<U>) -> Tanh<U,D> {
         Tanh {
             u: PhantomData::<U>,
             d:PhantomData::<D>
@@ -206,7 +206,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U
         r
     }
 
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
@@ -216,7 +216,7 @@ pub struct SoftMax<'a,U,D> where U: UnitValue<U>, D: Device<U> {
     c:HashSet<&'a str>
 }
 impl<'a,U,D> SoftMax<'a,U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(device:&DeviceCpu<U>) -> SoftMax<U,D> {
+    pub fn new(_:&DeviceCpu<U>) -> SoftMax<U,D> {
         let mut c = HashSet::new();
         c.insert("crossentropymulticlass");
 
@@ -236,7 +236,7 @@ impl<'a,U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<'a,U,De
 
         for (r,i) in r.iter_mut().zip(input.iter()) {
             let number = (*i - alpha).exp();
-            *r = *i / number;
+            *r = number / sum;
         }
 
         r

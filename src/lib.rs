@@ -53,18 +53,18 @@ mod tests {
 
     #[test]
     fn build_layers() {
-        let mut i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
+        let i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
         let device = DeviceCpu::new();
 
-        let l = i.add_layer(|l| LinearLayer::<_,_,_,4,1>::new(l,&device, || 1., || 0.));
+        let _l = i.add_layer(|l| LinearLayer::<_,_,_,4,1>::new(l,&device, || 1., || 0.));
     }
 
     #[test]
     fn build_train_layers() {
-        let mut i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
+        let i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
         let device = DeviceCpu::new();
 
-        let l = i.add_layer(|l| {
+        let _l = i.add_layer(|l| {
             LinearLayer::<_,_,_,4,1>::new(l,&device,|| 1., || 0.)
         }).add_layer_train(|l| LinearOutputLayer::<_,_,_,1>::new(l,&device));
     }

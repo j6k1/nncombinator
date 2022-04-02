@@ -19,7 +19,7 @@ pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {
     type LossInput;
     fn backward_all<OP: Optimizer<U>>(&mut self,input:Self::LossInput, stack:Self::OutStack, optimizer:&mut OP);
     fn derive(&mut self,input:&Self::LossInput) -> Self::LossInput;
-    fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool {
+    fn is_canonical_link<L: LossFunction<U>>(&self,_:&L) -> bool {
         false
     }
 }
@@ -82,11 +82,11 @@ impl<U,O> PreTrain<U> for InputLayer<U,O> where U: UnitValue<U> {
 impl<U,const N:usize> BackwardAll<U> for InputLayer<U,Arr<U,N>> where U: UnitValue<U> {
     type LossInput = Arr<U,N>;
 
-    fn backward_all<OP: Optimizer<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP) {
+    fn backward_all<OP: Optimizer<U>>(&mut self, _: Self::LossInput, _:Self::OutStack, _: &mut OP) {
         
     }
 
-    fn derive(&mut self,input:&Self::LossInput) -> Self::LossInput {
+    fn derive(&mut self,_:&Self::LossInput) -> Self::LossInput {
         let mut r = Arr::new();
 
         for it in r.iter_mut() {
@@ -212,7 +212,7 @@ pub struct LinearOutputLayer<U,P,D,const N:usize>
           D: Device<U> {
     u:PhantomData<U>,
     parent:P,
-    device:D,
+    _device:D,
 }
 impl<U,P,D,const N:usize> LinearOutputLayer<U,P,D,N>
     where P: ForwardAll, U: Default + Clone + Copy + UnitValue<U>,
@@ -221,7 +221,7 @@ impl<U,P,D,const N:usize> LinearOutputLayer<U,P,D,N>
         LinearOutputLayer {
             u:PhantomData::<U>,
             parent:parent,
-            device:device.clone(),
+            _device:device.clone(),
         }
     }
 }
@@ -231,7 +231,7 @@ impl<U,P,D,const N:usize> ForwardAll for LinearOutputLayer<U,P,D,N>
           D: Device<U> {
     type Input = <P as ForwardAll>::Input;
     type Output = ();
-    fn forward_all(&self, input: Self::Input) -> Self::Output {
+    fn forward_all(&self, _: Self::Input) -> Self::Output {
         ()
     }
 }
@@ -247,14 +247,6 @@ impl<U,P,D,const N:usize> PreTrain<U> for LinearOutputLayer<U,P,D,N>
         Cons(r,())
     }
 }
-impl<U,P,D,const N:usize> Backward<U,Arr<U,N>,Arr<U,N>> for LinearOutputLayer<U,P,D,N>
-    where U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          P: ForwardAll + BackwardAll<U,LossInput=Arr<U,N>>{
-    fn backward(&mut self, loss: Arr<U,N>) -> Arr<U,N> {
-        todo!()
-    }
-}
 impl<U,P,D,const N:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,N>
     where P: BackwardAll<U,LossInput=Arr<U,N>> + ForwardAll<Output=Arr<U,N>>,
           U: Default + Clone + Copy + UnitValue<U>,
@@ -262,14 +254,11 @@ impl<U,P,D,const N:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,N>
     type LossInput = Arr<U,N>;
 
     fn backward_all<OP: Optimizer<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP) {
-        let loss = self.backward(input);
-
         let (s,_) = stack.pop();
-
-        self.parent.backward_all(loss, s, optimizer);
+        self.parent.backward_all(input, s, optimizer);
     }
 
-    fn derive(&mut self, input: &Self::LossInput) -> Self::LossInput {
+    fn derive(&mut self, _: &Self::LossInput) -> Self::LossInput {
         Arr::new()
     }
 }
@@ -375,7 +364,7 @@ impl<U,P,D,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,N
         self.parent.backward_all(loss, s, optimizer);
     }
 
-    fn derive(&mut self, input: &Self::LossInput) -> Self::LossInput {
+    fn derive(&mut self, _: &Self::LossInput) -> Self::LossInput {
         let mut r = Arr::new();
 
         for it in r.iter_mut() {
@@ -398,9 +387,7 @@ impl<U,P,D,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,P,D,NI,NO>
             *it = U::one();
         }
 
-        let mut loss = Arr::new();
-
-        loss = self.device.loss_linear(expected,&actual,&f,lossf);
+        let loss = self.device.loss_linear(expected,&actual,&f,lossf);
         (Cons(s,actual),loss)
     }
 }

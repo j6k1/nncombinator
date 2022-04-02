@@ -1,7 +1,5 @@
 use std::marker::PhantomData;
-use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
-use crate::layer::{ForwardAll, LinearLayer};
 use crate::lossfunction::LossFunction;
 use crate::UnitValue;
 

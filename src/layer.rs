@@ -243,7 +243,6 @@ impl<U,P,D,const NI:usize,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,A
         let stack = self.pre_train(input);
 
         let (stack,loss) = if self.parent.is_canonical_link(lossf) {
-
             let loss = stack.map(|actual| {
                 let mut loss = Arr::new();
 
@@ -350,22 +349,24 @@ impl<U,P,D,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,N
           D: Device<U> {
     type LossInput = Arr<U,NI>;
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) {
-        let (s,o) = stack.pop();
+        let (s,_) = stack.pop();
 
         {
-            let loss = self.backward(&input);
+            s.map(|o| {
+                let loss = self.backward(&input);
 
-            for o in o.iter() {
-                for (w, l) in self.bias.iter_mut().zip(loss.iter()) {
-                    optimizer.update(*l * *o, w);
+                for o in o.iter() {
+                    for (w, l) in self.bias.iter_mut().zip(loss.iter()) {
+                        optimizer.update(*l * *o, w);
+                    }
                 }
-            }
 
-            for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
-                for (w,l) in u.iter_mut().zip(loss.iter()) {
-                    optimizer.update(*l * *o,w);
+                for (mut u, o) in self.units.iter_mut().zip(o.iter()) {
+                    for (w, l) in u.iter_mut().zip(loss.iter()) {
+                        optimizer.update(*l * *o, w);
+                    }
                 }
-            }
+            });
         }
 
         let (s,loss) = self.parent.loss(input,lossf,s);

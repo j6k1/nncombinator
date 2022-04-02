@@ -34,7 +34,8 @@ pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     fn pre_train(&mut self, input:Self::Input) -> Self::OutStack;
 }
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
-    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Input, input: Self::Input, optimizer:&mut OP, lossf:&L);
+    type Expected;
+    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Expected, input:Self::Input, optimizer:&mut OP, lossf:&L);
 }
 pub trait AddLayer: ForwardAll where Self: Sized {
     fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
@@ -273,10 +274,12 @@ impl<U,P,D,const N:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,N>
     }
 }
 impl<U,P,D,const N:usize> Train<U> for LinearOutputLayer<U,P,D,N>
-    where P: BackwardAll<U,LossInput=Arr<U,N>> + ForwardAll<Input=Arr<U,N>,Output=Arr<U,N>> + Loss<U>,
+    where P: BackwardAll<U,LossInput=Arr<U,N>> + ForwardAll<Output=Arr<U,N>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> {
-    fn train<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, expected: Self::Input, input: Self::Input, optimizer: &mut OP, lossf: &L) {
+    type Expected = P::Output;
+
+    fn train<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, expected: Self::Expected, input: Self::Input, optimizer: &mut OP, lossf: &L) {
         let r = self.pre_train(input);
 
         let (s,_) = r.pop();
@@ -382,8 +385,8 @@ impl<U,P,D,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,N
         r
     }
 }
-impl<U,P,D,const N:usize> Loss<U> for LinearLayer<U,P,D,N,N>
-    where P: BackwardAll<U,LossInput=Arr<U,N>> + ForwardAll<Output=Arr<U,N>> + Loss<U>,
+impl<U,P,D,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,P,D,NI,NO>
+    where P: BackwardAll<U,LossInput=Arr<U,NI>> + ForwardAll<Output=Arr<U,NI>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> {
     fn loss<L: LossFunction<U>>(&mut self, expected: &Self::LossInput, lossf: &L, stack: Self::OutStack) -> (Self::OutStack, Self::LossInput) {

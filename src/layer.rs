@@ -198,15 +198,6 @@ impl<U,P,A,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,Arr<U,N>,D>
         (Cons(s,actual),loss)
     }
 }
-impl<U,P,A,T,D> Backward<U,T,T> for ActivationLayer<U,P,A,T,D>
-    where P: PreTrain<U> + ForwardAll<Output=T>,
-          U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          A: Activation<U,T,D> {
-    fn backward(&mut self, input: T) -> T {
-        self.f.derive(&self.device,&input)
-    }
-}
 pub struct LinearOutputLayer<U,P,D,const N:usize>
     where P: ForwardAll, U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> {

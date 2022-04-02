@@ -329,7 +329,7 @@ impl<U,P,D,const NI:usize,const NO:usize> Backward<U,Arr<U,NO>,Arr<U,NI>> for Li
           D: Device<U>,
           P: ForwardAll + BackwardAll<U>{
     fn backward(&mut self, input: Arr<U,NO>) -> Arr<U,NI> {
-        todo!()
+        self.device.backward_liner(&self.bias,&self.units,&input)
     }
 }
 impl<U,P,D,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,NI,NO>
@@ -348,17 +348,7 @@ impl<U,P,D,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,P,D,NI,NO>
     where P: BackwardAll<U> + ForwardAll<Output=Arr<U,NI>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> {
-    fn loss<L: LossFunction<U>>(&mut self, expected: &Self::Output, lossf: &L, stack: Self::OutStack) -> (Self::OutStack, Self::Output) {
-        let (s,actual) = stack.pop();
-
-        let mut f = Arr::new();
-
-        for it in f.iter_mut() {
-            *it = U::one();
-        }
-
-        let loss = self.device.loss_linear(expected,&actual,&f,lossf);
-        (Cons(s,actual),loss)
+    fn loss<L: LossFunction<U>>(&mut self, loss: &Self::Output, lossf: &L, stack: Self::OutStack) -> (Self::OutStack, Self::Output) {
+        (stack,loss.clone())
     }
 }
-

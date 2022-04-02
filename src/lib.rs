@@ -11,7 +11,7 @@ pub mod layer;
 pub trait Stack {
     type Remaining: Stack;
     type Head;
-    fn pop(self) -> (Self::Remaining, Option<Self::Head>);
+    fn pop(self) -> (Self::Remaining, Self::Head);
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O;
 }
 pub struct Cons<R,T>(pub R,pub T) where R: Stack;
@@ -20,10 +20,10 @@ impl<R,T> Stack for Cons<R,T> where R: Stack{
     type Remaining = R;
     type Head = T;
 
-    fn pop(self) -> (Self::Remaining, Option<Self::Head>) {
+    fn pop(self) -> (Self::Remaining, Self::Head) {
         match self {
             Cons(parent,head) => {
-                (parent,Some(head))
+                (parent,head)
             }
         }
     }
@@ -37,8 +37,8 @@ pub struct Nil;
 impl Stack for Nil {
     type Remaining = Nil;
     type Head = ();
-    fn pop(self) -> (Self::Remaining, Option<Self::Head>) {
-        (Nil,None)
+    fn pop(self) -> (Self::Remaining, Self::Head) {
+        (Nil,())
     }
 
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {

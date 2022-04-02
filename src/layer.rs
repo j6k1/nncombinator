@@ -19,12 +19,18 @@ pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {
     type LossInput;
     fn backward_all<OP: Optimizer<U>>(&mut self,input:Self::LossInput, stack:Self::OutStack, optimizer:&mut OP);
     fn derive(&mut self,input:&Self::LossInput) -> Self::LossInput;
+    fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool {
+        false
+    }
+}
+pub trait Loss<U>: BackwardAll<U> where U: UnitValue<U> {
+    fn loss<L: LossFunction<U>>(&mut self,expected:&Self::LossInput,lossf:&L,stack:Self::OutStack) -> (Self::OutStack,Self::LossInput);
 }
 pub trait Backward<U,I,O> where U: UnitValue<U> {
     fn backward(&mut self, loss:I) -> O;
 }
 pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
-    type OutStack: Stack<Head=Self::Output>;
+    type OutStack: Stack<Head=Self::Output> + Sized;
     fn pre_train(&mut self, input:Self::Input) -> Self::OutStack;
 }
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
@@ -163,6 +169,33 @@ impl<U,P,A,T,D> BackwardAll<U> for ActivationLayer<U,P,A,T,D>
     fn derive(&mut self,input:&Self::LossInput) -> Self::LossInput {
         self.f.derive(&self.device,input)
     }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        self.f.is_canonical_link(l)
+    }
+}
+impl<U,P,A,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,Arr<U,N>,D>
+    where P: PreTrain<U> + ForwardAll<Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          A: Activation<U,Arr<U,N>,D> {
+    fn loss<L: LossFunction<U>>(&mut self, expected: &Self::LossInput, lossf:&L, stack: Self::OutStack) -> (Self::OutStack, Self::LossInput) {
+        let (s,actual) = stack.pop();
+        let mut loss = Arr::new();
+
+        if self.is_canonical_link(lossf) {
+            for ((e,a),loss) in expected.iter().zip(actual.iter()).zip(loss.iter_mut()) {
+                *loss = *e - *a;
+            }
+        } else {
+            let f = s.map(|u| {
+                self.derive(u)
+            });
+
+            loss = self.device.loss_linear(expected,&actual,&f,lossf);
+        }
+        (Cons(s,actual),loss)
+    }
 }
 impl<U,P,A,T,D> Backward<U,T,T> for ActivationLayer<U,P,A,T,D>
     where P: PreTrain<U> + ForwardAll<Output=T>,
@@ -240,7 +273,7 @@ impl<U,P,D,const N:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,N>
     }
 }
 impl<U,P,D,const N:usize> Train<U> for LinearOutputLayer<U,P,D,N>
-    where P: BackwardAll<U,LossInput=Arr<U,N>> + ForwardAll<Input=Arr<U,N>,Output=Arr<U,N>>,
+    where P: BackwardAll<U,LossInput=Arr<U,N>> + ForwardAll<Input=Arr<U,N>,Output=Arr<U,N>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> {
     fn train<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, expected: Self::Input, input: Self::Input, optimizer: &mut OP, lossf: &L) {
@@ -248,13 +281,7 @@ impl<U,P,D,const N:usize> Train<U> for LinearOutputLayer<U,P,D,N>
 
         let (s,_) = r.pop();
 
-        let mut loss = Arr::new();
-
-        s.map(|actual| {
-            for ((a, e), loss) in actual.iter().zip(expected.iter()).zip(loss.iter_mut()) {
-                *loss = lossf.derive(*a, *e);
-            }
-        });
+        let (s,loss) = self.parent.loss(&expected,lossf,s);
 
         self.backward_all(loss,Cons(s,()),optimizer);
     }
@@ -355,3 +382,23 @@ impl<U,P,D,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,N
         r
     }
 }
+impl<U,P,D,const N:usize> Loss<U> for LinearLayer<U,P,D,N,N>
+    where P: BackwardAll<U,LossInput=Arr<U,N>> + ForwardAll<Output=Arr<U,N>> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U> {
+    fn loss<L: LossFunction<U>>(&mut self, expected: &Self::LossInput, lossf: &L, stack: Self::OutStack) -> (Self::OutStack, Self::LossInput) {
+        let (s,actual) = stack.pop();
+
+        let mut f = Arr::new();
+
+        for it in f.iter_mut() {
+            *it = U::one();
+        }
+
+        let mut loss = Arr::new();
+
+        loss = self.device.loss_linear(expected,&actual,&f,lossf);
+        (Cons(s,actual),loss)
+    }
+}
+

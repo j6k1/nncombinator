@@ -230,19 +230,30 @@ impl<U,P,D,const N:usize> Train<U> for LinearOutputLayer<U,P,D,Arr<U,N>>
     fn train<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, expected: Self::Output, input: Self::Input, optimizer: &mut OP, lossf: &L) {
         let stack = self.pre_train(input);
 
-        let loss = stack.map(|actual| {
-            let mut loss = Arr::new();
-
-            for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
-                *l = *a - *e;
-            }
-
-            loss
-        });
-
         let (stack,loss) = if self.parent.is_canonical_link(lossf) {
+
+            let loss = stack.map(|actual| {
+                let mut loss = Arr::new();
+
+                for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
+                    *l = *a - *e;
+                }
+
+                loss
+            });
+
             (stack,loss)
         } else {
+            let loss = stack.map(|actual| {
+                let mut loss = Arr::new();
+
+                for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
+                    *l = lossf.derive(*a,*e);
+                }
+
+                loss
+            });
+
             self.parent.loss(&loss,lossf,stack)
         };
 

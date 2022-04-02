@@ -350,11 +350,10 @@ impl<U,P,D,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,N
     type LossInput = Arr<U,NI>;
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) {
         let (s,_) = stack.pop();
+        let loss = input;
 
         {
             s.map(|o| {
-                let loss = self.backward(&input);
-
                 for o in o.iter() {
                     for (w, l) in self.bias.iter_mut().zip(loss.iter()) {
                         optimizer.update(*l * *o, w);
@@ -369,7 +368,9 @@ impl<U,P,D,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,N
             });
         }
 
-        let (s,loss) = self.parent.loss(input,lossf,s);
+        let loss = self.backward(&loss);
+
+        let (s,loss) = self.parent.loss(loss,lossf,s);
 
         self.parent.backward_all(loss, s, optimizer, lossf);
     }

@@ -71,6 +71,6 @@ mod tests {
             LinearLayer::<_,_,_,4,1>::new(l,&device,|| 1., || 0.)
         }).add_layer(|l| {
             ActivationLayer::new(l,ReLu::new(&device),&device)
-        }).add_layer_train(|l| LinearOutputLayer::<_,_,_,Arr<f32,1>>::new(l,&device));
+        }).add_layer(|l| LinearOutputLayer::<_,_,_,Arr<f32,4>,Arr<f32,1>>::new(l,&device));
     }
 }

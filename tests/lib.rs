@@ -34,7 +34,7 @@ fn test_mnist() {
         LinearLayer::<_,_,_,64,10>::new(l,&device, move || n2.sample(&mut rnd2), || n1.sample(&mut rnd))
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
-        LinearOutputLayer::<_,_,_,Arr<f32,10>>::new(l,&device)
+    }).add_layer(|l| {
+        LinearOutputLayer::<_,_,_,Arr<f32,{ 28*28 }>,Arr<f32,10>::new(l,&device)
     });
 }

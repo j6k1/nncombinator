@@ -70,7 +70,7 @@ mod tests {
         let _l = i.add_layer(|l| {
             LinearLayer::<_,_,_,4,1>::new(l,&device,|| 1., || 0.)
         }).add_layer(|l| {
-            ActivationLayer::<_,_,_,_,Arr<f32,1>,_>::new(l,ReLu::new(&device),&device)
-        }).add_layer_train(|l| LinearOutputLayer::new(l,&device));
+            ActivationLayer::new(l,ReLu::new(&device),&device)
+        }).add_layer_train(|l| LinearOutputLayer::<_,_,_,Arr<f32,1>>::new(l,&device));
     }
 }

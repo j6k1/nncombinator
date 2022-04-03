@@ -1,8 +1,11 @@
 use std::marker::PhantomData;
+use std::str::FromStr;
 use crate::arr::*;
 use crate::device::*;
+use crate::persistence::*;
 use crate::{Cons, Nil, Stack};
 use crate::activation::Activation;
+use crate::error::ConfigReadError;
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
@@ -65,6 +68,16 @@ impl<U,O> InputLayer<U,O> where U: UnitValue<U> {
         }
     }
 }
+impl<U,O> Persistence<U,TextFilePersistence<U>> for InputLayer<U,O>
+    where U: UnitValue<U> + FromStr + Sized {
+    fn load(&mut self, _: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+        Ok(())
+    }
+
+    fn save(&mut self, _: &mut TextFilePersistence<U>) {
+
+    }
+}
 impl<U,O> ForwardAll for InputLayer<U,O> where U: UnitValue<U> {
     type Input = O;
     type Output = Self::Input;
@@ -110,6 +123,19 @@ impl<U,P,A,I,O,D> ActivationLayer<U,P,A,I,O,D> where P: ForwardAll<Output=O>,
             i:PhantomData::<I>,
             o:PhantomData::<O>
         }
+    }
+}
+impl<U,P,A,I,O,D> Persistence<U,TextFilePersistence<U>> for ActivationLayer<U,P,A,I,O,D>
+    where P: ForwardAll<Output=O> + Persistence<U,TextFilePersistence<U>>,
+          U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
+          D: Device<U>,
+          A: Activation<U,O,D> {
+    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+        self.parent.load(persistence)
+    }
+
+    fn save(&mut self, persistence: &mut TextFilePersistence<U>) {
+        self.parent.save(persistence)
     }
 }
 impl<U,P,A,I,O,D> ForwardAll for ActivationLayer<U,P,A,I,O,D>
@@ -204,6 +230,19 @@ impl<U,P,D,I,O> LinearOutputLayer<U,P,D,I,O>
             parent:parent,
             _device:device.clone(),
         }
+    }
+}
+impl<U,P,D,I,O> Persistence<U,TextFilePersistence<U>> for LinearOutputLayer<U,P,D,I,O>
+    where P: ForwardAll<Output=O> + BackwardAll<U> + Persistence<U,TextFilePersistence<U>>,
+          U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
+          D: Device<U> {
+    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+        self.parent.load(persistence)?;
+        persistence.verify_eof()
+    }
+
+    fn save(&mut self, persistence: &mut TextFilePersistence<U>) {
+        self.parent.save(persistence)
     }
 }
 impl<U,P,D,I,O> ForwardAll for LinearOutputLayer<U,P,D,I,O>
@@ -304,8 +343,46 @@ impl<U,P,D,const NI:usize,const NO:usize> LinearLayer<U,P,D,NI,NO>
         }
     }
 }
+impl<U,P,D,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>> for LinearLayer<U,P,D,NI,NO>
+    where P: ForwardAll<Output=Arr<U,NI>> + Persistence<U,TextFilePersistence<U>>,
+          U: Default + Clone + Copy + UnitValue<U> + FromStr,
+          D: Device<U>, ConfigReadError: From<<U as FromStr>::Err> {
+    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+        self.parent.load(persistence)?;
+
+        for b in self.bias.iter_mut() {
+            *b = persistence.read()?;
+        }
+
+        for mut u in self.units.iter_mut() {
+            for w in u.iter_mut() {
+                *w = persistence.read()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn save(&mut self, persistence: &mut TextFilePersistence<U>) {
+        self.parent.save(persistence);
+
+        persistence.write(UnitOrMarker::LayerStart);
+
+        for b in self.bias.iter() {
+            persistence.write(UnitOrMarker::Unit(*b));
+        }
+
+        for u in self.units.iter() {
+            persistence.write(UnitOrMarker::UnitsStart);
+            for w in u.iter() {
+                persistence.write(UnitOrMarker::Unit(*w));
+            }
+        }
+    }
+}
 impl<U,P,D,const NI:usize,const NO:usize> Forward<Arr<U,NI>,Arr<U,NO>> for LinearLayer<U,P,D,NI,NO>
-    where P: ForwardAll<Output=Arr<U,NI>>, U: Default + Clone + Copy + UnitValue<U>,
+    where P: ForwardAll<Output=Arr<U,NI>>,
+          U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> {
 
     fn forward(&self,input:&Arr<U,NI>) -> Arr<U,NO> {

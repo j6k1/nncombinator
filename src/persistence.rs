@@ -6,6 +6,10 @@ use std::path::Path;
 use std::str::FromStr;
 use crate::error::*;
 
+pub trait Persistence<U,P> {
+    fn load(&mut self, persistence:&mut P) -> Result<(),ConfigReadError>;
+    fn save(&mut self, persistence:&mut P);
+}
 pub trait ReadFromPersistence<U> {
     fn read(&mut self) -> U;
 }
@@ -17,13 +21,13 @@ pub enum UnitOrMarker<U> {
     LayerStart,
     UnitsStart
 }
-pub struct TextFilePersistence<U> {
+pub struct TextFilePersistence<U> where U: FromStr + Sized {
     reader:BufReader<File>,
     line:Option<Vec<String>>,
     index:usize,
     data:Vec<UnitOrMarker<U>>
 }
-impl<U> TextFilePersistence<U> {
+impl<U> TextFilePersistence<U> where U: FromStr + Sized {
     pub fn new (file:&str) -> Result<TextFilePersistence<U>,ConfigReadError> {
         Ok(TextFilePersistence {
             reader:BufReader::new(OpenOptions::new().read(true).create(false).open(file)?),
@@ -90,7 +94,7 @@ impl<U> TextFilePersistence<U> {
         Ok(t)
     }
 
-    fn verify_eof(&mut self) -> Result<(),ConfigReadError> {
+    pub fn verify_eof(&mut self) -> Result<(),ConfigReadError> {
         let mut buf = String::new();
 
         loop {
@@ -111,17 +115,17 @@ impl<U> TextFilePersistence<U> {
         }
     }
 }
-impl<U> TextFilePersistence<U> where U: std::str::FromStr, ConfigReadError: From<<U as FromStr>::Err> {
-    fn read(&mut self) -> Result<U, ConfigReadError> {
+impl<U> TextFilePersistence<U> where U: FromStr + Sized, ConfigReadError: From<<U as FromStr>::Err> {
+    pub fn read(&mut self) -> Result<U, ConfigReadError> {
         Ok(self.next_token()?.parse::<U>()?)
     }
 }
-impl<U> TextFilePersistence<U> {
-    fn write(&mut self,v:UnitOrMarker<U>) {
+impl<U> TextFilePersistence<U> where U: FromStr + Sized {
+    pub fn write(&mut self,v:UnitOrMarker<U>) {
         self.data.push(v);
     }
 }
-impl<U> TextFilePersistence<U> where U: Display {
+impl<U> TextFilePersistence<U> where U: FromStr + Sized + Display {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
         let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
 

@@ -5,7 +5,7 @@ use crate::UnitValue;
 
 pub trait Device<U>: Clone where U: UnitValue<U> {
     fn forward_linear<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NI>) -> Arr<U,NO>;
-    fn backward_liner<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NI>) -> Arr<U,NI>;
+    fn backward_liner<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NO>) -> Arr<U,NI>;
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, f: &Arr<U,N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U>;
 }
@@ -38,7 +38,7 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
         output
     }
 
-    fn backward_liner<const NI:usize, const NO: usize>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: &Arr<U, NI>) -> Arr<U, NI> {
+    fn backward_liner<const NI:usize, const NO: usize>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: &Arr<U, NO>) -> Arr<U, NI> {
         let mut r = Arr::new();
 
         for (r,(b,l)) in r.iter_mut().zip(bias.iter().zip(input.iter())) {

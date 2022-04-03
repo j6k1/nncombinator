@@ -19,22 +19,21 @@ fn test_mnist() {
     let mut rnd1 = XorShiftRng::from_seed(rnd.gen());
     let mut rnd2 = XorShiftRng::from_seed(rnd.gen());
 
-    let mut n1 = Normal::<f32>::new(0.0, 1f32/(2f32/(28f32*28f32)).sqrt()).unwrap();
-    let mut n2 = Normal::<f32>::new(0.0, 1f32/(28f32*28f32).sqrt()).unwrap();
+    let n1 = Normal::<f32>::new(0.0, 1f32/(2f32/(28f32*28f32)).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/(28f32*28f32).sqrt()).unwrap();
 
     let device = DeviceCpu::new();
 
     let net:InputLayer<f32,Arr<f32,{ 28*28 }>> = InputLayer::new();
-
     let net = net.add_layer(|l| {
-        LinearLayer::<_,_,_,{ 28*28 },64>::new(l,&device, move || n2.sample(&mut rnd1), || n1.sample(&mut rnd))
+        LinearLayer::<_,_,_,_,{ 28*28 },64>::new(l,&device, move || n1.sample(&mut rnd1), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
-        LinearLayer::<_,_,_,64,10>::new(l,&device, move || n2.sample(&mut rnd2), || n1.sample(&mut rnd))
+        LinearLayer::<_,_,_,_,64,10>::new(l,&device, move || n2.sample(&mut rnd2), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer(|l| {
-        LinearOutputLayer::<_,_,_,Arr<f32,{ 28*28 }>,Arr<f32,10>::new(l,&device)
+    }).add_layer_train(|l| {
+        LinearOutputLayer::new(l,&device)
     });
 }

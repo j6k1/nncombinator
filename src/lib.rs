@@ -1,5 +1,6 @@
 use crate::ope::UnitValue;
 
+pub mod error;
 pub mod ope;
 pub mod arr;
 pub mod optimizer;
@@ -7,6 +8,7 @@ pub mod lossfunction;
 pub mod activation;
 pub mod device;
 pub mod layer;
+pub mod persistence;
 
 pub trait Stack {
     type Remaining: Stack;

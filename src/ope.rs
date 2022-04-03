@@ -1,10 +1,12 @@
 use std::ops::{Add, Mul, Sub, Div, AddAssign, Neg};
 use std::fmt::Debug;
+use num_traits::FromPrimitive;
 
 pub trait UnitValue<T>: Add<Output=T> + Sub<Output=T> + Mul<Output=T> + Div<Output=T> + Neg<Output=T> +
     AddAssign + PartialOrd +
     Clone + Copy + Default + Debug + Send + Sync + 'static +
-    Exp + Tanh + One + Max + Min + MaxValue + InitialMaxValue + Abs + Bias {
+    Exp + Tanh + One + Max + Min + MaxValue + InitialMaxValue + Abs + Sqrt +
+    Bias + FromPrimitive {
 }
 pub trait Bias where Self: Sized {
     fn bias() -> Self;
@@ -137,6 +139,19 @@ impl Abs for f32 {
     #[inline]
     fn abs(&self) -> f32 {
         (*self).abs()
+    }
+}
+pub trait Sqrt {
+    fn sqrt(&self) -> Self;
+}
+impl Sqrt for f64 {
+    fn sqrt(&self) -> f64 {
+        (*self).sqrt()
+    }
+}
+impl Sqrt for f32 {
+    fn sqrt(&self) -> f32 {
+        (*self).sqrt()
     }
 }
 impl UnitValue<f64> for f64 {}

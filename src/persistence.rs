@@ -10,11 +10,14 @@ pub trait Persistence<U,P> {
     fn load(&mut self, persistence:&mut P) -> Result<(),ConfigReadError>;
     fn save(&mut self, persistence:&mut P);
 }
+pub trait SaveToFile<U> {
+    fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error>;
+}
 pub trait ReadFromPersistence<U> {
     fn read(&mut self) -> U;
 }
 pub trait SaveFromPersistence<U> {
-    fn read(&mut self);
+    fn write(&mut self);
 }
 pub enum UnitOrMarker<U> {
     Unit(U),
@@ -125,7 +128,7 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
         self.data.push(v);
     }
 }
-impl<U> TextFilePersistence<U> where U: FromStr + Sized + Display {
+impl<U> SaveToFile<U> for TextFilePersistence<U> where U: FromStr + Sized + Display {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
         let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
 

@@ -5,9 +5,10 @@ use crate::UnitValue;
 
 pub trait Device<U>: Clone where U: UnitValue<U> {
     fn forward_linear<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NI>) -> Arr<U,NO>;
-    fn backward_liner<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NO>) -> Arr<U,NI>;
-    fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, f: &Arr<U,N>, lossf: &L) -> Arr<U, N>
+    fn backward_liner<const NI:usize,const NO:usize>(&self,units:&Arr2<U,NI,NO>,input:&Arr<U,NO>) -> Arr<U,NI>;
+    fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U>;
+    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
 }
 pub struct DeviceCpu<U> where U: UnitValue<U> {
     u:PhantomData<U>
@@ -38,15 +39,11 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
         output
     }
 
-    fn backward_liner<const NI:usize, const NO: usize>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: &Arr<U, NO>) -> Arr<U, NI> {
+    fn backward_liner<const NI:usize, const NO: usize>(&self, units: &Arr2<U, NI, NO>, input: &Arr<U, NO>) -> Arr<U, NI> {
         let mut r = Arr::new();
 
-        for (r,(b,l)) in r.iter_mut().zip(bias.iter().zip(input.iter())) {
-            *r += *b * *l;
-        }
-
-        for u in units.iter() {
-            for (r,(w,l)) in r.iter_mut().zip(u.iter().zip(input.iter())) {
+        for (r,u) in r.iter_mut().zip(units.iter()) {
+            for (w,l) in u.iter().zip(input.iter()) {
                 *r += *w * *l;
             }
         }
@@ -54,15 +51,22 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
         r
     }
 
-    fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, f: &Arr<U,N>, lossf: &L) -> Arr<U, N>
+    fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U> {
 
         let mut loss = Arr::new();
 
-        for (((a, e), loss),f) in actual.iter()
-                                                            .zip(expected.iter())
-                                                            .zip(loss.iter_mut()).zip(f.iter()) {
-            *loss = lossf.derive(*a, *e) * *f;
+        for (loss,(a, e))in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
+            *loss = lossf.derive(*a, *e);
+        }
+
+        loss
+    }
+    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N> {
+        let mut loss = Arr::new();
+
+        for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
+            *l = *a - *e;
         }
 
         loss

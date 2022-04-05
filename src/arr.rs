@@ -1,5 +1,6 @@
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
+#[derive(Debug,Eq,PartialEq)]
 pub struct Arr<T,const N:usize> where T: Default + Clone {
     arr:Box<[T]>
 }
@@ -31,6 +32,7 @@ impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone {
         }
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct Arr2<T,const N1:usize, const N2:usize> where T: Default {
     arr:Box<[T]>
 }
@@ -74,6 +76,7 @@ impl<T,const N1:usize, const N2:usize> IndexMut<(usize,usize)> for Arr2<T,N1,N2>
         &mut self.arr[y * N2 + x]
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct Arr3<T,const N1:usize, const N2:usize, const N3:usize> where T: Default {
     arr:Box<[T]>
 }
@@ -121,6 +124,7 @@ impl<T,const N1:usize, const N2:usize, const N3:usize> IndexMut<(usize,usize,usi
         &mut self.arr[z * N2 * N3 + y * N3 + x]
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct Arr4<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> where T: Default {
     arr:Box<[T]>
 }
@@ -174,6 +178,7 @@ impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> IndexMut<
         &mut self.arr[i * N2 * N3 * N4 + z * N3 * N4 + y * N4 + x]
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct ArrView<'a,T,const N:usize> {
     arr:&'a [T]
 }
@@ -183,6 +188,7 @@ impl<'a,T,const N:usize> Deref for ArrView<'a,T,N> {
         &self.arr
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct ArrViewMut<'a,T,const N:usize> {
     arr:&'a mut [T]
 }
@@ -197,6 +203,7 @@ impl<'a,T,const N:usize> DerefMut for ArrViewMut<'a,T,N> {
         self.arr
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct Arr2Iter<'a,T,const N:usize>(&'a [T]);
 
 impl<'a,T,const N:usize> Arr2Iter<'a,T,N> {
@@ -222,6 +229,7 @@ impl<'a,T,const N:usize> Iterator for Arr2Iter<'a,T,N> {
         }
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct Arr2IterMut<'a,T,const N:usize>(&'a mut [T]);
 
 impl<'a,T,const N:usize> Arr2IterMut<'a,T,N> {
@@ -247,6 +255,7 @@ impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N> {
         }
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct Arr3Iter<'a,T,const N1:usize,const N2:usize>(&'a [T]);
 
 impl<'a,T,const N1:usize,const N2:usize> Arr3Iter<'a,T,N1,N2> {
@@ -270,6 +279,7 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3Iter<'a,T,N1,N2> {
         }
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct Arr3IterMut<'a,T,const N1:usize,const N2:usize>(&'a mut [T]);
 
 impl<'a,T,const N1:usize,const N2:usize> Arr3IterMut<'a,T,N1,N2> {
@@ -293,6 +303,7 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3IterMut<'a,T,N1,N2> {
         }
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct Arr4Iter<'a,T,const N1:usize,const N2:usize,const N3:usize>(&'a [T]);
 
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr4Iter<'a,T,N1,N2,N3> {
@@ -316,6 +327,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4Iter<'a
         }
     }
 }
+#[derive(Debug,Eq,PartialEq)]
 pub struct Arr4IterMut<'a,T,const N1:usize,const N2:usize, const N3:usize>(&'a mut [T]);
 
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr4IterMut<'a,T,N1,N2,N3> {

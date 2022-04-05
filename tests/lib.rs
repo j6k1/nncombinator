@@ -20,7 +20,7 @@ use nncombinator::arr::Arr;
 use nncombinator::device::DeviceCpu;
 use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, ForwardAll, InputLayer, LinearLayer, LinearOutputLayer, Train};
 use nncombinator::lossfunction::CrossEntropyMulticlass;
-use nncombinator::optimizer::SGD;
+use nncombinator::optimizer::{MomentumSGD};
 
 #[test]
 fn test_mnist() {
@@ -62,19 +62,29 @@ fn test_mnist() {
             teachers.push((n,path));
         }
     }
+    let mut optimizer = MomentumSGD::with_params(0.001,0.9,0.0);
 
     let mut rng = rand::thread_rng();
+
     teachers.shuffle(&mut rng);
 
-    for (n,path) in teachers.iter().take(10000) {
-        for b in BufReader::new(File::open(path).unwrap()).bytes() {
+    let mut teachers = teachers.into_iter().take(1000).collect::<Vec<(usize,PathBuf)>>();
+
+    let mut correct_answers = 0;
+
+    for _ in 0..10 {
+        teachers.shuffle(&mut rng);
+
+        for (n, path) in teachers.iter() {
+            let b = BufReader::new(File::open(path).unwrap()).bytes();
+
+            let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+
             let n = *n;
 
-            let pixels = b.iter().map(|&b| f32::from_bits(b as u32)).take(784).collect::<Vec<f32>>();
+            let mut input = Arr::<f32, 784>::new();
 
-            let mut input = Arr::<f32,784>::new();
-
-            for (it,p) in input.iter_mut().zip(pixels.iter()) {
+            for (it, p) in input.iter_mut().zip(pixels.iter()) {
                 *it = *p;
             }
 
@@ -82,10 +92,58 @@ fn test_mnist() {
 
             expected[n as usize] = 1.0;
 
-            let mut optimizer = SGD::new(0.001);
             let lossf = CrossEntropyMulticlass::new();
 
-            net.train(expected,input,&mut optimizer,&lossf);
+            net.train(expected, input, &mut optimizer, &lossf);
         }
     }
+
+    let mut tests: Vec<(usize, PathBuf)> = Vec::new();
+
+    for n in 0..10 {
+        for entry in fs::read_dir(Path::new("mnist")
+            .join("mnist_png")
+            .join("testing")
+            .join(n.to_string())).unwrap() {
+            let path = entry.unwrap().path();
+
+            tests.push((n, path));
+        }
+    }
+
+    tests.shuffle(&mut rng);
+
+    for (n, path) in tests.iter().take(100) {
+        let b = BufReader::new(File::open(path).unwrap()).bytes();
+
+        let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+
+        let n = *n;
+
+        let mut input = Arr::<f32, 784>::new();
+
+        for (it, p) in input.iter_mut().zip(pixels.iter()) {
+            *it = *p;
+        }
+
+        let r = net.forward_all(input);
+
+        let r = r.iter().enumerate().fold((0, 0.0), |acc, (n, &t)| {
+            if t > acc.1 {
+                (n, t)
+            } else {
+                acc
+            }
+        }).0;
+
+        if n == r {
+            correct_answers += 1;
+        }
+
+        println!("n = {}, answer = {}", n, r);
+    }
+
+    println!("correct_answers = {}",correct_answers);
+
+    debug_assert!(correct_answers > 10)
 }

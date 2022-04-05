@@ -112,7 +112,6 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U
                 U::default()
             };
         }
-
         r
     }
 

@@ -159,26 +159,21 @@ fn test_weather() {
 
     let device = DeviceCpu::new();
 
-    let net:InputLayer<f32,Arr<f32,37>> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,11>> = InputLayer::new();
 
     let rnd = rnd_base.clone();
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,37,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,_,11,11>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,100,1>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        LinearLayer::<_,_,_,_,11,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -201,7 +196,7 @@ fn test_weather() {
 
         line.clear();
 
-        if columns.len() != 39 {
+        if columns.len() != 13 {
             continue;
         }
 
@@ -214,7 +209,7 @@ fn test_weather() {
             .filter(|c| !c.parse::<f32>().is_err())
             .map(|c| c.parse::<f32>().unwrap())
             .collect::<Vec<f32>>();
-        if columns.len() < 37 {
+        if columns.len() < 11 {
             continue;
         }
 
@@ -229,13 +224,13 @@ fn test_weather() {
 
     let mut correct_answers = 0;
 
-    for _ in 0..10 {
+    for _ in 0..1 {
         teachers.shuffle(&mut rng);
 
         for (t, columns) in teachers.iter() {
             let t = *t;
 
-            let mut input = Arr::<f32, 37>::new();
+            let mut input = Arr::<f32, 11>::new();
 
             for (it, p) in input.iter_mut().zip(columns.iter()) {
                 *it = *p;
@@ -274,7 +269,7 @@ fn test_weather() {
 
         line.clear();
 
-        if columns.len() != 39 {
+        if columns.len() != 13 {
             continue;
         }
 
@@ -287,7 +282,7 @@ fn test_weather() {
                                         .filter(|c| !c.parse::<f32>().is_err())
                                         .map(|c| c.parse::<f32>().unwrap())
                                         .collect::<Vec<f32>>();
-        if columns.len() < 37 {
+        if columns.len() < 11 {
             continue;
         }
 
@@ -297,7 +292,7 @@ fn test_weather() {
     for (t, columns) in tests.iter() {
         let t = *t;
 
-        let mut input = Arr::<f32, 37>::new();
+        let mut input = Arr::<f32, 11>::new();
 
         for (it, p) in input.iter_mut().zip(columns.iter()) {
             *it = *p;
@@ -305,13 +300,14 @@ fn test_weather() {
 
         let r = net.forward_all(input);
 
-        if (t && r[0] >= 0.9) || r[0] < 0.01 {
+        if (t && r[0] >= 0.9) || !t && r[0] < 0.01 {
             correct_answers += 1;
-            println!("correct answer!");
+            println!("correct answer! t = {} r = {}",t,r[0]);
         } else {
             println!("incorrect. t = {} r = {}",t,r[0]);
         }
     }
 
     println!("correct_answers = {}",correct_answers);
+    println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
 }

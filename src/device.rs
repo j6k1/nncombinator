@@ -31,7 +31,7 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
         }
 
         for (i,u) in input.iter().zip(units.iter()) {
-            for (o,w) in output.iter_mut().skip(1).zip(u.iter()) {
+            for (o,w) in output.iter_mut().zip(u.iter()) {
                 *o += *i * *w;
             }
         }

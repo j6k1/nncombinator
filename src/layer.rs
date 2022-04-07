@@ -217,7 +217,7 @@ impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
 
         s.map(|u| {
             for (r, (l,u)) in r.iter_mut()
-                                            .zip(loss.iter().zip(u.iter())) {
+                                                .zip(loss.iter().zip(self.f.derive(&self.device,u).iter())) {
                 *r += *l * *u;
             }
         });
@@ -431,6 +431,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,D,I,
 
     fn pre_train(&mut self, input: Self::Input) -> Self::OutStack {
         let r = self.parent.pre_train(input);
+
         let u = r.map(|r| self.forward(r));
 
         Cons(r,u)

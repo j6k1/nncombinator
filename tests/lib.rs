@@ -19,7 +19,7 @@ use nncombinator::activation::{ReLu, Sigmoid, SoftMax};
 use nncombinator::arr::Arr;
 use nncombinator::device::DeviceCpu;
 use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, ForwardAll, InputLayer, LinearLayer, LinearOutputLayer, Train};
-use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass};
+use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{MomentumSGD};
 
 #[test]
@@ -155,8 +155,7 @@ fn test_weather() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, 1f32/(2f32/11f32).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, 1f32/(2f32/100f32).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/20f32.sqrt()).unwrap();
 
     let device = DeviceCpu::new();
 
@@ -166,17 +165,12 @@ fn test_weather() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,11,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,_,11,20>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,100,1>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,_,20,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
@@ -250,7 +244,7 @@ fn test_weather() {
                 0.
             };
 
-            let lossf = CrossEntropy::new();
+            let lossf = Mse::new();
 
             net.train(expected, input, &mut optimizer, &lossf);
         }

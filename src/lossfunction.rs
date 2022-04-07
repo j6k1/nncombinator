@@ -19,6 +19,7 @@ impl<U> LossFunction<U> for Mse<U> where U: Clone + Copy + UnitValue<U> {
     fn derive(&self, r: U, t: U) -> U {
         r - t
     }
+
     fn name(&self) -> &'static str {
         "mse"
     }
@@ -35,8 +36,9 @@ impl<U> CrossEntropy<U> where U: Clone + Copy + UnitValue<U> {
 }
 impl<U> LossFunction<U> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U> {
     fn derive(&self, r: U, t: U) -> U {
-        -(r / t) + (U::one() - t) / (U::one() - r)
+        -(r / (t + U::from_f64(1e-7).unwrap())) + (U::one() - t) / (U::one() - r)
     }
+
     fn name(&self) -> &'static str {
         "crossentropy"
     }
@@ -55,6 +57,7 @@ impl<U> LossFunction<U> for CrossEntropyMulticlass<U> where U: Clone + Copy + Un
     fn derive(&self, r: U, t: U) -> U {
         -t / r
     }
+
     fn name(&self) -> &'static str {
         "crossentropymulticlass"
     }

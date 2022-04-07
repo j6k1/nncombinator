@@ -60,6 +60,7 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
 
         loss
     }
+
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N> {
         let mut loss = Arr::new();
 

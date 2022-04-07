@@ -19,7 +19,7 @@ use nncombinator::activation::{ReLu, Sigmoid, SoftMax};
 use nncombinator::arr::Arr;
 use nncombinator::device::DeviceCpu;
 use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, ForwardAll, InputLayer, LinearLayer, LinearOutputLayer, Train};
-use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
+use nncombinator::lossfunction::{CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{MomentumSGD};
 
 #[test]
@@ -148,29 +148,28 @@ fn test_mnist() {
     debug_assert!(correct_answers > 10)
 }
 
-
 #[test]
 fn test_weather() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
-    let n1 = Normal::<f32>::new(0.0, 1f32/(2f32/11f32).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, 1f32/20f32.sqrt()).unwrap();
+    let n1 = Normal::<f32>::new(0.0, 1f32/(2f32/18f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/10f32.sqrt()).unwrap();
 
     let device = DeviceCpu::new();
 
-    let net:InputLayer<f32,Arr<f32,11>> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,18>> = InputLayer::new();
 
     let rnd = rnd_base.clone();
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,11,20>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,_,18,10>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,20,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,_,10,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
@@ -196,7 +195,7 @@ fn test_weather() {
 
         line.clear();
 
-        if columns.len() != 13 {
+        if columns.len() != 20 {
             continue;
         }
 
@@ -209,7 +208,7 @@ fn test_weather() {
             .filter(|c| !c.parse::<f32>().is_err())
             .map(|c| c.parse::<f32>().unwrap())
             .collect::<Vec<f32>>();
-        if columns.len() < 11 {
+        if columns.len() < 18 {
             continue;
         }
 
@@ -224,13 +223,13 @@ fn test_weather() {
 
     teachers.shuffle(&mut rng);
 
-    for _ in 0..5 {
+    for _ in 0..2 {
         teachers.shuffle(&mut rng);
 
         for (t, columns) in teachers.iter() {
             let t = *t;
 
-            let mut input = Arr::<f32, 11>::new();
+            let mut input = Arr::<f32,18>::new();
 
             for (it, p) in input.iter_mut().zip(columns.iter()) {
                 *it = *p;
@@ -269,12 +268,12 @@ fn test_weather() {
 
         line.clear();
 
-        if columns.len() != 13 {
+        if columns.len() != 20 {
             continue;
         }
 
         let t = match &*columns[1] {
-            "晴" => true,
+            "晴" | "快晴" => true,
             _ => false
         };
 
@@ -282,7 +281,7 @@ fn test_weather() {
                                         .filter(|c| !c.parse::<f32>().is_err())
                                         .map(|c| c.parse::<f32>().unwrap())
                                         .collect::<Vec<f32>>();
-        if columns.len() < 11 {
+        if columns.len() < 18 {
             continue;
         }
 
@@ -292,7 +291,7 @@ fn test_weather() {
     for (t, columns) in tests.iter() {
         let t = *t;
 
-        let mut input = Arr::<f32, 11>::new();
+        let mut input = Arr::<f32, 18>::new();
 
         for (it, p) in input.iter_mut().zip(columns.iter()) {
             *it = *p;

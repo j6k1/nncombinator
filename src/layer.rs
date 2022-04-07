@@ -145,7 +145,8 @@ impl<U,P,A,I,PI,D> ForwardAll for ActivationLayer<U,P,A,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          A: Activation<U,PI,D> {
+          A: Activation<U,PI,D>,
+          PI: Debug {
     type Input = I;
     type Output = PI;
     fn forward_all(&self, input: Self::Input) -> Self::Output {
@@ -156,7 +157,8 @@ impl<U,P,A,I,PI,D> Forward<PI,PI> for ActivationLayer<U,P,A,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          A: Activation<U,PI,D> {
+          A: Activation<U,PI,D>,
+          PI: Debug {
     fn forward(&self, input: &PI) -> PI {
         self.f.apply(&self.device,input)
     }

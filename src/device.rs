@@ -24,10 +24,8 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
     fn forward_linear<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NI>) -> Arr<U,NO> {
         let mut output:Arr<U,NO> = Arr::new();
 
-        let b = U::bias();
-
         for (o,w) in output.iter_mut().zip(bias.iter()) {
-            *o += b * *w;
+            *o += *w;
         }
 
         for (i,u) in input.iter().zip(units.iter()) {

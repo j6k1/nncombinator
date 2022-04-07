@@ -16,6 +16,7 @@ pub trait Stack {
     fn pop(self) -> (Self::Remaining, Self::Head);
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O;
 }
+#[derive(Debug)]
 pub struct Cons<R,T>(pub R,pub T) where R: Stack;
 
 impl<R,T> Stack for Cons<R,T> where R: Stack{
@@ -34,6 +35,8 @@ impl<R,T> Stack for Cons<R,T> where R: Stack{
         f(&self.1)
     }
 }
+
+#[derive(Debug)]
 pub struct Nil;
 
 impl Stack for Nil {

@@ -15,12 +15,12 @@ pub trait Forward<I,O> {
     fn forward(&self,input:&I) -> O;
 }
 pub trait ForwardAll {
-    type Input;
-    type Output;
+    type Input: Debug;
+    type Output: Debug;
     fn forward_all(&self,input:Self::Input) -> Self::Output;
 }
 pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {
-    type LossInput;
+    type LossInput: Debug;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self,input:Self::LossInput, stack:Self::OutStack, optimizer:&mut OP, lossf:&L);
     fn is_canonical_link<L: LossFunction<U>>(&self,_:&L) -> bool {
@@ -36,7 +36,7 @@ pub trait Backward<U,I,O> where U: UnitValue<U> {
     fn backward(&mut self, input:I) -> O;
 }
 pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
-    type OutStack: Stack<Head=Self::Output> + Sized;
+    type OutStack: Stack<Head=Self::Output> + Sized + Debug;
     fn pre_train(&mut self, input:Self::Input) -> Self::OutStack;
 }
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
@@ -80,32 +80,34 @@ impl<U,O> Persistence<U,TextFilePersistence<U>> for InputLayer<U,O>
 
     }
 }
-impl<U,O> ForwardAll for InputLayer<U,O> where U: UnitValue<U> {
+impl<U,O> ForwardAll for InputLayer<U,O> where U: UnitValue<U>, O: Debug {
     type Input = O;
     type Output = O;
     fn forward_all(&self,input:Self::Input) -> Self::Output {
         input
     }
 }
-impl<U,O> PreTrain<U> for InputLayer<U,O> where U: UnitValue<U> {
+impl<U,O> PreTrain<U> for InputLayer<U,O> where U: UnitValue<U>, O: Debug {
     type OutStack = Cons<Nil,Self::Output>;
 
     fn pre_train(&mut self, input:Self::Input) -> Self::OutStack {
         Cons(Nil,input)
     }
 }
-impl<U,O> BackwardAll<U> for InputLayer<U,O> where U: UnitValue<U> {
+impl<U,O> BackwardAll<U> for InputLayer<U,O> where U: UnitValue<U>, O: Debug {
     type LossInput = O;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, _: Self::LossInput, _:Self::OutStack, _: &mut OP, _:&L) {
         
     }
 }
-impl<U,O> Loss<U> for InputLayer<U,O> where U: UnitValue<U> {}
+impl<U,O> Loss<U> for InputLayer<U,O> where U: UnitValue<U>, O: Debug {}
 pub struct ActivationLayer<U,P,A,I,PI,D> where P: ForwardAll,
                                             U: UnitValue<U>,
                                             D: Device<U>,
-                                            A: Activation<U,PI,D> {
+                                            A: Activation<U,PI,D>,
+                                            PI: Debug,
+                                            I: Debug {
     parent:P,
     f:A,
     device:D,
@@ -116,7 +118,9 @@ pub struct ActivationLayer<U,P,A,I,PI,D> where P: ForwardAll,
 impl<U,P,A,I,PI,D> ActivationLayer<U,P,A,I,PI,D> where P: ForwardAll<Output=PI>,
                                                  U: UnitValue<U>,
                                                  D: Device<U>,
-                                                 A: Activation<U,PI,D> {
+                                                 A: Activation<U,PI,D>,
+                                                 PI: Debug,
+                                                 I: Debug {
     pub fn new(parent:P,f:A,device:&D) -> ActivationLayer<U,P,A,I,PI,D> {
         ActivationLayer {
             parent:parent,
@@ -132,7 +136,9 @@ impl<U,P,A,I,PI,D> Persistence<U,TextFilePersistence<U>> for ActivationLayer<U,P
     where P: ForwardAll<Output=PI> + Persistence<U,TextFilePersistence<U>>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
           D: Device<U>,
-          A: Activation<U,PI,D> {
+          A: Activation<U,PI,D>,
+          PI: Debug,
+          I: Debug {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)
     }
@@ -146,7 +152,8 @@ impl<U,P,A,I,PI,D> ForwardAll for ActivationLayer<U,P,A,I,PI,D>
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: Activation<U,PI,D>,
-          PI: Debug {
+          PI: Debug,
+          I: Debug {
     type Input = I;
     type Output = PI;
     fn forward_all(&self, input: Self::Input) -> Self::Output {
@@ -158,7 +165,8 @@ impl<U,P,A,I,PI,D> Forward<PI,PI> for ActivationLayer<U,P,A,I,PI,D>
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: Activation<U,PI,D>,
-          PI: Debug {
+          PI: Debug,
+          I: Debug {
     fn forward(&self, input: &PI) -> PI {
         self.f.apply(&self.device,input)
     }
@@ -167,11 +175,13 @@ impl<U,P,A,D,I,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          A: Activation<U,Arr<U,N>,D> {
+          A: Activation<U,Arr<U,N>,D>,
+          I: Debug {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack, Self::Output>;
 
     fn pre_train(&mut self, input: Self::Input) -> Self::OutStack {
         let r = self.parent.pre_train(input);
+
         let u = r.map(|r| self.forward(r));
 
         Cons(r,u)
@@ -181,7 +191,8 @@ impl<U,P,A,D,I,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,Arr<U,N
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          A: Activation<U,Arr<U,N>,D> {
+          A: Activation<U,Arr<U,N>,D>,
+          I: Debug {
     type LossInput = Arr<U,N>;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) {
@@ -198,7 +209,8 @@ impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          A: Activation<U,Arr<U,N>,D> {
+          A: Activation<U,Arr<U,N>,D>,
+          I: Debug {
     fn loss<L: LossFunction<U>>(&mut self, loss: Arr<U,N>, _:&L, stack: Self::OutStack) -> (Self::OutStack, Self::LossInput) {
         let (s,actual) = stack.pop();
         let mut r = Arr::new();
@@ -216,7 +228,9 @@ impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
 pub struct LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          IO: Debug,
+          I: Debug {
     u:PhantomData<U>,
     i:PhantomData<I>,
     io:PhantomData<IO>,
@@ -226,7 +240,9 @@ pub struct LinearOutputLayer<U,P,D,I,IO>
 impl<U,P,D,I,IO> LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          IO: Debug,
+          I: Debug {
     pub fn new(parent:P,device:&D) -> LinearOutputLayer<U,P,D,I,IO> {
         LinearOutputLayer {
             u:PhantomData::<U>,
@@ -240,7 +256,9 @@ impl<U,P,D,I,IO> LinearOutputLayer<U,P,D,I,IO>
 impl<U,P,D,I,IO> Persistence<U,TextFilePersistence<U>> for LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U> + Persistence<U,TextFilePersistence<U>>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
-          D: Device<U> {
+          D: Device<U>,
+          IO: Debug,
+          I: Debug {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
         persistence.verify_eof()
@@ -253,7 +271,9 @@ impl<U,P,D,I,IO> Persistence<U,TextFilePersistence<U>> for LinearOutputLayer<U,P
 impl<U,P,D,I,IO> ForwardAll for LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          IO: Debug,
+          I: Debug {
     type Input = I;
     type Output = IO;
     fn forward_all(&self, input: Self::Input) -> Self::Output {
@@ -263,7 +283,9 @@ impl<U,P,D,I,IO> ForwardAll for LinearOutputLayer<U,P,D,I,IO>
 impl<U,P,D,I,IO> PreTrain<U> for LinearOutputLayer<U,P,D,I,IO>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=IO> + BackwardAll<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          IO: Debug,
+          I: Debug {
     type OutStack = P::OutStack;
 
     fn pre_train(&mut self, input: Self::Input) -> Self::OutStack {
@@ -273,7 +295,8 @@ impl<U,P,D,I,IO> PreTrain<U> for LinearOutputLayer<U,P,D,I,IO>
 impl<U,P,D,I,const NO:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
     where P: BackwardAll<U,LossInput=Arr<U,NO>> + ForwardAll<Input=I,Output=Arr<U,NO>>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          I: Debug {
     type LossInput = Arr<U,NO>;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) {
@@ -307,7 +330,8 @@ impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
 }
 pub struct LinearLayer<U,P,D,I,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>>, U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          I: Debug {
     parent:P,
     device:D,
     units:Arr2<U,NI,NO>,
@@ -315,7 +339,8 @@ pub struct LinearLayer<U,P,D,I,const NI:usize,const NO:usize>
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> LinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>>, U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          I: Debug {
     pub fn new<UI: FnMut() -> U, BI: FnMut() -> U>(parent:P,device:&D,mut ui:UI,mut bi:BI) -> LinearLayer<U,P,D,I,NI,NO> {
         let mut units:Arr2<U,NI,NO> = Arr2::new();
         let mut bias:Arr<U,NO> = Arr::new();
@@ -341,7 +366,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> LinearLayer<U,P,D,I,NI,NO>
 impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>> for LinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + Persistence<U,TextFilePersistence<U>>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
-          D: Device<U>, ConfigReadError: From<<U as FromStr>::Err> {
+          D: Device<U>, ConfigReadError: From<<U as FromStr>::Err>,
+          I: Debug {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 
@@ -378,7 +404,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>
 impl<U,P,D,I,const NI:usize,const NO:usize> Forward<Arr<U,NI>,Arr<U,NO>> for LinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          I: Debug {
 
     fn forward(&self,input:&Arr<U,NI>) -> Arr<U,NO> {
         self.device.forward_linear(&self.bias,&self.units,input)
@@ -387,7 +414,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Forward<Arr<U,NI>,Arr<U,NO>> for Lin
 impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          I: Debug {
     type Input = I;
     type Output = Arr<U,NO>;
     fn forward_all(&self, input: Self::Input) -> Arr<U,NO> {
@@ -397,7 +425,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,P,D,I,N
 impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,D,I,NI,NO>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,NI>>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          I: Debug {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack,Self::Output>;
 
     fn pre_train(&mut self, input: Self::Input) -> Self::OutStack {
@@ -410,7 +439,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,D,I,
 impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Arr<U,NI>> for LinearLayer<U,P,D,I,NI,NO>
     where U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U> {
+          P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U>,
+          I: Debug {
     fn backward(&mut self, input: &Arr<U,NO>) -> Arr<U,NI> {
         self.device.backward_liner(&self.units,input)
     }
@@ -418,7 +448,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Arr<U,NI>> for
 impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,I,NI,NO>
     where P: BackwardAll<U,LossInput=Arr<U,NI>> + ForwardAll<Input=I,Output=Arr<U,NI>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          I: Debug {
     type LossInput = Arr<U,NO>;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) {
@@ -452,5 +483,6 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D
 impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,P,D,I,NI,NO>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> {
+          D: Device<U>,
+          I: Debug {
 }

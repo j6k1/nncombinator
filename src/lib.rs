@@ -15,6 +15,7 @@ pub trait Stack {
     type Head;
     fn pop(self) -> (Self::Remaining, Self::Head);
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O;
+    fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O;
 }
 #[derive(Debug)]
 pub struct Cons<R,T>(pub R,pub T) where R: Stack;
@@ -34,6 +35,7 @@ impl<R,T> Stack for Cons<R,T> where R: Stack{
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
         f(&self.1)
     }
+    fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O { f(&self.0) }
 }
 
 #[derive(Debug)]
@@ -48,6 +50,9 @@ impl Stack for Nil {
 
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
         f(&())
+    }
+    fn map_remaining<F: FnOnce(&Self::Remaining) -> O, O>(&self, f: F) -> O {
+        f(&Nil)
     }
 }
 #[cfg(test)]

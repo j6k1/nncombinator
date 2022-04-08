@@ -351,3 +351,26 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4IterMut
         }
     }
 }
+pub struct DiffArr<T,const N:usize> {
+    items:Vec<(usize,T)>
+}
+
+impl<T,const N:usize> DiffArr<T,N> {
+    pub fn new() -> DiffArr<T,N> {
+        DiffArr {
+            items:Vec::new()
+        }
+    }
+
+    pub fn push(&mut self,i:usize,v:T) {
+        if i >= N {
+            panic!("index out of bounds: the len is {} but the index is {}", N, i);
+        }
+
+        self.items.push((i,v));
+    }
+
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=&(usize,T)> {
+        self.items.iter()
+    }
+}

@@ -11,6 +11,10 @@ use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
 
+pub enum DiffInput<T,U,const NI:usize,const NO:usize> where U: UnitValue<U> {
+    Diff(T,Arr<U,NO>),
+    NotDiff(Arr<U,NI>)
+}
 pub trait Forward<I,O> {
     fn forward(&self,input:&I) -> O;
 }
@@ -483,6 +487,199 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,P,D,I,NI,NO>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+}
+pub struct DiffLinearLayer<U,P,D,I,const NI:usize,const NO:usize>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    parent:P,
+    device:D,
+    units:Arr2<U,NI,NO>,
+    bias:Arr<U,NO>
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    pub fn new<UI: FnMut() -> U, BI: FnMut() -> U>(parent:P,device:&D,mut ui:UI,mut bi:BI) -> DiffLinearLayer<U,P,D,I,NI,NO> {
+        let mut units:Arr2<U,NI,NO> = Arr2::new();
+        let mut bias:Arr<U,NO> = Arr::new();
+
+        for mut it in units.iter_mut() {
+            for it in it.iter_mut() {
+                *it = ui();
+            }
+        }
+
+        for it in bias.iter_mut() {
+            *it = bi();
+        }
+
+        DiffLinearLayer {
+            parent:parent,
+            device:device.clone(),
+            units: units,
+            bias:bias
+        }
+    }
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>> for DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + Persistence<U,TextFilePersistence<U>>,
+          U: Default + Clone + Copy + UnitValue<U> + FromStr,
+          D: Device<U>, ConfigReadError: From<<U as FromStr>::Err>,
+          I: Debug {
+    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+        self.parent.load(persistence)?;
+
+        for b in self.bias.iter_mut() {
+            *b = persistence.read()?;
+        }
+
+        for mut u in self.units.iter_mut() {
+            for w in u.iter_mut() {
+                *w = persistence.read()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn save(&mut self, persistence: &mut TextFilePersistence<U>) {
+        self.parent.save(persistence);
+
+        persistence.write(UnitOrMarker::LayerStart);
+
+        for b in self.bias.iter() {
+            persistence.write(UnitOrMarker::Unit(*b));
+        }
+
+        for u in self.units.iter() {
+            persistence.write(UnitOrMarker::UnitsStart);
+            for w in u.iter() {
+                persistence.write(UnitOrMarker::Unit(*w));
+            }
+        }
+    }
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    type Input = I;
+    type Output = Arr<U,NO>;
+
+    fn forward_all(&self, input: Self::Input) -> Arr<U,NO> {
+        let input = self.parent.forward_all(input);
+
+        match input {
+            DiffInput::Diff(d, mut output) => {
+                for &(i,d) in d.iter() {
+                    for (o,j) in output.iter_mut().zip(0..NO) {
+                        *o += self.units[(i,j)] * d;
+                    }
+                }
+                output
+            },
+            DiffInput::NotDiff(input) => {
+                self.device.forward_linear(&self.bias,&self.units,&input)
+            }
+        }
+    }
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: PreTrain<U> + ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    type OutStack = Cons<<P as PreTrain<U>>::OutStack,Arr<U,NO>>;
+
+    fn pre_train(&mut self, input: Self::Input) -> Self::OutStack {
+        let s = self.parent.pre_train(input);
+
+        let u = s.map(|input| {
+            match input {
+                DiffInput::Diff(d, output) => {
+                    let mut output = output.clone();
+
+                    for &(i, d) in d.iter() {
+                        for (o, j) in output.iter_mut().zip(0..NO) {
+                            *o += self.units[(i, j)] * d;
+                        }
+                    }
+                    output
+                },
+                DiffInput::NotDiff(input) => {
+                    self.device.forward_linear(&self.bias, &self.units, &input)
+                }
+            }
+        });
+
+        Cons(s,u)
+    }
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Arr<U,NI>> for DiffLinearLayer<U,P,D,I,NI,NO>
+    where U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + BackwardAll<U>,
+          I: Debug {
+    fn backward(&mut self, input: &Arr<U,NO>) -> Arr<U,NI> {
+        self.device.backward_liner(&self.units,input)
+    }
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: BackwardAll<U,LossInput=Arr<U,NI>> +
+             ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    type LossInput = Arr<U,NO>;
+
+    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) {
+        let loss = input;
+
+        let (s,_) = stack.pop();
+
+        {
+            for l in loss.iter() {
+                for w in self.bias.iter_mut() {
+                    optimizer.update(*l, w);
+                }
+            }
+
+            s.map(|o| {
+                let o = match o {
+                    DiffInput::Diff(_, output) => {
+                        output.clone()
+                    },
+                    DiffInput::NotDiff(input) => {
+                        self.device.forward_linear(&self.bias, &self.units, &input)
+                    }
+                };
+
+                for (mut u,(l,o)) in self.units.iter_mut().zip(loss.iter().zip(o.iter())) {
+                    for w in u.iter_mut() {
+                        optimizer.update(*l * *o, w);
+                    }
+                }
+            });
+        }
+
+        let loss= self.backward(&loss);
+
+        let (s,loss) = self.parent.loss(loss,lossf,s);
+
+        self.parent.backward_all(loss, s, optimizer, lossf);
+    }
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: PreTrain<U> + ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
+             BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug {

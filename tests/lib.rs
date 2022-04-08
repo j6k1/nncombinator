@@ -153,8 +153,8 @@ fn test_weather() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
-    let n1 = Normal::<f32>::new(0.0, 1f32/(2f32/14f32).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
+    let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/10f32.sqrt()).unwrap();
 
     let device = DeviceCpu::new();
 
@@ -164,12 +164,12 @@ fn test_weather() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,_,14,10>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,_,10,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {

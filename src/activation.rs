@@ -67,8 +67,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCp
     fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(input.iter()) {
-            *r = U::one() / (U::one() + (-*i).exp());
+        for (r,&i) in r.iter_mut().zip(input.iter()) {
+            *r = U::one() / (U::one() + (-i).exp());
         }
 
         r

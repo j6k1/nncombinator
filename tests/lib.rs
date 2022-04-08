@@ -154,7 +154,7 @@ fn test_weather() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, 1f32/10f32.sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
 
     let device = DeviceCpu::new();
 
@@ -164,12 +164,12 @@ fn test_weather() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,14,10>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,_,10,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -199,14 +199,11 @@ fn test_weather() {
             continue;
         }
 
-        let t = match &*columns[1] {
-            "晴" | "快晴" => true,
-            _ => false
-        };
+        let t = columns[1].find("晴").is_some();
 
         let columns = columns.iter().skip(2)
             .filter(|c| !c.parse::<f32>().is_err())
-            .map(|c| c.parse::<f32>().unwrap() / 1000.)
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
             .collect::<Vec<f32>>();
         if columns.len() < 14 {
             continue;
@@ -223,7 +220,7 @@ fn test_weather() {
 
     teachers.shuffle(&mut rng);
 
-    for _ in 0..5 {
+    for _ in 0..1 {
         teachers.shuffle(&mut rng);
 
         for (t, columns) in teachers.iter() {
@@ -272,14 +269,11 @@ fn test_weather() {
             continue;
         }
 
-        let t = match &*columns[1] {
-            "晴" | "快晴" => true,
-            _ => false
-        };
+        let t = columns[1].find("晴").is_some();
 
         let columns = columns.iter().skip(2)
                                         .filter(|c| !c.parse::<f32>().is_err())
-                                        .map(|c| c.parse::<f32>().unwrap() / 1000.)
+                                        .map(|c| c.parse::<f32>().unwrap() / 10000.)
                                         .collect::<Vec<f32>>();
         if columns.len() < 14 {
             continue;
@@ -299,14 +293,11 @@ fn test_weather() {
 
         let r = net.forward_all(input);
 
-        if (t && r[0] >= 0.9) || !t && r[0] < 0.01 {
+        if (t && r[0] >= 0.5) || !t && r[0] < 0.5 {
             correct_answers += 1;
-            println!("correct answer! t = {} r = {}",t,r[0]);
-        } else {
-            println!("incorrect. t = {} r = {}",t,r[0]);
         }
     }
 
-    println!("correct_answers = {}",correct_answers);
     println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
+    debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }

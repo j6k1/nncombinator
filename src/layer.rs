@@ -43,6 +43,9 @@ pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     type OutStack: Stack<Head=Self::Output> + Sized + Debug;
     fn pre_train(&mut self, input:Self::Input) -> Self::OutStack;
 }
+pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
+    fn forward_diff(&mut self, input:Self::Input) -> Self::OutStack;
+}
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
     fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, optimizer:&mut OP, lossf:&L);
 }
@@ -60,6 +63,11 @@ impl<T> AddLayer for T where T: ForwardAll + Sized {
 impl<T,U> AddLayerTrain<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
     fn add_layer_train<C, F>(self, f: F) -> C where C: Train<U>, F: FnOnce(Self) -> C {
         f(self)
+    }
+}
+impl<T,U> ForwardDiff<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
+    fn forward_diff(&mut self, input: Self::Input) -> Self::OutStack {
+        self.pre_train(input)
     }
 }
 pub struct InputLayer<U,O> where U: UnitValue<U> {

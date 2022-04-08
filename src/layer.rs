@@ -653,20 +653,24 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U
             }
 
             s.map(|o| {
-                let o = match o {
-                    DiffInput::Diff(_, output) => {
-                        output.clone()
+                match o {
+                    DiffInput::Diff(_, o) => {
+                        for (mut u,(l,o)) in self.units.iter_mut().zip(loss.iter().zip(o.iter())) {
+                            for w in u.iter_mut() {
+                                optimizer.update(*l * *o, w);
+                            }
+                        }
                     },
                     DiffInput::NotDiff(input) => {
-                        self.device.forward_linear(&self.bias, &self.units, &input)
+                       let o = self.device.forward_linear(&self.bias, &self.units, input);
+
+                        for (mut u,(l,o)) in self.units.iter_mut().zip(loss.iter().zip(o.iter())) {
+                            for w in u.iter_mut() {
+                                optimizer.update(*l * *o, w);
+                            }
+                        }
                     }
                 };
-
-                for (mut u,(l,o)) in self.units.iter_mut().zip(loss.iter().zip(o.iter())) {
-                    for w in u.iter_mut() {
-                        optimizer.update(*l * *o, w);
-                    }
-                }
             });
         }
 

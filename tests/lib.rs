@@ -206,7 +206,7 @@ fn test_weather() {
 
         let columns = columns.iter().skip(2)
             .filter(|c| !c.parse::<f32>().is_err())
-            .map(|c| c.parse::<f32>().unwrap())
+            .map(|c| c.parse::<f32>().unwrap() / 1000.)
             .collect::<Vec<f32>>();
         if columns.len() < 14 {
             continue;
@@ -279,7 +279,7 @@ fn test_weather() {
 
         let columns = columns.iter().skip(2)
                                         .filter(|c| !c.parse::<f32>().is_err())
-                                        .map(|c| c.parse::<f32>().unwrap())
+                                        .map(|c| c.parse::<f32>().unwrap() / 1000.)
                                         .collect::<Vec<f32>>();
         if columns.len() < 14 {
             continue;

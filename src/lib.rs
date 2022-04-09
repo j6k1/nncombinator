@@ -14,6 +14,7 @@ pub mod persistence;
 pub trait Stack {
     type Remaining: Stack;
     type Head;
+
     fn pop(self) -> (Self::Remaining, Self::Head);
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O;
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O;
@@ -21,7 +22,24 @@ pub trait Stack {
 #[derive(Debug)]
 pub struct Cons<R,T>(pub R,pub T) where R: Stack;
 
-impl<R,T> Stack for Cons<R,T> where R: Stack{
+pub trait Node<T> {
+    type Index;
+    fn get_index(&self) -> Self::Index;
+}
+
+impl Node<Nil> for Nil {
+    type Index = Here;
+    fn get_index(&self) -> Self::Index {
+        Here
+    }
+}
+impl<R,T> Node<Cons<R,T>> for Cons<R,T> where R: Node<R> + Stack {
+    type Index = There<R::Index>;
+    fn get_index(&self) -> Self::Index {
+        There(self.0.get_index())
+    }
+}
+impl<R,T> Stack for Cons<R,T> where R: Stack {
     type Remaining = R;
     type Head = T;
 
@@ -38,20 +56,26 @@ impl<R,T> Stack for Cons<R,T> where R: Stack{
     }
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O { f(&self.0) }
 }
-
 #[derive(Debug)]
 pub struct Nil;
 
-pub struct There<T>(PhantomData::<T>);
-pub enum Here {}
+impl Stack for Nil {
+    type Remaining = Nil;
+    type Head = ();
+    fn pop(self) -> (Self::Remaining, Self::Head) {
+        (Nil,())
+    }
 
-pub trait Node<T> {
-    type Parent;
+    fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
+        f(&())
+    }
+    fn map_remaining<F: FnOnce(&Self::Remaining) -> O, O>(&self, f: F) -> O {
+        f(&Nil)
+    }
 }
 
-impl<T> Node<T> for There<T> {
-    type Parent = T;
-}
+pub struct There<T>(T);
+pub struct Here;
 
 pub trait Same<T> {}
 
@@ -72,39 +96,25 @@ pub trait Find<T,P>: FindBase<T,P> {
         self.get_head_mut()
     }
 }
-impl<T,Head,TailIndex> Find<T,Pair<TailIndex,TailIndex>> for Cons<Head,T>
-    where Head: Find<T,Pair<TailIndex,TailIndex>>,
+impl<T,R,TailIndex> Find<T,Pair<TailIndex,TailIndex>> for Cons<R,T>
+    where R: Find<T,Pair<TailIndex,TailIndex>>,
           Pair<TailIndex,TailIndex>: Same<TailIndex> {
-
     fn get(&self) -> &T {
         &self.1
     }
+
     fn get_mut(&mut self) -> &mut T {
         &mut self.1
     }
 }
-impl<T,Head,TailIndex> FindBase<T,Pair<TailIndex,TailIndex>> for Cons<Head,T>
-    where Head: Find<T,Pair<TailIndex,TailIndex>> {
+impl<T,R,TailIndex> FindBase<T,Pair<TailIndex,TailIndex>> for Cons<R,T>
+    where R: Find<T,Pair<TailIndex,TailIndex>> {
 
     fn get_head(&self) -> &T {
         self.0.get()
     }
     fn get_head_mut(&mut self) -> &mut T {
         self.0.get_mut()
-    }
-}
-impl Stack for Nil {
-    type Remaining = Nil;
-    type Head = ();
-    fn pop(self) -> (Self::Remaining, Self::Head) {
-        (Nil,())
-    }
-
-    fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
-        f(&())
-    }
-    fn map_remaining<F: FnOnce(&Self::Remaining) -> O, O>(&self, f: F) -> O {
-        f(&Nil)
     }
 }
 #[cfg(test)]

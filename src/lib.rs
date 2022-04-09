@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use crate::ope::UnitValue;
 
 pub mod error;
@@ -41,6 +42,57 @@ impl<R,T> Stack for Cons<R,T> where R: Stack{
 #[derive(Debug)]
 pub struct Nil;
 
+pub struct There<T>(PhantomData::<T>);
+pub enum Here {}
+
+pub trait Node<T> {
+    type Parent;
+}
+
+impl<T> Node<T> for There<T> {
+    type Parent = T;
+}
+
+pub trait Same<T> {}
+
+pub struct Pair<T1,T2>(PhantomData::<T1>,PhantomData::<T2>);
+
+impl<T> Same<T> for Pair<T,T> {}
+
+pub trait FindBase<T,P>: Stack {
+    fn get_head(&self) -> &T;
+    fn get_head_mut(&mut self) -> &mut T;
+}
+pub trait Find<T,P>: FindBase<T,P> {
+    fn get(&self) -> &T {
+        self.get_head()
+    }
+
+    fn get_mut(&mut self) -> &mut T {
+        self.get_head_mut()
+    }
+}
+impl<T,Head,TailIndex> Find<T,Pair<TailIndex,TailIndex>> for Cons<Head,T>
+    where Head: Find<T,Pair<TailIndex,TailIndex>>,
+          Pair<TailIndex,TailIndex>: Same<TailIndex> {
+
+    fn get(&self) -> &T {
+        &self.1
+    }
+    fn get_mut(&mut self) -> &mut T {
+        &mut self.1
+    }
+}
+impl<T,Head,TailIndex> FindBase<T,Pair<TailIndex,TailIndex>> for Cons<Head,T>
+    where Head: Find<T,Pair<TailIndex,TailIndex>> {
+
+    fn get_head(&self) -> &T {
+        self.0.get()
+    }
+    fn get_head_mut(&mut self) -> &mut T {
+        self.0.get_mut()
+    }
+}
 impl Stack for Nil {
     type Remaining = Nil;
     type Head = ();

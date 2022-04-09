@@ -49,6 +49,10 @@ pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
     fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, optimizer:&mut OP, lossf:&L);
 }
+pub trait AscDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
+    type DiffInput: Debug;
+    fn asc_diff_input(&self, stack:Self::OutStack) -> Self::DiffInput;
+}
 pub trait AddLayer: ForwardAll where Self: Sized {
     fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
 }
@@ -217,6 +221,20 @@ impl<U,P,A,D,I,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,Arr<U,N
         self.f.is_canonical_link(l)
     }
 }
+impl<U,P,A,D,I,const N:usize> AscDiffInput<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
+    where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + AscDiffInput<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          A: Activation<U,Arr<U,N>,D>,
+          I: Debug {
+    type DiffInput = P::DiffInput;
+
+    fn asc_diff_input(&self, stack: Self::OutStack) -> Self::DiffInput {
+        let (s,_) = stack.pop();
+
+        self.parent.asc_diff_input(s)
+    }
+}
 impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>>,
           U: Default + Clone + Copy + UnitValue<U>,
@@ -305,7 +323,7 @@ impl<U,P,D,I,IO> PreTrain<U> for LinearOutputLayer<U,P,D,I,IO>
     }
 }
 impl<U,P,D,I,const NO:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
-    where P: BackwardAll<U,LossInput=Arr<U,NO>> + ForwardAll<Input=I,Output=Arr<U,NO>>,
+    where P: BackwardAll<U,LossInput=Arr<U,NO>> + ForwardAll<Input=I,Output=Arr<U,NO>> + PreTrain<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug {
@@ -315,8 +333,19 @@ impl<U,P,D,I,const NO:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,I,Arr<U,
         self.parent.backward_all(input, stack, optimizer, lossf);
     }
 }
+impl<U,P,D,I,const NO:usize> AscDiffInput<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
+    where P: BackwardAll<U,LossInput=Arr<U,NO>> + ForwardAll<Input=I,Output=Arr<U,NO>> + PreTrain<U> + Loss<U> + AscDiffInput<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    type DiffInput = P::DiffInput;
+
+    fn asc_diff_input(&self, stack: Self::OutStack) -> Self::DiffInput {
+        self.parent.asc_diff_input(stack)
+    }
+}
 impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
-    where P: BackwardAll<U,LossInput=Arr<U,NO>> + ForwardAll<Input=I,Output=Arr<U,NO>> + Loss<U>,
+    where P: BackwardAll<U,LossInput=Arr<U,NO>> + ForwardAll<Input=I,Output=Arr<U,NO>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug {
@@ -491,6 +520,19 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D
         let (s,loss) = self.parent.loss(loss,lossf,s);
 
         self.parent.backward_all(loss, s, optimizer, lossf);
+    }
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> AscDiffInput<U> for LinearLayer<U,P,D,I,NI,NO>
+    where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U> + AscDiffInput<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    type DiffInput = P::DiffInput;
+
+    fn asc_diff_input(&self, stack: Self::OutStack) -> Self::DiffInput {
+        let (s,_) = stack.pop();
+
+        self.parent.asc_diff_input(s)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,P,D,I,NI,NO>
@@ -687,6 +729,19 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U
         let (s,loss) = self.parent.loss(loss,lossf,s);
 
         self.parent.backward_all(loss, s, optimizer, lossf);
+    }
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> AscDiffInput<U> for DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: BackwardAll<U,LossInput=Arr<U,NI>> + ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    type DiffInput = Arr<U,NO>;
+
+    fn asc_diff_input(&self, stack: Self::OutStack) -> Self::DiffInput {
+        let (_,o) = stack.pop();
+
+        o
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<U,P,D,I,NI,NO>

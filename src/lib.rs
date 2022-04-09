@@ -95,6 +95,14 @@ pub trait Find<T,P>: FindBase<T,P> {
     fn get_mut(&mut self) -> &mut T {
         self.get_head_mut()
     }
+
+    fn get_by(&self,_:P) -> &T {
+        self.get()
+    }
+    
+    fn get_by_mut(&mut self,_:P) -> &mut T {
+        self.get_mut()
+    }
 }
 impl<T,R,TailIndex> Find<T,Pair<TailIndex,TailIndex>> for Cons<R,T>
     where R: Find<T,Pair<TailIndex,TailIndex>>,

@@ -463,6 +463,8 @@ fn test_weather_by_forward_diff() {
 
             Some(net.forward_diff(DiffInput::Diff(d,o)))
         } else {
+            prev = input.clone();
+
             Some(net.forward_diff(DiffInput::NotDiff(input)))
         };
 

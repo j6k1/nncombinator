@@ -10,7 +10,7 @@ homepage = "https://crates.io/crates/nncombinator"
 repository = "https://github.com/j6k1/nncombinator"
 readme = "README.md"
 
-keywords = ["neural network","machine learning","numeric calculation"]
+keywords = ["neural-network","machine-learning","numeric-calculation"]
 categories = ["mathematics","science"]
 license = "MIT"
 

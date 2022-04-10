@@ -376,3 +376,87 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
         self.items.iter()
     }
 }
+#[derive(Debug,Eq,PartialEq)]
+pub struct VecArrView<T,const N:usize> {
+    arr:Box<[T]>,
+}
+impl<T,const N:usize> VecArrView<T,N> {
+    pub fn iter(&self) -> VecArrViewIter<T,N> {
+        VecArrViewIter(&*self.arr)
+    }
+
+    pub fn iter_mut(&mut self) -> VecArrViewIterMut<T,N> {
+        VecArrViewIterMut(&mut *self.arr)
+    }
+}
+impl<T,const N:usize> From<Vec<Arr<T,N>>> for VecArrView<T,N> where T: Default + Clone + Copy {
+    fn from(items: Vec<Arr<T, N>>) -> Self {
+        let mut s = vec![T::default(); N * items.len()].into_boxed_slice();
+
+        let mut it = s.iter_mut();
+
+        for i in items.iter() {
+            for &i in i.iter() {
+                 if let Some(it) = it.next() {
+                     *it = i;
+                 }
+            }
+        }
+
+        VecArrView {
+            arr:s
+        }
+    }
+}
+#[derive(Debug,Eq,PartialEq)]
+pub struct VecArrViewIter<'a,T,const N:usize>(&'a [T]);
+
+impl<'a,T,const N:usize> VecArrViewIter<'a,T,N> {
+    const fn element_size(&self) -> usize {
+        N
+    }
+}
+impl<'a,T,const N:usize> Iterator for VecArrViewIter<'a,T,N> {
+    type Item = ArrView<'a,T,N>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+        if slice.is_empty() {
+            None
+        } else {
+            let (l,r) = slice.split_at(self.element_size());
+
+            self.0 = r;
+
+            Some(ArrView {
+                arr:l
+            })
+        }
+    }
+}
+#[derive(Debug,Eq,PartialEq)]
+pub struct VecArrViewIterMut<'a,T,const N:usize>(&'a mut [T]);
+
+impl<'a,T,const N:usize> VecArrViewIterMut<'a,T,N> {
+    const fn element_size(&self) -> usize {
+        N
+    }
+}
+impl<'a,T,const N:usize> Iterator for VecArrViewIterMut<'a,T,N> {
+    type Item = ArrViewMut<'a,T,N>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+        if slice.is_empty() {
+            None
+        } else {
+            let (l,r) = slice.split_at_mut(self.element_size());
+
+            self.0 = r;
+
+            Some(ArrViewMut {
+                arr:l
+            })
+        }
+    }
+}

@@ -41,10 +41,10 @@ pub trait Backward<U,I,O> where U: UnitValue<U> {
 }
 pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     type OutStack: Stack<Head=Self::Output> + Sized + Debug;
-    fn pre_train(&mut self, input:Self::Input) -> Self::OutStack;
+    fn pre_train(&self, input:Self::Input) -> Self::OutStack;
 }
 pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
-    fn forward_diff(&mut self, input:Self::Input) -> Self::OutStack;
+    fn forward_diff(&self, input:Self::Input) -> Self::OutStack;
 }
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
     fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, optimizer:&mut OP, lossf:&L);
@@ -70,7 +70,7 @@ impl<T,U> AddLayerTrain<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
     }
 }
 impl<T,U> ForwardDiff<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
-    fn forward_diff(&mut self, input: Self::Input) -> Self::OutStack {
+    fn forward_diff(&self, input: Self::Input) -> Self::OutStack {
         self.pre_train(input)
     }
 }
@@ -106,7 +106,7 @@ impl<U,O> ForwardAll for InputLayer<U,O> where U: UnitValue<U>, O: Debug {
 impl<U,O> PreTrain<U> for InputLayer<U,O> where U: UnitValue<U>, O: Debug {
     type OutStack = Cons<Nil,Self::Output>;
 
-    fn pre_train(&mut self, input:Self::Input) -> Self::OutStack {
+    fn pre_train(&self, input:Self::Input) -> Self::OutStack {
         Cons(Nil,input)
     }
 }
@@ -195,7 +195,7 @@ impl<U,P,A,D,I,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D
           I: Debug {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack, Self::Output>;
 
-    fn pre_train(&mut self, input: Self::Input) -> Self::OutStack {
+    fn pre_train(&self, input: Self::Input) -> Self::OutStack {
         let r = self.parent.pre_train(input);
 
         let u = r.map(|r| self.forward(r));
@@ -318,7 +318,7 @@ impl<U,P,D,I,IO> PreTrain<U> for LinearOutputLayer<U,P,D,I,IO>
           I: Debug {
     type OutStack = P::OutStack;
 
-    fn pre_train(&mut self, input: Self::Input) -> Self::OutStack {
+    fn pre_train(&self, input: Self::Input) -> Self::OutStack {
         self.parent.pre_train(input)
     }
 }
@@ -470,7 +470,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,D,I,
           I: Debug {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack,Self::Output>;
 
-    fn pre_train(&mut self, input: Self::Input) -> Self::OutStack {
+    fn pre_train(&self, input: Self::Input) -> Self::OutStack {
         let r = self.parent.pre_train(input);
 
         let u = r.map(|r| self.forward(r));
@@ -649,7 +649,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,P,
           I: Debug {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack,Arr<U,NO>>;
 
-    fn pre_train(&mut self, input: Self::Input) -> Self::OutStack {
+    fn pre_train(&self, input: Self::Input) -> Self::OutStack {
         let s = self.parent.pre_train(input);
 
         let u = s.map(|input| {

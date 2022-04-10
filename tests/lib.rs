@@ -18,7 +18,7 @@ use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLu, Sigmoid, SoftMax};
 use nncombinator::arr::{Arr, DiffArr};
 use nncombinator::device::DeviceCpu;
-use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AscDiffInput, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
+use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AskDiffInput, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
 use nncombinator::lossfunction::{CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{MomentumSGD};
 
@@ -459,7 +459,7 @@ fn test_weather_by_forward_diff() {
 
             prev = input.clone();
 
-            let o = net.asc_diff_input(s);
+            let o = net.ask_diff_input(s);
 
             Some(net.forward_diff(DiffInput::Diff(d,o)))
         } else {

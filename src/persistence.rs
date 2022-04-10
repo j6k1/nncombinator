@@ -16,7 +16,7 @@ pub trait SaveToFile<U> {
 pub trait ReadFromPersistence<U> {
     fn read(&mut self) -> U;
 }
-pub trait SaveFromPersistence<U> {
+pub trait SaveToPersistence<U> {
     fn write(&mut self);
 }
 pub enum UnitOrMarker<U> {

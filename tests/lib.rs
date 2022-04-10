@@ -16,9 +16,9 @@ use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLu, Sigmoid, SoftMax};
-use nncombinator::arr::Arr;
+use nncombinator::arr::{Arr, DiffArr};
 use nncombinator::device::DeviceCpu;
-use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, ForwardAll, InputLayer, LinearLayer, LinearOutputLayer, Train};
+use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AscDiffInput, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
 use nncombinator::lossfunction::{CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{MomentumSGD};
 
@@ -32,7 +32,7 @@ fn test_mnist() {
 
     let device = DeviceCpu::new();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
 
     let rnd = rnd_base.clone();
 
@@ -158,7 +158,7 @@ fn test_weather() {
 
     let device = DeviceCpu::new();
 
-    let net:InputLayer<f32,Arr<f32,14>> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,14>,_> = InputLayer::new();
 
     let rnd = rnd_base.clone();
 
@@ -294,6 +294,181 @@ fn test_weather() {
         let r = net.forward_all(input);
 
         if (t && r[0] >= 0.5) || !t && r[0] < 0.5 {
+            correct_answers += 1;
+        }
+    }
+
+    println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
+    debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
+}
+
+#[test]
+fn test_weather_by_forward_diff() {
+    let mut rnd = prelude::thread_rng();
+    let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
+
+    let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
+
+    let device = DeviceCpu::new();
+
+    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_> = InputLayer::new();
+
+    let rnd = rnd_base.clone();
+
+    let mut net = net.add_layer(|l| {
+        let rnd = rnd.clone();
+        DiffLinearLayer::<_,_,_,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayer::<_,_,_,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+    }).add_layer(|l| {
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer_train(|l| {
+        LinearOutputLayer::new(l,&device)
+    });
+
+    let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
+
+    let mut reader =  BufReader::new(
+        File::open(Path::new("data")
+            .join("weather")
+            .join("training")
+            .join("weather.csv")).unwrap());
+
+    let mut line:String = String::new();
+
+    loop {
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+
+        let columns = line.trim().split(',').map(|c| c.to_string()).collect::<Vec<String>>();
+
+        line.clear();
+
+        if columns.len() != 16 {
+            continue;
+        }
+
+        let t = columns[1].find("晴").is_some();
+
+        let columns = columns.iter().skip(2)
+            .filter(|c| !c.parse::<f32>().is_err())
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
+            .collect::<Vec<f32>>();
+        if columns.len() < 14 {
+            continue;
+        }
+
+        teachers.push((t,columns));
+    }
+
+    let mut optimizer = MomentumSGD::with_params(0.0001,0.9,0.0);
+
+    let mut rng = rand::thread_rng();
+
+    let mut correct_answers = 0;
+
+    teachers.shuffle(&mut rng);
+
+    for _ in 0..1 {
+        teachers.shuffle(&mut rng);
+
+        for (t, columns) in teachers.iter() {
+            let t = *t;
+
+            let mut input = Arr::<f32,14>::new();
+
+            for (it, p) in input.iter_mut().zip(columns.iter()) {
+                *it = *p;
+            }
+
+            let mut expected = Arr::new();
+
+            expected[0] = if t {
+                1.
+            } else {
+                0.
+            };
+
+            let lossf = Mse::new();
+
+            net.train(expected, DiffInput::NotDiff(input), &mut optimizer, &lossf);
+        }
+    }
+
+    let mut tests:Vec<(bool,Vec<f32>)> = Vec::new();
+
+    let mut reader =  BufReader::new(
+        File::open(Path::new("data")
+            .join("weather")
+            .join("testing")
+            .join("weather.csv")).unwrap());
+
+    let mut line:String = String::new();
+
+    loop {
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+
+        let columns = line.trim().split(',').map(|c| c.to_string()).collect::<Vec<String>>();
+
+        line.clear();
+
+        if columns.len() != 16 {
+            continue;
+        }
+
+        let t = columns[1].find("晴").is_some();
+
+        let columns = columns.iter().skip(2)
+            .filter(|c| !c.parse::<f32>().is_err())
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
+            .collect::<Vec<f32>>();
+        if columns.len() < 14 {
+            continue;
+        }
+
+        tests.push((t,columns));
+    }
+
+    let mut s = None;
+    let mut prev = Arr::new();
+
+    for (t, columns) in tests.iter() {
+        let t = *t;
+
+        let mut input = Arr::<f32, 14>::new();
+
+        for (it, p) in input.iter_mut().zip(columns.iter()) {
+            *it = *p;
+        }
+
+        s = if let Some(s) = s {
+            let d = input.iter().enumerate().zip(prev.iter())
+                                .filter(|((_,&input),&p)| input != p)
+                                .map(|((index,&input),&p)| (index,input - p))
+                                .fold(DiffArr::new(),| mut acc,(i,d) | {
+                acc.push(i,d);
+                acc
+            });
+
+            prev = input.clone();
+
+            let o = net.asc_diff_input(s);
+
+            Some(net.forward_diff(DiffInput::Diff(d,o)))
+        } else {
+            Some(net.forward_diff(DiffInput::NotDiff(input)))
+        };
+
+        let r = s.as_ref().map(|r| r.1[0]).unwrap();
+
+        if (t && r >= 0.5) || !t && r < 0.5 {
             correct_answers += 1;
         }
     }

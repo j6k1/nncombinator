@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn build_layers() {
-        let i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
+        let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
         let device = DeviceCpu::new();
 
         let _l = i.add_layer(|l| LinearLayer::<_,_,_,_,4,1>::new(l,&device, || 1., || 0.));
@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn build_train_layers() {
-        let i:InputLayer<f32,Arr<f32,4>> = InputLayer::new();
+        let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
         let device = DeviceCpu::new();
 
         let _l = i.add_layer(|l| {

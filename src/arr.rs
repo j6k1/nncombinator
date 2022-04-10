@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 #[derive(Debug,Eq,PartialEq)]
@@ -351,11 +352,12 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4IterMut
         }
     }
 }
-pub struct DiffArr<T,const N:usize> {
+#[derive(Debug)]
+pub struct DiffArr<T,const N:usize> where T: Debug {
     items:Vec<(usize,T)>
 }
 
-impl<T,const N:usize> DiffArr<T,N> {
+impl<T,const N:usize> DiffArr<T,N> where T: Debug {
     pub fn new() -> DiffArr<T,N> {
         DiffArr {
             items:Vec::new()

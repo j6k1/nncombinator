@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 #[derive(Debug,Eq,PartialEq)]
@@ -377,21 +378,22 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
     }
 }
 #[derive(Debug,Eq,PartialEq)]
-pub struct VecArrView<T,const N:usize> {
-    arr:Box<[T]>,
+pub struct VecArr<U,T,const N:usize> {
+    arr:Box<[U]>,
+    t:PhantomData<T>
 }
-impl<T,const N:usize> VecArrView<T,N> {
-    pub fn iter(&self) -> VecArrViewIter<T,N> {
+impl<U,T,const N:usize> VecArr<U,T,N> {
+    pub fn iter(&self) -> VecArrViewIter<U,N> {
         VecArrViewIter(&*self.arr)
     }
 
-    pub fn iter_mut(&mut self) -> VecArrViewIterMut<T,N> {
+    pub fn iter_mut(&mut self) -> VecArrViewIterMut<U,N> {
         VecArrViewIterMut(&mut *self.arr)
     }
 }
-impl<T,const N:usize> From<Vec<Arr<T,N>>> for VecArrView<T,N> where T: Default + Clone + Copy {
-    fn from(items: Vec<Arr<T, N>>) -> Self {
-        let mut s = vec![T::default(); N * items.len()].into_boxed_slice();
+impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>,N> where U: Default + Clone + Copy {
+    fn from(items: Vec<Arr<U, N>>) -> Self {
+        let mut s = vec![U::default(); N * items.len()].into_boxed_slice();
 
         let mut it = s.iter_mut();
 
@@ -403,8 +405,9 @@ impl<T,const N:usize> From<Vec<Arr<T,N>>> for VecArrView<T,N> where T: Default +
             }
         }
 
-        VecArrView {
-            arr:s
+        VecArr {
+            arr:s,
+            t:PhantomData::<Arr<U,N>>
         }
     }
 }

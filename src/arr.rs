@@ -378,11 +378,11 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
     }
 }
 #[derive(Debug,Eq,PartialEq)]
-pub struct VecArr<U,T,const N:usize> {
+pub struct VecArr<U,T> {
     arr:Box<[U]>,
     t:PhantomData<T>
 }
-impl<U,T,const N:usize> VecArr<U,T,N> {
+impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy {
     pub fn iter(&self) -> VecArrViewIter<U,N> {
         VecArrViewIter(&*self.arr)
     }
@@ -391,7 +391,7 @@ impl<U,T,const N:usize> VecArr<U,T,N> {
         VecArrViewIterMut(&mut *self.arr)
     }
 }
-impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>,N> where U: Default + Clone + Copy {
+impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy {
     fn from(items: Vec<Arr<U, N>>) -> Self {
         let mut s = vec![U::default(); N * items.len()].into_boxed_slice();
 

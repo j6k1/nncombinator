@@ -1,6 +1,33 @@
 use std::{error, fmt, io};
 use std::num::ParseFloatError;
+#[derive(Debug)]
+pub enum TrainingError {
+    ReferenceCountError,
+    ThreadError(String),
+}
+impl fmt::Display for TrainingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TrainingError::ReferenceCountError => write!(f, "There must be only one reference to Arc or Weak to itself when training is performed."),
+            TrainingError::ThreadError(s) => write!(f, "An error occurred while processing the thread. cause = ({})",s),
+        }
+    }
+}
+impl error::Error for TrainingError {
+    fn description(&self) -> &str {
+        match self {
+            TrainingError::ReferenceCountError => "There must be only one reference to Arc or Weak to itself when training is performed.",
+            TrainingError::ThreadError(_) => "An error occurred while processing the thread.",
+        }
+    }
 
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            TrainingError::ReferenceCountError => None,
+            TrainingError::ThreadError(_) => None,
+        }
+    }
+}
 #[derive(Debug)]
 pub enum ConfigReadError {
     IOError(io::Error),

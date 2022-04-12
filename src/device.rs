@@ -11,13 +11,23 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
 }
 pub struct DeviceCpu<U> where U: UnitValue<U> {
-    u:PhantomData<U>
+    u:PhantomData<U>,
+    max_threads:usize,
 }
 impl<U> DeviceCpu<U> where U: UnitValue<U> {
-    pub fn new() -> DeviceCpu<U> {
+    pub fn with_max_threads(c:usize) -> DeviceCpu<U> {
         DeviceCpu {
-            u:PhantomData::<U>
+            u:PhantomData::<U>,
+            max_threads:c
         }
+    }
+
+    pub fn new() -> DeviceCpu<U> {
+        DeviceCpu::with_max_threads(16)
+    }
+
+    pub fn get_max_threads(&self) -> usize {
+        self.max_threads
     }
 }
 impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
@@ -74,7 +84,8 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
         DeviceCpu {
-            u:PhantomData::<U>
+            u:PhantomData::<U>,
+            max_threads:self.max_threads
         }
     }
 }

@@ -2,6 +2,7 @@ use crate::ope::UnitValue;
 
 pub mod error;
 pub mod ope;
+pub mod mem;
 pub mod arr;
 pub mod optimizer;
 pub mod lossfunction;

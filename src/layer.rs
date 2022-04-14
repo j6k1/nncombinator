@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use std::sync::Arc;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use crate::arr::*;
 use crate::device::*;
 use crate::persistence::*;
@@ -10,6 +10,7 @@ use crate::activation::Activation;
 use crate::error::{ConfigReadError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
+use crate::mem::AsRawSlice;
 use crate::optimizer::*;
 
 #[derive(Debug)]
@@ -61,16 +62,14 @@ pub trait BatchForwardBase: ForwardAll {
     type BatchOutput: Debug;
 }
 pub trait BatchForward: BatchForwardBase {
-    fn batch_forward(self: &Arc<Self>,input:Self::BatchInput) -> Result<Self::BatchOutput, TrainingError>;
+    fn batch_forward(&self,input:Self::BatchInput) -> Result<Self::BatchOutput, TrainingError>;
 }
-pub trait BatchBackwardBase<U>: BatchPreTrainBase<U> + BackwardAll<U> where U: UnitValue<U> {
+pub trait BatchBackward<U>: BatchPreTrainBase<U> where U: UnitValue<U> {
     type BatchLossInput: Debug;
+    fn batch_backward<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, optimizer:&mut OP, lossf:&L) -> Result<(), TrainingError>;
 }
-pub trait BatchBackward<U>: BatchBackwardBase<U> where U: UnitValue<U> {
-    fn batch_backward<OP: Optimizer<U>,L: LossFunction<U>>(self: &mut Arc<Self>,input:Self::BatchLossInput, stack:Self::BatchOutStack, optimizer:&mut OP, lossf:&L);
-}
-pub trait BatchLoss<U>: BatchBackwardBase<U> + Loss<U> where U: UnitValue<U> {
-    fn batsch_loss<L: LossFunction<U>>(self: &Arc<Self>, loss:Self::BatchLossInput, _:&L, stack:Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
+pub trait BatchLoss<U>: BatchBackward<U> + Loss<U> where U: UnitValue<U> {
+    fn batch_loss<L: LossFunction<U>>(&self, loss:Self::BatchLossInput, _:&L, stack:Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
         Ok((stack,loss))
     }
 }
@@ -78,10 +77,10 @@ pub trait BatchPreTrainBase<U>: BatchForwardBase + PreTrain<U> where U: UnitValu
     type BatchOutStack: Stack<Head=Self::BatchOutput> + Sized + Debug;
 }
 pub trait BatchPreTrain<U>: BatchPreTrainBase<U> where U: UnitValue<U> {
-    fn batch_pre_train(self: &Arc<Self>, input:Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError>;
+    fn batch_pre_train(&self, input:Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError>;
 }
 pub trait BatchTrain<U>: BatchPreTrainBase<U> + PreTrain<U> where U: UnitValue<U> {
-    fn batch_train<OP: Optimizer<U>,L: LossFunction<U>>(self: &mut Arc<Self>, expected:Self::BatchOutput, input:Self::BatchInput, optimizer:&mut OP, lossf:&L);
+    fn batch_train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, optimizer:&mut OP, lossf:&L) -> Result<U, TrainingError>;
 }
 pub trait AddLayer: ForwardAll where Self: Sized {
     fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
@@ -155,7 +154,7 @@ impl<U,O,LI> BatchForwardBase for InputLayer<U,O,LI> where U: UnitValue<U>, O: D
     type BatchOutput = Vec<O>;
 }
 impl<U,O,LI> BatchForward for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug, LI: Debug {
-    fn batch_forward(self: &Arc<Self>, input: Self::BatchInput) -> Result<Self::BatchOutput,TrainingError> {
+    fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput,TrainingError> {
         Ok(input)
     }
 }
@@ -163,16 +162,14 @@ impl<U,O,LI> BatchPreTrainBase<U> for InputLayer<U,O,LI> where U: UnitValue<U>, 
     type BatchOutStack = Cons<Nil,Vec<O>>;
 }
 impl<U,O,LI> BatchPreTrain<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug, LI: Debug {
-    fn batch_pre_train(self: &Arc<Self>, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
+    fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         Ok(Cons(Nil,input))
     }
 }
-impl<U,O,LI> BatchBackwardBase<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug, LI: Debug {
-    type BatchLossInput = Vec<LI>;
-}
 impl<U,O,LI> BatchBackward<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug, LI: Debug {
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(self: &mut Arc<Self>, _: Self::BatchLossInput, _: Self::BatchOutStack, _: &mut OP, _: &L) {
-
+    type BatchLossInput = Vec<LI>;
+    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, _: Self::BatchLossInput, _: Self::BatchOutStack, _: &mut OP, _: &L) -> Result<(), TrainingError> {
+        Ok(())
     }
 }
 pub struct ActivationLayer<U,P,A,I,PI,D> where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI>,
@@ -319,7 +316,8 @@ impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     }
 }
 impl<U,P,A,D,I,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,Arr<U,N>,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + Loss<U>,
+    where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,N>>> + BatchPreTrainBase<U> + BatchBackward<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: Activation<U,Arr<U,N>,D>,
@@ -329,30 +327,45 @@ impl<U,P,A,D,I,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,Arr<U
 }
 impl<U,P,A,D,I,const N:usize> BatchPreTrainBase<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + Loss<U> +
-             BatchForwardBase + BatchPreTrainBase<U> + BatchBackwardBase<U>,
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,N>>> + BatchPreTrainBase<U> + BatchBackward<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: Activation<U,Arr<U,N>,D>,
           I: Debug {
     type BatchOutStack = Cons<<P as BatchPreTrainBase<U>>::BatchOutStack, Self::BatchOutput>;
 }
-impl<U,P,A,D,I,const N:usize> BatchBackwardBase<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
+impl<U,P,A,D,I,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + Loss<U> +
-             BatchForwardBase + BatchPreTrainBase<U> + BatchBackwardBase<U>,
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,N>>> +
+             BatchPreTrainBase<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=Vec<Arr<U,N>>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: Activation<U,Arr<U,N>,D>,
           I: Debug {
     type BatchLossInput = Vec<Arr<U,N>>;
+    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
+        let (s,_) = stack.pop();
+
+        self.parent.batch_backward(input, s, optimizer, lossf)
+    }
 }
-impl<U,P,A,D,I,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
+impl<U,P,A,I,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,DeviceCpu<U>>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> +
              BackwardAll<U,LossInput=Arr<U,N>> + Loss<U> +
-             BatchForwardBase + BatchPreTrainBase<U> + BatchBackwardBase<U>,
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,N>>> + BatchPreTrainBase<U> +
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=Vec<Arr<U,N>>>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          A: Activation<U,Arr<U,N>,D>,
+          A: Activation<U,Arr<U,N>,DeviceCpu<U>>,
           I: Debug {
+    fn batch_loss<L: LossFunction<U>>(&self, loss: Self::BatchLossInput, _: &L, stack: Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
+        let (s,actual) = stack.pop();
+
+        let r = s.map(|u| {
+            self.device.batch_loss_linear_by_activaton(loss, u, &self.f)
+        })?;
+
+        Ok((Cons(s,actual),r))
+    }
 }
 pub struct LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U>,
@@ -470,6 +483,90 @@ impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
         };
 
         self.backward_all(loss,stack,optimizer,lossf);
+    }
+}
+impl<U,P,I,IO> BatchForwardBase for LinearOutputLayer<U,P,DeviceCpu<U>,I,IO>
+    where P: PreTrain<U> + ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<IO>> + BatchPreTrainBase<U> + BatchBackward<U> + BatchLoss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          IO: Debug,
+          I: Debug {
+    type BatchInput = Vec<I>;
+    type BatchOutput = Vec<IO>;
+}
+impl<U,P,I,IO> BatchForward for LinearOutputLayer<U,P,DeviceCpu<U>,I,IO>
+    where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<IO>> + BatchPreTrainBase<U> + BatchBackward<U> + BatchLoss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          IO: Debug,
+          I: Debug {
+    fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
+        unimplemented!()
+    }
+}
+impl<U,P,I,IO> BatchPreTrainBase<U> for LinearOutputLayer<U,P,DeviceCpu<U>,I,IO>
+    where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<IO>> + BatchPreTrainBase<U> + BatchBackward<U> + BatchLoss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          IO: Debug,
+          I: Debug {
+    type BatchOutStack = P::BatchOutStack;
+}
+impl<U,P,I,IO> BatchPreTrain<U> for LinearOutputLayer<U,P,DeviceCpu<U>,I,IO>
+    where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<IO>> + BatchPreTrainBase<U> + BatchBackward<U> + BatchLoss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          IO: Debug,
+          I: Debug {
+    fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
+        unimplemented!()
+    }    
+}
+impl<U,P,I,IO> BatchBackward<U> for LinearOutputLayer<U,P,DeviceCpu<U>,I,IO>
+    where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<IO>> + BatchPreTrainBase<U> +
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=Vec<IO>>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          IO: Debug,
+          I: Debug {
+    type BatchLossInput = Vec<IO>;
+
+    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
+        self.parent.batch_backward(input,stack,optimizer,lossf)
+    }
+}
+impl<U,P,I,const N:usize> BatchTrain<U> for LinearOutputLayer<U,P,DeviceCpu<U>,I,Arr<U,N>>
+    where P: ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,N>>> + BatchPreTrainBase<U> + BatchPreTrain<U> +
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=Vec<Arr<U,N>>>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug {
+    fn batch_train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, optimizer:&mut OP, lossf:&L) -> Result<U, TrainingError> {
+        let stack = self.batch_pre_train(input)?;
+
+        let total_loss = stack.map(|l| self.device.batch_loss_linear_total(&expected,l,lossf));
+
+        let (stack,loss) = if self.parent.is_canonical_link(lossf) {
+            let loss = stack.map(|actual| {
+                self.device.loss_linear_batch_by_canonical_link(&expected, &actual)
+            })?;
+
+            (stack,loss)
+        } else {
+            let loss = stack.map(|actual| {
+                self.device.loss_linear_batch(&expected,&actual,lossf)
+            })?;
+
+            self.parent.batch_loss(loss,lossf,stack)?
+        };
+
+        self.parent.batch_backward(loss,stack,optimizer,lossf)?;
+
+        Ok(total_loss)
     }
 }
 pub struct LinearLayer<U,P,D,I,const NI:usize,const NO:usize>
@@ -590,7 +687,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Arr<U,NI>> for
           P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           I: Debug {
     fn backward(&mut self, input: &Arr<U,NO>) -> Arr<U,NI> {
-        self.device.backward_liner(&self.units,input)
+        self.device.backward_linear(&self.units, input)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,I,NI,NO>
@@ -646,6 +743,101 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,P,D,I,NI,N
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
+          I: Debug {
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> BatchForwardBase for LinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,NI>>> + BatchPreTrainBase<U> + BatchPreTrainBase<U> + BatchBackward<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    type BatchInput = Vec<I>;
+    type BatchOutput = Vec<Arr<U,NO>>;
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,NI>>> + BatchPreTrainBase<U> + BatchPreTrainBase<U> + BatchBackward<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
+        unimplemented!()
+    }
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for LinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,NI>>> + BatchPreTrainBase<U> + BatchPreTrainBase<U> + BatchBackward<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    type BatchOutStack = Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,Self::BatchOutput>;
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,NI>>> + BatchPreTrainBase<U> + BatchPreTrainBase<U> + BatchBackward<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
+        unimplemented!()
+    }
+}
+impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,P,DeviceCpu<U>,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,NI>>> + BatchPreTrainBase<U> +
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=Vec<Arr<U,NI>>>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug {
+    type BatchLossInput = Vec<Arr<U,NO>>;
+
+    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
+        let (s, _) = stack.pop();
+
+        let loss = input;
+        {
+            let loss:Arr<U,NI> = loss.par_iter().map(|l| l.as_raw_slice()
+                        .par_iter().cloned().reduce_with(|a,b| a + b)
+                        .ok_or(TrainingError::InvalidInputError(String::from("Input is empty."))))
+                        .collect::<Result<Vec<U>,_>>()?.try_into()?;
+
+            {
+                for l in loss.iter() {
+                    for w in self.bias.iter_mut() {
+                        optimizer.update(*l, w);
+                    }
+                }
+
+                s.map(|o| {
+                    o.par_iter()
+                    .map(|o| {
+                        o.as_raw_slice()
+                        .par_iter()
+                        .cloned()
+                        .reduce_with(|a,b| a + b)
+                        .ok_or(TrainingError::InvalidInputError(String::from("Input is empty.")))
+                    }).collect::<Result<Vec<U>,_>>()?.try_into().map(|o:Arr<U,NI>| {
+                        for (mut u, (l, o)) in self.units.iter_mut().zip(loss.iter().zip(o.iter())) {
+                            for w in u.iter_mut() {
+                                optimizer.update(*l * *o, w);
+                            }
+                        }
+                    }).map_err(|e| TrainingError::from(e))
+                })?;
+            }
+        }
+        
+        let loss = self.device.backward_linear_batch(&self.units,&loss)?;
+
+        let (s,loss) = self.parent.batch_loss(loss,lossf,s)?;
+
+        self.parent.batch_backward(loss, s, optimizer, lossf)
+    }
+}
+impl<U,P,I,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,P,DeviceCpu<U>,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,NI>>> + BatchPreTrainBase<U> + BatchPreTrainBase<U> +
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=Vec<Arr<U,NI>>>,
+          U: Default + Clone + Copy + UnitValue<U>,
           I: Debug {
 }
 pub struct DiffLinearLayer<U,P,D,I,const NI:usize,const NO:usize>
@@ -792,7 +984,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Arr<U,NI>> for
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           I: Debug {
     fn backward(&mut self, input: &Arr<U,NO>) -> Arr<U,NI> {
-        self.device.backward_liner(&self.units,input)
+        self.device.backward_linear(&self.units, input)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,P,D,I,NI,NO>
@@ -864,4 +1056,45 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<U,P,D,I,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug {
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> BatchForwardBase for DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
+             BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=I,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    type BatchInput = Vec<I>;
+    type BatchOutput = Vec<Arr<U,NO>>;
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> BatchForward for DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
+             BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=I,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
+        unimplemented!()
+    }
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
+             BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=I,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    type BatchOutStack = Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,Vec<Arr<U,NO>>>;
+}
+impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrain<U> for DiffLinearLayer<U,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
+             BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=I,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug {
+    fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
+        unimplemented!()
+    }
 }

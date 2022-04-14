@@ -17,6 +17,7 @@ license = "MIT"
 
 [dependencies]
 num-traits = "0.2.14"
+rayon = "1.5.1"
 [dev-dependencies]
 rand = "0.8.5"
 rand_xorshift = "0.3.0"

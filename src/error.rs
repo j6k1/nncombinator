@@ -4,12 +4,16 @@ use std::num::ParseFloatError;
 pub enum TrainingError {
     ReferenceCountError,
     ThreadError(String),
+    SizeMismatchError(SizeMismatchError),
+    InvalidInputError(String),
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             TrainingError::ReferenceCountError => write!(f, "There must be only one reference to Arc or Weak to itself when training is performed."),
             TrainingError::ThreadError(s) => write!(f, "An error occurred while processing the thread. cause = ({})",s),
+            TrainingError::SizeMismatchError(e) => write!(f, "{}",e),
+            TrainingError::InvalidInputError(s) => write!(f, "{}",s),
         }
     }
 }
@@ -18,6 +22,8 @@ impl error::Error for TrainingError {
         match self {
             TrainingError::ReferenceCountError => "There must be only one reference to Arc or Weak to itself when training is performed.",
             TrainingError::ThreadError(_) => "An error occurred while processing the thread.",
+            TrainingError::SizeMismatchError(_) => "memory size does not match.",
+            TrainingError::InvalidInputError(_) => "Incorrect input."
         }
     }
 
@@ -25,6 +31,8 @@ impl error::Error for TrainingError {
         match self {
             TrainingError::ReferenceCountError => None,
             TrainingError::ThreadError(_) => None,
+            TrainingError::SizeMismatchError(e) => Some(e),
+            TrainingError::InvalidInputError(_) => None
         }
     }
 }
@@ -60,6 +68,11 @@ impl error::Error for ConfigReadError {
         }
     }
 }
+impl From<SizeMismatchError> for TrainingError {
+    fn from(err: SizeMismatchError) -> TrainingError {
+        TrainingError::SizeMismatchError(err)
+    }
+}
 impl From<io::Error> for ConfigReadError {
     fn from(err: io::Error) -> ConfigReadError {
         ConfigReadError::IOError(err)
@@ -68,5 +81,21 @@ impl From<io::Error> for ConfigReadError {
 impl From<ParseFloatError> for ConfigReadError {
     fn from(err: ParseFloatError) -> ConfigReadError {
         ConfigReadError::ParseFloatError(err)
+    }
+}
+#[derive(Debug)]
+pub struct SizeMismatchError;
+impl fmt::Display for SizeMismatchError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "memory size does not match.")
+    }
+}
+impl error::Error for SizeMismatchError {
+    fn description(&self) -> &str {
+        "memory size does not match."
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
     }
 }

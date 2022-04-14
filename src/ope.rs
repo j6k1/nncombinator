@@ -5,7 +5,7 @@ use num_traits::FromPrimitive;
 pub trait UnitValue<T>: Add<Output=T> + Sub<Output=T> + Mul<Output=T> + Div<Output=T> + Neg<Output=T> +
     AddAssign + PartialOrd +
     Clone + Copy + Default + Debug + Send + Sync + 'static +
-    Exp + Tanh + One + Max + Min + MaxValue + InitialMaxValue + Abs + Sqrt +
+    Exp + Tanh + Ln + One + Max + Min + MaxValue + InitialMaxValue + Abs + Sqrt +
     Bias + FromPrimitive {
 }
 pub trait Bias where Self: Sized {
@@ -152,6 +152,19 @@ impl Sqrt for f64 {
 impl Sqrt for f32 {
     fn sqrt(&self) -> f32 {
         (*self).sqrt()
+    }
+}
+pub trait Ln {
+    fn ln(&self) -> Self;
+}
+impl Ln for f64 {
+    fn ln(&self) -> f64 {
+        (*self).ln()
+    }
+}
+impl Ln for f32 {
+    fn ln(&self) -> f32 {
+        (*self).ln()
     }
 }
 impl UnitValue<f64> for f64 {}

@@ -1,8 +1,9 @@
 use std::marker::PhantomData;
 use crate::UnitValue;
 
-pub trait LossFunction<U> where U: Clone + Copy + UnitValue<U> {
+pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy + UnitValue<U> {
     fn derive(&self,r:U,t:U) -> U;
+    fn apply(&self,r:U,t:U) -> U;
     fn name(&self) -> &'static str;
 }
 pub struct Mse<U> where U: Clone + Copy + UnitValue<U> {
@@ -18,6 +19,10 @@ impl<U> Mse<U> where U: UnitValue<U> {
 impl<U> LossFunction<U> for Mse<U> where U: Clone + Copy + UnitValue<U> {
     fn derive(&self, r: U, t: U) -> U {
         r - t
+    }
+
+    fn apply(&self, r: U, t: U) -> U {
+        (r - t) * (r - t) / U::from_f64(2.).unwrap()
     }
 
     fn name(&self) -> &'static str {
@@ -39,6 +44,10 @@ impl<U> LossFunction<U> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U>
         -(r / (t + U::from_f64(1e-7).unwrap())) + (U::one() - t) / (U::one() - r)
     }
 
+    fn apply(&self, r: U, t: U) -> U {
+        -t * r.ln() + (U::one() - t) * (U::one() - r).ln()
+    }
+
     fn name(&self) -> &'static str {
         "crossentropy"
     }
@@ -56,6 +65,10 @@ impl<U> CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U>{
 impl<U> LossFunction<U> for CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {
     fn derive(&self, r: U, t: U) -> U {
         -t / r
+    }
+
+    fn apply(&self, r: U, t: U) -> U {
+        -t * r.ln()
     }
 
     fn name(&self) -> &'static str {

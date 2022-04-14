@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
+use crate::error::SizeMismatchError;
+use crate::mem::{AsRawMutSlice, AsRawSlice};
 
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr<T,const N:usize> where T: Default + Clone {
@@ -32,6 +34,31 @@ impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone {
         Arr{
             arr:self.arr.clone()
         }
+    }
+}
+impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone {
+    type Error = SizeMismatchError;
+
+    fn try_from(v: Vec<T>) -> Result<Self, Self::Error> {
+        let s = v.into_boxed_slice();
+
+        if s.len() != N {
+            Err(SizeMismatchError)
+        } else {
+            Ok(Arr {
+                arr: s
+            })
+        }
+    }
+}
+impl<'a,T,const N:usize> AsRawSlice<T> for Arr<T,N> where T: Default + Clone {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
+}
+impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for Arr<T,N> where T: Default + Clone {
+    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
+        &mut self.arr
     }
 }
 #[derive(Debug,Eq,PartialEq)]
@@ -205,6 +232,11 @@ impl<'a,T,const N:usize> DerefMut for ArrViewMut<'a,T,N> {
         self.arr
     }
 }
+impl<'a,T,const N:usize> AsRawSlice<T> for ArrView<'a,T,N> where T: Default + Clone {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
+}
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr2Iter<'a,T,const N:usize>(&'a [T]);
 
@@ -229,6 +261,11 @@ impl<'a,T,const N:usize> Iterator for Arr2Iter<'a,T,N> {
                 arr:l
             })
         }
+    }
+}
+impl<'a,T,const N:usize> AsRawSlice<T> for Arr2Iter<'a,T,N> {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.0
     }
 }
 #[derive(Debug,Eq,PartialEq)]

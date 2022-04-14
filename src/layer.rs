@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::*;
 use crate::device::*;
 use crate::persistence::*;
@@ -795,34 +795,29 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,P,D
 
         let loss = input;
         {
-            let loss:Arr<U,NI> = loss.par_iter().map(|l| l.as_raw_slice()
-                        .par_iter().cloned().reduce_with(|a,b| a + b)
-                        .ok_or(TrainingError::InvalidInputError(String::from("Input is empty."))))
-                        .collect::<Result<Vec<U>,_>>()?.try_into()?;
+            let loss = loss.par_iter().try_fold(|| Arr::<U,NI>::new(), |acc, x| {
+                Ok(acc)
+            }).reduce_with(|a,b| {
+                a.and_then(|a| b.and_then(|b| {
+                    a.as_raw_slice()
+                        .par_iter().cloned()
+                        .zip(b.as_raw_slice().par_iter().cloned())
+                        .map(|(a, b)| a + b).collect::<Vec<U>>().try_into()
+                }))
+            }).ok_or(TrainingError::InvalidInputError(String::from("The input value for loss is empty.")))??;
 
             {
-                for l in loss.iter() {
-                    for w in self.bias.iter_mut() {
-                        optimizer.update(*l, w);
-                    }
+                for (w,&l) in self.bias.iter_mut().zip(loss.iter()) {
+                    optimizer.update(l, w);
                 }
 
                 s.map(|o| {
-                    o.par_iter()
-                    .map(|o| {
-                        o.as_raw_slice()
-                        .par_iter()
-                        .cloned()
-                        .reduce_with(|a,b| a + b)
-                        .ok_or(TrainingError::InvalidInputError(String::from("Input is empty.")))
-                    }).collect::<Result<Vec<U>,_>>()?.try_into().map(|o:Arr<U,NI>| {
-                        for (mut u, (l, o)) in self.units.iter_mut().zip(loss.iter().zip(o.iter())) {
-                            for w in u.iter_mut() {
-                                optimizer.update(*l * *o, w);
-                            }
+                    for (mut u, o) in self.units.iter_mut().zip(loss.iter()) {
+                        for (w,&l) in u.iter_mut().zip(loss.iter()) {
+                            optimizer.update(l * *o, w);
                         }
-                    }).map_err(|e| TrainingError::from(e))
-                })?;
+                    }
+                })
             }
         }
         
@@ -1096,5 +1091,52 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrain<U> for DiffLinearLayer
           I: Debug {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         unimplemented!()
+    }
+}
+impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for DiffLinearLayer<U,P,DeviceCpu<U>,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
+             BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             BatchForwardBase<BatchInput=I,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> +
+             BatchLoss<U,BatchLossInput=Vec<Arr<U,NI>>> + BatchBackward<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug {
+    type BatchLossInput = Vec<Arr<U,NO>>;
+
+    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
+        let (s, _) = stack.pop();
+
+        let loss = input;
+        {
+            let loss = loss.par_iter().try_fold(|| Arr::<U,NI>::new(), |acc, x| {
+                Ok(acc)
+            }).reduce_with(|a,b| {
+                a.and_then(|a| b.and_then(|b| {
+                    a.as_raw_slice()
+                        .par_iter().cloned()
+                        .zip(b.as_raw_slice().par_iter().cloned())
+                        .map(|(a, b)| a + b).collect::<Vec<U>>().try_into()
+                }))
+            }).ok_or(TrainingError::InvalidInputError(String::from("The input value for loss is empty.")))??;
+
+            {
+                for (w,&l) in self.bias.iter_mut().zip(loss.iter()) {
+                    optimizer.update(l, w);
+                }
+
+                s.map(|o| {
+                    for (mut u, o) in self.units.iter_mut().zip(loss.iter()) {
+                        for (w,&l) in u.iter_mut().zip(loss.iter()) {
+                            optimizer.update(l * *o, w);
+                        }
+                    }
+                })
+            }
+        }
+
+        let loss = self.device.backward_linear_batch(&self.units,&loss)?;
+
+        let (s,loss) = self.parent.batch_loss(loss,lossf,s)?;
+
+        self.parent.batch_backward(loss, s, optimizer, lossf)
     }
 }

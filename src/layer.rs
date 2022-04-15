@@ -749,8 +749,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D
             }
 
             s.map(|o| {
-                for (mut u,(l,o)) in self.units.iter_mut().zip(loss.iter().zip(o.iter())) {
-                    for w in u.iter_mut() {
+                for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
+                    for (w,l) in u.iter_mut().zip(loss.iter()) {
                         optimizer.update(*l * *o, w);
                     }
                 }
@@ -1058,17 +1058,17 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U
             s.map(|o| {
                 match o {
                     DiffInput::Diff(_, o) => {
-                        for (mut u,(l,o)) in self.units.iter_mut().zip(loss.iter().zip(o.iter())) {
-                            for w in u.iter_mut() {
+                        for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
+                            for (w,l) in u.iter_mut().zip(loss.iter()) {
                                 optimizer.update(*l * *o, w);
                             }
                         }
                     },
                     DiffInput::NotDiff(input) => {
-                       let o = self.device.forward_linear(&self.bias, &self.units, input);
+                        let o = self.device.forward_linear(&self.bias, &self.units, input);
 
-                        for (mut u,(l,o)) in self.units.iter_mut().zip(loss.iter().zip(o.iter())) {
-                            for w in u.iter_mut() {
+                        for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
+                            for (w,l) in u.iter_mut().zip(loss.iter()) {
                                 optimizer.update(*l * *o, w);
                             }
                         }

@@ -802,7 +802,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,P,Devic
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        self.device.batch_forward_linear(&input,&self.units)
+        self.device.batch_forward_linear(&input,&self.bias,&self.units,)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for LinearLayer<U,P,D,I,NI,NO>
@@ -822,7 +822,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U,P,D
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let r = self.parent.batch_pre_train(input)?;
 
-        let u = r.map(|input| self.device.batch_forward_linear(input,&self.units))?;
+        let u = r.map(|input| self.device.batch_forward_linear(input,&self.bias,&self.units))?;
 
         Ok(Cons(r,u))
     }

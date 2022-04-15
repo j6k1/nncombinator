@@ -149,7 +149,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         }).map(|(sum,_)| sum).reduce(|| U::default(), |sum,l| sum + l)
     }
 
-    pub fn batch_forward_linear<const NI:usize,const NO:usize>(&self,input:&Vec<Arr<U,NI>>,units:&Arr2<U,NI,NO>) -> Result<Vec<Arr<U,NO>>,TrainingError> {
+    pub fn batch_forward_linear<const NI:usize,const NO:usize>(&self,input:&Vec<Arr<U,NI>>,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>) -> Result<Vec<Arr<U,NO>>,TrainingError> {
         input.par_iter().map(|input| {
             input.iter().zip(units.iter()).map(|(&i, unit)| {
                 unit.iter().par_bridge().map(|&w| {
@@ -161,7 +161,10 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
                 acc.as_raw_slice()
                     .par_iter()
                     .zip(o.as_raw_slice().par_iter())
-                    .map(|(&acc, &o)| acc + o).collect::<Vec<U>>().try_into()
+                    .map(|(&acc, &o)| acc + o)
+                    .zip(bias.as_raw_slice().par_iter()).map(|(acc,&b)| {
+                        acc + b
+                    }).collect::<Vec<U>>().try_into()
             }))
         })).collect::<Result<Vec<Arr<U, NO>>, _>>().map_err(|e| TrainingError::from(e))
     }

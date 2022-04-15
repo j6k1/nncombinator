@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelBridge, ParallelIterator, FromParallelIterator};
+use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, FromParallelIterator};
 use crate::arr::*;
 use crate::device::*;
 use crate::persistence::*;
@@ -802,7 +802,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,P,Devic
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        self.device.batch_forward_linear(input,&self.units)
+        self.device.batch_forward_linear(&input,&self.units)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for LinearLayer<U,P,D,I,NI,NO>
@@ -813,14 +813,18 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for LinearLayer
           I: Debug + Send + Sync {
     type BatchOutStack = Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,Self::BatchOutput>;
 }
-impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U,P,D,I,NI,NO>
+impl<U,P,I,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U,P,DeviceCpu<U>,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,NI>>> + BatchPreTrainBase<U> + BatchPreTrainBase<U> + BatchBackward<U>,
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,NI>>> + BatchPreTrainBase<U> + BatchPreTrain<U> +
+             BatchBackward<U>,
           U: Default + Clone + Copy + Send + UnitValue<U> + FromParallelIterator<U>,
-          D: Device<U>,
           I: Debug + Send + Sync {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
-        unimplemented!()
+        let r = self.parent.batch_pre_train(input)?;
+
+        let u = r.map(|input| self.device.batch_forward_linear(input,&self.units))?;
+
+        Ok(Cons(r,u))
     }
 }
 impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,P,DeviceCpu<U>,I,NI,NO>
@@ -1096,28 +1100,30 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<U,P,D,I,
 impl<U,P,D,I,const NI:usize,const NO:usize> BatchForwardBase for DiffLinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=I,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
     type BatchInput = Vec<I>;
     type BatchOutput = Vec<Arr<U,NO>>;
 }
-impl<U,P,D,I,const NI:usize,const NO:usize> BatchForward for DiffLinearLayer<U,P,D,I,NI,NO>
+impl<U,P,I,const NI:usize,const NO:usize> BatchForward for DiffLinearLayer<U,P,DeviceCpu<U>,I,NI,NO>
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=I,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
           I: Debug + Send + Sync {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
-        unimplemented!()
+        Ok(input.into_iter().map(|input| {
+            self.forward_all(input)
+        }).collect())
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for DiffLinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=I,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> +
+             BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
@@ -1126,18 +1132,39 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for DiffLinearL
 impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrain<U> for DiffLinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=I,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> + BatchLoss<U> + BatchBackward<U>,
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> +
+             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchLoss<U> + BatchBackward<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
-        unimplemented!()
+        let r = self.parent.batch_pre_train(input)?;
+
+        let u = r.map(|input| input.into_iter().map(|input| {
+            match input {
+                DiffInput::Diff(d, output) => {
+                    let mut output = output.clone();
+
+                    for &(i, d) in d.iter() {
+                        for (o, j) in output.iter_mut().zip(0..NO) {
+                            *o += self.units[(i, j)] * d;
+                        }
+                    }
+                    output
+                },
+                DiffInput::NotDiff(input) => {
+                    self.device.forward_linear(&self.bias, &self.units, &input)
+                }
+            }
+        }).collect());
+
+        Ok(Cons(r,u))
     }
 }
 impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for DiffLinearLayer<U,P,DeviceCpu<U>,I,NI,NO>
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=I,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> +
+             BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<DiffInput<DiffArr<U,NI>,U,NI,NO>>> + BatchPreTrainBase<U> +
              BatchLoss<U,BatchLossInput=Vec<Arr<U,NI>>> + BatchBackward<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync {

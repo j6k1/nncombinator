@@ -793,30 +793,16 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BatchForwardBase for LinearLayer<U,P
     type BatchInput = Vec<I>;
     type BatchOutput = Vec<Arr<U,NO>>;
 }
-impl<U,P,D,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,P,D,I,NI,NO>
+impl<U,P,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,P,DeviceCpu<U>,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,NI>>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrainBase<U> + BatchBackward<U> + Sync,
           U: Default + Clone + Copy + Send + UnitValue<U> + FromParallelIterator<U>,
-          D: Device<U>,
           I: Debug + Send + Sync {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        input.par_iter().map(|input| {
-            input.iter().zip(self.units.iter()).map(|(&i, unit)| {
-                unit.iter().par_bridge().map(|&w| {
-                    i * w
-                }).collect::<Vec<U>>()
-            }).collect::<Vec<Vec<U>>>()
-        }).map(|o| o.par_iter().cloned().map(|o| o.try_into()).reduce(|| Ok(Arr::new()), |acc, o| {
-            acc.and_then(|acc| o.and_then(|o| {
-                acc.as_raw_slice()
-                    .par_iter()
-                    .zip(o.as_raw_slice().par_iter())
-                    .map(|(&acc, &o)| acc + o).collect::<Vec<U>>().try_into()
-            }))
-        })).collect::<Result<Vec<Arr<U, NO>>, _>>().map_err(|e| TrainingError::from(e))
+        self.device.batch_forward_linear(input,&self.units)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for LinearLayer<U,P,D,I,NI,NO>
@@ -850,16 +836,16 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,P,D
 
         let loss = input;
         {
-            let loss = loss.par_iter().try_fold(|| Arr::<U,NI>::new(), |acc, x| {
-                Ok(acc)
-            }).reduce_with(|a,b| {
-                a.and_then(|a| b.and_then(|b| {
-                    a.as_raw_slice()
+            let loss = loss.par_iter()
+                           .cloned()
+                           .map(|l| Ok(l)).reduce(|| Ok(Arr::<U,NO>::new()), |acc,o| {
+                acc.and_then(|acc| o.and_then(|o| {
+                    acc.as_raw_slice()
                         .par_iter().cloned()
-                        .zip(b.as_raw_slice().par_iter().cloned())
-                        .map(|(a, b)| a + b).collect::<Vec<U>>().try_into()
+                        .zip(o.as_raw_slice().par_iter().cloned())
+                        .map(|(acc, o)| acc + o).collect::<Vec<U>>().try_into()
                 }))
-            }).unwrap()?;
+            })?;
 
             {
                 for (w,&l) in self.bias.iter_mut().zip(loss.iter()) {
@@ -1162,16 +1148,16 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for DiffLinearLayer<U
 
         let loss = input;
         {
-            let loss = loss.par_iter().try_fold(|| Arr::<U,NI>::new(), |acc, x| {
-                Ok(acc)
-            }).reduce_with(|a,b| {
-                a.and_then(|a| b.and_then(|b| {
-                    a.as_raw_slice()
+            let loss = loss.par_iter()
+                .cloned()
+                .map(|l| Ok(l)).reduce(|| Ok(Arr::<U,NO>::new()), |acc,o| {
+                acc.and_then(|acc| o.and_then(|o| {
+                    acc.as_raw_slice()
                         .par_iter().cloned()
-                        .zip(b.as_raw_slice().par_iter().cloned())
-                        .map(|(a, b)| a + b).collect::<Vec<U>>().try_into()
+                        .zip(o.as_raw_slice().par_iter().cloned())
+                        .map(|(acc, o)| acc + o).collect::<Vec<U>>().try_into()
                 }))
-            }).ok_or(TrainingError::InvalidInputError(String::from("The input value for loss is empty.")))??;
+            })?;
 
             {
                 for (w,&l) in self.bias.iter_mut().zip(loss.iter()) {

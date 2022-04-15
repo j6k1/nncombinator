@@ -5,10 +5,10 @@ use crate::error::SizeMismatchError;
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 
 #[derive(Debug,Eq,PartialEq)]
-pub struct Arr<T,const N:usize> where T: Default + Clone {
+pub struct Arr<T,const N:usize> where T: Default + Clone + Send {
     arr:Box<[T]>
 }
-impl<T,const N:usize> Arr<T,N> where T: Default + Clone {
+impl<T,const N:usize> Arr<T,N> where T: Default + Clone + Send {
     pub fn new() -> Arr<T,N> {
         let mut arr = Vec::with_capacity(N);
         arr.resize_with(N,Default::default);
@@ -18,25 +18,25 @@ impl<T,const N:usize> Arr<T,N> where T: Default + Clone {
         }
     }
 }
-impl<T,const N:usize> Deref for Arr<T,N> where T: Default + Clone {
+impl<T,const N:usize> Deref for Arr<T,N> where T: Default + Clone + Send {
     type Target = Box<[T]>;
     fn deref(&self) -> &Self::Target {
         &self.arr
     }
 }
-impl<T,const N:usize> DerefMut for Arr<T,N> where T: Default + Clone  {
+impl<T,const N:usize> DerefMut for Arr<T,N> where T: Default + Clone + Send  {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.arr
     }
 }
-impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone {
+impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
     fn clone(&self) -> Self {
         Arr{
             arr:self.arr.clone()
         }
     }
 }
-impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone {
+impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Send {
     type Error = SizeMismatchError;
 
     fn try_from(v: Vec<T>) -> Result<Self, Self::Error> {
@@ -51,12 +51,12 @@ impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone {
         }
     }
 }
-impl<'a,T,const N:usize> AsRawSlice<T> for Arr<T,N> where T: Default + Clone {
+impl<'a,T,const N:usize> AsRawSlice<T> for Arr<T,N> where T: Default + Clone + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr
     }
 }
-impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for Arr<T,N> where T: Default + Clone {
+impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for Arr<T,N> where T: Default + Clone + Send {
     fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
         &mut self.arr
     }
@@ -419,7 +419,7 @@ pub struct VecArr<U,T> {
     arr:Box<[U]>,
     t:PhantomData<T>
 }
-impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy {
+impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
     pub fn iter(&self) -> VecArrViewIter<U,N> {
         VecArrViewIter(&*self.arr)
     }
@@ -428,7 +428,7 @@ impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy {
         VecArrViewIterMut(&mut *self.arr)
     }
 }
-impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy {
+impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
     fn from(items: Vec<Arr<U, N>>) -> Self {
         let mut s = vec![U::default(); N * items.len()].into_boxed_slice();
 

@@ -7,7 +7,7 @@ use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::UnitValue;
 
-pub trait Device<U>: Clone where U: UnitValue<U> {
+pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
     fn forward_linear<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NI>) -> Arr<U,NO>;
     fn backward_linear<const NI:usize,const NO:usize>(&self, units:&Arr2<U,NI,NO>, input:&Arr<U,NO>) -> Arr<U,NI>;
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>

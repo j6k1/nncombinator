@@ -62,7 +62,7 @@ fn test_mnist() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::with_params(0.001,0.9,0.0);
+    let mut optimizer = MomentumSGD::with_params(0.0001,0.9,0.0);
 
     let mut rng = rand::thread_rng();
 
@@ -70,39 +70,48 @@ fn test_mnist() {
 
     let mut correct_answers = 0;
 
-    for _ in 0..10 {
+    for _ in 0..2 {
         teachers.shuffle(&mut rng);
 
-        let batch_data = teachers.iter().take(1000).map(|(n, path)| {
-            let b = BufReader::new(File::open(path).unwrap()).bytes();
+        let mut teachers = teachers.iter().take(100).map(|t| t.clone()).collect::<Vec<(usize,PathBuf)>>();
 
-            let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+        let mut total_loss = 0.;
 
-            let n = *n;
+        for _ in 0..10 {
+            teachers.shuffle(&mut rng);
 
-            let mut input = Arr::<f32, 784>::new();
+            let batch_data = teachers.iter().take(100).map(|(n, path)| {
+                let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-            for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                *it = *p;
-            }
+                let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
 
-            let mut expected = Arr::new();
+                let n = *n;
 
-            expected[n as usize] = 1.0;
+                let mut input = Arr::<f32, 784>::new();
 
-            (expected,input)
-        }).fold((Vec::<Arr<f32,10>>::new(),Vec::<Arr<f32,784>>::new(),),| mut acc, (e,i) | {
-            acc.0.push(e);
-            acc.1.push(i);
-            acc
-        });
+                for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                    *it = *p;
+                }
 
-        let lossf = CrossEntropyMulticlass::new();
+                let mut expected = Arr::new();
 
-        let loss = net.batch_train(batch_data.0, batch_data.1.clone(), &mut optimizer, &lossf).unwrap();
+                expected[n as usize] = 1.0;
 
-        let _ = net.batch_forward(batch_data.1).unwrap();
-        println!("loss = {}",loss);
+                (expected, input)
+            }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                acc.0.push(e);
+                acc.1.push(i);
+                acc
+            });
+
+            let lossf = CrossEntropyMulticlass::new();
+
+            let loss = net.batch_train(batch_data.0, batch_data.1.clone(), &mut optimizer, &lossf).unwrap();
+            total_loss += loss;
+
+            let _ = net.batch_forward(batch_data.1).unwrap();
+        }
+        println!("total_loss = {}", total_loss);
     }
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();
@@ -147,7 +156,7 @@ fn test_mnist() {
             correct_answers += 1;
         }
 
-        println!("n = {}, answer = {}", n, r);
+        //println!("n = {}, answer = {}", n, r);
     }
 
     println!("correct_answers = {}",correct_answers);

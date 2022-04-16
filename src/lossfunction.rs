@@ -45,7 +45,13 @@ impl<U> LossFunction<U> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U>
     }
 
     fn apply(&self, r: U, t: U) -> U {
-        -t * r.ln() + (U::one() - t) * (U::one() - r).ln()
+        let rl = r.ln();
+
+        if rl == U::neg_infinity() {
+            (U::one() - t) * (U::one() - r).ln()
+        } else {
+            -t * rl + (U::one() - t) * (U::one() - r).ln()
+        }
     }
 
     fn name(&self) -> &'static str {
@@ -68,7 +74,13 @@ impl<U> LossFunction<U> for CrossEntropyMulticlass<U> where U: Clone + Copy + Un
     }
 
     fn apply(&self, r: U, t: U) -> U {
-        -t * r.ln()
+        let rl = r.ln();
+
+        if rl == U::neg_infinity() {
+            U::default()
+        } else {
+            -t * rl
+        }
     }
 
     fn name(&self) -> &'static str {

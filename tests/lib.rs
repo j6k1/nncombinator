@@ -110,6 +110,7 @@ fn test_mnist() {
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1).unwrap();
+            dbg!(&loss);
         }
         println!("total_loss = {}", total_loss);
     }

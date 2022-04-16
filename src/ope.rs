@@ -5,7 +5,7 @@ use num_traits::FromPrimitive;
 pub trait UnitValue<T>: Add<Output=T> + Sub<Output=T> + Mul<Output=T> + Div<Output=T> + Neg<Output=T> +
     AddAssign + PartialOrd +
     Clone + Copy + Default + Debug + Send + Sync + 'static +
-    Exp + Tanh + Ln + One + Max + Min + MaxValue + InitialMaxValue + Abs + Sqrt + Neginfinity +
+    Exp + Tanh + Ln + One + Max + Min + MaxValue + InitialMaxValue + Abs + Sqrt + Infinity + Neginfinity +
     Bias + FromPrimitive {
 }
 pub trait Bias where Self: Sized {
@@ -179,6 +179,19 @@ impl Neginfinity for f64 {
 impl Neginfinity for f32 {
     fn neg_infinity() -> Self {
         f32::NEG_INFINITY
+    }
+}
+pub trait Infinity {
+    fn infinity() -> Self;
+}
+impl Infinity for f64 {
+    fn infinity() -> f64 {
+        f64::INFINITY
+    }
+}
+impl Infinity for f32 {
+    fn infinity() -> f32 {
+        f32::INFINITY
     }
 }
 impl UnitValue<f64> for f64 {}

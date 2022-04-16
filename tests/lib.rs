@@ -77,7 +77,7 @@ fn test_mnist() {
 
         let mut total_loss = 0.;
 
-        for _ in 0..10 {
+        for _ in 0..100 {
             teachers.shuffle(&mut rng);
 
             let batch_data = teachers.iter().take(100).map(|(n, path)| {
@@ -155,8 +155,6 @@ fn test_mnist() {
         if n == r {
             correct_answers += 1;
         }
-
-        //println!("n = {}, answer = {}", n, r);
     }
 
     println!("correct_answers = {}",correct_answers);

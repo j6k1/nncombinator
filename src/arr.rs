@@ -86,6 +86,13 @@ impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2> where T: Default {
         Arr2IterMut(&mut *self.arr)
     }
 }
+impl<T,const N1:usize, const N2:usize> Clone for Arr2<T,N1,N2> where T: Default + Clone + Send {
+    fn clone(&self) -> Self {
+        Arr2 {
+            arr:self.arr.clone()
+        }
+    }
+}
 impl<T,const N1:usize, const N2:usize> Index<(usize,usize)> for Arr2<T,N1,N2> where T: Default {
     type Output = T;
 
@@ -111,6 +118,13 @@ impl<T,const N1:usize, const N2:usize> IndexMut<(usize,usize)> for Arr2<T,N1,N2>
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr3<T,const N1:usize, const N2:usize, const N3:usize> where T: Default {
     arr:Box<[T]>
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize> Clone for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
+    fn clone(&self) -> Self {
+        Arr3 {
+            arr:self.arr.clone()
+        }
+    }
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: Default {
     pub fn new() -> Arr3<T,N1,N2,N3> {
@@ -159,6 +173,13 @@ impl<T,const N1:usize, const N2:usize, const N3:usize> IndexMut<(usize,usize,usi
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr4<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> where T: Default {
     arr:Box<[T]>
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize, const N4:usize> Clone for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
+    fn clone(&self) -> Self {
+        Arr4 {
+            arr:self.arr.clone()
+        }
+    }
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize, const N4:usize> Arr4<T,N1,N2,N3,N4> where T: Default {
     pub fn new() -> Arr3<T,N1,N2,N3> {
@@ -213,6 +234,13 @@ impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> IndexMut<
 #[derive(Debug,Eq,PartialEq)]
 pub struct ArrView<'a,T,const N:usize> {
     arr:&'a [T]
+}
+impl<'a,T,const N:usize> Clone for ArrView<'a,T,N> where T: Default + Clone + Send {
+    fn clone(&self) -> Self {
+        ArrView {
+            arr:self.arr.clone()
+        }
+    }
 }
 impl<'a,T,const N:usize> Deref for ArrView<'a,T,N> {
     type Target = [T];
@@ -393,7 +421,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4IterMut
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct DiffArr<T,const N:usize> where T: Debug {
     items:Vec<(usize,T)>
 }

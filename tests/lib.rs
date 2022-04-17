@@ -76,8 +76,11 @@ fn test_mnist() {
         let mut teachers = teachers.iter().take(100).map(|t| t.clone()).collect::<Vec<(usize,PathBuf)>>();
 
         let mut total_loss = 0.;
+        let mut count = 0;
 
-        for _ in 0..100 {
+        for _ in 0..10 {
+            count += 1;
+
             teachers.shuffle(&mut rng);
 
             let batch_data = teachers.iter().take(100).map(|(n, path)| {
@@ -113,6 +116,7 @@ fn test_mnist() {
             dbg!(&loss);
         }
         println!("total_loss = {}", total_loss);
+        println!("loss_average = {}", total_loss as f32 / count as f32);
     }
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();

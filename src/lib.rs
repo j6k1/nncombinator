@@ -19,7 +19,7 @@ pub trait Stack {
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O;
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O;
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Cons<R,T>(pub R,pub T) where R: Stack;
 
 impl<R,T> Stack for Cons<R,T> where R: Stack {
@@ -39,7 +39,7 @@ impl<R,T> Stack for Cons<R,T> where R: Stack {
     }
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O { f(&self.0) }
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Nil;
 
 impl Stack for Nil {

@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelBridge};
+use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::*;
 use crate::device::*;
 use crate::persistence::*;
@@ -10,7 +10,6 @@ use crate::activation::Activation;
 use crate::error::{ConfigReadError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
-use crate::mem::AsRawSlice;
 use crate::optimizer::*;
 
 #[derive(Debug)]
@@ -845,9 +844,8 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,P,D
                            .cloned()
                            .map(|l| Ok(l)).reduce(|| Ok(Arr::<U,NO>::new()), |acc,o| {
                 acc.and_then(|acc| o.and_then(|o| {
-                    acc.as_raw_slice()
-                        .par_iter().cloned()
-                        .zip(o.as_raw_slice().par_iter().cloned())
+                    acc.par_iter().cloned()
+                        .zip(o.par_iter().cloned())
                         .map(|(acc, o)| acc + o).collect::<Vec<U>>().try_into()
                 }))
             })?;
@@ -858,9 +856,9 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,P,D
                 }
 
                 s.map(|o| {
-                    o.iter().par_bridge().cloned().map(|o| Ok(o)).reduce(|| Ok(Arr::new()), |acc,o| {
+                    o.par_iter().cloned().map(|o| Ok(o)).reduce(|| Ok(Arr::new()), |acc,o| {
                         acc.and_then(|acc| o.and_then(|o| {
-                            acc.as_raw_slice().par_iter().zip(o.as_raw_slice().par_iter()).map(|(&acc, &o)| {
+                            acc.par_iter().zip(o.par_iter()).map(|(&acc, &o)| {
                                 acc + o
                             }).collect::<Vec<U>>().try_into()
                         }))

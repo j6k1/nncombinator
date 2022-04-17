@@ -1,10 +1,9 @@
 use std::marker::PhantomData;
-use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
 use crate::error::TrainingError;
 use crate::lossfunction::LossFunction;
-use crate::mem::AsRawSlice;
 use crate::UnitValue;
 
 pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
@@ -101,9 +100,8 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         where L: LossFunction<U> {
 
         actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
-            a.as_raw_slice()
-             .par_iter()
-             .zip(e.as_raw_slice().par_iter())
+            a.par_iter()
+             .zip(e.par_iter())
              .map(|(&a,&e)| lossf.derive(a,e))
              .collect::<Vec<U>>()
              .try_into().map_err(|e| TrainingError::from(e))
@@ -113,8 +111,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     pub fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &Vec<Arr<U, N>>, actual: &Vec<Arr<U, N>>)
         -> Result<Vec<Arr<U, N>>, TrainingError> {
         actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
-            a.as_raw_slice()
-             .par_iter().zip(e.as_raw_slice().par_iter())
+            a.par_iter().zip(e.par_iter())
              .map(|(&a,&e)| a - e).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,N>>,_>>()
     }
@@ -122,8 +119,8 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     pub fn backward_linear_batch<const NI:usize, const NO: usize>(&self, units: &Arr2<U, NI, NO>, input: &Vec<Arr<U, NO>>)
                                                                   -> Result<Vec<Arr<U, NI>>, TrainingError> {
         input.par_iter().map(|input| {
-            units.iter().par_bridge().map(|u| {
-                u.as_raw_slice().par_iter().cloned().zip(input.as_raw_slice().par_iter().cloned())
+            units.par_iter().map(|u| {
+                u.par_iter().cloned().zip(input.par_iter().cloned())
                     .reduce(|| (U::default(),U::default()), | (sum,d), (w,l) | (sum + w * l,d))
             }).map(|(r,_)| r).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,NI>>,_>>()
@@ -132,7 +129,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     pub fn batch_loss_linear_by_activaton<A: Activation<U,Arr<U,N>,Self>,const N:usize>(&self, loss:Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A) -> Result<Vec<Arr<U, N>>, TrainingError>
     {
         loss.par_iter().zip(u.par_iter()).map(|(l,u)| {
-            l.as_raw_slice().par_iter().zip(activation.derive(self,u).as_raw_slice().par_iter()).map(|(&l,&u)| {
+            l.par_iter().zip(activation.derive(self,u).par_iter()).map(|(&l,&u)| {
                 l * u
             }).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,N>>,_>>()
@@ -140,9 +137,8 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
 
     pub fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&Vec<Arr<U,N>>,actual:&Vec<Arr<U,N>>,lossf:&L) -> U {
         actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
-            a.as_raw_slice()
-             .par_iter().cloned()
-             .zip(e.as_raw_slice().par_iter().cloned())
+            a.par_iter().cloned()
+             .zip(e.par_iter().cloned())
              .reduce(|| (U::default(),U::default()), |(sum,d),(a,e)| {
                  (sum + lossf.apply(a,e),d)
              })
@@ -151,18 +147,17 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
 
     pub fn batch_forward_linear<const NI:usize,const NO:usize>(&self,input:&Vec<Arr<U,NI>>,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>) -> Result<Vec<Arr<U,NO>>,TrainingError> {
         input.par_iter().map(|input| {
-            input.iter().zip(units.iter()).map(|(&i, unit)| {
-                unit.iter().par_bridge().map(|&w| {
+            input.par_iter().zip(units.par_iter()).map(|(&i, unit)| {
+                unit.par_iter().map(|&w| {
                     i * w
                 }).collect::<Vec<U>>()
             }).collect::<Vec<Vec<U>>>()
         }).map(|o| o.par_iter().cloned().map(|o| o.try_into()).reduce(|| Ok(Arr::new()), |acc, o| {
             acc.and_then(|acc| o.and_then(|o| {
-                acc.as_raw_slice()
-                    .par_iter()
-                    .zip(o.as_raw_slice().par_iter())
+                acc.par_iter()
+                    .zip(o.par_iter())
                     .map(|(&acc, &o)| acc + o)
-                    .zip(bias.as_raw_slice().par_iter()).map(|(acc,&b)| {
+                    .zip(bias.par_iter()).map(|(acc,&b)| {
                         acc + b
                     }).collect::<Vec<U>>().try_into()
             }))

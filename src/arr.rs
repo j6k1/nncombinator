@@ -587,7 +587,7 @@ impl<'data, T: Send + Sync + 'static,const N1:usize,const N2:usize> plumbing::Pr
     fn into_iter(self) -> Self { self }
 
     fn split_at(self, mid: usize) -> (Self, Self) {
-        let (l,r) = self.0.split_at(mid);
+        let (l,r) = self.0.split_at(mid * N2);
 
         (Arr2IterProducer(l),Arr2IterProducer(r))
     }

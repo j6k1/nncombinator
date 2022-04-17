@@ -1,6 +1,9 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std;
+use rayon::iter::plumbing;
+use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::error::SizeMismatchError;
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 
@@ -498,5 +501,118 @@ impl<'a,T,const N:usize> Iterator for VecArrViewIterMut<'a,T,N> {
                 arr:l
             })
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct Arr2ParIter<'data,T,const N1:usize,const N2:usize>(&'data [T]);
+
+pub struct Arr2IterProducer<'data,T,const N1:usize,const N:usize>(&'data [T]);
+
+impl<'data,T,const N1:usize, const N2:usize> Arr2IterProducer<'data,T,N1,N2> {
+    const fn element_size(&self) -> usize {
+        N2
+    }
+}
+impl<'data,T,const N1:usize,const N2:usize> Iterator for Arr2IterProducer<'data,T,N1,N2> {
+    type Item = ArrView<'data,T,N2>;
+
+    fn next(&mut self) -> Option<ArrView<'data,T,N2>> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+
+        if slice.is_empty() {
+            None
+        } else {
+            let (l,r) = slice.split_at(self.element_size());
+
+            self.0 = r;
+
+            Some(ArrView {
+                arr:l
+            })
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        ({N1*N2-1}, Some(N1*N2-1))
+    }
+}
+
+impl<'data,T,const N1:usize,const N2:usize> std::iter::ExactSizeIterator for Arr2IterProducer<'data,T,N1,N2> {
+    fn len(&self) -> usize {
+        N1 * N2
+    }
+}
+
+impl<'data,T,const N1:usize,const N2:usize> std::iter::DoubleEndedIterator for Arr2IterProducer<'data,T,N1,N2> {
+    fn next_back(&mut self) -> Option<ArrView<'data,T,N2>> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+
+        if slice.is_empty() {
+            None
+        } else {
+            let (l,r) = slice.split_at(self.0.len() - self.element_size());
+
+            self.0 = l;
+
+            Some(ArrView {
+                arr:r
+            })
+        }
+    }
+}
+
+
+impl<'data, T: Send + Sync + 'static,const N1:usize,const N2:usize> plumbing::Producer for Arr2IterProducer<'data,T,N1,N2> {
+    type Item = ArrView<'data,T,N2>;
+    type IntoIter = Self;
+
+    fn into_iter(self) -> Self { self }
+
+    fn split_at(self, mid: usize) -> (Self, Self) {
+        let (l,r) = self.0.split_at(mid);
+
+        (Arr2IterProducer(l),Arr2IterProducer(r))
+    }
+}
+
+impl<'data, T: Send + Sync + 'static,const N1: usize, const N2: usize> ParallelIterator for Arr2ParIter<'data,T,N1,N2> {
+    type Item = ArrView<'data,T,N2>;
+
+    fn opt_len(&self) -> Option<usize> { Some(IndexedParallelIterator::len(self)) }
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+        where
+            C: plumbing::UnindexedConsumer<Self::Item>,
+    {
+        self.drive(consumer)
+    }
+
+}
+
+impl<'data, T: Send + Sync + 'static, const N1: usize, const N2: usize> IndexedParallelIterator for Arr2ParIter<'data,T,N1,N2> {
+    fn len(&self) -> usize { N1 }
+
+    fn drive<C>(self, consumer: C) -> C::Result
+        where
+            C: plumbing::Consumer<Self::Item>,
+    {
+        plumbing::bridge(self, consumer)
+    }
+
+    fn with_producer<CB>(self, callback: CB) -> CB::Output
+        where
+            CB: plumbing::ProducerCallback<Self::Item>,
+    {
+        callback.callback(Arr2IterProducer::<T,N1,N2>(&self.0))
+    }
+}
+impl<'data,T, const N1:usize, const N2:usize> IntoParallelRefIterator<'data> for Arr2<T,N1,N2>
+    where T: Send + Sync + 'static + Default {
+    type Iter = Arr2ParIter<'data,T,N1,N2>;
+    type Item = ArrView<'data,T,N2>;
+
+    fn par_iter(&'data self) -> Self::Iter {
+        Arr2ParIter(&self.arr)
     }
 }

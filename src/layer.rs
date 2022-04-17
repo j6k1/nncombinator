@@ -55,7 +55,7 @@ pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
 }
 pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
     type DiffInput: Debug;
-    fn ask_diff_input(&self, stack:Self::OutStack) -> Self::DiffInput;
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput;
 }
 pub trait BatchForwardBase: ForwardAll {
     type BatchInput: Debug;
@@ -289,10 +289,8 @@ impl<U,P,A,D,I,const N:usize> AskDiffInput<U> for ActivationLayer<U,P,A,I,Arr<U,
           I: Debug + Send + Sync {
     type DiffInput = P::DiffInput;
 
-    fn ask_diff_input(&self, stack: Self::OutStack) -> Self::DiffInput {
-        let (s,_) = stack.pop();
-
-        self.parent.ask_diff_input(s)
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
+        stack.map_remaining(|s| self.parent.ask_diff_input(s))
     }
 }
 impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
@@ -498,7 +496,7 @@ impl<U,P,D,I,const NO:usize> AskDiffInput<U> for LinearOutputLayer<U,P,D,I,Arr<U
           I: Debug + Send + Sync {
     type DiffInput = P::DiffInput;
 
-    fn ask_diff_input(&self, stack: Self::OutStack) -> Self::DiffInput {
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
         self.parent.ask_diff_input(stack)
     }
 }
@@ -776,10 +774,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> AskDiffInput<U> for LinearLayer<U,P,
           I: Debug + Send + Sync {
     type DiffInput = P::DiffInput;
 
-    fn ask_diff_input(&self, stack: Self::OutStack) -> Self::DiffInput {
-        let (s,_) = stack.pop();
-
-        self.parent.ask_diff_input(s)
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
+        stack.map_remaining(|s| self.parent.ask_diff_input(s))
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,P,D,I,NI,NO>
@@ -1098,10 +1094,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> AskDiffInput<U> for DiffLinearLayer<
           I: Debug + Send + Sync {
     type DiffInput = Arr<U,NO>;
 
-    fn ask_diff_input(&self, stack: Self::OutStack) -> Self::DiffInput {
-        let (_,o) = stack.pop();
-
-        o
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
+        stack.map(|o| o.clone())
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<U,P,D,I,NI,NO>

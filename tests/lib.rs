@@ -478,7 +478,7 @@ fn test_weather_by_forward_diff() {
 
             prev = input.clone();
 
-            let o = net.ask_diff_input(s);
+            let o = net.ask_diff_input(&s);
 
             Some(net.forward_diff(DiffInput::Diff(d,o)))
         } else {

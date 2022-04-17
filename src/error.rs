@@ -99,3 +99,34 @@ impl error::Error for SizeMismatchError {
         None
     }
 }
+#[derive(Debug)]
+pub struct IndexOutBoundError {
+    len:usize,
+    index:usize
+}
+impl fmt::Display for IndexOutBoundError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            IndexOutBoundError { len, index}  => {
+                write!(f, "The value {} specified for the index is out of range; it exceeds {}.",index, len - 1)
+            }
+        }
+    }
+}
+impl error::Error for IndexOutBoundError {
+    fn description(&self) -> &str {
+        "The value specified for the index is out of range."
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
+    }
+}
+impl IndexOutBoundError {
+    pub fn new(len:usize,index:usize) -> IndexOutBoundError {
+        IndexOutBoundError {
+            len:len,
+            index:index
+        }
+    }
+}

@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std;
 use rayon::iter::plumbing;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use crate::error::SizeMismatchError;
+use crate::error::{IndexOutBoundError, SizeMismatchError};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 
 #[derive(Debug,Eq,PartialEq)]
@@ -405,12 +405,14 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
         }
     }
 
-    pub fn push(&mut self,i:usize,v:T) {
+    pub fn push(&mut self,i:usize,v:T) -> Result<(),IndexOutBoundError> {
         if i >= N {
-            panic!("index out of bounds: the len is {} but the index is {}", N, i);
+            return Err(IndexOutBoundError::new(N,i));
         }
 
         self.items.push((i,v));
+
+        Ok(())
     }
 
     pub fn iter<'a>(&'a self) -> impl Iterator<Item=&(usize,T)> {

@@ -472,7 +472,7 @@ fn test_weather_by_forward_diff() {
                                 .filter(|((_,&input),&p)| input != p)
                                 .map(|((index,&input),&p)| (index,input - p))
                                 .fold(DiffArr::new(),| mut acc,(i,d) | {
-                acc.push(i,d);
+                acc.push(i,d).unwrap();
                 acc
             });
 

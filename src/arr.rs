@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std;
 use rayon::iter::plumbing;
-use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::error::SizeMismatchError;
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 
@@ -503,7 +503,24 @@ impl<'a,T,const N:usize> Iterator for VecArrViewIterMut<'a,T,N> {
         }
     }
 }
+impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for ArrView<'data,T,N>
+    where T: Send + Sync + 'static + Default + Clone {
+    type Iter = rayon::slice::Iter<'data,T>;
+    type Item = &'data T;
 
+    fn par_iter(&'data self) -> Self::Iter {
+        <&[T]>::into_par_iter(&self.arr)
+    }
+}
+impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for Arr<T,N>
+    where T: Send + Sync + 'static + Default + Clone {
+    type Iter = rayon::slice::Iter<'data,T>;
+    type Item = &'data T;
+
+    fn par_iter(&'data self) -> Self::Iter {
+        <&[T]>::into_par_iter(&self.arr)
+    }
+}
 #[derive(Debug)]
 pub struct Arr2ParIter<'data,T,const N1:usize,const N2:usize>(&'data [T]);
 

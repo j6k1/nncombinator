@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::io;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 use crate::error::*;
@@ -18,6 +18,11 @@ pub trait ReadFromPersistence<U> {
 }
 pub trait SaveToPersistence<U> {
     fn write(&mut self);
+}
+pub trait LinearPersistence<U> {
+    fn read(&mut self) -> Result<U, ConfigReadError>;
+    fn write(&mut self,u:U);
+    fn verify_eof(&mut self) -> Result<(),ConfigReadError>;
 }
 pub enum UnitOrMarker<U> {
     Unit(U),
@@ -144,6 +149,123 @@ impl<U> SaveToFile<U> for TextFilePersistence<U> where U: FromStr + Sized + Disp
                     bw.write(b"\n")?;
                 }
             }
+        }
+
+        Ok(())
+    }
+}
+pub struct BinFilePersistence<U> {
+    reader:BufReader<File>,
+    data:Vec<U>
+}
+impl<U> BinFilePersistence<U> {
+    pub fn new (file:&str) -> Result<BinFilePersistence<U>, ConfigReadError> {
+        Ok(BinFilePersistence {
+            reader:BufReader::new(OpenOptions::new().read(true).create(false).open(file)?),
+            data:Vec::new()
+        })
+    }
+}
+impl LinearPersistence<f64> for BinFilePersistence<f64> {
+    fn read(&mut self) -> Result<f64, ConfigReadError> {
+        let mut buf = [0; 8];
+
+        self.reader.read_exact(&mut buf)?;
+
+        Ok(f64::from_bits(
+            (buf[0] as u64) << 56 |
+                (buf[1] as u64) << 48 |
+                (buf[2] as u64) << 40 |
+                (buf[3] as u64) << 32 |
+                (buf[4] as u64) << 24 |
+                (buf[5] as u64) << 16 |
+                (buf[6] as u64) << 8  |
+                buf[7] as u64)
+        )
+    }
+
+    fn write(&mut self, u: f64) {
+        self.data.push(u);
+    }
+
+    fn verify_eof(&mut self) -> Result<(), ConfigReadError> {
+        let mut buf:[u8; 1] = [0];
+
+        let n = self.reader.read(&mut buf)?;
+
+        if n == 0 {
+            Ok(())
+        } else {
+            Err(ConfigReadError::InvalidState(String::from("Data loaded , but the input has not reached the end.")))
+        }
+    }
+}
+impl LinearPersistence<f32> for BinFilePersistence<f32> {
+    fn read(&mut self) -> Result<f32, ConfigReadError> {
+        let mut buf = [0; 8];
+
+        self.reader.read_exact(&mut buf)?;
+
+        Ok(f32::from_bits(
+                (buf[4] as u32) << 24 |
+                (buf[5] as u32) << 16 |
+                (buf[6] as u32) << 8  |
+                buf[7] as u32)
+        )
+    }
+
+    fn write(&mut self, u: f32) {
+        self.data.push(u);
+    }
+
+    fn verify_eof(&mut self) -> Result<(), ConfigReadError> {
+        let mut buf:[u8; 1] = [0];
+
+        let n = self.reader.read(&mut buf)?;
+
+        if n == 0 {
+            Ok(())
+        } else {
+            Err(ConfigReadError::InvalidState(String::from("Data loaded , but the input has not reached the end.")))
+        }
+    }
+}
+impl SaveToFile<f64> for BinFilePersistence<f64> {
+    fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
+        let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
+
+        for u in self.data.iter() {
+            let mut buf = [0; 8];
+            let bits = u.to_bits();
+
+            buf[0] = (bits >> 56 & 0xff) as u8;
+            buf[1] = (bits >> 48 & 0xff) as u8;
+            buf[2] = (bits >> 40 & 0xff) as u8;
+            buf[3] = (bits >> 32 & 0xff) as u8;
+            buf[4] = (bits >> 24 & 0xff) as u8;
+            buf[5] = (bits >> 16 & 0xff) as u8;
+            buf[6] = (bits >> 8 & 0xff) as u8;
+            buf[7] = (bits & 0xff) as u8;
+
+            bw.write(&buf)?;
+        }
+
+        Ok(())
+    }
+}
+impl SaveToFile<f32> for BinFilePersistence<f32> {
+    fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
+        let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
+
+        for u in self.data.iter() {
+            let mut buf = [0; 8];
+            let bits = u.to_bits();
+            buf[4] = (bits >> 24 & 0xff) as u8;
+            buf[5] = (bits >> 16 & 0xff) as u8;
+            buf[6] = (bits >> 8 & 0xff) as u8;
+            buf[7] = (bits & 0xff) as u8;
+
+            bw.write(&buf)?;
         }
 
         Ok(())

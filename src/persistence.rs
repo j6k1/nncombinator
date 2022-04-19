@@ -202,15 +202,15 @@ impl LinearPersistence<f64> for BinFilePersistence<f64> {
 }
 impl LinearPersistence<f32> for BinFilePersistence<f32> {
     fn read(&mut self) -> Result<f32, ConfigReadError> {
-        let mut buf = [0; 8];
+        let mut buf = [0; 4];
 
         self.reader.read_exact(&mut buf)?;
 
         Ok(f32::from_bits(
-                (buf[4] as u32) << 24 |
-                (buf[5] as u32) << 16 |
-                (buf[6] as u32) << 8  |
-                buf[7] as u32)
+                (buf[0] as u32) << 24 |
+                (buf[1] as u32) << 16 |
+                (buf[2] as u32) << 8  |
+                buf[3] as u32)
         )
     }
 
@@ -258,12 +258,12 @@ impl SaveToFile<f32> for BinFilePersistence<f32> {
         let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
 
         for u in self.data.iter() {
-            let mut buf = [0; 8];
+            let mut buf = [0; 4];
             let bits = u.to_bits();
-            buf[4] = (bits >> 24 & 0xff) as u8;
-            buf[5] = (bits >> 16 & 0xff) as u8;
-            buf[6] = (bits >> 8 & 0xff) as u8;
-            buf[7] = (bits & 0xff) as u8;
+            buf[0] = (bits >> 24 & 0xff) as u8;
+            buf[1] = (bits >> 16 & 0xff) as u8;
+            buf[2] = (bits >> 8 & 0xff) as u8;
+            buf[3] = (bits & 0xff) as u8;
 
             bw.write(&buf)?;
         }

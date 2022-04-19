@@ -116,13 +116,23 @@ impl<U,O,LI> InputLayer<U,O,LI> where U: UnitValue<U> {
         }
     }
 }
-impl<U,O,LI> Persistence<U,TextFilePersistence<U>> for InputLayer<U,O,LI>
+impl<U,O,LI> Persistence<U,TextFilePersistence<U>,Specialized> for InputLayer<U,O,LI>
     where U: UnitValue<U> + FromStr + Sized {
     fn load(&mut self, _: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         Ok(())
     }
 
     fn save(&mut self, _: &mut TextFilePersistence<U>) {
+
+    }
+}
+impl<T,U,O,LI> Persistence<U,T,Linear> for InputLayer<U,O,LI>
+    where T: LinearPersistence<U>, U: UnitValue<U> {
+    fn load(&mut self, _: &mut T) -> Result<(),ConfigReadError> {
+        Ok(())
+    }
+
+    fn save(&mut self, _: &mut T) {
 
     }
 }
@@ -203,8 +213,8 @@ impl<U,P,A,I,PI,D> ActivationLayer<U,P,A,I,PI,D>
         }
     }
 }
-impl<U,P,A,I,PI,D> Persistence<U,TextFilePersistence<U>> for ActivationLayer<U,P,A,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence<U>> +
+impl<U,P,A,I,PI,D> Persistence<U,TextFilePersistence<U>,Specialized> for ActivationLayer<U,P,A,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence<U>,Specialized> +
              BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
           D: Device<U>,
@@ -216,6 +226,23 @@ impl<U,P,A,I,PI,D> Persistence<U,TextFilePersistence<U>> for ActivationLayer<U,P
     }
 
     fn save(&mut self, persistence: &mut TextFilePersistence<U>) {
+        self.parent.save(persistence)
+    }
+}
+impl<T,U,P,A,I,PI,D> Persistence<U,T,Linear> for ActivationLayer<U,P,A,I,PI,D>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=PI> + Persistence<U,T,Linear> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          A: Activation<U,PI,D>,
+          PI: Debug,
+          I: Debug + Send + Sync {
+    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
+        self.parent.load(persistence)
+    }
+
+    fn save(&mut self, persistence: &mut T) {
         self.parent.save(persistence)
     }
 }
@@ -435,9 +462,9 @@ impl<U,P,D,I,IO> LinearOutputLayer<U,P,D,I,IO>
         }
     }
 }
-impl<U,P,D,I,IO> Persistence<U,TextFilePersistence<U>> for LinearOutputLayer<U,P,D,I,IO>
+impl<U,P,D,I,IO> Persistence<U,TextFilePersistence<U>,Specialized> for LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> +
-             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>>,
+             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
           D: Device<U>,
           IO: Debug,
@@ -448,6 +475,23 @@ impl<U,P,D,I,IO> Persistence<U,TextFilePersistence<U>> for LinearOutputLayer<U,P
     }
 
     fn save(&mut self, persistence: &mut TextFilePersistence<U>) {
+        self.parent.save(persistence)
+    }
+}
+impl<T,U,P,D,I,IO> Persistence<U,T,Linear> for LinearOutputLayer<U,P,D,I,IO>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> +
+             PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          IO: Debug,
+          I: Debug + Send + Sync {
+    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
+        self.parent.load(persistence)?;
+        persistence.verify_eof()
+    }
+
+    fn save(&mut self, persistence: &mut T) {
         self.parent.save(persistence)
     }
 }
@@ -646,9 +690,9 @@ impl<U,P,D,I,const NI:usize,const NO:usize> LinearLayer<U,P,D,I,NI,NO>
         }
     }
 }
-impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>> for LinearLayer<U,P,D,I,NI,NO>
+impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>,Specialized> for LinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> +
-             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>>,
+             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           D: Device<U>, ConfigReadError: From<<U as FromStr>::Err>,
           I: Debug + Send + Sync {
@@ -681,6 +725,43 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>
             persistence.write(UnitOrMarker::UnitsStart);
             for w in u.iter() {
                 persistence.write(UnitOrMarker::Unit(*w));
+            }
+        }
+    }
+}
+impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for LinearLayer<U,P,D,I,NI,NO>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> +
+             PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync {
+    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
+        self.parent.load(persistence)?;
+
+        for b in self.bias.iter_mut() {
+            *b = persistence.read()?;
+        }
+
+        for mut u in self.units.iter_mut() {
+            for w in u.iter_mut() {
+                *w = persistence.read()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn save(&mut self, persistence: &mut T) {
+        self.parent.save(persistence);
+
+        for b in self.bias.iter() {
+            persistence.write(*b);
+        }
+
+        for u in self.units.iter() {
+            for w in u.iter() {
+                persistence.write(*w);
             }
         }
     }
@@ -926,10 +1007,10 @@ impl<U,P,D,I,const NI:usize,const NO:usize> DiffLinearLayer<U,P,D,I,NI,NO>
         }
     }
 }
-impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>> for DiffLinearLayer<U,P,D,I,NI,NO>
+impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>,Specialized> for DiffLinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
-             Persistence<U,TextFilePersistence<U>>,
+             Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           D: Device<U>, ConfigReadError: From<<U as FromStr>::Err>,
           I: Debug + Send + Sync {
@@ -962,6 +1043,44 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>
             persistence.write(UnitOrMarker::UnitsStart);
             for w in u.iter() {
                 persistence.write(UnitOrMarker::Unit(*w));
+            }
+        }
+    }
+}
+impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for DiffLinearLayer<U,P,D,I,NI,NO>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
+             BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
+             Persistence<U,T,Linear>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync {
+    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
+        self.parent.load(persistence)?;
+
+        for b in self.bias.iter_mut() {
+            *b = persistence.read()?;
+        }
+
+        for mut u in self.units.iter_mut() {
+            for w in u.iter_mut() {
+                *w = persistence.read()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn save(&mut self, persistence: &mut T) {
+        self.parent.save(persistence);
+
+        for b in self.bias.iter() {
+            persistence.write(*b);
+        }
+
+        for u in self.units.iter() {
+            for w in u.iter() {
+                persistence.write(*w);
             }
         }
     }

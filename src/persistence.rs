@@ -6,10 +6,16 @@ use std::path::Path;
 use std::str::FromStr;
 use crate::error::*;
 
-pub trait Persistence<U,P> {
+pub trait Persistence<U,P,S> {
     fn load(&mut self, persistence:&mut P) -> Result<(),ConfigReadError>;
     fn save(&mut self, persistence:&mut P);
 }
+pub trait PersistenceType {}
+pub struct Specialized;
+pub struct Linear;
+impl PersistenceType for Specialized {}
+impl PersistenceType for Linear {}
+
 pub trait SaveToFile<U> {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error>;
 }

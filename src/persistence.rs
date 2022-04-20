@@ -6,7 +6,7 @@ use std::path::Path;
 use std::str::FromStr;
 use crate::error::*;
 
-pub trait Persistence<U,P,S> {
+pub trait Persistence<U,P,K> where K: PersistenceType {
     fn load(&mut self, persistence:&mut P) -> Result<(),ConfigReadError>;
     fn save(&mut self, persistence:&mut P);
 }

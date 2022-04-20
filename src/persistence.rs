@@ -36,32 +36,49 @@ pub enum UnitOrMarker<U> {
     UnitsStart
 }
 pub struct TextFilePersistence<U> where U: FromStr + Sized {
-    reader:BufReader<File>,
+    reader:Option<BufReader<File>>,
     line:Option<Vec<String>>,
     index:usize,
     data:Vec<UnitOrMarker<U>>
 }
 impl<U> TextFilePersistence<U> where U: FromStr + Sized {
     pub fn new (file:&str) -> Result<TextFilePersistence<U>,ConfigReadError> {
-        Ok(TextFilePersistence {
-            reader:BufReader::new(OpenOptions::new().read(true).create(false).open(file)?),
-            line:None,
-            index:0usize,
-            data:Vec::new()
-        })
+        if Path::new(file).exists() {
+            Ok(TextFilePersistence {
+                reader:Some(BufReader::new(OpenOptions::new().read(true).create(false).open(file)?)),
+                line: None,
+                index: 0usize,
+                data: Vec::new()
+            })
+        } else {
+            Ok(TextFilePersistence {
+                reader:None,
+                line: None,
+                index: 0usize,
+                data: Vec::new()
+            })
+        }
     }
 
     fn read_line(&mut self) -> Result<String, ConfigReadError> {
-        let mut buf = String::new();
-        let n = self.reader.read_line(&mut buf)?;
+        match self.reader {
+            Some(ref mut reader) => {
+                let mut buf = String::new();
+                let n = reader.read_line(&mut buf)?;
 
-        buf = buf.trim().to_string();
+                buf = buf.trim().to_string();
 
-        if n == 0 {
-            Err(ConfigReadError::InvalidState(String::from(
-                "End of input has been reached.")))
-        } else {
-            Ok(buf)
+                if n == 0 {
+                    Err(ConfigReadError::InvalidState(String::from(
+                        "End of input has been reached.")))
+                } else {
+                    Ok(buf)
+                }
+            },
+            None => {
+                Err(ConfigReadError::InvalidState(String::from(
+                    "File does not exist yet.")))
+            }
         }
     }
 
@@ -109,22 +126,30 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
     }
 
     pub fn verify_eof(&mut self) -> Result<(),ConfigReadError> {
-        let mut buf = String::new();
+        match self.reader {
+            Some(ref mut reader) => {
+                let mut buf = String::new();
 
-        loop {
-            let n = self.reader.read_line(&mut buf)?;
+                loop {
+                    let n = reader.read_line(&mut buf)?;
 
-            if n == 0 {
-                return Ok(());
-            }
+                    if n == 0 {
+                        return Ok(());
+                    }
 
-            buf = buf.trim().to_string();
+                    buf = buf.trim().to_string();
 
-            if !buf.is_empty() {
-                return Err(ConfigReadError::InvalidState(
-                    String::from("Data loaded , but the input has not reached the end.")));
-            } else {
-                buf.clear();
+                    if !buf.is_empty() {
+                        return Err(ConfigReadError::InvalidState(
+                            String::from("Data loaded , but the input has not reached the end.")));
+                    } else {
+                        buf.clear();
+                    }
+                }
+            },
+            None => {
+                Err(ConfigReadError::InvalidState(String::from(
+                    "File does not exist yet.")))
             }
         }
     }
@@ -161,33 +186,48 @@ impl<U> SaveToFile<U> for TextFilePersistence<U> where U: FromStr + Sized + Disp
     }
 }
 pub struct BinFilePersistence<U> {
-    reader:BufReader<File>,
+    reader:Option<BufReader<File>>,
     data:Vec<U>
 }
 impl<U> BinFilePersistence<U> {
     pub fn new (file:&str) -> Result<BinFilePersistence<U>, ConfigReadError> {
-        Ok(BinFilePersistence {
-            reader:BufReader::new(OpenOptions::new().read(true).create(false).open(file)?),
-            data:Vec::new()
-        })
+        if Path::new(file).exists() {
+            Ok(BinFilePersistence {
+                reader:Some(BufReader::new(OpenOptions::new().read(true).create(false).open(file)?)),
+                data:Vec::new()
+            })
+        } else {
+            Ok(BinFilePersistence {
+                reader:None,
+                data:Vec::new()
+            })
+        }
     }
 }
 impl LinearPersistence<f64> for BinFilePersistence<f64> {
     fn read(&mut self) -> Result<f64, ConfigReadError> {
-        let mut buf = [0; 8];
+        match self.reader {
+            Some(ref mut reader) => {
+                let mut buf = [0; 8];
 
-        self.reader.read_exact(&mut buf)?;
+                reader.read_exact(&mut buf)?;
 
-        Ok(f64::from_bits(
-            (buf[0] as u64) << 56 |
-                (buf[1] as u64) << 48 |
-                (buf[2] as u64) << 40 |
-                (buf[3] as u64) << 32 |
-                (buf[4] as u64) << 24 |
-                (buf[5] as u64) << 16 |
-                (buf[6] as u64) << 8  |
-                buf[7] as u64)
-        )
+                Ok(f64::from_bits(
+                    (buf[0] as u64) << 56 |
+                        (buf[1] as u64) << 48 |
+                        (buf[2] as u64) << 40 |
+                        (buf[3] as u64) << 32 |
+                        (buf[4] as u64) << 24 |
+                        (buf[5] as u64) << 16 |
+                        (buf[6] as u64) << 8 |
+                        buf[7] as u64)
+                )
+            },
+            None => {
+                Err(ConfigReadError::InvalidState(String::from(
+                    "File does not exist yet.")))
+            }
+        }
     }
 
     fn write(&mut self, u: f64) {
@@ -195,29 +235,45 @@ impl LinearPersistence<f64> for BinFilePersistence<f64> {
     }
 
     fn verify_eof(&mut self) -> Result<(), ConfigReadError> {
-        let mut buf:[u8; 1] = [0];
+        match self.reader {
+            Some(ref mut reader) => {
+                let mut buf: [u8; 1] = [0];
 
-        let n = self.reader.read(&mut buf)?;
+                let n = reader.read(&mut buf)?;
 
-        if n == 0 {
-            Ok(())
-        } else {
-            Err(ConfigReadError::InvalidState(String::from("Data loaded , but the input has not reached the end.")))
+                if n == 0 {
+                    Ok(())
+                } else {
+                    Err(ConfigReadError::InvalidState(String::from("Data loaded , but the input has not reached the end.")))
+                }
+            },
+            None => {
+                Err(ConfigReadError::InvalidState(String::from(
+                    "File does not exist yet.")))
+            }
         }
     }
 }
 impl LinearPersistence<f32> for BinFilePersistence<f32> {
     fn read(&mut self) -> Result<f32, ConfigReadError> {
-        let mut buf = [0; 4];
+        match self.reader {
+            Some(ref mut reader) => {
+                let mut buf = [0; 4];
 
-        self.reader.read_exact(&mut buf)?;
+                reader.read_exact(&mut buf)?;
 
-        Ok(f32::from_bits(
-                (buf[0] as u32) << 24 |
-                (buf[1] as u32) << 16 |
-                (buf[2] as u32) << 8  |
-                buf[3] as u32)
-        )
+                Ok(f32::from_bits(
+                    (buf[0] as u32) << 24 |
+                        (buf[1] as u32) << 16 |
+                        (buf[2] as u32) << 8 |
+                        buf[3] as u32)
+                )
+            },
+            None => {
+                Err(ConfigReadError::InvalidState(String::from(
+                    "File does not exist yet.")))
+            }
+        }
     }
 
     fn write(&mut self, u: f32) {
@@ -225,14 +281,22 @@ impl LinearPersistence<f32> for BinFilePersistence<f32> {
     }
 
     fn verify_eof(&mut self) -> Result<(), ConfigReadError> {
-        let mut buf:[u8; 1] = [0];
+        match self.reader {
+            Some(ref mut reader) => {
+                let mut buf: [u8; 1] = [0];
 
-        let n = self.reader.read(&mut buf)?;
+                let n = reader.read(&mut buf)?;
 
-        if n == 0 {
-            Ok(())
-        } else {
-            Err(ConfigReadError::InvalidState(String::from("Data loaded , but the input has not reached the end.")))
+                if n == 0 {
+                    Ok(())
+                } else {
+                    Err(ConfigReadError::InvalidState(String::from("Data loaded , but the input has not reached the end.")))
+                }
+            },
+            None => {
+                Err(ConfigReadError::InvalidState(String::from(
+                    "File does not exist yet.")))
+            }
         }
     }
 }

@@ -1,2 +1,3 @@
 # nncombinator
-型安全に記述できるニューラルネットワークライブラリ
+nncombinator is a neural network library that allows type-safe implementation.
+

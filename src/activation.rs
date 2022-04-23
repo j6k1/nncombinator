@@ -5,7 +5,7 @@ use crate::arr::*;
 use crate::device::*;
 use crate::lossfunction::LossFunction;
 
-pub trait Activation<U,T,D> where U: UnitValue<U>, D: Device<U> {
+pub trait Activation<U,T,D>: Send + Sync + 'static where U: UnitValue<U>, D: Device<U> {
     fn apply(&self,device:&D,input:&T) -> T;
     fn derive(&self,device:&D,input:&T) -> T;
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;

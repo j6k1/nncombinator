@@ -333,7 +333,7 @@ impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
         s.map(|u| {
             for (r, (l,u)) in r.iter_mut()
                                                 .zip(loss.iter().zip(self.f.derive(&self.device,u).iter())) {
-                *r += *l * *u;
+                *r = *l * *u;
             }
         });
 
@@ -425,13 +425,13 @@ impl<U,P,A,I,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,De
           A: Activation<U,Arr<U,N>,DeviceCpu<U>>,
           I: Debug + Send + Sync {
     fn batch_loss<L: LossFunction<U>>(&self, loss: Self::BatchLossInput, _: &L, stack: Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
-        let (s,actual) = stack.pop();
+        let (s,o) = stack.pop();
 
         let r = s.map(|u| {
             self.device.batch_loss_linear_by_activaton(loss, u, &self.f)
         })?;
 
-        Ok((Cons(s,actual),r))
+        Ok((Cons(s,o),r))
     }
 }
 pub struct LinearOutputLayer<U,P,D,I,IO>

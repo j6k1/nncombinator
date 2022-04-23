@@ -50,7 +50,7 @@ pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
     fn forward_diff(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError>;
 }
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
-    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, optimizer:&mut OP, lossf:&L) -> Result<(), TrainingError>;
+    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, optimizer:&mut OP, lossf:&L) -> Result<U, TrainingError>;
 }
 pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
     type DiffInput: Debug;
@@ -549,8 +549,10 @@ impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
-    fn train<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, expected: Self::Output, input: Self::Input, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
+    fn train<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, expected: Self::Output, input: Self::Input, optimizer: &mut OP, lossf: &L) -> Result<U, TrainingError> {
         let stack = self.pre_train(input)?;
+
+        let total_loss = stack.map(|l| self.device.loss_linear_total(&expected,l,lossf));
 
         let (stack,loss) = if self.parent.is_canonical_link(lossf) {
             let loss = stack.map(|actual| {
@@ -566,7 +568,9 @@ impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
             self.parent.loss(loss,lossf,stack)?
         };
 
-        self.backward_all(loss,stack,optimizer,lossf)
+        self.backward_all(loss,stack,optimizer,lossf)?;
+
+        Ok(total_loss)
     }
 }
 impl<U,P,I,IO> BatchForwardBase for LinearOutputLayer<U,P,DeviceCpu<U>,I,IO>

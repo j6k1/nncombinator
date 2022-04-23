@@ -12,6 +12,7 @@ pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U>;
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
+    fn loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&Arr<U,N>,actual:&Arr<U,N>,lossf:&L) -> U;
 }
 pub struct DeviceCpu<U> where U: UnitValue<U> {
     u:PhantomData<U>,
@@ -84,6 +85,12 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
         loss
     }
 
+    fn loss_linear_total<L: LossFunction<U>, const N: usize>(&self, exptected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> U {
+        actual.iter().zip(exptected.iter()).fold(U::default(),| mut acc,(&a,&e) | {
+            acc += lossf.apply(a,e);
+            acc
+        })
+    }
 }
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {

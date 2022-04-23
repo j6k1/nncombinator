@@ -8,7 +8,7 @@ use crate::error::*;
 
 pub trait Persistence<U,P,K> where K: PersistenceType {
     fn load(&mut self, persistence:&mut P) -> Result<(),ConfigReadError>;
-    fn save(&mut self, persistence:&mut P);
+    fn save(&mut self, persistence:&mut P) -> Result<(), PersistenceError>;
 }
 pub trait PersistenceType {}
 pub struct Specialized;

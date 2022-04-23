@@ -6,6 +6,7 @@ pub enum TrainingError {
     ThreadError(String),
     SizeMismatchError(SizeMismatchError),
     InvalidInputError(String),
+    EvaluateError(EvaluateError)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -14,6 +15,7 @@ impl fmt::Display for TrainingError {
             TrainingError::ThreadError(s) => write!(f, "An error occurred while processing the thread. cause = ({})",s),
             TrainingError::SizeMismatchError(e) => write!(f, "{}",e),
             TrainingError::InvalidInputError(s) => write!(f, "{}",s),
+            TrainingError::EvaluateError(e) => write!(f, "{}",e),
         }
     }
 }
@@ -23,7 +25,8 @@ impl error::Error for TrainingError {
             TrainingError::ReferenceCountError => "There must be only one reference to Arc or Weak to itself when training is performed.",
             TrainingError::ThreadError(_) => "An error occurred while processing the thread.",
             TrainingError::SizeMismatchError(_) => "memory size does not match.",
-            TrainingError::InvalidInputError(_) => "Incorrect input."
+            TrainingError::InvalidInputError(_) => "Incorrect input.",
+            TrainingError::EvaluateError(_) => "An error occurred when running the neural network."
         }
     }
 
@@ -32,7 +35,8 @@ impl error::Error for TrainingError {
             TrainingError::ReferenceCountError => None,
             TrainingError::ThreadError(_) => None,
             TrainingError::SizeMismatchError(e) => Some(e),
-            TrainingError::InvalidInputError(_) => None
+            TrainingError::InvalidInputError(_) => None,
+            TrainingError::EvaluateError(e) => Some(e)
         }
     }
 }
@@ -71,6 +75,11 @@ impl error::Error for ConfigReadError {
 impl From<SizeMismatchError> for TrainingError {
     fn from(err: SizeMismatchError) -> TrainingError {
         TrainingError::SizeMismatchError(err)
+    }
+}
+impl From<EvaluateError> for TrainingError {
+    fn from(err: EvaluateError) -> TrainingError {
+        TrainingError::EvaluateError(err)
     }
 }
 impl From<io::Error> for ConfigReadError {
@@ -128,5 +137,40 @@ impl IndexOutBoundError {
             len:len,
             index:index
         }
+    }
+}
+#[derive(Debug)]
+pub enum EvaluateError {
+
+}
+impl fmt::Display for EvaluateError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "An error occurred when running the neural network.")
+    }
+}
+impl error::Error for EvaluateError {
+    fn description(&self) -> &str {
+        "An error occurred when running the neural network."
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
+    }
+}
+#[derive(Debug)]
+pub enum PersistenceError {
+}
+impl fmt::Display for PersistenceError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "An error occurred when saving model information.")
+    }
+}
+impl error::Error for PersistenceError {
+    fn description(&self) -> &str {
+        "An error occurred when saving model information."
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
     }
 }

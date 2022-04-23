@@ -7,7 +7,7 @@ use crate::device::*;
 use crate::persistence::*;
 use crate::{Cons, Nil, Stack};
 use crate::activation::Activation;
-use crate::error::{ConfigReadError, TrainingError};
+use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
@@ -24,19 +24,19 @@ pub trait Forward<I,O> {
 pub trait ForwardAll {
     type Input: Debug;
     type Output: Debug;
-    fn forward_all(&self,input:Self::Input) -> Self::Output;
+    fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError>;
 }
 pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {
     type LossInput: Debug;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self,input:Self::LossInput, stack:Self::OutStack, optimizer:&mut OP, lossf:&L);
+    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::LossInput, stack:Self::OutStack, optimizer:&mut OP, lossf:&L) -> Result<(), TrainingError>;
     fn is_canonical_link<L: LossFunction<U>>(&self,_:&L) -> bool {
         false
     }
 }
 pub trait Loss<U>: BackwardAll<U> where U: UnitValue<U> {
-    fn loss<L: LossFunction<U>>(&mut self,loss:Self::LossInput,_:&L,stack:Self::OutStack) -> (Self::OutStack,Self::LossInput) {
-        (stack,loss)
+    fn loss<L: LossFunction<U>>(&mut self, loss:Self::LossInput, _:&L, stack:Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
+        Ok((stack,loss))
     }
 }
 pub trait Backward<U,I,O> where U: UnitValue<U> {
@@ -44,13 +44,13 @@ pub trait Backward<U,I,O> where U: UnitValue<U> {
 }
 pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     type OutStack: Stack<Head=Self::Output> + Sized + Debug + Send + Sync + 'static;
-    fn pre_train(&self, input:Self::Input) -> Self::OutStack;
+    fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError>;
 }
 pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
-    fn forward_diff(&self, input:Self::Input) -> Self::OutStack;
+    fn forward_diff(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError>;
 }
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
-    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, optimizer:&mut OP, lossf:&L);
+    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, optimizer:&mut OP, lossf:&L) -> Result<(), TrainingError>;
 }
 pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
     type DiffInput: Debug;
@@ -98,7 +98,7 @@ impl<T,U> AddLayerTrain<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
     }
 }
 impl<T,U> ForwardDiff<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
-    fn forward_diff(&self, input: Self::Input) -> Self::OutStack {
+    fn forward_diff(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
         self.pre_train(input)
     }
 }
@@ -122,8 +122,8 @@ impl<U,O,LI> Persistence<U,TextFilePersistence<U>,Specialized> for InputLayer<U,
         Ok(())
     }
 
-    fn save(&mut self, _: &mut TextFilePersistence<U>) {
-
+    fn save(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+        Ok(())
     }
 }
 impl<T,U,O,LI> Persistence<U,T,Linear> for InputLayer<U,O,LI>
@@ -132,29 +132,29 @@ impl<T,U,O,LI> Persistence<U,T,Linear> for InputLayer<U,O,LI>
         Ok(())
     }
 
-    fn save(&mut self, _: &mut T) {
-
+    fn save(&mut self, _: &mut T) -> Result<(), PersistenceError> {
+        Ok(())
     }
 }
 impl<U,O,LI> ForwardAll for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
     type Input = O;
     type Output = O;
-    fn forward_all(&self,input:Self::Input) -> Self::Output {
-        input
+    fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError> {
+        Ok(input)
     }
 }
 impl<U,O,LI> PreTrain<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
     type OutStack = Cons<Nil,Self::Output>;
 
-    fn pre_train(&self, input:Self::Input) -> Self::OutStack {
-        Cons(Nil,input)
+    fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError> {
+        Ok(Cons(Nil,input))
     }
 }
 impl<U,O,LI> BackwardAll<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
     type LossInput = LI;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, _: Self::LossInput, _:Self::OutStack, _: &mut OP, _:&L) {
-        
+    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, _: Self::LossInput, _:Self::OutStack, _: &mut OP, _:&L) -> Result<(), TrainingError> {
+        Ok(())
     }
 }
 impl<U,O,LI> Loss<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {}
@@ -225,7 +225,7 @@ impl<U,P,A,I,PI,D> Persistence<U,TextFilePersistence<U>,Specialized> for Activat
         self.parent.load(persistence)
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) {
+    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
         self.parent.save(persistence)
     }
 }
@@ -242,7 +242,7 @@ impl<T,U,P,A,I,PI,D> Persistence<U,T,Linear> for ActivationLayer<U,P,A,I,PI,D>
         self.parent.load(persistence)
     }
 
-    fn save(&mut self, persistence: &mut T) {
+    fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         self.parent.save(persistence)
     }
 }
@@ -255,8 +255,8 @@ impl<U,P,A,I,PI,D> ForwardAll for ActivationLayer<U,P,A,I,PI,D>
           I: Debug + Send + Sync {
     type Input = I;
     type Output = PI;
-    fn forward_all(&self, input: Self::Input) -> Self::Output {
-        self.forward(&self.parent.forward_all(input))
+    fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
+        Ok(self.forward(&self.parent.forward_all(input)?))
     }
 }
 impl<U,P,A,I,PI,D> Forward<PI,PI> for ActivationLayer<U,P,A,I,PI,D>
@@ -280,12 +280,12 @@ impl<U,P,A,D,I,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D
           I: Debug + Send + Sync {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack, Self::Output>;
 
-    fn pre_train(&self, input: Self::Input) -> Self::OutStack {
-        let r = self.parent.pre_train(input);
+    fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
+        let r = self.parent.pre_train(input)?;
 
         let u = r.map(|r| self.forward(r));
 
-        Cons(r,u)
+        Ok(Cons(r,u))
     }
 }
 impl<U,P,A,D,I,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
@@ -296,10 +296,10 @@ impl<U,P,A,D,I,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,Arr<U,N
           I: Debug + Send + Sync {
     type LossInput = Arr<U,N>;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) {
+    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
         let (s,_) = stack.pop();
 
-        self.parent.backward_all(input, s, optimizer,lossf);
+        self.parent.backward_all(input, s, optimizer,lossf)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -326,7 +326,7 @@ impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
           D: Device<U>,
           A: Activation<U,Arr<U,N>,D>,
           I: Debug + Send + Sync {
-    fn loss<L: LossFunction<U>>(&mut self, loss: Arr<U,N>, _:&L, stack: Self::OutStack) -> (Self::OutStack, Self::LossInput) {
+    fn loss<L: LossFunction<U>>(&mut self, loss: Self::LossInput, _:&L, stack: Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         let (s,actual) = stack.pop();
         let mut r = Arr::new();
 
@@ -337,7 +337,7 @@ impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
             }
         });
 
-        (Cons(s,actual),r)
+        Ok((Cons(s,actual),r))
     }
 }
 impl<U,P,A,D,I,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,Arr<U,N>,D>
@@ -474,7 +474,7 @@ impl<U,P,D,I,IO> Persistence<U,TextFilePersistence<U>,Specialized> for LinearOut
         persistence.verify_eof()
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) {
+    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
         self.parent.save(persistence)
     }
 }
@@ -491,7 +491,7 @@ impl<T,U,P,D,I,IO> Persistence<U,T,Linear> for LinearOutputLayer<U,P,D,I,IO>
         persistence.verify_eof()
     }
 
-    fn save(&mut self, persistence: &mut T) {
+    fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         self.parent.save(persistence)
     }
 }
@@ -503,7 +503,7 @@ impl<U,P,D,I,IO> ForwardAll for LinearOutputLayer<U,P,D,I,IO>
           I: Debug + Send + Sync {
     type Input = I;
     type Output = IO;
-    fn forward_all(&self, input: Self::Input) -> Self::Output {
+    fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
         self.parent.forward_all(input)
     }
 }
@@ -515,7 +515,7 @@ impl<U,P,D,I,IO> PreTrain<U> for LinearOutputLayer<U,P,D,I,IO>
           I: Debug + Send + Sync {
     type OutStack = P::OutStack;
 
-    fn pre_train(&self, input: Self::Input) -> Self::OutStack {
+    fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
         self.parent.pre_train(input)
     }
 }
@@ -527,8 +527,8 @@ impl<U,P,D,I,const NO:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,I,Arr<U,
           I: Debug + Send + Sync {
     type LossInput = Arr<U,NO>;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) {
-        self.parent.backward_all(input, stack, optimizer, lossf);
+    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
+        self.parent.backward_all(input, stack, optimizer, lossf)
     }
 }
 impl<U,P,D,I,const NO:usize> AskDiffInput<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
@@ -549,8 +549,8 @@ impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
-    fn train<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, expected: Self::Output, input: Self::Input, optimizer: &mut OP, lossf: &L) {
-        let stack = self.pre_train(input);
+    fn train<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, expected: Self::Output, input: Self::Input, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
+        let stack = self.pre_train(input)?;
 
         let (stack,loss) = if self.parent.is_canonical_link(lossf) {
             let loss = stack.map(|actual| {
@@ -563,10 +563,10 @@ impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
                 self.device.loss_linear(&expected,&actual,lossf)
             });
 
-            self.parent.loss(loss,lossf,stack)
+            self.parent.loss(loss,lossf,stack)?
         };
 
-        self.backward_all(loss,stack,optimizer,lossf);
+        self.backward_all(loss,stack,optimizer,lossf)
     }
 }
 impl<U,P,I,IO> BatchForwardBase for LinearOutputLayer<U,P,DeviceCpu<U>,I,IO>
@@ -712,8 +712,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>
         Ok(())
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) {
-        self.parent.save(persistence);
+    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+        self.parent.save(persistence)?;
 
         persistence.write(UnitOrMarker::LayerStart);
 
@@ -727,6 +727,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>
                 persistence.write(UnitOrMarker::Unit(*w));
             }
         }
+
+        Ok(())
     }
 }
 impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for LinearLayer<U,P,D,I,NI,NO>
@@ -752,8 +754,8 @@ impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for Linear
         Ok(())
     }
 
-    fn save(&mut self, persistence: &mut T) {
-        self.parent.save(persistence);
+    fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save(persistence)?;
 
         for b in self.bias.iter() {
             persistence.write(*b);
@@ -764,6 +766,8 @@ impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for Linear
                 persistence.write(*w);
             }
         }
+
+        Ok(())
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> Forward<Arr<U,NI>,Arr<U,NO>> for LinearLayer<U,P,D,I,NI,NO>
@@ -783,8 +787,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,P,D,I,N
           I: Debug + Send + Sync {
     type Input = I;
     type Output = Arr<U,NO>;
-    fn forward_all(&self, input: Self::Input) -> Arr<U,NO> {
-        self.forward(&self.parent.forward_all(input))
+    fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
+        Ok(self.forward(&self.parent.forward_all(input)?))
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,D,I,NI,NO>
@@ -794,12 +798,12 @@ impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,D,I,
           I: Debug + Send + Sync {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack,Self::Output>;
 
-    fn pre_train(&self, input: Self::Input) -> Self::OutStack {
-        let r = self.parent.pre_train(input);
+    fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
+        let r = self.parent.pre_train(input)?;
 
         let u = r.map(|r| self.forward(r));
 
-        Cons(r,u)
+        Ok(Cons(r,u))
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Arr<U,NI>> for LinearLayer<U,P,D,I,NI,NO>
@@ -818,7 +822,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D
           I: Debug + Send + Sync {
     type LossInput = Arr<U,NO>;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) {
+    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
         let loss = input;
 
         let (s,_) = stack.pop();
@@ -841,9 +845,9 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D
 
         let loss= self.backward(&loss);
 
-        let (s,loss) = self.parent.loss(loss,lossf,s);
+        let (s,loss) = self.parent.loss(loss,lossf,s)?;
 
-        self.parent.backward_all(loss, s, optimizer, lossf);
+        self.parent.backward_all(loss, s, optimizer, lossf)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> AskDiffInput<U> for LinearLayer<U,P,D,I,NI,NO>
@@ -1030,8 +1034,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>
         Ok(())
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) {
-        self.parent.save(persistence);
+    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+        self.parent.save(persistence)?;
 
         persistence.write(UnitOrMarker::LayerStart);
 
@@ -1045,6 +1049,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>
                 persistence.write(UnitOrMarker::Unit(*w));
             }
         }
+
+        Ok(())
     }
 }
 impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for DiffLinearLayer<U,P,D,I,NI,NO>
@@ -1071,8 +1077,8 @@ impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for DiffLi
         Ok(())
     }
 
-    fn save(&mut self, persistence: &mut T) {
-        self.parent.save(persistence);
+    fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save(persistence)?;
 
         for b in self.bias.iter() {
             persistence.write(*b);
@@ -1083,6 +1089,8 @@ impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for DiffLi
                 persistence.write(*w);
             }
         }
+
+        Ok(())
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLayer<U,P,D,I,NI,NO>
@@ -1094,10 +1102,10 @@ impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLayer<U,P,D
     type Input = I;
     type Output = Arr<U,NO>;
 
-    fn forward_all(&self, input: Self::Input) -> Arr<U,NO> {
-        let input = self.parent.forward_all(input);
+    fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
+        let input = self.parent.forward_all(input)?;
 
-        match input {
+        Ok(match input {
             DiffInput::Diff(d, mut output) => {
                 for &(i,d) in d.iter() {
                     for (o,j) in output.iter_mut().zip(0..NO) {
@@ -1109,7 +1117,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLayer<U,P,D
             DiffInput::NotDiff(input) => {
                 self.device.forward_linear(&self.bias,&self.units,&input)
             }
-        }
+        })
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,P,D,I,NI,NO>
@@ -1120,8 +1128,8 @@ impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,P,
           I: Debug + Send + Sync {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack,Arr<U,NO>>;
 
-    fn pre_train(&self, input: Self::Input) -> Self::OutStack {
-        let s = self.parent.pre_train(input);
+    fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
+        let s = self.parent.pre_train(input)?;
 
         let u = s.map(|input| {
             match input {
@@ -1141,7 +1149,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,P,
             }
         });
 
-        Cons(s,u)
+        Ok(Cons(s,u))
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Arr<U,NI>> for DiffLinearLayer<U,P,D,I,NI,NO>
@@ -1162,7 +1170,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U
           I: Debug + Send + Sync {
     type LossInput = Arr<U,NO>;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) {
+    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
         let loss = input;
 
         let (s,_) = stack.pop();
@@ -1198,9 +1206,9 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U
 
         let loss= self.backward(&loss);
 
-        let (s,loss) = self.parent.loss(loss,lossf,s);
+        let (s,loss) = self.parent.loss(loss,lossf,s)?;
 
-        self.parent.backward_all(loss, s, optimizer, lossf);
+        self.parent.backward_all(loss, s, optimizer, lossf)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> AskDiffInput<U> for DiffLinearLayer<U,P,D,I,NI,NO>

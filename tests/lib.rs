@@ -147,7 +147,7 @@ fn test_mnist() {
             *it = *p;
         }
 
-        let r = net.forward_all(input);
+        let r = net.forward_all(input).unwrap();
 
         let r = r.iter().enumerate().fold((0, 0.0), |acc, (n, &t)| {
             if t > acc.1 {
@@ -261,7 +261,7 @@ fn test_weather() {
 
             let lossf = Mse::new();
 
-            net.train(expected, input, &mut optimizer, &lossf);
+            net.train(expected, input, &mut optimizer, &lossf).unwrap();
         }
     }
 
@@ -310,7 +310,7 @@ fn test_weather() {
             *it = *p;
         }
 
-        let r = net.forward_all(input);
+        let r = net.forward_all(input).unwrap();
 
         println!("晴れの確率 {}%",r[0]);
 
@@ -419,7 +419,7 @@ fn test_weather_by_forward_diff() {
 
             let lossf = Mse::new();
 
-            net.train(expected, DiffInput::NotDiff(input), &mut optimizer, &lossf);
+            net.train(expected, DiffInput::NotDiff(input), &mut optimizer, &lossf).unwrap();
         }
     }
 
@@ -484,11 +484,11 @@ fn test_weather_by_forward_diff() {
 
             let o = net.ask_diff_input(&s);
 
-            Some(net.forward_diff(DiffInput::Diff(d,o)))
+            Some(net.forward_diff(DiffInput::Diff(d,o)).unwrap())
         } else {
             prev = input.clone();
 
-            Some(net.forward_diff(DiffInput::NotDiff(input)))
+            Some(net.forward_diff(DiffInput::NotDiff(input)).unwrap())
         };
 
         let r = s.as_ref().map(|r| r.1[0]).unwrap();
@@ -656,7 +656,7 @@ fn test_weather_batch_train() {
             *it = *p;
         }
 
-        let r = net.forward_all(input);
+        let r = net.forward_all(input).unwrap();
 
         println!("晴れの確率 {}%",r[0]);
 

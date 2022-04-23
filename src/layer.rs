@@ -758,12 +758,12 @@ impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for Linear
         self.parent.save(persistence)?;
 
         for b in self.bias.iter() {
-            persistence.write(*b);
+            persistence.write(*b)?;
         }
 
         for u in self.units.iter() {
             for w in u.iter() {
-                persistence.write(*w);
+                persistence.write(*w)?;
             }
         }
 
@@ -1081,12 +1081,12 @@ impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for DiffLi
         self.parent.save(persistence)?;
 
         for b in self.bias.iter() {
-            persistence.write(*b);
+            persistence.write(*b)?;
         }
 
         for u in self.units.iter() {
             for w in u.iter() {
-                persistence.write(*w);
+                persistence.write(*w)?;
             }
         }
 

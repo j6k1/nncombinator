@@ -27,7 +27,7 @@ pub trait SaveToPersistence<U> {
 }
 pub trait LinearPersistence<U> {
     fn read(&mut self) -> Result<U, ConfigReadError>;
-    fn write(&mut self,u:U);
+    fn write(&mut self, u:U) -> Result<(), PersistenceError>;
     fn verify_eof(&mut self) -> Result<(),ConfigReadError>;
 }
 pub enum UnitOrMarker<U> {
@@ -230,8 +230,9 @@ impl LinearPersistence<f64> for BinFilePersistence<f64> {
         }
     }
 
-    fn write(&mut self, u: f64) {
+    fn write(&mut self, u: f64) -> Result<(), PersistenceError> {
         self.data.push(u);
+        Ok(())
     }
 
     fn verify_eof(&mut self) -> Result<(), ConfigReadError> {
@@ -276,8 +277,9 @@ impl LinearPersistence<f32> for BinFilePersistence<f32> {
         }
     }
 
-    fn write(&mut self, u: f32) {
+    fn write(&mut self, u: f32) -> Result<(), PersistenceError> {
         self.data.push(u);
+        Ok(())
     }
 
     fn verify_eof(&mut self) -> Result<(), ConfigReadError> {

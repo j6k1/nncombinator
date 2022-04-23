@@ -325,7 +325,6 @@ fn test_weather() {
     println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }
-
 #[test]
 fn test_weather_by_forward_diff() {
     let mut rnd = prelude::thread_rng();
@@ -502,7 +501,6 @@ fn test_weather_by_forward_diff() {
     println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }
-
 #[test]
 fn test_weather_batch_train() {
     let mut rnd = prelude::thread_rng();
@@ -575,12 +573,8 @@ fn test_weather_batch_train() {
 
     let lossf = Mse::new();
 
-    for _ in 0..1 {
-        teachers.shuffle(&mut rng);
-
-        let mut teachers:Vec<(bool,Vec<f32>)> = teachers.iter().take(1000).map(|(e,input)| (e.clone(),input.clone())).collect();
-
-        for _ in 0..2{
+    for teachers in teachers.chunks_mut(100).take(100) {
+        for _ in 0..5 {
             teachers.shuffle(&mut rng);
 
             let mut train_data = Vec::new();

@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std::ops::{Deref, DerefMut, Div, Index, IndexMut, Mul};
 use std;
 use rayon::iter::plumbing;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -52,6 +52,30 @@ impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Se
                 arr: s
             })
         }
+    }
+}
+impl<T,const N:usize> Mul<T> for Arr<T,N> where T: Mul<T> + Mul<Output=T> + Clone + Copy + Default + Send {
+    type Output = Self;
+
+    fn mul(self, rhs: T) -> Self::Output {
+        let mut r = self;
+
+        for it in r.iter_mut() {
+            *it = *it * rhs;
+        }
+        r
+    }
+}
+impl<T,const N:usize> Div<T> for Arr<T,N> where T: Div<T> + Div<Output=T> + Clone + Copy + Default + Send {
+    type Output = Self;
+
+    fn div(self, rhs: T) -> Self::Output {
+        let mut r = self;
+
+        for it in r.iter_mut() {
+            *it = *it / rhs;
+        }
+        r
     }
 }
 impl<'a,T,const N:usize> AsRawSlice<T> for Arr<T,N> where T: Default + Clone + Send {
@@ -445,6 +469,36 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
 
     pub fn iter<'a>(&'a self) -> impl Iterator<Item=&(usize,T)> {
         self.items.iter()
+    }
+}
+impl<T,const N:usize> Mul<T> for DiffArr<T,N>
+    where T: Mul<T> + Mul<Output=T> + Clone + Copy + Default + Send +Debug {
+
+    type Output = Self;
+
+    fn mul(self, rhs: T) -> Self::Output {
+        let mut r = self;
+
+        for it in r.items.iter_mut() {
+            it.1 = it.1 * rhs
+        }
+
+        r
+    }
+}
+impl<T,const N:usize> Div<T> for DiffArr<T,N>
+    where T: Div<T> + Div<Output=T> + Clone + Copy + Default + Send + Debug {
+
+    type Output = Self;
+
+    fn div(self, rhs: T) -> Self::Output {
+        let mut r = self;
+
+        for it in r.items.iter_mut() {
+            it.1 = it.1 / rhs
+        }
+
+        r
     }
 }
 #[derive(Debug,Eq,PartialEq)]

@@ -517,20 +517,14 @@ impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send 
 }
 impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
     fn from(items: Vec<Arr<U, N>>) -> Self {
-        let mut s = vec![U::default(); N * items.len()].into_boxed_slice();
+        let mut buffer = Vec::with_capacity(items.len() * N);
 
-        let mut it = s.iter_mut();
-
-        for i in items.iter() {
-            for &i in i.iter() {
-                 if let Some(it) = it.next() {
-                     *it = i;
-                 }
-            }
+        for item in items.into_iter() {
+            buffer.extend_from_slice(&item);
         }
 
         VecArr {
-            arr:s,
+            arr:buffer.into_boxed_slice(),
             t:PhantomData::<Arr<U,N>>
         }
     }

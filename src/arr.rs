@@ -472,7 +472,7 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
     }
 }
 impl<T,const N:usize> Mul<T> for DiffArr<T,N>
-    where T: Mul<T> + Mul<Output=T> + Clone + Copy + Default + Send +Debug {
+    where T: Mul<T> + Mul<Output=T> + Clone + Copy + Debug {
 
     type Output = Self;
 
@@ -487,7 +487,7 @@ impl<T,const N:usize> Mul<T> for DiffArr<T,N>
     }
 }
 impl<T,const N:usize> Div<T> for DiffArr<T,N>
-    where T: Div<T> + Div<Output=T> + Clone + Copy + Default + Send + Debug {
+    where T: Div<T> + Div<Output=T> + Clone + Copy + Debug {
 
     type Output = Self;
 

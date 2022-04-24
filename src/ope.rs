@@ -5,7 +5,8 @@ use num_traits::FromPrimitive;
 pub trait UnitValue<T>: Add<Output=T> + Sub<Output=T> + Mul<Output=T> + Div<Output=T> + Neg<Output=T> +
     AddAssign + PartialOrd +
     Clone + Copy + Default + Debug + Send + Sync + 'static +
-    Exp + Tanh + Ln + One + Max + Min + MaxValue + InitialMaxValue + Abs + Sqrt + Infinity + Neginfinity +
+    Exp + Tanh + Ln + One + Max + Min + MaxValue + InitialMaxValue + Abs + Sqrt +
+    Infinity + Neginfinity + IsNaN +
     Bias + FromPrimitive {
 }
 pub trait Bias where Self: Sized {
@@ -145,11 +146,13 @@ pub trait Sqrt {
     fn sqrt(&self) -> Self;
 }
 impl Sqrt for f64 {
+    #[inline]
     fn sqrt(&self) -> f64 {
         (*self).sqrt()
     }
 }
 impl Sqrt for f32 {
+    #[inline]
     fn sqrt(&self) -> f32 {
         (*self).sqrt()
     }
@@ -158,11 +161,13 @@ pub trait Ln {
     fn ln(&self) -> Self;
 }
 impl Ln for f64 {
+    #[inline]
     fn ln(&self) -> f64 {
         (*self).ln()
     }
 }
 impl Ln for f32 {
+    #[inline]
     fn ln(&self) -> f32 {
         (*self).ln()
     }
@@ -171,12 +176,14 @@ pub trait Neginfinity {
     fn neg_infinity() -> Self;
 }
 impl Neginfinity for f64 {
+    #[inline]
     fn neg_infinity() -> Self {
         f64::NEG_INFINITY
     }
 }
 
 impl Neginfinity for f32 {
+    #[inline]
     fn neg_infinity() -> Self {
         f32::NEG_INFINITY
     }
@@ -185,13 +192,31 @@ pub trait Infinity {
     fn infinity() -> Self;
 }
 impl Infinity for f64 {
+    #[inline]
     fn infinity() -> f64 {
         f64::INFINITY
     }
 }
 impl Infinity for f32 {
+    #[inline]
     fn infinity() -> f32 {
         f32::INFINITY
+    }
+}
+pub trait IsNaN {
+    fn is_nan(&self) -> bool;
+}
+impl IsNaN for f64 {
+    #[inline]
+    fn is_nan(&self) -> bool {
+        (*self).is_nan()
+    }
+}
+
+impl IsNaN for f32 {
+    #[inline]
+    fn is_nan(&self) -> bool {
+        (*self).is_nan()
     }
 }
 impl UnitValue<f64> for f64 {}

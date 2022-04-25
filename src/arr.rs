@@ -504,6 +504,7 @@ impl<T,const N:usize> Div<T> for DiffArr<T,N>
 #[derive(Debug,Eq,PartialEq)]
 pub struct VecArr<U,T> {
     arr:Box<[U]>,
+    len:usize,
     t:PhantomData<T>
 }
 impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
@@ -514,10 +515,16 @@ impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send 
     pub fn iter_mut(&mut self) -> VecArrViewIterMut<U,N> {
         VecArrViewIterMut(&mut *self.arr)
     }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
 }
 impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
     fn from(items: Vec<Arr<U, N>>) -> Self {
-        let mut buffer = Vec::with_capacity(items.len() * N);
+        let len = items.len();
+
+        let mut buffer = Vec::with_capacity(len * N);
 
         for item in items.into_iter() {
             buffer.extend_from_slice(&item);
@@ -525,6 +532,7 @@ impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Defaul
 
         VecArr {
             arr:buffer.into_boxed_slice(),
+            len:len,
             t:PhantomData::<Arr<U,N>>
         }
     }

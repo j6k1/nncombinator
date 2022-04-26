@@ -70,6 +70,8 @@ fn test_mnist() {
 
     let mut correct_answers = 0;
 
+    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+
     for _ in 0..2 {
         let mut total_loss = 0.;
         let mut count = 0;
@@ -77,7 +79,7 @@ fn test_mnist() {
         for _ in 0..5 {
             teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(50) {
+            for teachers in teachers.chunks(200) {
                 count += 1;
 
                 let batch_data = teachers.iter().map(|(n, path)| {

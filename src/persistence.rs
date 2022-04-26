@@ -19,12 +19,6 @@ impl PersistenceType for Linear {}
 pub trait SaveToFile<U> {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error>;
 }
-pub trait ReadFromPersistence<U> {
-    fn read(&mut self) -> U;
-}
-pub trait SaveToPersistence<U> {
-    fn write(&mut self);
-}
 pub trait LinearPersistence<U> {
     fn read(&mut self) -> Result<U, ConfigReadError>;
     fn write(&mut self, u:U) -> Result<(), PersistenceError>;

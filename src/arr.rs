@@ -508,12 +508,12 @@ pub struct VecArr<U,T> {
     t:PhantomData<T>
 }
 impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
-    pub fn iter(&self) -> VecArrViewIter<U,N> {
-        VecArrViewIter(&*self.arr)
+    pub fn iter(&self) -> VecArrIter<U,N> {
+        VecArrIter(&*self.arr)
     }
 
-    pub fn iter_mut(&mut self) -> VecArrViewIterMut<U,N> {
-        VecArrViewIterMut(&mut *self.arr)
+    pub fn iter_mut(&mut self) -> VecArrIterMut<U,N> {
+        VecArrIterMut(&mut *self.arr)
     }
 
     pub fn len(&self) -> usize {
@@ -538,14 +538,14 @@ impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Defaul
     }
 }
 #[derive(Debug,Eq,PartialEq)]
-pub struct VecArrViewIter<'a,T,const N:usize>(&'a [T]);
+pub struct VecArrIter<'a,T,const N:usize>(&'a [T]);
 
-impl<'a,T,const N:usize> VecArrViewIter<'a,T,N> {
+impl<'a,T,const N:usize> VecArrIter<'a,T,N> {
     const fn element_size(&self) -> usize {
         N
     }
 }
-impl<'a,T,const N:usize> Iterator for VecArrViewIter<'a,T,N> {
+impl<'a,T,const N:usize> Iterator for VecArrIter<'a,T,N> {
     type Item = ArrView<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -564,14 +564,14 @@ impl<'a,T,const N:usize> Iterator for VecArrViewIter<'a,T,N> {
     }
 }
 #[derive(Debug,Eq,PartialEq)]
-pub struct VecArrViewIterMut<'a,T,const N:usize>(&'a mut [T]);
+pub struct VecArrIterMut<'a,T,const N:usize>(&'a mut [T]);
 
-impl<'a,T,const N:usize> VecArrViewIterMut<'a,T,N> {
+impl<'a,T,const N:usize> VecArrIterMut<'a,T,N> {
     const fn element_size(&self) -> usize {
         N
     }
 }
-impl<'a,T,const N:usize> Iterator for VecArrViewIterMut<'a,T,N> {
+impl<'a,T,const N:usize> Iterator for VecArrIterMut<'a,T,N> {
     type Item = ArrViewMut<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {

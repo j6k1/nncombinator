@@ -79,7 +79,7 @@ fn test_mnist() {
         for _ in 0..5 {
             teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(200) {
+            for teachers in teachers.chunks(50) {
                 count += 1;
 
                 let batch_data = teachers.iter().map(|(n, path)| {

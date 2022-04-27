@@ -46,7 +46,7 @@ impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Se
         let s = v.into_boxed_slice();
 
         if s.len() != N {
-            Err(SizeMismatchError)
+            Err(SizeMismatchError(s.len(),N))
         } else {
             Ok(Arr {
                 arr: s
@@ -652,13 +652,11 @@ impl<'data,T,const N1:usize,const N2:usize> Iterator for Arr2IterProducer<'data,
         ({N1*N2-1}, Some(N1*N2-1))
     }
 }
-
 impl<'data,T,const N1:usize,const N2:usize> std::iter::ExactSizeIterator for Arr2IterProducer<'data,T,N1,N2> {
     fn len(&self) -> usize {
         N1 * N2
     }
 }
-
 impl<'data,T,const N1:usize,const N2:usize> std::iter::DoubleEndedIterator for Arr2IterProducer<'data,T,N1,N2> {
     fn next_back(&mut self) -> Option<ArrView<'data,T,N2>> {
         let slice = std::mem::replace(&mut self.0, &mut []);
@@ -676,8 +674,6 @@ impl<'data,T,const N1:usize,const N2:usize> std::iter::DoubleEndedIterator for A
         }
     }
 }
-
-
 impl<'data, T: Send + Sync + 'static,const N1:usize,const N2:usize> plumbing::Producer for Arr2IterProducer<'data,T,N1,N2> {
     type Item = ArrView<'data,T,N2>;
     type IntoIter = Self;
@@ -690,7 +686,6 @@ impl<'data, T: Send + Sync + 'static,const N1:usize,const N2:usize> plumbing::Pr
         (Arr2IterProducer(l),Arr2IterProducer(r))
     }
 }
-
 impl<'data, T: Send + Sync + 'static,const N1: usize, const N2: usize> ParallelIterator for Arr2ParIter<'data,T,N1,N2> {
     type Item = ArrView<'data,T,N2>;
 
@@ -702,9 +697,7 @@ impl<'data, T: Send + Sync + 'static,const N1: usize, const N2: usize> ParallelI
     {
         self.drive(consumer)
     }
-
 }
-
 impl<'data, T: Send + Sync + 'static, const N1: usize, const N2: usize> IndexedParallelIterator for Arr2ParIter<'data,T,N1,N2> {
     fn len(&self) -> usize { N1 }
 

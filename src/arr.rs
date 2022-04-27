@@ -508,6 +508,18 @@ pub struct VecArr<U,T> {
     t:PhantomData<T>
 }
 impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
+    pub fn with_size(size:usize) -> VecArr<U,Arr<U,N>> {
+        let mut arr = Vec::with_capacity(N * size);
+
+        arr.resize_with(N * size,Default::default);
+
+        VecArr {
+            arr:arr.into_boxed_slice(),
+            len:size,
+            t:PhantomData::<Arr<U,N>>
+        }
+    }
+
     pub fn iter(&self) -> VecArrIter<U,N> {
         VecArrIter(&*self.arr)
     }

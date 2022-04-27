@@ -46,7 +46,7 @@ impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Se
         let s = v.into_boxed_slice();
 
         if s.len() != N {
-            Err(SizeMismatchError)
+            Err(SizeMismatchError(s.len(),N))
         } else {
             Ok(Arr {
                 arr: s
@@ -472,7 +472,7 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
     }
 }
 impl<T,const N:usize> Mul<T> for DiffArr<T,N>
-    where T: Mul<T> + Mul<Output=T> + Clone + Copy + Default + Send +Debug {
+    where T: Mul<T> + Mul<Output=T> + Clone + Copy + Debug {
 
     type Output = Self;
 
@@ -487,7 +487,7 @@ impl<T,const N:usize> Mul<T> for DiffArr<T,N>
     }
 }
 impl<T,const N:usize> Div<T> for DiffArr<T,N>
-    where T: Div<T> + Div<Output=T> + Clone + Copy + Default + Send + Debug {
+    where T: Div<T> + Div<Output=T> + Clone + Copy + Debug {
 
     type Output = Self;
 
@@ -504,46 +504,60 @@ impl<T,const N:usize> Div<T> for DiffArr<T,N>
 #[derive(Debug,Eq,PartialEq)]
 pub struct VecArr<U,T> {
     arr:Box<[U]>,
+    len:usize,
     t:PhantomData<T>
 }
 impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
-    pub fn iter(&self) -> VecArrViewIter<U,N> {
-        VecArrViewIter(&*self.arr)
+    pub fn with_size(size:usize) -> VecArr<U,Arr<U,N>> {
+        let mut arr = Vec::with_capacity(N * size);
+
+        arr.resize_with(N * size,Default::default);
+
+        VecArr {
+            arr:arr.into_boxed_slice(),
+            len:size,
+            t:PhantomData::<Arr<U,N>>
+        }
     }
 
-    pub fn iter_mut(&mut self) -> VecArrViewIterMut<U,N> {
-        VecArrViewIterMut(&mut *self.arr)
+    pub fn iter(&self) -> VecArrIter<U,N> {
+        VecArrIter(&*self.arr)
+    }
+
+    pub fn iter_mut(&mut self) -> VecArrIterMut<U,N> {
+        VecArrIterMut(&mut *self.arr)
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
     }
 }
 impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
     fn from(items: Vec<Arr<U, N>>) -> Self {
-        let mut s = vec![U::default(); N * items.len()].into_boxed_slice();
+        let len = items.len();
 
-        let mut it = s.iter_mut();
+        let mut buffer = Vec::with_capacity(len * N);
 
-        for i in items.iter() {
-            for &i in i.iter() {
-                 if let Some(it) = it.next() {
-                     *it = i;
-                 }
-            }
+        for item in items.into_iter() {
+            buffer.extend_from_slice(&item);
         }
 
         VecArr {
-            arr:s,
+            arr:buffer.into_boxed_slice(),
+            len:len,
             t:PhantomData::<Arr<U,N>>
         }
     }
 }
 #[derive(Debug,Eq,PartialEq)]
-pub struct VecArrViewIter<'a,T,const N:usize>(&'a [T]);
+pub struct VecArrIter<'a,T,const N:usize>(&'a [T]);
 
-impl<'a,T,const N:usize> VecArrViewIter<'a,T,N> {
+impl<'a,T,const N:usize> VecArrIter<'a,T,N> {
     const fn element_size(&self) -> usize {
         N
     }
 }
-impl<'a,T,const N:usize> Iterator for VecArrViewIter<'a,T,N> {
+impl<'a,T,const N:usize> Iterator for VecArrIter<'a,T,N> {
     type Item = ArrView<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -562,14 +576,14 @@ impl<'a,T,const N:usize> Iterator for VecArrViewIter<'a,T,N> {
     }
 }
 #[derive(Debug,Eq,PartialEq)]
-pub struct VecArrViewIterMut<'a,T,const N:usize>(&'a mut [T]);
+pub struct VecArrIterMut<'a,T,const N:usize>(&'a mut [T]);
 
-impl<'a,T,const N:usize> VecArrViewIterMut<'a,T,N> {
+impl<'a,T,const N:usize> VecArrIterMut<'a,T,N> {
     const fn element_size(&self) -> usize {
         N
     }
 }
-impl<'a,T,const N:usize> Iterator for VecArrViewIterMut<'a,T,N> {
+impl<'a,T,const N:usize> Iterator for VecArrIterMut<'a,T,N> {
     type Item = ArrViewMut<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -638,13 +652,11 @@ impl<'data,T,const N1:usize,const N2:usize> Iterator for Arr2IterProducer<'data,
         ({N1*N2-1}, Some(N1*N2-1))
     }
 }
-
 impl<'data,T,const N1:usize,const N2:usize> std::iter::ExactSizeIterator for Arr2IterProducer<'data,T,N1,N2> {
     fn len(&self) -> usize {
         N1 * N2
     }
 }
-
 impl<'data,T,const N1:usize,const N2:usize> std::iter::DoubleEndedIterator for Arr2IterProducer<'data,T,N1,N2> {
     fn next_back(&mut self) -> Option<ArrView<'data,T,N2>> {
         let slice = std::mem::replace(&mut self.0, &mut []);
@@ -662,8 +674,6 @@ impl<'data,T,const N1:usize,const N2:usize> std::iter::DoubleEndedIterator for A
         }
     }
 }
-
-
 impl<'data, T: Send + Sync + 'static,const N1:usize,const N2:usize> plumbing::Producer for Arr2IterProducer<'data,T,N1,N2> {
     type Item = ArrView<'data,T,N2>;
     type IntoIter = Self;
@@ -676,7 +686,6 @@ impl<'data, T: Send + Sync + 'static,const N1:usize,const N2:usize> plumbing::Pr
         (Arr2IterProducer(l),Arr2IterProducer(r))
     }
 }
-
 impl<'data, T: Send + Sync + 'static,const N1: usize, const N2: usize> ParallelIterator for Arr2ParIter<'data,T,N1,N2> {
     type Item = ArrView<'data,T,N2>;
 
@@ -688,9 +697,7 @@ impl<'data, T: Send + Sync + 'static,const N1: usize, const N2: usize> ParallelI
     {
         self.drive(consumer)
     }
-
 }
-
 impl<'data, T: Send + Sync + 'static, const N1: usize, const N2: usize> IndexedParallelIterator for Arr2ParIter<'data,T,N1,N2> {
     fn len(&self) -> usize { N1 }
 

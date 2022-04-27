@@ -106,7 +106,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(input.iter()) {
-            *r = if *i > U::default() {
+            *r = if *i > U::default() || i.is_nan() {
                 *i
             } else {
                 U::default()

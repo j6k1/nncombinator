@@ -70,50 +70,54 @@ fn test_mnist() {
 
     let mut correct_answers = 0;
 
+    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+
     for _ in 0..2 {
-        teachers.shuffle(&mut rng);
-
-        let mut teachers = teachers.iter().take(100).map(|t| t.clone()).collect::<Vec<(usize,PathBuf)>>();
-
         let mut total_loss = 0.;
         let mut count = 0;
 
-        for _ in 0..10 {
-            count += 1;
-
+        for _ in 0..5 {
             teachers.shuffle(&mut rng);
 
-            let batch_data = teachers.iter().take(100).map(|(n, path)| {
-                let b = BufReader::new(File::open(path).unwrap()).bytes();
+            for teachers in teachers.chunks(50) {
+                count += 1;
 
-                let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+                let batch_data = teachers.iter().map(|(n, path)| {
+                    let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-                let n = *n;
+                    let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
 
-                let mut input = Arr::<f32, 784>::new();
+                    let n = *n;
 
-                for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                    *it = *p;
+                    let mut input = Arr::<f32, 784>::new();
+
+                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                        *it = *p;
+                    }
+
+                    let mut expected = Arr::new();
+
+                    expected[n as usize] = 1.0;
+
+                    (expected, input)
+                }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                    acc.0.push(e);
+                    acc.1.push(i);
+                    acc
+                });
+
+                let lossf = CrossEntropyMulticlass::new();
+
+                let loss = net.batch_train(batch_data.0, batch_data.1.clone(), &mut optimizer, &lossf).unwrap();
+                total_loss += loss;
+
+                let _ = net.batch_forward(batch_data.1).unwrap();
+                dbg!(&loss);
+
+                if count >= 100 {
+                    break;
                 }
-
-                let mut expected = Arr::new();
-
-                expected[n as usize] = 1.0;
-
-                (expected, input)
-            }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
-                acc.0.push(e);
-                acc.1.push(i);
-                acc
-            });
-
-            let lossf = CrossEntropyMulticlass::new();
-
-            let loss = net.batch_train(batch_data.0, batch_data.1.clone(), &mut optimizer, &lossf).unwrap();
-            total_loss += loss;
-
-            let _ = net.batch_forward(batch_data.1).unwrap();
-            dbg!(&loss);
+            }
         }
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f32 / count as f32);

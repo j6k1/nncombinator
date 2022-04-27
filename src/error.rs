@@ -6,7 +6,8 @@ pub enum TrainingError {
     ThreadError(String),
     SizeMismatchError(SizeMismatchError),
     InvalidInputError(String),
-    EvaluateError(EvaluateError)
+    EvaluateError(EvaluateError),
+    ToLargeInput(f64)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -16,6 +17,7 @@ impl fmt::Display for TrainingError {
             TrainingError::SizeMismatchError(e) => write!(f, "{}",e),
             TrainingError::InvalidInputError(s) => write!(f, "{}",s),
             TrainingError::EvaluateError(e) => write!(f, "{}",e),
+            TrainingError::ToLargeInput(n) => write!(f, "The value is too large to convert. (Value = {})",n),
         }
     }
 }
@@ -26,7 +28,8 @@ impl error::Error for TrainingError {
             TrainingError::ThreadError(_) => "An error occurred while processing the thread.",
             TrainingError::SizeMismatchError(_) => "memory size does not match.",
             TrainingError::InvalidInputError(_) => "Incorrect input.",
-            TrainingError::EvaluateError(_) => "An error occurred when running the neural network."
+            TrainingError::EvaluateError(_) => "An error occurred when running the neural network.",
+            TrainingError::ToLargeInput(_) => "The value is too large to convert."
         }
     }
 
@@ -36,7 +39,8 @@ impl error::Error for TrainingError {
             TrainingError::ThreadError(_) => None,
             TrainingError::SizeMismatchError(e) => Some(e),
             TrainingError::InvalidInputError(_) => None,
-            TrainingError::EvaluateError(e) => Some(e)
+            TrainingError::EvaluateError(e) => Some(e),
+            TrainingError::ToLargeInput(_) => None,
         }
     }
 }
@@ -93,10 +97,14 @@ impl From<ParseFloatError> for ConfigReadError {
     }
 }
 #[derive(Debug)]
-pub struct SizeMismatchError;
+pub struct SizeMismatchError(pub usize, pub usize);
 impl fmt::Display for SizeMismatchError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "memory size does not match.")
+        match self {
+            SizeMismatchError(from, to) => {
+                write!(f, "memory size does not match. (from = {}, to = {})",from,to)
+            }
+        }
     }
 }
 impl error::Error for SizeMismatchError {

@@ -19,7 +19,7 @@ use nncombinator::activation::{ReLu, Sigmoid, SoftMax};
 use nncombinator::arr::{Arr, DiffArr};
 use nncombinator::device::DeviceCpu;
 use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
-use nncombinator::lossfunction::{CrossEntropyMulticlass, Mse};
+use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass};
 use nncombinator::optimizer::{MomentumSGD};
 
 #[test]
@@ -263,7 +263,7 @@ fn test_weather() {
                 0.
             };
 
-            let lossf = Mse::new();
+            let lossf = CrossEntropy::new();
 
             net.train(expected, input, &mut optimizer, &lossf).unwrap();
         }
@@ -421,7 +421,7 @@ fn test_weather_by_forward_diff() {
                 0.
             };
 
-            let lossf = Mse::new();
+            let lossf = CrossEntropy::new();
 
             net.train(expected, DiffInput::NotDiff(input), &mut optimizer, &lossf).unwrap();
         }
@@ -575,7 +575,7 @@ fn test_weather_batch_train() {
 
     let mut correct_answers = 0;
 
-    let lossf = Mse::new();
+    let lossf = CrossEntropy::new();
 
     for teachers in teachers.chunks_mut(100).take(100) {
         for _ in 0..5 {

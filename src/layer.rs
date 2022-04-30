@@ -328,14 +328,8 @@ impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
           I: Debug + Send + Sync {
     fn loss<L: LossFunction<U>>(&mut self, loss: Self::LossInput, _:&L, stack: Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         let (s,actual) = stack.pop();
-        let mut r = Arr::new();
 
-        s.map(|u| {
-            for (r, (l,u)) in r.iter_mut()
-                                                .zip(loss.iter().zip(self.f.derive(&self.device,u).iter())) {
-                *r = *l * *u;
-            }
-        });
+        let r = s.map(|u| self.device.loss_linear_activation(&self.f,&loss,u));
 
         Ok((Cons(s,actual),r))
     }

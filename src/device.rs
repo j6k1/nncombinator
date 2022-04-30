@@ -11,6 +11,8 @@ pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
     fn backward_linear<const NI:usize,const NO:usize>(&self, units:&Arr2<U,NI,NO>, input:&Arr<U,NO>) -> Arr<U,NI>;
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U>;
+    fn loss_linear_activation<A,const N: usize>(&self, f: &A, u:&Arr<U,N>, loss:&Arr<U,N>) -> Arr<U, N>
+        where A: Activation<U,Arr<U,N>,Self>;
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
     fn loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&Arr<U,N>,actual:&Arr<U,N>,lossf:&L) -> U;
 }
@@ -73,6 +75,18 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
         }
 
         loss
+    }
+
+    fn loss_linear_activation<A,const N: usize>(&self, f: &A, u:&Arr<U,N>, loss:&Arr<U,N>) -> Arr<U, N>
+        where A: Activation<U,Arr<U,N>,Self> {
+        let mut r = Arr::new();
+
+        for (r, (l,u)) in r.iter_mut()
+            .zip(loss.iter().zip(f.derive(&self,u).iter())) {
+            *r = *l * *u;
+        }
+
+        r
     }
 
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N> {

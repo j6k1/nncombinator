@@ -139,6 +139,16 @@ impl<T,const N1:usize, const N2:usize> IndexMut<(usize,usize)> for Arr2<T,N1,N2>
         &mut self.arr[y * N2 + x]
     }
 }
+impl<'a,T,const N1:usize, const N2: usize> AsRawSlice<T> for Arr2<T,N1,N2> where T: Default + Clone + Send {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
+}
+impl<'a,T,const N1:usize, const N2:usize> AsRawMutSlice<'a,T> for Arr2<T,N1,N2> where T: Default + Clone + Send {
+    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
+        &mut self.arr
+    }
+}
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr3<T,const N1:usize, const N2:usize, const N3:usize> where T: Default {
     arr:Box<[T]>

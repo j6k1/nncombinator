@@ -1,3 +1,8 @@
+extern crate libc;
+extern crate cublas_sys;
+extern crate cublas;
+extern crate rcudnn;
+
 use crate::ope::UnitValue;
 
 pub mod error;

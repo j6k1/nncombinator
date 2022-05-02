@@ -5,77 +5,50 @@ use crate::UnitValue;
 use crate::arr::*;
 use crate::device::*;
 use crate::lossfunction::LossFunction;
-use crate::mem::{AsRawSlice};
+use crate::mem::{AsRawMutSlice};
 
-pub trait  ActivationImplType: Sync {}
-pub enum Specialized {}
-pub enum Common {}
-
-impl ActivationImplType for Specialized {}
-impl ActivationImplType  for Common {}
-
-pub trait Activation<U,T,D,I>: Send + Sync + 'static
-    where U: UnitValue<U>, D: Device<U>, I: ActivationImplType {
+pub trait Activation<U,T,D>: Send + Sync + 'static
+    where U: UnitValue<U>, D: Device<U> {
 
     fn apply(&self,device:&D,input:&T) -> T;
     fn derive(&self,device:&D,o:&T,loss:&T,u:&T) -> T;
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;
 }
-pub trait ActivationCommon<U,D>: Send + Sync + 'static where U: UnitValue<U>, D: Device<U> {
-    fn apply_common(&self,cudnn:&Cudnn,
-                        src_desc:&TensorDescriptor,
-                        src_data:*const libc::c_void,
-                        dest_desc:&TensorDescriptor,
-                        dest_data:*mut libc::c_void);
+pub trait ActivationCommonBase<U,D>: Send + Sync + 'static where U: UnitValue<U>, D: Device<U> {
+    fn apply_common_base(&self, cudnn:&Cudnn,
+                         src_desc:&TensorDescriptor,
+                         src_ptr:*const libc::c_void,
+                         dest_desc:&TensorDescriptor,
+                         dest_ptr:*mut libc::c_void);
 
-    fn derive_common(&self,cudnn:&Cudnn,
-                     src_desc:&TensorDescriptor,
-                     src_data:*const libc::c_void,
-                     src_diff_desc:&TensorDescriptor,
-                     src_diff_data:*const libc::c_void,
-                     dest_desc:&TensorDescriptor,
-                     dest_data:*const libc::c_void,
-                     dest_diff_desc:&TensorDescriptor,
-                     dest_diff_ptr:*mut libc::c_void);
+    fn derive_common_base(&self, cudnn:&Cudnn,
+                          src_desc:&TensorDescriptor,
+                          src_ptr:*const libc::c_void,
+                          src_diff_desc:&TensorDescriptor,
+                          src_diff_ptr:*const libc::c_void,
+                          dest_desc:&TensorDescriptor,
+                          dest_ptr:*const libc::c_void,
+                          dest_diff_desc:&TensorDescriptor,
+                          dest_diff_ptr:*mut libc::c_void);
+}
+pub trait ActivationCommon<U,T,D>: Send + Sync + 'static where U: UnitValue<U>, D: Device<U> {
+    fn apply_common(&self, input:&T,device:&D) -> T;
+    fn derive_common(&self, o:&T, loss:&T, u:&T,device:&D) -> T;
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;
 }
-impl<U,A: ActivationCommon<U,DeviceGpu<U>>,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>,Common> for A
+impl<U,A: ActivationCommon<U,Arr<U,N>,DeviceGpu<U>>,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for A
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
     fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
-        device.linear_activation_forward(|cudnn, src_desc, dest_desc, dest_ptr| {
-            self.apply_common(
-                cudnn,
-                src_desc,
-                input.as_raw_slice().as_ptr() as *const ::libc::c_void,
-                dest_desc,
-                dest_ptr)
-        })
+        self.apply_common(input,device)
     }
 
     fn derive(&self, device: &DeviceGpu<U>, o: &Arr<U, N>,loss: &Arr<U, N>, u:&Arr<U, N>)-> Arr<U, N> {
-        device.linear_activation_backward(|cudnn,
-                                           src_desc,
-                                           src_diff_desc,
-                                           dest_desc,
-                                           dest_diff_desc,
-                                           dest_diff_ptr| {
-
-            self.derive_common(cudnn,
-                               src_desc,
-                               o.as_raw_slice().as_ptr() as *const libc::c_void,
-                               src_diff_desc,
-                               loss.as_raw_slice().as_ptr() as *const libc::c_void,
-                               dest_desc,
-                               u.as_raw_slice().as_ptr() as *const libc::c_void,
-                               dest_diff_desc,
-                               dest_diff_ptr
-            )
-        })
+        self.derive_common(o,loss,u, device)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
-        <Self as ActivationCommon<U,DeviceGpu<U>>>::is_canonical_link(self,l)
+        <Self as ActivationCommon<U,Arr<U,N>,DeviceGpu<U>>>::is_canonical_link(self, l)
     }
 }
 pub struct Identity<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -95,14 +68,27 @@ impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,D:Device<U>,const N:usize> Activation<U,Arr<U,N>,D,Specialized> for Identity<U,DeviceCpu<U>>
-    where U: UnitValue<U>, D: Device<U> {
-
-    fn apply(&self, _: &D, input: &Arr<U, N>) -> Arr<U, N> {
+impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
+    fn apply_common(&self,input:&Arr<U,N>,_:&DeviceCpu<U>) -> Arr<U,N> {
         (*input).clone()
     }
 
-    fn derive(&self, _: &D, _: &Arr<U,N>,l: &Arr<U,N>,_: &Arr<U, N>) -> Arr<U, N> {
+    fn derive_common(&self, _:&Arr<U,N>, loss:&Arr<U,N>, _:&Arr<U,N>,_:&DeviceCpu<U>) -> Arr<U,N> {
+        (*loss).clone()
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        self.c.contains(l.name())
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
+        (*input).clone()
+    }
+
+    fn derive(&self, _: &DeviceCpu<U>, _: &Arr<U,N>,l: &Arr<U,N>,_: &Arr<U, N>) -> Arr<U, N> {
         l.clone()
     }
 
@@ -127,12 +113,12 @@ impl<U,D> Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U> ActivationCommon<U,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
-    fn apply_common(&self,cudnn:&Cudnn,
-                    src_desc:&TensorDescriptor,
-                    src_data:*const libc::c_void,
-                    dest_desc:&TensorDescriptor,
-                    dest_ptr:*mut libc::c_void) {
+impl<U> ActivationCommonBase<U,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
+    fn apply_common_base(&self, cudnn:&Cudnn,
+                         src_desc:&TensorDescriptor,
+                         src_ptr:*const libc::c_void,
+                         dest_desc:&TensorDescriptor,
+                         dest_ptr:*mut libc::c_void) {
         let activation_desc = ActivationDescriptor::new(cudnnActivationMode_t::CUDNN_ACTIVATION_SIGMOID).unwrap();
 
         let alpha = U::one();
@@ -143,21 +129,21 @@ impl<U> ActivationCommon<U,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>> where U: Un
             *activation_desc.id_c(),
             &alpha as *const U as *const libc::c_void,
             *src_desc.id_c(),
-            src_data,
+            src_ptr,
             &beta as *const U as *const libc::c_void,
             *dest_desc.id_c(),
             dest_ptr).unwrap()
     }
 
-    fn derive_common(&self,cudnn:&Cudnn,
-                     src_desc:&TensorDescriptor,
-                     src_data:*const libc::c_void,
-                     src_diff_desc:&TensorDescriptor,
-                     src_diff_data:*const libc::c_void,
-                     dest_desc:&TensorDescriptor,
-                     dest_data:*const libc::c_void,
-                     dest_diff_desc:&TensorDescriptor,
-                     dest_diff_ptr:*mut libc::c_void) {
+    fn derive_common_base(&self, cudnn:&Cudnn,
+                          src_desc:&TensorDescriptor,
+                          src_ptr:*const libc::c_void,
+                          src_diff_desc:&TensorDescriptor,
+                          src_diff_ptr:*const libc::c_void,
+                          dest_desc:&TensorDescriptor,
+                          dest_ptr:*const libc::c_void,
+                          dest_diff_desc:&TensorDescriptor,
+                          dest_diff_ptr:*mut libc::c_void) {
         let activation_desc = ActivationDescriptor::new(cudnnActivationMode_t::CUDNN_ACTIVATION_SIGMOID).unwrap();
 
         let alpha = U::one();
@@ -168,22 +154,59 @@ impl<U> ActivationCommon<U,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>> where U: Un
             *activation_desc.id_c(),
             &alpha as *const U as *const libc::c_void,
             *src_desc.id_c(),
-            src_data,
+            src_ptr,
             *src_diff_desc.id_c(),
-            src_diff_data,
+            src_diff_ptr,
             &beta as *const U as *const libc::c_void,
             *dest_desc.id_c(),
-            dest_data,
+            dest_ptr,
             *dest_diff_desc.id_c(),
             dest_diff_ptr,
         ).unwrap()
+    }
+}
+impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
+
+    fn apply_common(&self, input:&Arr<U,N>, device:&DeviceGpu<U>) -> Arr<U,N> {
+        device.linear_activation_forward(input,|cudnn,src_desc,src_ptr,dest_desc,mut dest_data| {
+            self.apply_common_base(cudnn,
+                                   src_desc,
+                                   src_ptr,
+                                   dest_desc,
+                                   dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+            dest_data
+        })
+    }
+
+    fn derive_common(&self, o:&Arr<U,N>, loss:&Arr<U,N>, u:&Arr<U,N>, device:&DeviceGpu<U>) -> Arr<U,N> {
+        device.linear_activation_backward(o,loss,u,|cudnn,
+                                                            src_desc,
+                                                            src_ptr,
+                                                            src_diff_desc,
+                                                            src_diff_ptr,
+                                                            dest_desc,
+                                                            dest_ptr,
+                                                            dest_diff_desc,
+                                                            mut dest_diff_data| {
+            self.derive_common_base(cudnn,
+                                    src_desc,
+                                    src_ptr,
+                                    src_diff_desc,
+                                    src_diff_ptr,
+                                    dest_desc,
+                                    dest_ptr,
+                                    dest_diff_desc,
+                                    dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+            dest_diff_data
+        })
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         self.c.contains(l.name())
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>,Common> for Sigmoid<U,DeviceCpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: UnitValue<U> {
 
     fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
@@ -227,12 +250,14 @@ impl<U,D> ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U> ActivationCommon<U,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
-    fn apply_common(&self,cudnn:&Cudnn,
-                        src_desc:&TensorDescriptor,
-                        src_data:*const libc::c_void,
-                        dest_desc:&TensorDescriptor,
-                        dest_ptr:*mut libc::c_void) {
+impl<U> ActivationCommonBase<U,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
+
+    fn apply_common_base(&self, cudnn:&Cudnn,
+                         src_desc:&TensorDescriptor,
+                         src_data:*const libc::c_void,
+                         dest_desc:&TensorDescriptor,
+                         dest_ptr:*mut libc::c_void) {
         let activation_desc = ActivationDescriptor::new(cudnnActivationMode_t::CUDNN_ACTIVATION_RELU).unwrap();
 
         let alpha = U::one();
@@ -249,15 +274,15 @@ impl<U> ActivationCommon<U,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>> where U: UnitV
             dest_ptr).unwrap()
     }
 
-    fn derive_common(&self,cudnn:&Cudnn,
-                     src_desc:&TensorDescriptor,
-                     src_data:*const libc::c_void,
-                     src_diff_desc:&TensorDescriptor,
-                     src_diff_data:*const libc::c_void,
-                     dest_desc:&TensorDescriptor,
-                     dest_data:*const libc::c_void,
-                     dest_diff_desc:&TensorDescriptor,
-                     dest_diff_ptr:*mut libc::c_void) {
+    fn derive_common_base(&self, cudnn:&Cudnn,
+                          src_desc:&TensorDescriptor,
+                          src_data:*const libc::c_void,
+                          src_diff_desc:&TensorDescriptor,
+                          src_diff_data:*const libc::c_void,
+                          dest_desc:&TensorDescriptor,
+                          dest_data:*const libc::c_void,
+                          dest_diff_desc:&TensorDescriptor,
+                          dest_diff_ptr:*mut libc::c_void) {
         let activation_desc = ActivationDescriptor::new(cudnnActivationMode_t::CUDNN_ACTIVATION_RELU).unwrap();
 
         let alpha = U::one();
@@ -278,12 +303,49 @@ impl<U> ActivationCommon<U,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>> where U: UnitV
             dest_diff_ptr,
         ).unwrap()
     }
+}
+impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
+
+    fn apply_common(&self, input:&Arr<U,N>, device:&DeviceGpu<U>) -> Arr<U,N> {
+        device.linear_activation_forward(input,|cudnn,src_desc,src_ptr,dest_desc,mut dest_data| {
+            self.apply_common_base(cudnn,
+                                   src_desc,
+                                   src_ptr,
+                                   dest_desc,
+                                   dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+            dest_data
+        })
+    }
+
+    fn derive_common(&self, o:&Arr<U,N>, loss:&Arr<U,N>, u:&Arr<U,N>, device:&DeviceGpu<U>) -> Arr<U,N> {
+        device.linear_activation_backward(o,loss,u,|cudnn,
+                                                    src_desc,
+                                                    src_ptr,
+                                                    src_diff_desc,
+                                                    src_diff_ptr,
+                                                    dest_desc,
+                                                    dest_ptr,
+                                                    dest_diff_desc,
+                                                    mut dest_diff_data| {
+            self.derive_common_base(cudnn,
+                                    src_desc,
+                                    src_ptr,
+                                    src_diff_desc,
+                                    src_diff_ptr,
+                                    dest_desc,
+                                    dest_ptr,
+                                    dest_diff_desc,
+                                    dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+            dest_diff_data
+        })
+    }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>,Common> for ReLu<U,DeviceCpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
     where U: UnitValue<U> {
 
     fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
@@ -333,12 +395,14 @@ impl<U,D> Swish<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U> ActivationCommon<U,DeviceGpu<U>> for Swish<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
-    fn apply_common(&self,cudnn:&Cudnn,
-                    src_desc:&TensorDescriptor,
-                    src_data:*const libc::c_void,
-                    dest_desc:&TensorDescriptor,
-                    dest_data:*mut libc::c_void) {
+impl<U> ActivationCommonBase<U,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
+
+    fn apply_common_base(&self, cudnn:&Cudnn,
+                         src_desc:&TensorDescriptor,
+                         src_data:*const libc::c_void,
+                         dest_desc:&TensorDescriptor,
+                         dest_ptr:*mut libc::c_void) {
         let activation_desc = ActivationDescriptor::new(cudnnActivationMode_t::CUDNN_ACTIVATION_SWISH).unwrap();
 
         unsafe {
@@ -356,18 +420,18 @@ impl<U> ActivationCommon<U,DeviceGpu<U>> for Swish<U,DeviceGpu<U>> where U: Unit
             src_data,
             &beta as *const U as *const libc::c_void,
             *dest_desc.id_c(),
-            dest_data).unwrap()
+            dest_ptr).unwrap()
     }
 
-    fn derive_common(&self,cudnn:&Cudnn,
-                     src_desc:&TensorDescriptor,
-                     src_data:*const libc::c_void,
-                     src_diff_desc:&TensorDescriptor,
-                     src_diff_data:*const libc::c_void,
-                     dest_desc:&TensorDescriptor,
-                     dest_data:*const libc::c_void,
-                     dest_diff_desc:&TensorDescriptor,
-                     dest_diff_ptr:*mut libc::c_void) {
+    fn derive_common_base(&self, cudnn:&Cudnn,
+                          src_desc:&TensorDescriptor,
+                          src_data:*const libc::c_void,
+                          src_diff_desc:&TensorDescriptor,
+                          src_diff_data:*const libc::c_void,
+                          dest_desc:&TensorDescriptor,
+                          dest_data:*const libc::c_void,
+                          dest_diff_desc:&TensorDescriptor,
+                          dest_diff_ptr:*mut libc::c_void) {
         let activation_desc = ActivationDescriptor::new(cudnnActivationMode_t::CUDNN_ACTIVATION_SWISH).unwrap();
 
         let alpha = U::one();
@@ -388,12 +452,49 @@ impl<U> ActivationCommon<U,DeviceGpu<U>> for Swish<U,DeviceGpu<U>> where U: Unit
             dest_diff_ptr,
         ).unwrap()
     }
+}
+impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
+
+    fn apply_common(&self, input:&Arr<U,N>, device:&DeviceGpu<U>) -> Arr<U,N> {
+        device.linear_activation_forward(input,|cudnn,src_desc,src_ptr,dest_desc,mut dest_data| {
+            self.apply_common_base(cudnn,
+                                   src_desc,
+                                   src_ptr,
+                                   dest_desc,
+                                   dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+            dest_data
+        })
+    }
+
+    fn derive_common(&self, o:&Arr<U,N>, loss:&Arr<U,N>, u:&Arr<U,N>, device:&DeviceGpu<U>) -> Arr<U,N> {
+        device.linear_activation_backward(o,loss,u,|cudnn,
+                                                    src_desc,
+                                                    src_ptr,
+                                                    src_diff_desc,
+                                                    src_diff_ptr,
+                                                    dest_desc,
+                                                    dest_ptr,
+                                                    dest_diff_desc,
+                                                    mut dest_diff_data| {
+            self.derive_common_base(cudnn,
+                                    src_desc,
+                                    src_ptr,
+                                    src_diff_desc,
+                                    src_diff_ptr,
+                                    dest_desc,
+                                    dest_ptr,
+                                    dest_diff_desc,
+                                    dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+            dest_diff_data
+        })
+    }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>,Common> for Swish<U,DeviceCpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: UnitValue<U> {
 
     fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
@@ -437,12 +538,14 @@ impl<U,D> Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U> ActivationCommon<U,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
-    fn apply_common(&self,cudnn:&Cudnn,
-                    src_desc:&TensorDescriptor,
-                    src_data:*const libc::c_void,
-                    dest_desc:&TensorDescriptor,
-                    dest_ptr:*mut libc::c_void) {
+impl<U> ActivationCommonBase<U,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
+
+    fn apply_common_base(&self, cudnn:&Cudnn,
+                         src_desc:&TensorDescriptor,
+                         src_data:*const libc::c_void,
+                         dest_desc:&TensorDescriptor,
+                         dest_ptr:*mut libc::c_void) {
         let activation_desc = ActivationDescriptor::new(cudnnActivationMode_t::CUDNN_ACTIVATION_TANH).unwrap();
 
         let alpha = U::one();
@@ -459,15 +562,15 @@ impl<U> ActivationCommon<U,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>> where U: UnitV
             dest_ptr).unwrap()
     }
 
-    fn derive_common(&self,cudnn:&Cudnn,
-                     src_desc:&TensorDescriptor,
-                     src_data:*const libc::c_void,
-                     src_diff_desc:&TensorDescriptor,
-                     src_diff_data:*const libc::c_void,
-                     dest_desc:&TensorDescriptor,
-                     dest_data:*const libc::c_void,
-                     dest_diff_desc:&TensorDescriptor,
-                     dest_diff_ptr:*mut libc::c_void) {
+    fn derive_common_base(&self, cudnn:&Cudnn,
+                          src_desc:&TensorDescriptor,
+                          src_data:*const libc::c_void,
+                          src_diff_desc:&TensorDescriptor,
+                          src_diff_data:*const libc::c_void,
+                          dest_desc:&TensorDescriptor,
+                          dest_data:*const libc::c_void,
+                          dest_diff_desc:&TensorDescriptor,
+                          dest_diff_ptr:*mut libc::c_void) {
         let activation_desc = ActivationDescriptor::new(cudnnActivationMode_t::CUDNN_ACTIVATION_TANH).unwrap();
 
         let alpha = U::one();
@@ -488,12 +591,49 @@ impl<U> ActivationCommon<U,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>> where U: UnitV
             dest_diff_ptr,
         ).unwrap()
     }
+}
+impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
+
+    fn apply_common(&self, input:&Arr<U,N>, device:&DeviceGpu<U>) -> Arr<U,N> {
+        device.linear_activation_forward(input,|cudnn,src_desc,src_ptr,dest_desc,mut dest_data| {
+            self.apply_common_base(cudnn,
+                                   src_desc,
+                                   src_ptr,
+                                   dest_desc,
+                                   dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+            dest_data
+        })
+    }
+
+    fn derive_common(&self, o:&Arr<U,N>, loss:&Arr<U,N>, u:&Arr<U,N>, device:&DeviceGpu<U>) -> Arr<U,N> {
+        device.linear_activation_backward(o,loss,u,|cudnn,
+                                                    src_desc,
+                                                    src_ptr,
+                                                    src_diff_desc,
+                                                    src_diff_ptr,
+                                                    dest_desc,
+                                                    dest_ptr,
+                                                    dest_diff_desc,
+                                                    mut dest_diff_data| {
+            self.derive_common_base(cudnn,
+                                    src_desc,
+                                    src_ptr,
+                                    src_diff_desc,
+                                    src_diff_ptr,
+                                    dest_desc,
+                                    dest_ptr,
+                                    dest_diff_desc,
+                                    dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+            dest_diff_data
+        })
+    }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>,Common> for Tanh<U,DeviceCpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
     where U: UnitValue<U> {
 
     fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {
@@ -542,12 +682,14 @@ impl<U,D> SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U> ActivationCommon<U,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
-    fn apply_common(&self,cudnn:&Cudnn,
-                    src_desc:&TensorDescriptor,
-                    src_data:*const libc::c_void,
-                    dest_desc:&TensorDescriptor,
-                    dest_ptr:*mut libc::c_void) {
+impl<U> ActivationCommonBase<U,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
+
+    fn apply_common_base(&self, cudnn:&Cudnn,
+                         src_desc:&TensorDescriptor,
+                         src_data:*const libc::c_void,
+                         dest_desc:&TensorDescriptor,
+                         dest_ptr:*mut libc::c_void) {
         let alpha = U::one();
         let beta = U::default();
 
@@ -564,15 +706,15 @@ impl<U> ActivationCommon<U,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>> where U: Un
         ).unwrap()
     }
 
-    fn derive_common(&self,cudnn:&Cudnn,
-                     src_desc:&TensorDescriptor,
-                     src_data:*const libc::c_void,
-                     src_diff_desc:&TensorDescriptor,
-                     src_diff_data:*const libc::c_void,
-                     _:&TensorDescriptor,
-                     _:*const libc::c_void,
-                     dest_diff_desc:&TensorDescriptor,
-                     dest_diff_ptr:*mut libc::c_void) {
+    fn derive_common_base(&self, cudnn:&Cudnn,
+                          src_desc:&TensorDescriptor,
+                          src_data:*const libc::c_void,
+                          src_diff_desc:&TensorDescriptor,
+                          src_diff_data:*const libc::c_void,
+                          _:&TensorDescriptor,
+                          _:*const libc::c_void,
+                          dest_diff_desc:&TensorDescriptor,
+                          dest_diff_ptr:*mut libc::c_void) {
         let alpha = U::one();
         let beta = U::default();
 
@@ -590,12 +732,49 @@ impl<U> ActivationCommon<U,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>> where U: Un
             dest_diff_ptr
         ).unwrap()
     }
+}
+impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
+
+    fn apply_common(&self, input:&Arr<U,N>, device:&DeviceGpu<U>) -> Arr<U,N> {
+        device.linear_activation_forward(input,|cudnn,src_desc,src_ptr,dest_desc,mut dest_data| {
+            self.apply_common_base(cudnn,
+                                   src_desc,
+                                   src_ptr,
+                                   dest_desc,
+                                   dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+            dest_data
+        })
+    }
+
+    fn derive_common(&self, o:&Arr<U,N>, loss:&Arr<U,N>, u:&Arr<U,N>, device:&DeviceGpu<U>) -> Arr<U,N> {
+        device.linear_activation_backward(o,loss,u,|cudnn,
+                                                    src_desc,
+                                                    src_ptr,
+                                                    src_diff_desc,
+                                                    src_diff_ptr,
+                                                    dest_desc,
+                                                    dest_ptr,
+                                                    dest_diff_desc,
+                                                    mut dest_diff_data| {
+            self.derive_common_base(cudnn,
+                                    src_desc,
+                                    src_ptr,
+                                    src_diff_desc,
+                                    src_diff_ptr,
+                                    dest_desc,
+                                    dest_ptr,
+                                    dest_diff_desc,
+                                    dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+            dest_diff_data
+        })
+    }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         self.c.contains(l.name())
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>,Common> for SoftMax<U,DeviceCpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
     where U: UnitValue<U> {
 
     fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U, N>) -> Arr<U, N> {

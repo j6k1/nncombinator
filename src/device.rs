@@ -9,7 +9,6 @@ use crate::arr::{Arr, Arr2};
 use crate::error::TrainingError;
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawMutSlice, AsRawSlice};
-use crate::activation::ActivationImplType;
 use crate::UnitValue;
 
 pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
@@ -19,9 +18,9 @@ pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
         where L: LossFunction<U>;
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
     fn loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&Arr<U,N>,actual:&Arr<U,N>,lossf:&L) -> U;
-    fn batch_loss_linear_by_activaton<A,I,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
+    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
         -> Result<Vec<Arr<U, N>>, TrainingError>
-        where A: Activation<U,Arr<U,N>,Self,I>, I: ActivationImplType;
+        where A: Activation<U,Arr<U,N>,Self>;
 }
 pub trait DataTypeInfo {
     fn cudnn_data_type() -> DataType;
@@ -122,9 +121,9 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
         })
     }
 
-    fn batch_loss_linear_by_activaton<A,I,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
+    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
                                                        -> Result<Vec<Arr<U, N>>, TrainingError>
-        where A: Activation<U,Arr<U,N>,Self,I>, I: ActivationImplType {
+        where A: Activation<U,Arr<U,N>,Self> {
 
         o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
             Ok(activation.derive(&self,o,l,u))
@@ -292,9 +291,9 @@ impl Device<f32> for DeviceGpu<f32> {
         })
     }
 
-    fn batch_loss_linear_by_activaton<A,I,const N:usize>(&self, o:&Vec<Arr<f32,N>>, loss:&Vec<Arr<f32,N>>, u:&Vec<Arr<f32,N>>, activation:&A)
+    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f32,N>>, loss:&Vec<Arr<f32,N>>, u:&Vec<Arr<f32,N>>, activation:&A)
         -> Result<Vec<Arr<f32, N>>, TrainingError>
-        where A: Activation<f32,Arr<f32,N>,Self,I>, I: ActivationImplType
+        where A: Activation<f32,Arr<f32,N>,Self>
     {
         o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
             Ok(activation.derive(&self,o,l,u))
@@ -310,48 +309,54 @@ impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
 }
 
 impl<U> DeviceGpu<U> where U: DataTypeInfo {
-    pub fn linear_activation_forward<F,const N:usize>(&self, callback:F) -> Arr<U,N>
+    pub fn linear_activation_forward<F,const N:usize>(&self, input:&Arr<U,N>,callback:F) -> Arr<U,N>
         where U: UnitValue<U>,
               F: FnOnce(&Cudnn,
                         &TensorDescriptor,
+                        *const libc::c_void,
                         &TensorDescriptor,
-                        *mut libc::c_void) {
+                        Arr<U,N>) -> Arr<U,N> {
         let cudnn = Cudnn::new().unwrap();
         let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
         let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
 
-        let mut dest_data = Arr::<U,N>::new();
+        let dest_data = Arr::<U,N>::new();
 
         callback(&cudnn,
                  &src_desc,
+                 input.as_raw_slice().as_ptr() as *const U as *const libc::c_void,
                  &dest_desc,
-                 dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
-        dest_data
+                 dest_data)
     }
 
-    pub fn linear_activation_backward<F,const N:usize>(&self, callback:F) -> Arr<U,N>
+    pub fn linear_activation_backward<F,const N:usize>(&self, o:&Arr<U,N>,loss:&Arr<U,N>,u:&Arr<U,N>,callback:F) -> Arr<U,N>
         where U: UnitValue<U>,
               F: FnOnce(&Cudnn,
                   &TensorDescriptor,
+                  *const libc::c_void,
                   &TensorDescriptor,
+                  *const libc::c_void,
                   &TensorDescriptor,
+                  *const libc::c_void,
                   &TensorDescriptor,
-                  *mut libc::c_void
-                  ) {
+                  Arr<U,N>
+                  ) -> Arr<U,N> {
         let cudnn = Cudnn::new().unwrap();
         let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
         let src_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
         let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1],U::cudnn_data_type()).unwrap();
         let dest_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
 
-        let mut dest_diff_data = Arr::<U,N>::new();
+        let dest_diff_data = Arr::<U,N>::new();
 
         callback(&cudnn,
                  &src_desc,
+                 o.as_raw_slice().as_ptr() as *const U as *const libc::c_void,
                  &src_diff_desc,
+                 loss.as_raw_slice().as_ptr() as *const U as *const libc::c_void,
                  &dest_desc,
+                 u.as_raw_slice().as_ptr() as *const U as *const libc::c_void,
                  &dest_diff_desc,
-                 dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
-        dest_diff_data
+                 dest_diff_data)
     }
 }

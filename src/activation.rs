@@ -68,12 +68,12 @@ impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
-    fn apply_common(&self,input:&Arr<U,N>,_:&DeviceCpu<U>) -> Arr<U,N> {
+impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
+    fn apply_common(&self,input:&Arr<U,N>,_:&DeviceGpu<U>) -> Arr<U,N> {
         (*input).clone()
     }
 
-    fn derive_common(&self, _:&Arr<U,N>, loss:&Arr<U,N>, _:&Arr<U,N>,_:&DeviceCpu<U>) -> Arr<U,N> {
+    fn derive_common(&self, _:&Arr<U,N>, loss:&Arr<U,N>, _:&Arr<U,N>,_:&DeviceGpu<U>) -> Arr<U,N> {
         (*loss).clone()
     }
 

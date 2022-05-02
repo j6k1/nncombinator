@@ -3,13 +3,13 @@ use cublas::Context;
 use cublas_sys::{cublasOperation_t, cublasSgemm_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcudnn::{Cudnn, TensorDescriptor};
-use rcudnn::utils::{ActivationConfig, DataType, ScalParams};
-use rcudnn::utils::DataTypeInfo;
+use rcudnn::utils::DataType;
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
 use crate::error::TrainingError;
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawMutSlice, AsRawSlice};
+use crate::activation::ActivationImplType;
 use crate::UnitValue;
 
 pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
@@ -17,11 +17,33 @@ pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
     fn backward_linear<const NI:usize,const NO:usize>(&self, units:&Arr2<U,NI,NO>, input:&Arr<U,NO>) -> Arr<U,NI>;
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U>;
-    fn loss_linear_activation<A,const N: usize>(&self, f: &A, u:&Arr<U,N>, loss:&Arr<U,N>) -> Arr<U, N>
-        where A: Activation<U,Arr<U,N>,Self>;
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
     fn loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&Arr<U,N>,actual:&Arr<U,N>,lossf:&L) -> U;
+    fn batch_loss_linear_by_activaton<A,I,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
+        -> Result<Vec<Arr<U, N>>, TrainingError>
+        where A: Activation<U,Arr<U,N>,Self,I>, I: ActivationImplType;
 }
+pub trait DataTypeInfo {
+    fn cudnn_data_type() -> DataType;
+    fn size() -> usize;
+}
+impl DataTypeInfo for f32 {
+    fn cudnn_data_type() -> DataType {
+        DataType::Float
+    }
+    fn size() -> usize {
+        4_usize
+    }
+}
+impl DataTypeInfo for f64 {
+    fn cudnn_data_type() -> DataType {
+        DataType::Double
+    }
+    fn size() -> usize {
+        8_usize
+    }
+}
+
 pub struct DeviceCpu<U> where U: UnitValue<U> {
     u:PhantomData<U>,
     max_threads:usize,
@@ -83,18 +105,6 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
         loss
     }
 
-    fn loss_linear_activation<A,const N: usize>(&self, f: &A, u:&Arr<U,N>, loss:&Arr<U,N>) -> Arr<U, N>
-        where A: Activation<U,Arr<U,N>,Self> {
-        let mut r = Arr::new();
-
-        for (r, (l,u)) in r.iter_mut()
-            .zip(loss.iter().zip(f.derive(&self,u).iter())) {
-            *r = *l * *u;
-        }
-
-        r
-    }
-
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N> {
         let mut loss = Arr::new();
 
@@ -110,6 +120,15 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
             acc += lossf.apply(a,e);
             acc
         })
+    }
+
+    fn batch_loss_linear_by_activaton<A,I,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
+                                                       -> Result<Vec<Arr<U, N>>, TrainingError>
+        where A: Activation<U,Arr<U,N>,Self,I>, I: ActivationImplType {
+
+        o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
+            Ok(activation.derive(&self,o,l,u))
+        }).collect::<Result<Vec<Arr<U,N>>,_>>()
     }
 }
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
@@ -152,15 +171,6 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         }).collect::<Result<Vec<Arr<U,NI>>,_>>()
     }
 
-    pub fn batch_loss_linear_by_activaton<A: Activation<U,Arr<U,N>,Self>,const N:usize>(&self, loss:Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A) -> Result<Vec<Arr<U, N>>, TrainingError>
-    {
-        loss.par_iter().zip(u.par_iter()).map(|(l,u)| {
-            l.par_iter().zip(activation.derive(self,u).par_iter()).map(|(&l,&u)| {
-                l * u
-            }).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
-        }).collect::<Result<Vec<Arr<U,N>>,_>>()
-    }
-
     pub fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&Vec<Arr<U,N>>,actual:&Vec<Arr<U,N>>,lossf:&L) -> U {
         actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
             a.par_iter().cloned()
@@ -194,7 +204,7 @@ pub struct DeviceGpu<U> {
     u:PhantomData<U>
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
-    pub fn new(c:usize) -> DeviceGpu<U> {
+    pub fn new() -> DeviceGpu<U> {
         DeviceGpu {
             u:PhantomData::<U>,
         }
@@ -202,7 +212,7 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
 }
 impl Device<f32> for DeviceGpu<f32> {
     fn forward_linear<const NI:usize,const NO:usize>(&self,bias:&Arr<f32,NO>,units:&Arr2<f32,NI,NO>,input:&Arr<f32,NI>) -> Arr<f32,NO> {
-        let mut context = Context::new().unwrap();
+        let context = Context::new().unwrap();
 
         let mut output = bias.clone();
 
@@ -230,7 +240,7 @@ impl Device<f32> for DeviceGpu<f32> {
     fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<f32,NI,NO>, input: &Arr<f32,NO>) -> Arr<f32, NI> {
         let mut output:Arr<f32,NI> = Arr::new();
 
-        let mut context = Context::new().unwrap();
+        let context = Context::new().unwrap();
 
         unsafe {
             cublasSgemm_v2(*context.id_c(),
@@ -265,18 +275,6 @@ impl Device<f32> for DeviceGpu<f32> {
         loss
     }
 
-    fn loss_linear_activation<A,const N: usize>(&self, f: &A, u:&Arr<f32,N>, loss:&Arr<f32,N>) -> Arr<f32, N>
-        where A: Activation<f32,Arr<f32,N>,Self> {
-        let mut r = Arr::new();
-
-        for (r, (l,u)) in r.iter_mut()
-            .zip(loss.iter().zip(f.derive(&self,u).iter())) {
-            *r = *l * *u;
-        }
-
-        r
-    }
-
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>) -> Arr<f32, N> {
         let mut loss = Arr::new();
 
@@ -293,6 +291,15 @@ impl Device<f32> for DeviceGpu<f32> {
             acc
         })
     }
+
+    fn batch_loss_linear_by_activaton<A,I,const N:usize>(&self, o:&Vec<Arr<f32,N>>, loss:&Vec<Arr<f32,N>>, u:&Vec<Arr<f32,N>>, activation:&A)
+        -> Result<Vec<Arr<f32, N>>, TrainingError>
+        where A: Activation<f32,Arr<f32,N>,Self,I>, I: ActivationImplType
+    {
+        o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
+            Ok(activation.derive(&self,o,l,u))
+        }).collect::<Result<Vec<Arr<f32,N>>,_>>()
+    }
 }
 impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
@@ -302,79 +309,49 @@ impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
     }
 }
 
-impl DeviceGpu<f32> {
-    pub fn linear_activation<F,const N:usize>(&self,input:&Arr<f32,N>,callback:F) -> Arr<f32,N>
-        where F: FnOnce(&Cudnn,
-                        &ActivationConfig,
+impl<U> DeviceGpu<U> where U: DataTypeInfo {
+    pub fn linear_activation_forward<F,const N:usize>(&self, callback:F) -> Arr<U,N>
+        where U: UnitValue<U>,
+              F: FnOnce(&Cudnn,
                         &TensorDescriptor,
                         &TensorDescriptor,
-                        &mut Arr<f32,N>) {
+                        *mut libc::c_void) {
         let cudnn = Cudnn::new().unwrap();
+        let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
+        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
 
-        let src_desc = TensorDescriptor::new(&[N as i32,1,1],&[N as i32,1,1], DataType::Float).unwrap();
-        let dest_desc = TensorDescriptor::new(&[N as i32,1,1],&[N as i32,1,1], DataType::Float).unwrap();
-
-        let config = cudnn.init_activation().unwrap();
-
-        let mut dest_data = Arr::<f32,N>::new();
+        let mut dest_data = Arr::<U,N>::new();
 
         callback(&cudnn,
-                 &config,
                  &src_desc,
                  &dest_desc,
-                 &mut dest_data);
+                 dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
         dest_data
     }
 
-    pub fn linear_activation_sigmoid<T,const N:usize>(&self,input:&Arr<f32,N>) -> Arr<f32,N>
-        where T: num_traits::Float + DataTypeInfo {
-        self.linear_activation(input,|cudnn, config, src_desc, dest_desc, dest_data| {
-            cudnn.sigmoid_forward::<T>(config,
-                                  src_desc,
-                                  input.as_raw_slice().as_ptr() as *const ::libc::c_void,
-                                  dest_desc,
-                                  dest_data.as_raw_mut_slice().as_mut_ptr() as *mut ::libc::c_void,
-                                  ScalParams::default());
+    pub fn linear_activation_backward<F,const N:usize>(&self, callback:F) -> Arr<U,N>
+        where U: UnitValue<U>,
+              F: FnOnce(&Cudnn,
+                  &TensorDescriptor,
+                  &TensorDescriptor,
+                  &TensorDescriptor,
+                  &TensorDescriptor,
+                  *mut libc::c_void
+                  ) {
+        let cudnn = Cudnn::new().unwrap();
+        let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
+        let src_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
+        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1],U::cudnn_data_type()).unwrap();
+        let dest_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
 
-        })
-    }
+        let mut dest_diff_data = Arr::<U,N>::new();
 
-    pub fn linear_activation_relu<T,const N:usize>(&self,input:&Arr<f32,N>) -> Arr<f32,N>
-        where T: num_traits::Float + DataTypeInfo {
-        self.linear_activation(input,|cudnn, config, src_desc, dest_desc, dest_data| {
-            cudnn.relu_forward::<T>(config,
-                       src_desc,
-                       input.as_raw_slice().as_ptr() as *const ::libc::c_void,
-                       dest_desc,
-                       dest_data.as_raw_mut_slice().as_mut_ptr() as *mut ::libc::c_void,
-                       ScalParams::default());
-
-        })
-    }
-
-    pub fn linear_activation_tanh<T,const N:usize>(&self,input:&Arr<f32,N>) -> Arr<f32,N>
-        where T: num_traits::Float + DataTypeInfo {
-        self.linear_activation(input,|cudnn, config, src_desc, dest_desc, dest_data| {
-            cudnn.tanh_forward::<T>(config,
-                               src_desc,
-                               input.as_raw_slice().as_ptr() as *const ::libc::c_void,
-                               dest_desc,
-                               dest_data.as_raw_mut_slice().as_mut_ptr() as *mut ::libc::c_void,
-                               ScalParams::default());
-
-        })
-    }
-
-    pub fn linear_activation_softmax<T,const N:usize>(&self,input:&Arr<f32,N>) -> Arr<f32,N>
-        where T: num_traits::Float + DataTypeInfo {
-        self.linear_activation(input,|cudnn,_,src_desc,dest_desc,dest_data| {
-            cudnn.softmax_forward::<T>(
-                                  src_desc,
-                                  input.as_raw_slice().as_ptr() as *const ::libc::c_void,
-                                  dest_desc,
-                                  dest_data.as_raw_mut_slice().as_mut_ptr() as *mut ::libc::c_void,
-                                  ScalParams::default());
-
-        })
+        callback(&cudnn,
+                 &src_desc,
+                 &src_diff_desc,
+                 &dest_desc,
+                 &dest_diff_desc,
+                 dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void);
+        dest_diff_data
     }
 }

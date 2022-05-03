@@ -103,7 +103,7 @@ pub struct Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
     c:HashSet<&'static str>
 }
 impl<U,D> Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(_:&DeviceCpu<U>) -> Sigmoid<U,D> {
+    pub fn new(_:&D) -> Sigmoid<U,D> {
         let mut c = HashSet::new();
         c.insert("crossentropy");
 
@@ -248,7 +248,7 @@ pub struct ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>
 }
 impl<U,D> ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(_:&DeviceCpu<U>) -> ReLu<U,D> {
+    pub fn new(_:&D) -> ReLu<U,D> {
         ReLu {
             u: PhantomData::<U>,
             d:PhantomData::<D>
@@ -397,7 +397,7 @@ pub struct Swish<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>
 }
 impl<U,D> Swish<U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(_:&DeviceCpu<U>) -> Swish<U,D> {
+    pub fn new(_:&D) -> Swish<U,D> {
         Swish {
             u: PhantomData::<U>,
             d:PhantomData::<D>
@@ -564,7 +564,7 @@ pub struct Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>
 }
 impl<U,D> Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(_:&DeviceCpu<U>) -> Tanh<U,D> {
+    pub fn new(_:&D) -> Tanh<U,D> {
         Tanh {
             u: PhantomData::<U>,
             d:PhantomData::<D>
@@ -708,7 +708,7 @@ pub struct SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
     c:HashSet<&'static str>
 }
 impl<U,D> SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
-    pub fn new(_:&DeviceCpu<U>) -> SoftMax<U,D> {
+    pub fn new(_:&D) -> SoftMax<U,D> {
         let mut c = HashSet::new();
         c.insert("crossentropymulticlass");
 

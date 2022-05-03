@@ -256,10 +256,10 @@ impl<U,P,A,I,PI,D> ForwardAll for ActivationLayer<U,P,A,I,PI,D>
     type Input = I;
     type Output = PI;
     fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
-        Ok(self.forward(&self.parent.forward_all(input)?))
+        self.forward(&self.parent.forward_all(input)?)
     }
 }
-impl<U,P,A,I,PI,D> Forward<PI,PI> for ActivationLayer<U,P,A,I,PI,D>
+impl<U,P,A,I,PI,D> Forward<PI,Result<PI,EvaluateError>> for ActivationLayer<U,P,A,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
@@ -267,7 +267,7 @@ impl<U,P,A,I,PI,D> Forward<PI,PI> for ActivationLayer<U,P,A,I,PI,D>
           A: Activation<U,PI,D>,
           PI: Debug,
           I: Debug + Send + Sync {
-    fn forward(&self, input: &PI) -> PI {
+    fn forward(&self, input: &PI) -> Result<PI,EvaluateError> {
         self.f.apply(&self.device,input)
     }
 }
@@ -283,7 +283,7 @@ impl<U,P,A,D,I,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
         let r = self.parent.pre_train(input)?;
 
-        let u = r.map(|r| self.forward(r));
+        let u = r.map(|r| self.forward(r))?;
 
         Ok(Cons(r,u))
     }
@@ -329,7 +329,7 @@ impl<U,P,A,D,I,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     fn loss<L: LossFunction<U>>(&mut self, loss: Self::LossInput, _:&L, stack: Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         let (s,o) = stack.pop();
 
-        let r = s.map(|u| self.f.derive(&self.device,&o,&loss,u));
+        let r = s.map(|u| self.f.derive(&self.device,&o,&loss,u))?;
 
         Ok((Cons(s,o),r))
     }
@@ -357,9 +357,9 @@ impl<U,P,A,D,I,const N:usize> BatchForward for ActivationLayer<U,P,A,I,Arr<U,N>,
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        Ok(input.par_iter().map(|i| {
+        input.par_iter().map(|i| {
             self.f.apply(&self.device,&i)
-        }).collect::<Vec<Arr<U,N>>>())
+        }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))
     }
 }
 impl<U,P,A,D,I,const N:usize> BatchPreTrainBase<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
@@ -387,7 +387,7 @@ impl<U,P,A,D,I,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,Arr<U
 
         let u = r.map(|input| input.par_iter().map(|i| {
             self.f.apply(&self.device,&i)
-        }).collect::<Vec<Arr<U,N>>>());
+        }).collect::<Result<Vec<Arr<U,N>>,_>>())?;
 
         Ok(Cons(r,u))
     }
@@ -769,13 +769,13 @@ impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for Linear
         Ok(())
     }
 }
-impl<U,P,D,I,const NI:usize,const NO:usize> Forward<Arr<U,NI>,Arr<U,NO>> for LinearLayer<U,P,D,I,NI,NO>
+impl<U,P,D,I,const NI:usize,const NO:usize> Forward<Arr<U,NI>,Result<Arr<U,NO>,EvaluateError>> for LinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
 
-    fn forward(&self,input:&Arr<U,NI>) -> Arr<U,NO> {
+    fn forward(&self,input:&Arr<U,NI>) -> Result<Arr<U,NO>,EvaluateError> {
         self.device.forward_linear(&self.bias,&self.units,input)
     }
 }
@@ -787,7 +787,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,P,D,I,N
     type Input = I;
     type Output = Arr<U,NO>;
     fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
-        Ok(self.forward(&self.parent.forward_all(input)?))
+        self.forward(&self.parent.forward_all(input)?)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,D,I,NI,NO>
@@ -800,17 +800,17 @@ impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,P,D,I,
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
         let r = self.parent.pre_train(input)?;
 
-        let u = r.map(|r| self.forward(r));
+        let u = r.map(|r| self.forward(r))?;
 
         Ok(Cons(r,u))
     }
 }
-impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Arr<U,NI>> for LinearLayer<U,P,D,I,NI,NO>
+impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Result<Arr<U,NI>,TrainingError>> for LinearLayer<U,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
-    fn backward(&mut self, input: &Arr<U,NO>) -> Arr<U,NI> {
+    fn backward(&mut self, input: &Arr<U,NO>) -> Result<Arr<U,NI>,TrainingError> {
         self.device.backward_linear(&self.units, input)
     }
 }
@@ -842,7 +842,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D
             });
         }
 
-        let loss= self.backward(&loss);
+        let loss= self.backward(&loss)?;
 
         let (s,loss) = self.parent.loss(loss,lossf,s)?;
 
@@ -1107,19 +1107,19 @@ impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLayer<U,P,D
     fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.forward_all(input)?;
 
-        Ok(match input {
+        match input {
             DiffInput::Diff(d, mut output) => {
                 for &(i,d) in d.iter() {
                     for (o,j) in output.iter_mut().zip(0..NO) {
                         *o += self.units[(i,j)] * d;
                     }
                 }
-                output
+                Ok(output)
             },
             DiffInput::NotDiff(input) => {
                 self.device.forward_linear(&self.bias,&self.units,&input)
             }
-        })
+        }
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,P,D,I,NI,NO>
@@ -1143,24 +1143,24 @@ impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,P,
                             *o += self.units[(i, j)] * d;
                         }
                     }
-                    output
+                    Ok(output)
                 },
                 DiffInput::NotDiff(input) => {
                     self.device.forward_linear(&self.bias, &self.units, &input)
                 }
             }
-        });
+        })?;
 
         Ok(Cons(s,u))
     }
 }
-impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Arr<U,NI>> for DiffLinearLayer<U,P,D,I,NI,NO>
+impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Result<Arr<U,NI>,TrainingError>> for DiffLinearLayer<U,P,D,I,NI,NO>
     where U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           I: Debug + Send + Sync {
-    fn backward(&mut self, input: &Arr<U,NO>) -> Arr<U,NI> {
+    fn backward(&mut self, input: &Arr<U,NO>) -> Result<Arr<U,NI>,TrainingError> {
         self.device.backward_linear(&self.units, input)
     }
 }
@@ -1184,7 +1184,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U
                 }
             }
 
-            s.map(|o| {
+            s.map::<_,Result<(),EvaluateError>>(|o| {
                 match o {
                     DiffInput::Diff(_, o) => {
                         for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
@@ -1192,21 +1192,25 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U
                                 optimizer.update(*l * *o, w);
                             }
                         }
+
+                        Ok(())
                     },
                     DiffInput::NotDiff(input) => {
-                        let o = self.device.forward_linear(&self.bias, &self.units, input);
+                        let o = self.device.forward_linear(&self.bias, &self.units, input)?;
 
                         for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
                             for (w,l) in u.iter_mut().zip(loss.iter()) {
                                 optimizer.update(*l * *o, w);
                             }
                         }
+
+                        Ok(())
                     }
-                };
-            });
+                }
+            })?;
         }
 
-        let loss= self.backward(&loss);
+        let loss= self.backward(&loss)?;
 
         let (s,loss) = self.parent.loss(loss,lossf,s)?;
 

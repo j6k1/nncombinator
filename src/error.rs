@@ -7,7 +7,9 @@ pub enum TrainingError {
     SizeMismatchError(SizeMismatchError),
     InvalidInputError(String),
     EvaluateError(EvaluateError),
-    ToLargeInput(f64)
+    ToLargeInput(f64),
+    CublasError(cublas::error::Error),
+    CudnnError(rcudnn::Error)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -18,6 +20,8 @@ impl fmt::Display for TrainingError {
             TrainingError::InvalidInputError(s) => write!(f, "{}",s),
             TrainingError::EvaluateError(e) => write!(f, "{}",e),
             TrainingError::ToLargeInput(n) => write!(f, "The value is too large to convert. (Value = {})",n),
+            TrainingError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})",e),
+            TrainingError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
         }
     }
 }
@@ -29,7 +33,9 @@ impl error::Error for TrainingError {
             TrainingError::SizeMismatchError(_) => "memory size does not match.",
             TrainingError::InvalidInputError(_) => "Incorrect input.",
             TrainingError::EvaluateError(_) => "An error occurred when running the neural network.",
-            TrainingError::ToLargeInput(_) => "The value is too large to convert."
+            TrainingError::ToLargeInput(_) => "The value is too large to convert.",
+            TrainingError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
+            TrainingError::CudnnError(_) => "An error occurred during the execution of a process in cudnn."
         }
     }
 
@@ -41,6 +47,8 @@ impl error::Error for TrainingError {
             TrainingError::InvalidInputError(_) => None,
             TrainingError::EvaluateError(e) => Some(e),
             TrainingError::ToLargeInput(_) => None,
+            TrainingError::CublasError(e) => Some(e),
+            TrainingError::CudnnError(e) => Some(e)
         }
     }
 }
@@ -84,6 +92,16 @@ impl From<SizeMismatchError> for TrainingError {
 impl From<EvaluateError> for TrainingError {
     fn from(err: EvaluateError) -> TrainingError {
         TrainingError::EvaluateError(err)
+    }
+}
+impl From<cublas::error::Error> for TrainingError {
+    fn from(err: cublas::error::Error) -> TrainingError {
+        TrainingError::CublasError(err)
+    }
+}
+impl From<rcudnn::Error> for TrainingError {
+    fn from(err: rcudnn::Error) -> TrainingError {
+        TrainingError::CudnnError(err)
     }
 }
 impl From<io::Error> for ConfigReadError {
@@ -149,20 +167,40 @@ impl IndexOutBoundError {
 }
 #[derive(Debug)]
 pub enum EvaluateError {
-
+    CublasError(cublas::error::Error),
+    CudnnError(rcudnn::Error)
 }
 impl fmt::Display for EvaluateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "An error occurred when running the neural network.")
+        match self {
+            EvaluateError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})", e),
+            EvaluateError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
+        }
     }
 }
 impl error::Error for EvaluateError {
     fn description(&self) -> &str {
-        "An error occurred when running the neural network."
+        match self {
+            EvaluateError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
+            EvaluateError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+        }
     }
 
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        None
+        match self {
+            EvaluateError::CublasError(e) => Some(e),
+            EvaluateError::CudnnError(e) => Some(e)
+        }
+    }
+}
+impl From<cublas::error::Error> for EvaluateError {
+    fn from(err: cublas::error::Error) -> EvaluateError {
+        EvaluateError::CublasError(err)
+    }
+}
+impl From<rcudnn::Error> for EvaluateError {
+    fn from(err: rcudnn::Error) -> EvaluateError {
+        EvaluateError::CudnnError(err)
     }
 }
 #[derive(Debug)]

@@ -1,19 +1,19 @@
 use std::marker::PhantomData;
 use cublas::Context;
-use cublas_sys::{cublasOperation_t, cublasSgemm_v2};
+use cublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcudnn::{Cudnn, TensorDescriptor};
 use rcudnn::utils::DataType;
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
-use crate::error::TrainingError;
+use crate::error::{EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::UnitValue;
 
 pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NI>) -> Arr<U,NO>;
-    fn backward_linear<const NI:usize,const NO:usize>(&self, units:&Arr2<U,NI,NO>, input:&Arr<U,NO>) -> Arr<U,NI>;
+    fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&Arr2<U,NI,NO>, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
+    fn backward_linear<const NI:usize,const NO:usize>(&self, units:&Arr2<U,NI,NO>, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U>;
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
@@ -64,7 +64,9 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     }
 }
 impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:&Arr<U,NI>) -> Arr<U,NO> {
+    fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&Arr2<U,NI,NO>, input:&Arr<U,NI>)
+        -> Result<Arr<U, NO>, EvaluateError> {
+
         let mut output:Arr<U,NO> = Arr::new();
 
         for (o,w) in output.iter_mut().zip(bias.iter()) {
@@ -77,10 +79,12 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
             }
         }
 
-        output
+        Ok(output)
     }
 
-    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<U,NI,NO>, input: &Arr<U,NO>) -> Arr<U, NI> {
+    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<U,NI,NO>, input: &Arr<U,NO>)
+        -> Result<Arr<U, NI>, TrainingError> {
+
         let mut r = Arr::new();
 
         for (r,u) in r.iter_mut().zip(units.iter()) {
@@ -89,7 +93,7 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
             }
         }
 
-        r
+        Ok(r)
     }
 
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
@@ -126,7 +130,7 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
         where A: Activation<U,Arr<U,N>,Self> {
 
         o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            Ok(activation.derive(&self,o,l,u))
+            activation.derive(&self,o,l,u)
         }).collect::<Result<Vec<Arr<U,N>>,_>>()
     }
 }
@@ -210,8 +214,10 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
     }
 }
 impl Device<f32> for DeviceGpu<f32> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self,bias:&Arr<f32,NO>,units:&Arr2<f32,NI,NO>,input:&Arr<f32,NI>) -> Arr<f32,NO> {
-        let context = Context::new().unwrap();
+    fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f32,NO>, units: &Arr2<f32,NI,NO>, input: &Arr<f32,NI>)
+        -> Result<Arr<f32, NO>, EvaluateError> {
+
+        let context = Context::new()?;
 
         let mut output = bias.clone();
 
@@ -233,13 +239,15 @@ impl Device<f32> for DeviceGpu<f32> {
             );
         }
 
-        output
+        Ok(output)
     }
 
-    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<f32,NI,NO>, input: &Arr<f32,NO>) -> Arr<f32, NI> {
+    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<f32,NI,NO>, input: &Arr<f32,NO>)
+        -> Result<Arr<f32, NI>, TrainingError> {
+
         let mut output:Arr<f32,NI> = Arr::new();
 
-        let context = Context::new().unwrap();
+        let context = Context::new()?;
 
         unsafe {
             cublasSgemm_v2(*context.id_c(),
@@ -259,7 +267,7 @@ impl Device<f32> for DeviceGpu<f32> {
             );
         }
 
-        output
+        Ok(output)
     }
 
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>, lossf: &L) -> Arr<f32, N>
@@ -296,8 +304,103 @@ impl Device<f32> for DeviceGpu<f32> {
         where A: Activation<f32,Arr<f32,N>,Self>
     {
         o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            Ok(activation.derive(&self,o,l,u))
+            activation.derive(&self,o,l,u)
         }).collect::<Result<Vec<Arr<f32,N>>,_>>()
+    }
+}
+impl Device<f64> for DeviceGpu<f64> {
+    fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f64,NO>, units: &Arr2<f64,NI,NO>, input: &Arr<f64,NI>)
+                                                     -> Result<Arr<f64, NO>, EvaluateError> {
+
+        let context = Context::new()?;
+
+        let mut output = bias.clone();
+
+        unsafe {
+            cublasDgemm_v2(*context.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           1,
+                           NI as ::libc::c_int,
+                           &1.0f64 as *const f64,
+                           units.as_raw_slice().as_ptr(),
+                           NO as libc::c_int,
+                           input.as_raw_slice().as_ptr(),
+                           NO as libc::c_int,
+                           &1.0f64 as *const f64,
+                           output.as_raw_mut_slice().as_mut_ptr(),
+                           NO as ::libc::c_int
+            );
+        }
+
+        Ok(output)
+    }
+
+    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<f64,NI,NO>, input: &Arr<f64,NO>)
+                                                        -> Result<Arr<f64, NI>, TrainingError> {
+
+        let mut output:Arr<f64,NI> = Arr::new();
+
+        let context = Context::new()?;
+
+        unsafe {
+            cublasDgemm_v2(*context.id_c(),
+                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           1,
+                           NO as ::libc::c_int,
+                           &1.0f64 as *const f64,
+                           units.as_raw_slice().as_ptr(),
+                           NI as libc::c_int,
+                           input.as_raw_slice().as_ptr(),
+                           NI as libc::c_int,
+                           &0.0f64 as *const f64,
+                           output.as_raw_mut_slice().as_mut_ptr(),
+                           NI as ::libc::c_int
+            );
+        }
+
+        Ok(output)
+    }
+
+    fn loss_linear<L,const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> Arr<f64, N>
+        where L: LossFunction<f64> {
+
+        let mut loss = Arr::new();
+
+        for (loss,(a, e))in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
+            *loss = lossf.derive(*a, *e);
+        }
+
+        loss
+    }
+
+    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>) -> Arr<f64, N> {
+        let mut loss = Arr::new();
+
+        for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
+            *l = *a - *e;
+        }
+
+        loss
+    }
+
+    fn loss_linear_total<L: LossFunction<f64>, const N: usize>(&self, exptected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> f64 {
+        actual.iter().zip(exptected.iter()).fold(0.,| mut acc,(&a,&e) | {
+            acc += lossf.apply(a,e);
+            acc
+        })
+    }
+
+    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f64,N>>, loss:&Vec<Arr<f64,N>>, u:&Vec<Arr<f64,N>>, activation:&A)
+                                                       -> Result<Vec<Arr<f64, N>>, TrainingError>
+        where A: Activation<f64,Arr<f64,N>,Self>
+    {
+        o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
+            activation.derive(&self,o,l,u)
+        }).collect::<Result<Vec<Arr<f64,N>>,_>>()
     }
 }
 impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
@@ -307,18 +410,17 @@ impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
         }
     }
 }
-
 impl<U> DeviceGpu<U> where U: DataTypeInfo {
-    pub fn linear_activation_forward<F,const N:usize>(&self, input:&Arr<U,N>,callback:F) -> Arr<U,N>
+    pub fn linear_activation_forward<F,const N:usize>(&self, input:&Arr<U,N>,callback:F) -> Result<Arr<U,N>,EvaluateError>
         where U: UnitValue<U>,
               F: FnOnce(&Cudnn,
                         &TensorDescriptor,
                         *const libc::c_void,
                         &TensorDescriptor,
-                        Arr<U,N>) -> Arr<U,N> {
-        let cudnn = Cudnn::new().unwrap();
-        let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
-        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
+                        Arr<U,N>) -> Result<Arr<U,N>,EvaluateError> {
+        let cudnn = Cudnn::new()?;
+        let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
 
         let dest_data = Arr::<U,N>::new();
 
@@ -329,7 +431,7 @@ impl<U> DeviceGpu<U> where U: DataTypeInfo {
                  dest_data)
     }
 
-    pub fn linear_activation_backward<F,const N:usize>(&self, o:&Arr<U,N>,loss:&Arr<U,N>,u:&Arr<U,N>,callback:F) -> Arr<U,N>
+    pub fn linear_activation_backward<F,const N:usize>(&self, o:&Arr<U,N>,loss:&Arr<U,N>,u:&Arr<U,N>,callback:F) -> Result<Arr<U,N>,TrainingError>
         where U: UnitValue<U>,
               F: FnOnce(&Cudnn,
                   &TensorDescriptor,
@@ -340,12 +442,12 @@ impl<U> DeviceGpu<U> where U: DataTypeInfo {
                   *const libc::c_void,
                   &TensorDescriptor,
                   Arr<U,N>
-                  ) -> Arr<U,N> {
-        let cudnn = Cudnn::new().unwrap();
-        let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
-        let src_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
-        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1],U::cudnn_data_type()).unwrap();
-        let dest_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type()).unwrap();
+                  ) -> Result<Arr<U,N>,TrainingError> {
+        let cudnn = Cudnn::new()?;
+        let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let src_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1],U::cudnn_data_type())?;
+        let dest_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
 
         let dest_diff_data = Arr::<U,N>::new();
 

@@ -7,10 +7,10 @@ use rcudnn::{Cudnn, TensorDescriptor};
 use rcudnn::utils::DataType;
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
-use crate::cuda::{CudaPtr, Memory};
+use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, Memory};
 use crate::error::{EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
-use crate::mem::{AsRawMutSlice, AsRawSlice};
+use crate::mem::{AsRawSlice};
 use crate::UnitValue;
 
 pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
@@ -221,35 +221,46 @@ impl Device<f32> for DeviceGpu<f32> {
 
         let context = Context::new()?;
 
-        let mut output = bias.clone();
+        let mut input_ptr = CudaPtr::new(NI)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NO)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
+        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
 
         unsafe {
             cublasSgemm_v2(*context.id_c(),
-                          cublasOperation_t::CUBLAS_OP_N,
-                          cublasOperation_t::CUBLAS_OP_N,
-                          NO as ::libc::c_int,
-                          1,
-                          NI as ::libc::c_int,
-                          &1.0f32 as *const f32,
-                          units.as_raw_slice().as_ptr(),
-                          NO as libc::c_int,
-                          input.as_raw_slice().as_ptr(),
-                          NI as libc::c_int,
-                          &1.0f32 as *const f32,
-                          output.as_raw_mut_slice().as_mut_ptr(),
-                          NO as ::libc::c_int
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           1,
+                           NI as ::libc::c_int,
+                           &1.0f32 as *const f32,
+                           units_ptr.as_ptr(),
+                           NO as libc::c_int,
+                           input_ptr.as_ptr(),
+                           NI as libc::c_int,
+                           &1.0f32 as *const f32,
+                           output_ptr.as_mut_ptr(),
+                           NO as ::libc::c_int
             );
         }
 
-        Ok(output)
+        Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 
     fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<f32,NI,NO>, input: &Arr<f32,NO>)
         -> Result<Arr<f32, NI>, TrainingError> {
 
-        let mut output:Arr<f32,NI> = Arr::new();
-
         let context = Context::new()?;
+
+        let mut input_ptr = CudaPtr::new(NO)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NI)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
 
         unsafe {
             cublasSgemm_v2(*context.id_c(),
@@ -259,17 +270,17 @@ impl Device<f32> for DeviceGpu<f32> {
                            1,
                            NO as ::libc::c_int,
                            &1.0f32 as *const f32,
-                           units.as_raw_slice().as_ptr(),
+                           units_ptr.as_ptr(),
                            NI as libc::c_int,
-                           input.as_raw_slice().as_ptr(),
+                           input_ptr.as_ptr(),
                            NO as libc::c_int,
                            &0.0f32 as *const f32,
-                           output.as_raw_mut_slice().as_mut_ptr(),
+                           output_ptr.as_mut_ptr(),
                            NI as ::libc::c_int
             );
         }
 
-        Ok(output)
+        Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>, lossf: &L) -> Arr<f32, N>
@@ -316,7 +327,13 @@ impl Device<f64> for DeviceGpu<f64> {
 
         let context = Context::new()?;
 
-        let mut output = bias.clone();
+        let mut input_ptr = CudaPtr::new(NI)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NO)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
+        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
 
         unsafe {
             cublasDgemm_v2(*context.id_c(),
@@ -326,25 +343,30 @@ impl Device<f64> for DeviceGpu<f64> {
                            1,
                            NI as ::libc::c_int,
                            &1.0f64 as *const f64,
-                           units.as_raw_slice().as_ptr(),
+                           units_ptr.as_ptr(),
                            NO as libc::c_int,
-                           input.as_raw_slice().as_ptr(),
+                           input_ptr.as_ptr(),
                            NI as libc::c_int,
                            &1.0f64 as *const f64,
-                           output.as_raw_mut_slice().as_mut_ptr(),
+                           output_ptr.as_mut_ptr(),
                            NO as ::libc::c_int
             );
         }
 
-        Ok(output)
+        Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 
     fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<f64,NI,NO>, input: &Arr<f64,NO>)
                                                         -> Result<Arr<f64, NI>, TrainingError> {
 
-        let mut output:Arr<f64,NI> = Arr::new();
-
         let context = Context::new()?;
+
+        let mut input_ptr = CudaPtr::new(NO)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NI)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
 
         unsafe {
             cublasDgemm_v2(*context.id_c(),
@@ -354,17 +376,17 @@ impl Device<f64> for DeviceGpu<f64> {
                            1,
                            NO as ::libc::c_int,
                            &1.0f64 as *const f64,
-                           units.as_raw_slice().as_ptr(),
+                           units_ptr.as_ptr(),
                            NI as libc::c_int,
-                           input.as_raw_slice().as_ptr(),
+                           input_ptr.as_ptr(),
                            NO as libc::c_int,
                            &0.0f64 as *const f64,
-                           output.as_raw_mut_slice().as_mut_ptr(),
+                           output_ptr.as_mut_ptr(),
                            NI as ::libc::c_int
             );
         }
 
-        Ok(output)
+        Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> Arr<f64, N>
@@ -439,24 +461,24 @@ impl<U> DeviceGpu<U> where U: DataTypeInfo + Default + Debug {
                   CudaPtr<U>,
                   ) -> Result<Arr<U,N>,TrainingError> {
         let cudnn = Cudnn::new()?;
-        let output_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let mut output = CudaPtr::new(N)?;
-        output.memcpy(o.as_raw_slice().as_ptr(),N)?;
+        let o_desc = TensorDescriptor::new(&[1,1,N as i32], &[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let mut o_ptr = CudaPtr::new(N)?;
+        o_ptr.memcpy(o.as_raw_slice().as_ptr(), N)?;
 
-        let diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let mut diff = CudaPtr::new(N)?;
-        diff.memcpy(loss.as_raw_slice().as_ptr(),N)?;
+        let loss_desc = TensorDescriptor::new(&[1,1,N as i32], &[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let mut loss_ptr = CudaPtr::new(N)?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
 
-        let input_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1],U::cudnn_data_type())?;
-        let mut input = CudaPtr::new(N)?;
-        input.memcpy(u.as_raw_slice().as_ptr(),N)?;
+        let u_desc = TensorDescriptor::new(&[1,1,N as i32], &[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let mut u_ptr = CudaPtr::new(N)?;
+        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
         callback(&cudnn,
-                 &output_desc,
-                 output,
-                 &diff_desc,
-                 diff,
-                 &input_desc,
-                 input)
+                 &o_desc,
+                 o_ptr,
+                 &loss_desc,
+                 loss_ptr,
+                 &u_desc,
+                 u_ptr)
     }
 }

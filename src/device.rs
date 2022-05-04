@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use cublas::Context;
 use cublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2};
@@ -6,6 +7,7 @@ use rcudnn::{Cudnn, TensorDescriptor};
 use rcudnn::utils::DataType;
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
+use crate::cuda::{CudaPtr, Memory};
 use crate::error::{EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawMutSlice, AsRawSlice};
@@ -410,55 +412,59 @@ impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
         }
     }
 }
-impl<U> DeviceGpu<U> where U: DataTypeInfo {
+impl<U> DeviceGpu<U> where U: DataTypeInfo + Default + Debug {
     pub fn linear_activation_forward<F,const N:usize>(&self, input:&Arr<U,N>,callback:F) -> Result<Arr<U,N>,EvaluateError>
         where U: UnitValue<U>,
               F: FnOnce(&Cudnn,
                         &TensorDescriptor,
-                        *const libc::c_void,
-                        &TensorDescriptor,
-                        Arr<U,N>) -> Result<Arr<U,N>,EvaluateError> {
+                        CudaPtr<U>,
+                        &TensorDescriptor) -> Result<Arr<U,N>,EvaluateError> {
         let cudnn = Cudnn::new()?;
         let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let mut x = CudaPtr::new(N)?;
+        x.memcpy(input.as_raw_slice().as_ptr(),N)?;
 
-        let dest_data = Arr::<U,N>::new();
+        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
 
         callback(&cudnn,
                  &src_desc,
-                 input.as_raw_slice().as_ptr() as *const U as *const libc::c_void,
-                 &dest_desc,
-                 dest_data)
+                 x,
+                 &dest_desc)
     }
 
     pub fn linear_activation_backward<F,const N:usize>(&self, o:&Arr<U,N>,loss:&Arr<U,N>,u:&Arr<U,N>,callback:F) -> Result<Arr<U,N>,TrainingError>
         where U: UnitValue<U>,
               F: FnOnce(&Cudnn,
                   &TensorDescriptor,
-                  *const libc::c_void,
+                  CudaPtr<U>,
                   &TensorDescriptor,
-                  *const libc::c_void,
+                  CudaPtr<U>,
                   &TensorDescriptor,
-                  *const libc::c_void,
-                  &TensorDescriptor,
-                  Arr<U,N>
+                  CudaPtr<U>,
+                  &TensorDescriptor
                   ) -> Result<Arr<U,N>,TrainingError> {
         let cudnn = Cudnn::new()?;
         let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let src_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1],U::cudnn_data_type())?;
-        let dest_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let mut y = CudaPtr::new(N)?;
+        y.memcpy(o.as_raw_slice().as_ptr(),N)?;
 
-        let dest_diff_data = Arr::<U,N>::new();
+        let src_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let mut dy = CudaPtr::new(N)?;
+        dy.memcpy(loss.as_raw_slice().as_ptr(),N)?;
+
+        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1],U::cudnn_data_type())?;
+        let mut x = CudaPtr::new(N)?;
+        x.memcpy(u.as_raw_slice().as_ptr(),N)?;
+
+        let dest_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
 
         callback(&cudnn,
                  &src_desc,
-                 o.as_raw_slice().as_ptr() as *const U as *const libc::c_void,
+                 y,
                  &src_diff_desc,
-                 loss.as_raw_slice().as_ptr() as *const U as *const libc::c_void,
+                 dy,
                  &dest_desc,
-                 u.as_raw_slice().as_ptr() as *const U as *const libc::c_void,
-                 &dest_diff_desc,
-                 dest_diff_data)
+                 x,
+                 &dest_diff_desc)
     }
 }

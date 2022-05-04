@@ -168,13 +168,15 @@ impl IndexOutBoundError {
 #[derive(Debug)]
 pub enum EvaluateError {
     CublasError(cublas::error::Error),
-    CudnnError(rcudnn::Error)
+    CudnnError(rcudnn::Error),
+    SizeMismatchError(SizeMismatchError)
 }
 impl fmt::Display for EvaluateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             EvaluateError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})", e),
             EvaluateError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
+            EvaluateError::SizeMismatchError(e) => write!(f,"{}",e),
         }
     }
 }
@@ -183,13 +185,15 @@ impl error::Error for EvaluateError {
         match self {
             EvaluateError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
             EvaluateError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            EvaluateError::SizeMismatchError(_) => "memory size does not match.",
         }
     }
 
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             EvaluateError::CublasError(e) => Some(e),
-            EvaluateError::CudnnError(e) => Some(e)
+            EvaluateError::CudnnError(e) => Some(e),
+            EvaluateError::SizeMismatchError(e) => Some(e)
         }
     }
 }
@@ -201,6 +205,11 @@ impl From<cublas::error::Error> for EvaluateError {
 impl From<rcudnn::Error> for EvaluateError {
     fn from(err: rcudnn::Error) -> EvaluateError {
         EvaluateError::CudnnError(err)
+    }
+}
+impl From<SizeMismatchError> for EvaluateError {
+    fn from(err: SizeMismatchError) -> EvaluateError {
+        EvaluateError::SizeMismatchError(err)
     }
 }
 #[derive(Debug)]

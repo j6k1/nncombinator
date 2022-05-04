@@ -3,10 +3,10 @@ use std::marker::PhantomData;
 use rcudnn::{ActivationDescriptor, API, Cudnn, cudnnActivationMode_t, cudnnSetActivationDescriptorSwishBeta, cudnnSoftmaxAlgorithm_t, cudnnSoftmaxMode_t, cudnnStatus_t, TensorDescriptor};
 use crate::UnitValue;
 use crate::arr::*;
+use crate::cuda::{AsMutPtr, Memory};
 use crate::device::*;
 use crate::error::{EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
-use crate::mem::{AsRawMutSlice};
 
 pub trait Activation<U,T,D>: Send + Sync + 'static
     where U: UnitValue<U>, D: Device<U> {
@@ -174,36 +174,35 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,De
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
     fn apply_common(&self, input: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
-        device.linear_activation_forward(input,|cudnn,src_desc,src_ptr,dest_desc,mut dest_data| {
+        device.linear_activation_forward(input,|cudnn,src_desc,mut x,dest_desc| {
             self.apply_common_base(cudnn,
                                    src_desc,
-                                   src_ptr,
+                                   x.as_mut_ptr(),
                                    dest_desc,
-                                   dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void)?;
-            Ok(dest_data)
+                                   x.as_mut_ptr())?;
+            Ok(x.read_to_vec()?.try_into()?)
         })
     }
 
     fn derive_common(&self, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
         device.linear_activation_backward(o,loss,u,|cudnn,
                                                             src_desc,
-                                                            src_ptr,
+                                                            mut src_ptr,
                                                             src_diff_desc,
-                                                            src_diff_ptr,
+                                                            mut y,
                                                             dest_desc,
-                                                            dest_ptr,
-                                                            dest_diff_desc,
-                                                            mut dest_diff_data| {
+                                                            mut dest_ptr,
+                                                            dest_diff_desc| {
             self.derive_common_base(cudnn,
                                     src_desc,
-                                    src_ptr,
+                                    src_ptr.as_mut_ptr(),
                                     src_diff_desc,
-                                    src_diff_ptr,
+                                    y.as_mut_ptr(),
                                     dest_desc,
-                                    dest_ptr,
+                                    dest_ptr.as_mut_ptr(),
                                     dest_diff_desc,
-                                    dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void)?;
-            Ok(dest_diff_data)
+                                    y.as_mut_ptr())?;
+            Ok(y.read_to_vec()?.try_into()?)
         })
     }
 
@@ -317,36 +316,35 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,Devic
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
     fn apply_common(&self, input: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
-        device.linear_activation_forward(input,|cudnn,src_desc,src_ptr,dest_desc,mut dest_data| {
+        device.linear_activation_forward(input,|cudnn,src_desc,mut x,dest_desc| {
             self.apply_common_base(cudnn,
                                    src_desc,
-                                   src_ptr,
+                                   x.as_mut_ptr(),
                                    dest_desc,
-                                   dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void)?;
-            Ok(dest_data)
+                                   x.as_mut_ptr())?;
+            Ok(x.read_to_vec()?.try_into()?)
         })
     }
 
     fn derive_common(&self, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
         device.linear_activation_backward(o,loss,u,|cudnn,
                                                     src_desc,
-                                                    src_ptr,
+                                                    mut src_ptr,
                                                     src_diff_desc,
-                                                    src_diff_ptr,
+                                                    mut y,
                                                     dest_desc,
-                                                    dest_ptr,
-                                                    dest_diff_desc,
-                                                    mut dest_diff_data| {
+                                                    mut dest_ptr,
+                                                    dest_diff_desc| {
             self.derive_common_base(cudnn,
                                     src_desc,
-                                    src_ptr,
+                                    src_ptr.as_mut_ptr(),
                                     src_diff_desc,
-                                    src_diff_ptr,
+                                    y.as_mut_ptr(),
                                     dest_desc,
-                                    dest_ptr,
+                                    dest_ptr.as_mut_ptr(),
                                     dest_diff_desc,
-                                    dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void)?;
-            Ok(dest_diff_data)
+                                    y.as_mut_ptr())?;
+            Ok(y.read_to_vec()?.try_into()?)
         })
     }
 
@@ -490,36 +488,35 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Swish<U,Devi
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
     fn apply_common(&self, input: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
-        device.linear_activation_forward(input,|cudnn,src_desc,src_ptr,dest_desc,mut dest_data| {
+        device.linear_activation_forward(input,|cudnn,src_desc,mut x,dest_desc| {
             self.apply_common_base(cudnn,
                                    src_desc,
-                                   src_ptr,
+                                   x.as_mut_ptr(),
                                    dest_desc,
-                                   dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void)?;
-            Ok(dest_data)
+                                   x.as_mut_ptr())?;
+            Ok(x.read_to_vec()?.try_into()?)
         })
     }
 
     fn derive_common(&self, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
         device.linear_activation_backward(o,loss,u,|cudnn,
                                                     src_desc,
-                                                    src_ptr,
+                                                    mut src_ptr,
                                                     src_diff_desc,
-                                                    src_diff_ptr,
+                                                    mut y,
                                                     dest_desc,
-                                                    dest_ptr,
-                                                    dest_diff_desc,
-                                                    mut dest_diff_data| {
+                                                    mut dest_ptr,
+                                                    dest_diff_desc| {
             self.derive_common_base(cudnn,
                                     src_desc,
-                                    src_ptr,
+                                    src_ptr.as_mut_ptr(),
                                     src_diff_desc,
-                                    src_diff_ptr,
+                                    y.as_mut_ptr(),
                                     dest_desc,
-                                    dest_ptr,
+                                    dest_ptr.as_mut_ptr(),
                                     dest_diff_desc,
-                                    dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void)?;
-            Ok(dest_diff_data)
+                                    y.as_mut_ptr())?;
+            Ok(y.read_to_vec()?.try_into()?)
         })
     }
 
@@ -633,36 +630,35 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Tanh<U,Devic
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
     fn apply_common(&self, input: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
-        device.linear_activation_forward(input,|cudnn,src_desc,src_ptr,dest_desc,mut dest_data| {
+        device.linear_activation_forward(input,|cudnn,src_desc,mut x,dest_desc| {
             self.apply_common_base(cudnn,
                                    src_desc,
-                                   src_ptr,
+                                   x.as_mut_ptr(),
                                    dest_desc,
-                                   dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void)?;
-            Ok(dest_data)
+                                   x.as_mut_ptr())?;
+            Ok(x.read_to_vec()?.try_into()?)
         })
     }
 
     fn derive_common(&self, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
         device.linear_activation_backward(o,loss,u,|cudnn,
                                                     src_desc,
-                                                    src_ptr,
+                                                    mut src_ptr,
                                                     src_diff_desc,
-                                                    src_diff_ptr,
+                                                    mut y,
                                                     dest_desc,
-                                                    dest_ptr,
-                                                    dest_diff_desc,
-                                                    mut dest_diff_data| {
+                                                    mut dest_ptr,
+                                                    dest_diff_desc| {
             self.derive_common_base(cudnn,
                                     src_desc,
-                                    src_ptr,
+                                    src_ptr.as_mut_ptr(),
                                     src_diff_desc,
-                                    src_diff_ptr,
+                                    y.as_mut_ptr(),
                                     dest_desc,
-                                    dest_ptr,
+                                    dest_ptr.as_mut_ptr(),
                                     dest_diff_desc,
-                                    dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void)?;
-            Ok(dest_diff_data)
+                                    y.as_mut_ptr())?;
+            Ok(y.read_to_vec()?.try_into()?)
         })
     }
 
@@ -778,36 +774,35 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,De
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
     fn apply_common(&self, input: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
-        device.linear_activation_forward(input,|cudnn,src_desc,src_ptr,dest_desc,mut dest_data| {
+        device.linear_activation_forward(input,|cudnn,src_desc,mut x,dest_desc| {
             self.apply_common_base(cudnn,
                                    src_desc,
-                                   src_ptr,
+                                   x.as_mut_ptr(),
                                    dest_desc,
-                                   dest_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void)?;
-            Ok(dest_data)
+                                   x.as_mut_ptr())?;
+            Ok(x.read_to_vec()?.try_into()?)
         })
     }
 
     fn derive_common(&self, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
         device.linear_activation_backward(o,loss,u,|cudnn,
                                                     src_desc,
-                                                    src_ptr,
+                                                    mut src_ptr,
                                                     src_diff_desc,
-                                                    src_diff_ptr,
+                                                    mut y,
                                                     dest_desc,
-                                                    dest_ptr,
-                                                    dest_diff_desc,
-                                                    mut dest_diff_data| {
+                                                    mut dest_ptr,
+                                                    dest_diff_desc| {
             self.derive_common_base(cudnn,
                                     src_desc,
-                                    src_ptr,
+                                    src_ptr.as_mut_ptr(),
                                     src_diff_desc,
-                                    src_diff_ptr,
+                                    y.as_mut_ptr(),
                                     dest_desc,
-                                    dest_ptr,
+                                    dest_ptr.as_mut_ptr(),
                                     dest_diff_desc,
-                                    dest_diff_data.as_raw_mut_slice().as_mut_ptr() as *mut U as *mut libc::c_void)?;
-            Ok(dest_diff_data)
+                                    y.as_mut_ptr())?;
+            Ok(y.read_to_vec()?.try_into()?)
         })
     }
 

@@ -1,8 +1,11 @@
 use std::fmt::Debug;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t};
 
-mod ffi;
+pub mod ffi;
 
+pub trait AsPtr {
+    fn as_ptr(&self) -> *const libc::c_void;
+}
 pub trait AsMutPtr {
     fn as_mut_ptr(&mut self) -> *mut libc::c_void;
 }
@@ -67,9 +70,14 @@ impl<T> Drop for CudaPtr<T> {
         ffi::free(self.ptr).unwrap();
     }
 }
+impl<T> AsPtr for CudaPtr<T> {
+    fn as_ptr(&self) -> *const libc::c_void {
+        self.ptr as *const T as *const libc::c_void
+    }
+}
 impl<T> AsMutPtr for CudaPtr<T> {
     fn as_mut_ptr(&mut self) -> *mut libc::c_void {
-        &mut self.ptr as *mut *mut T as *mut libc::c_void
+        self.ptr as *mut T as *mut libc::c_void
     }
 }
 unsafe impl<T> Send for CudaPtr<T> where T: Send {}
@@ -156,8 +164,13 @@ impl<T> Drop for CudaHostPtr<T> {
         ffi::free_host(self.ptr).unwrap();
     }
 }
+impl<T> AsPtr for CudaHostPtr<T> {
+    fn as_ptr(&self) -> *const libc::c_void {
+        self.ptr as *const T as *const libc::c_void
+    }
+}
 impl<T> AsMutPtr for CudaHostPtr<T> {
     fn as_mut_ptr(&mut self) -> *mut libc::c_void {
-        &mut self.ptr as *mut *mut T as *mut libc::c_void
+        self.ptr as *mut T as *mut libc::c_void
     }
 }

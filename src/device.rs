@@ -417,19 +417,15 @@ impl<U> DeviceGpu<U> where U: DataTypeInfo + Default + Debug {
         where U: UnitValue<U>,
               F: FnOnce(&Cudnn,
                         &TensorDescriptor,
-                        CudaPtr<U>,
-                        &TensorDescriptor) -> Result<Arr<U,N>,EvaluateError> {
+                        CudaPtr<U>) -> Result<Arr<U,N>,EvaluateError> {
         let cudnn = Cudnn::new()?;
-        let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let mut x = CudaPtr::new(N)?;
-        x.memcpy(input.as_raw_slice().as_ptr(),N)?;
-
-        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let mut input_output = CudaPtr::new(N)?;
+        input_output.memcpy(input.as_raw_slice().as_ptr(),N)?;
 
         callback(&cudnn,
-                 &src_desc,
-                 x,
-                 &dest_desc)
+                 &desc,
+                 input_output)
     }
 
     pub fn linear_activation_backward<F,const N:usize>(&self, o:&Arr<U,N>,loss:&Arr<U,N>,u:&Arr<U,N>,callback:F) -> Result<Arr<U,N>,TrainingError>
@@ -441,30 +437,26 @@ impl<U> DeviceGpu<U> where U: DataTypeInfo + Default + Debug {
                   CudaPtr<U>,
                   &TensorDescriptor,
                   CudaPtr<U>,
-                  &TensorDescriptor
                   ) -> Result<Arr<U,N>,TrainingError> {
         let cudnn = Cudnn::new()?;
-        let src_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let mut y = CudaPtr::new(N)?;
-        y.memcpy(o.as_raw_slice().as_ptr(),N)?;
+        let output_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let mut output = CudaPtr::new(N)?;
+        output.memcpy(o.as_raw_slice().as_ptr(),N)?;
 
-        let src_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let mut dy = CudaPtr::new(N)?;
-        dy.memcpy(loss.as_raw_slice().as_ptr(),N)?;
+        let diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let mut diff = CudaPtr::new(N)?;
+        diff.memcpy(loss.as_raw_slice().as_ptr(),N)?;
 
-        let dest_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1],U::cudnn_data_type())?;
-        let mut x = CudaPtr::new(N)?;
-        x.memcpy(u.as_raw_slice().as_ptr(),N)?;
-
-        let dest_diff_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
+        let input_desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1],U::cudnn_data_type())?;
+        let mut input = CudaPtr::new(N)?;
+        input.memcpy(u.as_raw_slice().as_ptr(),N)?;
 
         callback(&cudnn,
-                 &src_desc,
-                 y,
-                 &src_diff_desc,
-                 dy,
-                 &dest_desc,
-                 x,
-                 &dest_diff_desc)
+                 &output_desc,
+                 output,
+                 &diff_desc,
+                 diff,
+                 &input_desc,
+                 input)
     }
 }

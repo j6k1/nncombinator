@@ -1,5 +1,4 @@
 use std::{mem, result};
-use std::os::raw;
 use std::ptr::null_mut;
 use rcudnn_sys::{cudaError, cudaMemcpyKind, cudaStream_t};
 
@@ -9,7 +8,7 @@ pub fn malloc<T>(size: usize) -> Result<*mut T> {
     let size = mem::size_of::<T>() * size;
     let mut ptr: *mut T = null_mut();
 
-    match unsafe { rcudnn_sys::cudaMalloc(&mut ptr as *mut *mut T as *mut *mut raw::c_void, size) } {
+    match unsafe { rcudnn_sys::cudaMalloc(&mut ptr as *mut *mut T as *mut *mut libc::c_void, size) } {
         cudaError::cudaSuccess => {
             assert_ne!(ptr,
                        null_mut(),
@@ -32,7 +31,7 @@ pub fn malloc_host<T>(size: usize, flags:libc::c_uint) -> Result<*mut T> {
     let size = mem::size_of::<T>() * size;
     let mut ptr: *mut T = null_mut();
 
-    match unsafe { rcudnn_sys::cudaHostAlloc(&mut ptr as *mut *mut T as *mut *mut raw::c_void, size, flags) } {
+    match unsafe { rcudnn_sys::cudaHostAlloc(&mut ptr as *mut *mut T as *mut *mut libc::c_void, size, flags) } {
         cudaError::cudaSuccess => {
             assert_ne!(ptr,
                        null_mut(),
@@ -55,7 +54,7 @@ pub fn memcpy<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind) 
     let size = mem::size_of::<T>() * size;
 
     match unsafe {
-        rcudnn_sys::cudaMemcpy(dst as *mut raw::c_void, src as *mut raw::c_void, size, kind)
+        rcudnn_sys::cudaMemcpy(dst as *mut libc::c_void, src as *mut libc::c_void, size, kind)
     } {
         cudaError::cudaSuccess => {
             Ok(())
@@ -72,7 +71,7 @@ pub fn memcpy<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind) 
 pub fn memcpy_async<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind, stream: cudaStream_t) -> Result<()> {
     let size = mem::size_of::<T>() * size;
     match unsafe {
-        rcudnn_sys::cudaMemcpyAsync(dst as *mut raw::c_void, src as *mut raw::c_void, size, kind, stream)
+        rcudnn_sys::cudaMemcpyAsync(dst as *mut libc::c_void, src as *mut libc::c_void, size, kind, stream)
     } {
         cudaError::cudaSuccess => {
             Ok(())
@@ -87,7 +86,7 @@ pub fn memcpy_async<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpy
 }
 
 pub fn free<T>(devptr: *mut T) -> Result<()> {
-    match unsafe { rcudnn_sys::cudaFree(devptr as *mut raw::c_void) } {
+    match unsafe { rcudnn_sys::cudaFree(devptr as *mut libc::c_void) } {
         cudaError::cudaSuccess => Ok(()),
         cudaError::cudaErrorInvalidValue => {
             Err(rcudnn::Error::InvalidValue("Invalid pointer passed as argument."))
@@ -98,7 +97,7 @@ pub fn free<T>(devptr: *mut T) -> Result<()> {
     }
 }
 pub fn free_host<T>(devptr: *mut T) -> Result<()> {
-    match unsafe { rcudnn_sys::cudaFreeHost(devptr as *mut raw::c_void) } {
+    match unsafe { rcudnn_sys::cudaFreeHost(devptr as *mut libc::c_void) } {
         cudaError::cudaSuccess => Ok(()),
         cudaError::cudaErrorInvalidValue => {
             Err(rcudnn::Error::InvalidValue("Invalid pointer passed as argument."))

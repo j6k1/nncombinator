@@ -2,6 +2,7 @@ extern crate libc;
 extern crate cublas_sys;
 extern crate cublas;
 extern crate rcudnn;
+extern crate rcudnn_sys;
 
 use crate::ope::UnitValue;
 
@@ -12,6 +13,7 @@ pub mod arr;
 pub mod optimizer;
 pub mod lossfunction;
 pub mod activation;
+pub mod cuda;
 pub mod device;
 pub mod layer;
 pub mod persistence;

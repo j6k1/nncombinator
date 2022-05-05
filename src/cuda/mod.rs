@@ -200,3 +200,4 @@ impl<T> AsVoidMutPtr for CudaHostPtr<T> {
         self.ptr as *mut T as *mut libc::c_void
     }
 }
+unsafe impl<T> Send for CudaHostPtr<T> where T: Send {}

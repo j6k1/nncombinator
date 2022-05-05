@@ -33,19 +33,19 @@ pub trait ActivationCommonBase<U,D>: Send + Sync + 'static where U: UnitValue<U>
                           dest_diff_ptr:*mut libc::c_void) -> Result<(), TrainingError>;
 }
 pub trait ActivationCommon<U,T,D>: Send + Sync + 'static where U: UnitValue<U>, D: Device<U> {
-    fn apply_common(&self, input:&T, device:&D) -> Result<T, EvaluateError>;
-    fn derive_common(&self, o:&T, loss:&T, u:&T, device:&D) -> Result<T, TrainingError>;
+    fn apply_common(&self, device:&D, input:&T) -> Result<T, EvaluateError>;
+    fn derive_common(&self, device:&D, o:&T, loss:&T, u:&T) -> Result<T, TrainingError>;
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;
 }
 impl<U,A: ActivationCommon<U,Arr<U,N>,DeviceGpu<U>>,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for A
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
     fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply_common(input,device)
+        self.apply_common(device,input)
     }
 
     fn derive(&self, device: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive_common(o,loss,u, device)
+        self.derive_common(device,o,loss,u)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -70,11 +70,11 @@ impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
     }
 }
 impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
-    fn apply_common(&self, input: &Arr<U,N>, _: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply_common(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         Ok((*input).clone())
     }
 
-    fn derive_common(&self, _: &Arr<U,N>, loss: &Arr<U,N>, _: &Arr<U,N>, _: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive_common(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, _: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         Ok((*loss).clone())
     }
 
@@ -173,7 +173,7 @@ impl<U> ActivationCommonBase<U,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>> where U
 impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
-    fn apply_common(&self, input: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply_common(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         device.linear_activation_forward(input,|cudnn,desc,mut input_output| {
             self.apply_common_base(cudnn,
                                    desc,
@@ -184,7 +184,7 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,De
         })
     }
 
-    fn derive_common(&self, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive_common(&self, device: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         device.linear_activation_backward(o,loss,u,|cudnn,
                                                     o_desc,
                                                     mut o_ptr,
@@ -314,7 +314,7 @@ impl<U> ActivationCommonBase<U,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
 impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
-    fn apply_common(&self, input: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply_common(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         device.linear_activation_forward(input,|cudnn,desc,mut input_output| {
             self.apply_common_base(cudnn,
                                    desc,
@@ -325,7 +325,7 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,Devic
         })
     }
 
-    fn derive_common(&self, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive_common(&self, device: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         device.linear_activation_backward(o,loss,u,|cudnn,
                                                     o_desc,
                                                     mut o_ptr,
@@ -485,7 +485,7 @@ impl<U> ActivationCommonBase<U,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
 impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
-    fn apply_common(&self, input: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply_common(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         device.linear_activation_forward(input,|cudnn,desc,mut input_output| {
             self.apply_common_base(cudnn,
                                    desc,
@@ -496,7 +496,7 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Swish<U,Devi
         })
     }
 
-    fn derive_common(&self, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive_common(&self, device: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         device.linear_activation_backward(o,loss,u,|cudnn,
                                                     o_desc,
                                                     mut o_ptr,
@@ -626,7 +626,7 @@ impl<U> ActivationCommonBase<U,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
 impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
-    fn apply_common(&self, input: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply_common(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         device.linear_activation_forward(input,|cudnn,desc,mut input_output| {
             self.apply_common_base(cudnn,
                                    desc,
@@ -637,7 +637,7 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Tanh<U,Devic
         })
     }
 
-    fn derive_common(&self, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive_common(&self, device: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         device.linear_activation_backward(o,loss,u,|cudnn,
                                                     o_desc,
                                                     mut o_ptr,
@@ -769,7 +769,7 @@ impl<U> ActivationCommonBase<U,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
 impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U> {
 
-    fn apply_common(&self, input: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply_common(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         device.linear_activation_forward(input,|cudnn,desc,mut input_output| {
             self.apply_common_base(cudnn,
                                    desc,
@@ -780,7 +780,7 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,De
         })
     }
 
-    fn derive_common(&self, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>, device: &DeviceGpu<U>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive_common(&self, device: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         device.linear_activation_backward(o,loss,u,|cudnn,
                                                     o_desc,
                                                     mut o_ptr,

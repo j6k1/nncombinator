@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use cublas::Context;
-use cublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2};
+use rcublas::Context;
+use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcudnn::{Cudnn, TensorDescriptor};
 use rcudnn::utils::DataType;

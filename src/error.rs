@@ -8,7 +8,7 @@ pub enum TrainingError {
     InvalidInputError(String),
     EvaluateError(EvaluateError),
     ToLargeInput(f64),
-    CublasError(cublas::error::Error),
+    CublasError(rcublas::error::Error),
     CudnnError(rcudnn::Error)
 }
 impl fmt::Display for TrainingError {
@@ -20,7 +20,7 @@ impl fmt::Display for TrainingError {
             TrainingError::InvalidInputError(s) => write!(f, "{}",s),
             TrainingError::EvaluateError(e) => write!(f, "{}",e),
             TrainingError::ToLargeInput(n) => write!(f, "The value is too large to convert. (Value = {})",n),
-            TrainingError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})",e),
+            TrainingError::CublasError(e) => write!(f, "An error occurred during the execution of a process in rcublas. ({})",e),
             TrainingError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
         }
     }
@@ -34,7 +34,7 @@ impl error::Error for TrainingError {
             TrainingError::InvalidInputError(_) => "Incorrect input.",
             TrainingError::EvaluateError(_) => "An error occurred when running the neural network.",
             TrainingError::ToLargeInput(_) => "The value is too large to convert.",
-            TrainingError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
+            TrainingError::CublasError(_) => "An error occurred during the execution of a process in rcublas.",
             TrainingError::CudnnError(_) => "An error occurred during the execution of a process in cudnn."
         }
     }
@@ -94,8 +94,8 @@ impl From<EvaluateError> for TrainingError {
         TrainingError::EvaluateError(err)
     }
 }
-impl From<cublas::error::Error> for TrainingError {
-    fn from(err: cublas::error::Error) -> TrainingError {
+impl From<rcublas::error::Error> for TrainingError {
+    fn from(err: rcublas::error::Error) -> TrainingError {
         TrainingError::CublasError(err)
     }
 }
@@ -167,14 +167,14 @@ impl IndexOutBoundError {
 }
 #[derive(Debug)]
 pub enum EvaluateError {
-    CublasError(cublas::error::Error),
+    CublasError(rcublas::error::Error),
     CudnnError(rcudnn::Error),
     SizeMismatchError(SizeMismatchError)
 }
 impl fmt::Display for EvaluateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            EvaluateError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})", e),
+            EvaluateError::CublasError(e) => write!(f, "An error occurred during the execution of a process in rcublas. ({})", e),
             EvaluateError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
             EvaluateError::SizeMismatchError(e) => write!(f,"{}",e),
         }
@@ -183,7 +183,7 @@ impl fmt::Display for EvaluateError {
 impl error::Error for EvaluateError {
     fn description(&self) -> &str {
         match self {
-            EvaluateError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
+            EvaluateError::CublasError(_) => "An error occurred during the execution of a process in rcublas.",
             EvaluateError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
             EvaluateError::SizeMismatchError(_) => "memory size does not match.",
         }
@@ -197,8 +197,8 @@ impl error::Error for EvaluateError {
         }
     }
 }
-impl From<cublas::error::Error> for EvaluateError {
-    fn from(err: cublas::error::Error) -> EvaluateError {
+impl From<rcublas::error::Error> for EvaluateError {
+    fn from(err: rcublas::error::Error) -> EvaluateError {
         EvaluateError::CublasError(err)
     }
 }

@@ -1,4 +1,5 @@
 extern crate libc;
+extern crate cuda_runtime_sys;
 extern crate cublas_sys;
 extern crate cublas;
 extern crate rcudnn;

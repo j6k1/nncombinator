@@ -2,10 +2,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem::size_of;
 use std::ops::Deref;
-use std::ptr::null_mut;
 use std::rc::Rc;
 use libc::c_void;
-use rcudnn_sys::cudaError;
 use crate::cuda::ffi;
 use crate::error::CudaError;
 use crate::list::ListNode;
@@ -39,56 +37,41 @@ impl MemoryPool {
     pub fn with_size(size:usize,alloc_type:Alloctype) -> Result<MemoryPool,CudaError> {
         match alloc_type {
             Alloctype::Device => {
-                Self::with_callback(alloc_type,size,|size,ptr| {
-                    unsafe { rcudnn_sys::cudaMalloc(ptr,size) }
+                Self::with_callback(alloc_type,size,|size| {
+                    ffi::malloc(size)
                 })
             },
             Alloctype::Host(flags) => {
-                Self::with_callback(alloc_type,size,|size,ptr| {
-                    unsafe { rcudnn_sys::cudaHostAlloc(ptr,size,flags) }
+                Self::with_callback(alloc_type,size,|size| {
+                    ffi::malloc_host(size,flags)
                 })
             }
         }
     }
 
-    fn with_callback<F>(alloc_type:Alloctype,size:usize,f:F) -> Result<MemoryPool,CudaError> where F: FnOnce(usize,*mut *mut c_void) -> cudaError {
-        let mut ptr: *mut c_void = null_mut();
+    fn with_callback<F>(alloc_type:Alloctype,size:usize,f:F) -> Result<MemoryPool,CudaError>
+        where F: FnOnce(usize) -> Result<*mut c_void,rcudnn::Error> {
 
-        match f(size,&mut ptr as *mut *mut c_void) {
-            cudaError::cudaSuccess => {
-                assert_ne!(ptr,
-                           null_mut(),
-                           "cudaMalloc is succeeded, but returned null pointer!");
+        let ptr = f(size)?;
 
-                let mut n = ListNode::new(Usage {
-                    prev_key:None,
-                    size: 0,
-                    allocated: true
-                });
+        let mut n = ListNode::new(Usage {
+            prev_key:None,
+            size: 0,
+            allocated: true
+        });
 
-                n.append(ListNode::new(Usage {
-                    prev_key: None,
-                    size: size,
-                    allocated: false
-                }));
+        n.append(ListNode::new(Usage {
+            prev_key: None,
+            size: size,
+            allocated: false
+        }));
 
-                Ok(MemoryPool {
-                    alloc_type:alloc_type,
-                    list: n,
-                    map: HashMap::new(),
-                    pool: ptr
-                })
-            },
-            cudaError::cudaErrorInvalidValue => {
-                Err(CudaError::CudnnError(rcudnn::Error::InvalidValue("The range of one or more of the entered parameters is out of tolerance.")))
-            },
-            cudaError::cudaErrorMemoryAllocation => {
-                Err(CudaError::CudnnError(rcudnn::Error::AllocFailed("Device memory allocation failed.")))
-            },
-            status => {
-                Err(CudaError::CudnnError(rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)))
-            }
-        }
+        Ok(MemoryPool {
+            alloc_type:alloc_type,
+            list: n,
+            map: HashMap::new(),
+            pool: ptr
+        })
     }
 
     pub fn alloc_device<T>(&mut self,size:usize) -> Result<*mut T,CudaError> {

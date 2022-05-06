@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t};
 
 pub mod ffi;
+pub mod mem;
 
 pub trait AsVoidPtr {
     fn as_void_ptr(&self) -> *const libc::c_void;

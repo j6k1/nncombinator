@@ -18,6 +18,10 @@ impl<T> ListNode<T> {
         self.next.clone()
     }
 
+    pub fn append(&mut self,next:ListNode<T>) {
+        self.next = Some(Rc::new(RefCell::new(next)));
+    }
+
     pub fn split(&mut self,value:T) -> Option<Rc<RefCell<ListNode<T>>>> {
         let next = self.next.take();
         let mut n = ListNode::new(value);

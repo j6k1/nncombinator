@@ -250,12 +250,16 @@ impl error::Error for PersistenceError {
 #[derive(Debug)]
 pub enum CudaError {
     AllocFailed(String),
+    CudnnError(rcudnn::Error),
+    InvalidState(String),
     LogicError(String)
 }
 impl fmt::Display for CudaError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             CudaError::AllocFailed(s) => write!(f, "{}", s),
+            CudaError::CudnnError(s) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", s),
+            CudaError::InvalidState(s) => write!(f, "{}", s),
             CudaError::LogicError(s) => write!(f,"{}",s)
         }
     }
@@ -264,6 +268,8 @@ impl error::Error for CudaError {
     fn description(&self) -> &str {
         match self {
             CudaError::AllocFailed(_) => "Memory allocation failed.",
+            CudaError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            CudaError::InvalidState(_) => "Invalid state.s",
             CudaError::LogicError(_) => "Logic error."
         }
     }
@@ -271,7 +277,14 @@ impl error::Error for CudaError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             CudaError::AllocFailed(_) => None,
+            CudaError::CudnnError(e) => Some(e),
+            CudaError::InvalidState(_) => None,
             CudaError::LogicError(_) => None,
         }
+    }
+}
+impl From<rcudnn::Error> for CudaError {
+    fn from(err: rcudnn::Error) -> CudaError {
+        CudaError::CudnnError(err)
     }
 }

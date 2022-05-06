@@ -1,7 +1,5 @@
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t};
-use crate::cuda::mem::MemoryPool;
 use crate::error::CudaError;
 
 pub mod ffi;
@@ -32,26 +30,15 @@ pub trait MemoryAsync<T: Default + Debug>: AsVoidMutPtr {
 pub struct CudaPtr<T> {
     ptr:*mut T,
     size:usize,
-    memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<T> CudaPtr<T> {
-    pub fn new(size: usize,memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CudaPtr<T>, CudaError> {
-        match memory_pool.lock() {
-            Ok(mut mp) => {
-                let ptr: *mut T = mp.alloc_device(size)?;
+    pub fn new(size: usize) -> Result<CudaPtr<T>, CudaError> {
+        let ptr: *mut T = ffi::malloc(size)?;
 
-                Ok(CudaPtr {
-                    ptr: ptr,
-                    size: size,
-                    memory_pool: memory_pool.clone()
-                })
-            },
-            Err(e) => {
-                Err(CudaError::InvalidState(format!(
-                    "Exclusive lock on memory pool object failed. ({})",e
-                )))
-            }
-        }
+        Ok(CudaPtr {
+            ptr: ptr,
+            size: size,
+        })
     }
 }
 impl<T: Default + Debug> Memory<T> for CudaPtr<T> {
@@ -87,14 +74,7 @@ impl<T: Default + Debug> Memory<T> for CudaPtr<T> {
 }
 impl<T> Drop for CudaPtr<T> {
     fn drop(&mut self) {
-        match self.memory_pool.lock() {
-            Ok(mut memory_pool) => {
-                memory_pool.deallocate(self.ptr as *const T).unwrap();
-            },
-            Err(e) => {
-                panic!("{}",e);
-            }
-        }
+        ffi::free(self.ptr).unwrap();
     }
 }
 impl<T> AsVoidPtr for CudaPtr<T> {
@@ -121,26 +101,15 @@ unsafe impl<T> Send for CudaPtr<T> where T: Send {}
 pub struct CudaHostPtr<T> {
     ptr:*mut T,
     size:usize,
-    memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<T> CudaHostPtr<T> {
-    pub fn new(size: usize,memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CudaPtr<T>, CudaError> {
-        match memory_pool.lock() {
-            Ok(mut mp) => {
-                let ptr: *mut T = mp.alloc_host(size)?;
+    pub fn new(size: usize, flags:libc::c_uint) -> Result<CudaHostPtr<T>, CudaError> {
+        let ptr: *mut T = ffi::malloc_host(size,flags)?;
 
-                Ok(CudaPtr {
-                    ptr: ptr,
-                    size: size,
-                    memory_pool: memory_pool.clone()
-                })
-            },
-            Err(e) => {
-                Err(CudaError::InvalidState(format!(
-                    "Exclusive lock on memory pool object failed. ({})",e
-                )))
-            }
-        }
+        Ok(CudaHostPtr {
+            ptr: ptr,
+            size: size,
+        })
     }
 }
 impl<T: Default + Debug> Memory<T> for CudaHostPtr<T> {
@@ -209,14 +178,7 @@ impl<T: Default + Debug> MemoryAsync<T> for CudaHostPtr<T> {
 }
 impl<T> Drop for CudaHostPtr<T> {
     fn drop(&mut self) {
-        match self.memory_pool.lock() {
-            Ok(mut memory_pool) => {
-                memory_pool.deallocate(self.ptr as *const T).unwrap();
-            },
-            Err(e) => {
-                panic!("{}",e);
-            }
-        }
+        ffi::free_host(self.ptr).unwrap()
     }
 }
 impl<T> AsPtr<T> for CudaHostPtr<T> {

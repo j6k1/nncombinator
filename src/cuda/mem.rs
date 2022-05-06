@@ -9,11 +9,13 @@ use rcudnn_sys::cudaError;
 use crate::error::CudaError;
 use crate::list::ListNode;
 
+#[derive(Debug)]
 pub struct Usage {
     prev_key: Option<*mut c_void>,
     size: usize,
     allocated: bool
 }
+#[derive(Debug)]
 pub enum Alloctype {
     Device,
     Host(libc::c_uint)
@@ -125,28 +127,30 @@ impl MemoryPool {
         let mut n = n.next();
 
         while let Some(c) = n {
-            let mut current = c.deref().borrow_mut();
+            {
+                let mut current = c.deref().borrow_mut();
 
-            if current.value.allocated == false && current.value.size <= size {
-                let remaining = current.value.size - size;
+                if current.value.allocated == false && current.value.size <= size {
+                    let remaining = current.value.size - size;
 
-                current.split(Usage {
-                    prev_key: Some(p),
-                    size:remaining,
-                    allocated:false
-                });
+                    current.split(Usage {
+                        prev_key: Some(p),
+                        size: remaining,
+                        allocated: false
+                    });
 
-                current.value.allocated = true;
-                current.value.size = size;
+                    current.value.allocated = true;
+                    current.value.size = size;
 
-                let p = unsafe { p.add(offset) };
+                    let p = unsafe { p.add(offset) };
 
-                self.map.insert(p,Rc::clone(&c));
+                    self.map.insert(p, Rc::clone(&c));
 
-                return Ok(p as *mut T);
+                    return Ok(p as *mut T);
+                }
+
+                offset += current.value.size;
             }
-
-            offset += current.value.size;
 
             n = c.deref().borrow().next();
         }

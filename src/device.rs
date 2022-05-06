@@ -209,7 +209,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
 }
 pub struct DeviceGpu<U> {
     u:PhantomData<U>,
-    memory_pool:Arc<Mutex<MemoryPool>>
+    pub memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
     pub fn new(memory_pool:MemoryPool) -> DeviceGpu<U> {

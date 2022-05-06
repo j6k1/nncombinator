@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
 
+#[derive(Debug)]
 pub struct ListNode<T> {
     next:Option<Rc<RefCell<ListNode<T>>>>,
     pub value:T

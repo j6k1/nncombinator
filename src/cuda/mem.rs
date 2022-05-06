@@ -154,7 +154,7 @@ impl MemoryPool {
         Err(CudaError::AllocFailed(String::from("Memory allocation failed.")))
     }
 
-    pub fn deallocate<T>(&mut self, ptr:*mut T) -> Result<(),CudaError> {
+    pub fn deallocate<T>(&mut self, ptr:*const T) -> Result<(),CudaError> {
         let mut n = self.map.get(&(ptr as *const c_void)).ok_or(CudaError::InvalidState(String::from(
             "An attempt was made to release an unregistered memory address."
         )))?.deref().borrow_mut();

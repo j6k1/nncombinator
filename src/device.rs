@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::sync::{Arc, Mutex};
 use rcublas::Context;
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -8,6 +9,7 @@ use rcudnn::utils::DataType;
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
 use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, Memory};
+use crate::cuda::mem::MemoryPool;
 use crate::error::{EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
@@ -206,12 +208,14 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     }
 }
 pub struct DeviceGpu<U> {
-    u:PhantomData<U>
+    u:PhantomData<U>,
+    memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
-    pub fn new() -> DeviceGpu<U> {
+    pub fn new(memory_pool:MemoryPool) -> DeviceGpu<U> {
         DeviceGpu {
             u:PhantomData::<U>,
+            memory_pool:Arc::new(Mutex::new(memory_pool))
         }
     }
 }
@@ -221,9 +225,9 @@ impl Device<f32> for DeviceGpu<f32> {
 
         let context = Context::new()?;
 
-        let mut input_ptr = CudaPtr::new(NI)?;
-        let mut units_ptr = CudaPtr::new(NI*NO)?;
-        let mut output_ptr = CudaPtr::new(NO)?;
+        let mut input_ptr = CudaPtr::new(NI,&self.memory_pool)?;
+        let mut units_ptr = CudaPtr::new(NI*NO,&self.memory_pool)?;
+        let mut output_ptr = CudaPtr::new(NO,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
@@ -255,9 +259,9 @@ impl Device<f32> for DeviceGpu<f32> {
 
         let context = Context::new()?;
 
-        let mut input_ptr = CudaPtr::new(NO)?;
-        let mut units_ptr = CudaPtr::new(NI*NO)?;
-        let mut output_ptr = CudaPtr::new(NI)?;
+        let mut input_ptr = CudaPtr::new(NO,&self.memory_pool)?;
+        let mut units_ptr = CudaPtr::new(NI*NO,&self.memory_pool)?;
+        let mut output_ptr = CudaPtr::new(NI,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
@@ -327,9 +331,9 @@ impl Device<f64> for DeviceGpu<f64> {
 
         let context = Context::new()?;
 
-        let mut input_ptr = CudaPtr::new(NI)?;
-        let mut units_ptr = CudaPtr::new(NI*NO)?;
-        let mut output_ptr = CudaPtr::new(NO)?;
+        let mut input_ptr = CudaPtr::new(NI,&self.memory_pool)?;
+        let mut units_ptr = CudaPtr::new(NI*NO,&self.memory_pool)?;
+        let mut output_ptr = CudaPtr::new(NO,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
@@ -361,9 +365,9 @@ impl Device<f64> for DeviceGpu<f64> {
 
         let context = Context::new()?;
 
-        let mut input_ptr = CudaPtr::new(NO)?;
-        let mut units_ptr = CudaPtr::new(NI*NO)?;
-        let mut output_ptr = CudaPtr::new(NI)?;
+        let mut input_ptr = CudaPtr::new(NO,&self.memory_pool)?;
+        let mut units_ptr = CudaPtr::new(NI*NO,&self.memory_pool)?;
+        let mut output_ptr = CudaPtr::new(NI,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
@@ -431,6 +435,7 @@ impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,
+            memory_pool:self.memory_pool.clone()
         }
     }
 }
@@ -442,7 +447,7 @@ impl<U> DeviceGpu<U> where U: DataTypeInfo + Default + Debug {
                         CudaPtr<U>) -> Result<Arr<U,N>,EvaluateError> {
         let cudnn = Cudnn::new()?;
         let desc = TensorDescriptor::new(&[1,1,N as i32],&[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let mut input_output = CudaPtr::new(N)?;
+        let mut input_output = CudaPtr::new(N,&self.memory_pool)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(),N)?;
 
         callback(&cudnn,
@@ -462,15 +467,15 @@ impl<U> DeviceGpu<U> where U: DataTypeInfo + Default + Debug {
                   ) -> Result<Arr<U,N>,TrainingError> {
         let cudnn = Cudnn::new()?;
         let o_desc = TensorDescriptor::new(&[1,1,N as i32], &[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let mut o_ptr = CudaPtr::new(N)?;
+        let mut o_ptr = CudaPtr::new(N,&self.memory_pool)?;
         o_ptr.memcpy(o.as_raw_slice().as_ptr(), N)?;
 
         let loss_desc = TensorDescriptor::new(&[1,1,N as i32], &[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let mut loss_ptr = CudaPtr::new(N)?;
+        let mut loss_ptr = CudaPtr::new(N,&self.memory_pool)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
 
         let u_desc = TensorDescriptor::new(&[1,1,N as i32], &[N as i32,N as i32,1], U::cudnn_data_type())?;
-        let mut u_ptr = CudaPtr::new(N)?;
+        let mut u_ptr = CudaPtr::new(N,&self.memory_pool)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
         callback(&cudnn,

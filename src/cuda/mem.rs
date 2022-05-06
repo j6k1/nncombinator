@@ -130,7 +130,7 @@ impl MemoryPool {
             {
                 let mut current = c.deref().borrow_mut();
 
-                if current.value.allocated == false && current.value.size <= size {
+                if current.value.allocated == false && current.value.size >= size {
                     let remaining = current.value.size - size;
 
                     current.split(Usage {

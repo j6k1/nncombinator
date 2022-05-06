@@ -153,4 +153,36 @@ impl MemoryPool {
 
         Err(CudaError::AllocFailed(String::from("Memory allocation failed.")))
     }
+
+    pub fn deallocate<T>(&mut self, ptr:*mut T) -> Result<(),CudaError> {
+        let mut n = self.map.get(&(ptr as *const c_void)).ok_or(CudaError::InvalidState(String::from(
+            "An attempt was made to release an unregistered memory address."
+        )))?.deref().borrow_mut();
+
+        n.value.allocated = false;
+
+        let size = n.value.size;
+        let size = n.next().map(|n| n.deref().borrow().value.size + size).unwrap_or(size);
+
+        n.value.size = size;
+
+        if n.next().is_some() {
+            n.merge_next();
+        }
+
+        let p = n.value.prev_key;
+
+        if let Some(p) = p {
+            let mut n = self.map.get(&(p as *const c_void)).ok_or(CudaError::LogicError(String::from(
+                "Memory address is unregistered."
+            )))?.deref().borrow_mut();
+
+            if n.value.allocated == false {
+                n.value.size += size;
+                n.merge_next();
+            }
+        }
+
+        Ok(())
+    }
 }

@@ -6,6 +6,7 @@ use std::ptr::null_mut;
 use std::rc::Rc;
 use libc::c_void;
 use rcudnn_sys::cudaError;
+use crate::cuda::ffi;
 use crate::error::CudaError;
 use crate::list::ListNode;
 
@@ -159,34 +160,50 @@ impl MemoryPool {
     }
 
     pub fn deallocate<T>(&mut self, ptr:*const T) -> Result<(),CudaError> {
-        let mut n = self.map.get(&(ptr as *const c_void)).ok_or(CudaError::InvalidState(String::from(
-            "An attempt was made to release an unregistered memory address."
-        )))?.deref().borrow_mut();
-
-        n.value.allocated = false;
-
-        let size = n.value.size;
-        let size = n.next().map(|n| n.deref().borrow().value.size + size).unwrap_or(size);
-
-        n.value.size = size;
-
-        if n.next().is_some() {
-            n.merge_next();
-        }
-
-        let p = n.value.prev_key;
-
-        if let Some(p) = p {
-            let mut n = self.map.get(&(p as *const c_void)).ok_or(CudaError::LogicError(String::from(
-                "Memory address is unregistered."
+        {
+            let mut n = self.map.get(&(ptr as *const c_void)).ok_or(CudaError::InvalidState(String::from(
+                "An attempt was made to release an unregistered memory address."
             )))?.deref().borrow_mut();
 
-            if n.value.allocated == false {
-                n.value.size += size;
+            n.value.allocated = false;
+
+            let size = n.value.size;
+            let size = n.next().map(|n| n.deref().borrow().value.size + size).unwrap_or(size);
+
+            n.value.size = size;
+
+            if n.next().map(|n| n.deref().borrow().value.allocated == false).unwrap_or(false) {
                 n.merge_next();
+            }
+
+            let p = n.value.prev_key;
+
+            if let Some(p) = p {
+                let mut n = self.map.get(&(p as *const c_void)).ok_or(CudaError::LogicError(String::from(
+                    "Memory address is unregistered."
+                )))?.deref().borrow_mut();
+
+                if n.value.allocated == false {
+                    n.value.size += size;
+                    n.merge_next();
+                }
             }
         }
 
+        self.map.remove(&(ptr as *const c_void));
+
         Ok(())
+    }
+}
+impl Drop for MemoryPool {
+    fn drop(&mut self) {
+        match self.alloc_type {
+            Alloctype::Device => {
+                ffi::free(self.pool).unwrap();
+            },
+            Alloctype::Host(_) => {
+                ffi::free_host(self.pool).unwrap();
+            }
+        }
     }
 }

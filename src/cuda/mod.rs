@@ -85,7 +85,6 @@ impl<T: Default + Debug> Memory<T> for CudaPtr<T> {
         Ok(r)
     }
 }
-
 impl<T> Drop for CudaPtr<T> {
     fn drop(&mut self) {
         match self.memory_pool.lock() {
@@ -208,7 +207,6 @@ impl<T: Default + Debug> MemoryAsync<T> for CudaHostPtr<T> {
         Ok(r)
     }
 }
-
 impl<T> Drop for CudaHostPtr<T> {
     fn drop(&mut self) {
         match self.memory_pool.lock() {

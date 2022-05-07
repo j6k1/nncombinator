@@ -559,6 +559,16 @@ impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Defaul
         }
     }
 }
+impl<'a,T,const N:usize> AsRawSlice<T> for VecArr<T,Arr<T,N>> where T: Default + Clone + Send {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
+}
+impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for VecArr<T,Arr<T,N>> where T: Default + Clone + Send {
+    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
+        &mut self.arr
+    }
+}
 #[derive(Debug,Eq,PartialEq)]
 pub struct VecArrIter<'a,T,const N:usize>(&'a [T]);
 

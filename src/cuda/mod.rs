@@ -17,6 +17,26 @@ pub trait AsPtr<T> {
 pub trait AsMutPtr<T> {
     fn as_mut_ptr(&mut self) -> *mut T;
 }
+impl AsVoidMutPtr for i32 {
+    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+        self as *mut i32 as *mut libc::c_void
+    }
+}
+impl AsVoidMutPtr for u32 {
+    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+        self as *mut u32 as *mut libc::c_void
+    }
+}
+impl AsVoidMutPtr for i64 {
+    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+        self as *mut i64 as *mut libc::c_void
+    }
+}
+impl AsVoidMutPtr for u64 {
+    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+        self as *mut u64 as *mut libc::c_void
+    }
+}
 pub trait Memory<T: Default + Debug>: AsVoidMutPtr {
     fn memcpy(&mut self, p:*const T,len:usize) -> Result<usize,rcudnn::Error>;
     fn read_to_vec(&mut self) -> Result<Vec<T>,rcudnn::Error>;

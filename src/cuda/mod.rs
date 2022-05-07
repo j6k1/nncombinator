@@ -5,6 +5,12 @@ use crate::error::CudaError;
 pub mod ffi;
 pub mod mem;
 
+pub trait AsDoubleVoidPtr {
+    fn as_double_void_ptr(&self) -> *const libc::c_void;
+}
+pub trait AsDoubleVoidMutPtr {
+    fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void;
+}
 pub trait AsVoidPtr {
     fn as_void_ptr(&self) -> *const libc::c_void;
 }
@@ -97,14 +103,24 @@ impl<T> Drop for CudaPtr<T> {
         ffi::free(self.ptr).unwrap();
     }
 }
+impl<T> AsDoubleVoidPtr for CudaPtr<T> {
+    fn as_double_void_ptr(&self) -> *const libc::c_void {
+        &self.ptr as *const *mut T as *const libc::c_void
+    }
+}
+impl<T> AsDoubleVoidMutPtr for CudaPtr<T> {
+    fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
+        &mut self.ptr as *mut *mut T as *mut libc::c_void
+    }
+}
 impl<T> AsVoidPtr for CudaPtr<T> {
     fn as_void_ptr(&self) -> *const libc::c_void {
-        self.ptr as *const T as *const libc::c_void
+        self.ptr as *const libc::c_void
     }
 }
 impl<T> AsVoidMutPtr for CudaPtr<T> {
     fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
-        self.ptr as *mut T as *mut libc::c_void
+        self.ptr as *mut libc::c_void
     }
 }
 impl<T> AsPtr<T> for CudaPtr<T> {
@@ -211,14 +227,24 @@ impl<T> AsMutPtr<T> for CudaHostPtr<T> {
         self.ptr
     }
 }
+impl<T> AsDoubleVoidPtr for CudaHostPtr<T> {
+    fn as_double_void_ptr(&self) -> *const libc::c_void {
+        &self.ptr as *const *mut T as *const libc::c_void
+    }
+}
+impl<T> AsDoubleVoidMutPtr for CudaHostPtr<T> {
+    fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
+        &mut self.ptr as *mut *mut T as *mut libc::c_void
+    }
+}
 impl<T> AsVoidPtr for CudaHostPtr<T> {
     fn as_void_ptr(&self) -> *const libc::c_void {
-        self.ptr as *const T as *const libc::c_void
+        self.ptr as *const libc::c_void
     }
 }
 impl<T> AsVoidMutPtr for CudaHostPtr<T> {
     fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
-        self.ptr as *mut T as *mut libc::c_void
+        self.ptr as *mut libc::c_void
     }
 }
 unsafe impl<T> Send for CudaHostPtr<T> where T: Send {}

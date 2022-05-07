@@ -3,7 +3,6 @@ use rcudnn_sys::{cudaMemcpyKind, cudaStream_t};
 use crate::error::CudaError;
 
 pub mod ffi;
-pub mod mem;
 
 pub trait AsDoubleVoidPtr {
     fn as_double_void_ptr(&self) -> *const libc::c_void;

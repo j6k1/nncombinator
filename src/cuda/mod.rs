@@ -3,6 +3,7 @@ use rcudnn_sys::{cudaMemcpyKind, cudaStream_t};
 use crate::error::CudaError;
 
 pub mod ffi;
+pub mod mem;
 
 pub trait AsDoubleVoidPtr {
     fn as_double_void_ptr(&self) -> *const libc::c_void;
@@ -247,29 +248,3 @@ impl<T> AsVoidMutPtr for CudaHostPtr<T> {
     }
 }
 unsafe impl<T> Send for CudaHostPtr<T> where T: Send {}
-pub struct ConstCudaPtr<T> where T: Default + Debug {
-    ptr:CudaPtr<T>
-}
-impl<T> ConstCudaPtr<T> where T: Default + Debug {
-    pub fn new(size:usize,ptr:*const T) -> Result<ConstCudaPtr<T>,CudaError> {
-        let mut p = CudaPtr::new(size)?;
-
-        p.memcpy(ptr,size)?;
-
-        Ok(ConstCudaPtr {
-            ptr: p
-        })
-    }
-}
-impl<T> AsVoidPtr for ConstCudaPtr<T> where T: Default + Debug {
-    fn as_void_ptr(&self) -> *const libc::c_void {
-        self.as_void_ptr()
-    }
-}
-impl<T> AsPtr<T> for ConstCudaPtr<T> where T: Default + Debug {
-    fn as_ptr(&self) -> *const T {
-        self.as_ptr()
-    }
-}
-unsafe impl<T> Send for ConstCudaPtr<T> where T: Default + Debug {}
-unsafe impl<T> Sync for ConstCudaPtr<T> where T: Default + Debug {}

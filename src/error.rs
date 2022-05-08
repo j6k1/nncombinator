@@ -22,7 +22,7 @@ impl fmt::Display for TrainingError {
             TrainingError::EvaluateError(e) => write!(f, "{}",e),
             TrainingError::ToLargeInput(n) => write!(f, "The value is too large to convert. (Value = {})",n),
             TrainingError::CudaError(e) => write!(f, "An error occurred in the process of cuda. ({})",e),
-            TrainingError::CublasError(e) => write!(f, "An error occurred during the execution of a process in rcublas. ({})",e),
+            TrainingError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})",e),
             TrainingError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
         }
     }
@@ -37,7 +37,7 @@ impl error::Error for TrainingError {
             TrainingError::EvaluateError(_) => "An error occurred when running the neural network.",
             TrainingError::ToLargeInput(_) => "The value is too large to convert.",
             TrainingError::CudaError(_) => "An error occurred in the process of cuda.",
-            TrainingError::CublasError(_) => "An error occurred during the execution of a process in rcublas.",
+            TrainingError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
             TrainingError::CudnnError(_) => "An error occurred during the execution of a process in cudnn."
         }
     }
@@ -185,7 +185,7 @@ impl fmt::Display for EvaluateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             EvaluateError::CudaError(e) => write!(f, "An error occurred in the process of cuda. ({})", e),
-            EvaluateError::CublasError(e) => write!(f, "An error occurred during the execution of a process in rcublas. ({})", e),
+            EvaluateError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})", e),
             EvaluateError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
             EvaluateError::SizeMismatchError(e) => write!(f,"{}",e),
         }
@@ -195,7 +195,7 @@ impl error::Error for EvaluateError {
     fn description(&self) -> &str {
         match self {
             EvaluateError::CudaError(_) => "An error occurred in the process of cuda.",
-            EvaluateError::CublasError(_) => "An error occurred during the execution of a process in rcublas.",
+            EvaluateError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
             EvaluateError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
             EvaluateError::SizeMismatchError(_) => "memory size does not match.",
         }
@@ -286,5 +286,43 @@ impl error::Error for CudaError {
 impl From<rcudnn::Error> for CudaError {
     fn from(err: rcudnn::Error) -> CudaError {
         CudaError::CudnnError(err)
+    }
+}
+#[derive(Debug)]
+pub enum DeviceError {
+    CublasError(rcublas::error::Error),
+    CudnnError(rcudnn::Error),
+}
+impl fmt::Display for DeviceError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DeviceError::CublasError(e) => write!(f,"{}",e),
+            DeviceError::CudnnError(e) => write!(f,"{}",e)
+        }
+    }
+}
+impl error::Error for DeviceError {
+    fn description(&self) -> &str {
+        match self {
+            DeviceError::CublasError(_) => "An error occurred during initialization of cublas.",
+            DeviceError::CudnnError(_) => "An error occurred during initialization of cudnn.",
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            DeviceError::CublasError(e) => Some(e),
+            DeviceError::CudnnError(e) => Some(e),
+        }
+    }
+}
+impl From<rcudnn::Error> for DeviceError {
+    fn from(err: rcudnn::Error) -> DeviceError {
+        DeviceError::CudnnError(err)
+    }
+}
+impl From<rcublas::error::Error> for DeviceError {
+    fn from(err: rcublas::error::Error) -> DeviceError {
+        DeviceError::CublasError(err)
     }
 }

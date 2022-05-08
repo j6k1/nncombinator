@@ -1,14 +1,14 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use rcublas::Context;
-use rcublas_sys::{cublasDgemm_v2, cublasDgemv_v2, cublasOperation_t, cublasSgemv_v2, cublasStatus_t};
+use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasSgemv_v2, cublasStatus_t};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcudnn::{Cudnn, TensorDescriptor};
 use rcudnn::utils::DataType;
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
 use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, Memory};
-use crate::error::{EvaluateError, TrainingError};
+use crate::error::{DeviceError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
 use crate::UnitValue;
@@ -47,22 +47,12 @@ impl DataTypeInfo for f64 {
 
 pub struct DeviceCpu<U> where U: UnitValue<U> {
     u:PhantomData<U>,
-    max_threads:usize,
 }
 impl<U> DeviceCpu<U> where U: UnitValue<U> {
-    pub fn with_max_threads(c:usize) -> DeviceCpu<U> {
-        DeviceCpu {
-            u:PhantomData::<U>,
-            max_threads:c
-        }
-    }
-
-    pub fn new() -> DeviceCpu<U> {
-        DeviceCpu::with_max_threads(16)
-    }
-
-    pub fn get_max_threads(&self) -> usize {
-        self.max_threads
+    pub fn new() -> Result<DeviceCpu<U>,DeviceError> {
+        Ok(DeviceCpu {
+            u:PhantomData::<U>
+        })
     }
 }
 impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
@@ -139,8 +129,7 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
         DeviceCpu {
-            u:PhantomData::<U>,
-            max_threads:self.max_threads
+            u:PhantomData::<U>
         }
     }
 }
@@ -209,10 +198,10 @@ pub struct DeviceGpu<U> {
     u:PhantomData<U>,
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
-    pub fn new() -> DeviceGpu<U> {
-        DeviceGpu {
+    pub fn new() -> Result<DeviceGpu<U>,DeviceError> {
+        Ok(DeviceGpu {
             u:PhantomData::<U>,
-        }
+        })
     }
 }
 impl Device<f32> for DeviceGpu<f32> {

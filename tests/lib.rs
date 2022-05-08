@@ -30,7 +30,7 @@ fn test_mnist() {
     let n1 = Normal::<f32>::new(0.0, 1f32/(2f32/(28f32*28f32)).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/(28f32*28f32).sqrt()).unwrap();
 
-    let device = DeviceCpu::new();
+    let device = DeviceCpu::new().unwrap();
 
     let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
 
@@ -179,7 +179,7 @@ fn test_weather() {
     let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
 
-    let device = DeviceCpu::new();
+    let device = DeviceCpu::new().unwrap();
 
     let net:InputLayer<f32,Arr<f32,14>,_> = InputLayer::new();
 
@@ -337,7 +337,7 @@ fn test_weather_by_forward_diff() {
     let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
 
-    let device = DeviceCpu::new();
+    let device = DeviceCpu::new().unwrap();
 
     let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_> = InputLayer::new();
 
@@ -513,7 +513,7 @@ fn test_weather_batch_train() {
     let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
 
-    let device = DeviceCpu::new();
+    let device = DeviceCpu::new().unwrap();
 
     let net:InputLayer<f32,Arr<f32,14>,_> = InputLayer::new();
 

@@ -271,3 +271,5 @@ impl<T> AsPtr<T> for ConstCudaPtr<T> where T: Default + Debug {
         self.as_ptr()
     }
 }
+unsafe impl<T> Send for ConstCudaPtr<T> where T: Default + Debug {}
+unsafe impl<T> Sync for ConstCudaPtr<T> where T: Default + Debug {}

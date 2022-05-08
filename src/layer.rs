@@ -653,7 +653,7 @@ impl<U,P,I,const N:usize> BatchTrain<U> for LinearOutputLayer<U,P,DeviceCpu<U>,I
     }
 }
 pub struct LinearLayer<U,P,D,I,const NI:usize,const NO:usize>
-    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
@@ -663,7 +663,7 @@ pub struct LinearLayer<U,P,D,I,const NI:usize,const NO:usize>
     bias:Arr<U,NO>
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> LinearLayer<U,P,D,I,NI,NO>
-    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
@@ -687,6 +687,14 @@ impl<U,P,D,I,const NI:usize,const NO:usize> LinearLayer<U,P,D,I,NI,NO>
             units: units,
             bias:bias
         }
+    }
+
+    pub fn units(&self) -> &Arr2<U,NI,NO> {
+        &self.units
+    }
+
+    pub fn bias(&self) -> &Arr<U,NO> {
+        &self.bias
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>,Specialized> for LinearLayer<U,P,D,I,NI,NO>
@@ -776,7 +784,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Forward<Arr<U,NI>,Result<Arr<U,NO>,E
           I: Debug + Send + Sync {
 
     fn forward(&self,input:&Arr<U,NI>) -> Result<Arr<U,NO>,EvaluateError> {
-        self.device.forward_linear(&self.bias,&self.units,input)
+        self.device.forward_linear(&self,input)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,P,D,I,NI,NO>
@@ -811,7 +819,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Result<Arr<U,N
           D: Device<U>,
           I: Debug + Send + Sync {
     fn backward(&mut self, input: &Arr<U,NO>) -> Result<Arr<U,NI>,TrainingError> {
-        self.device.backward_linear(&self.units, input)
+        self.device.backward_linear(&self, input)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D,I,NI,NO>
@@ -975,7 +983,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,P,Devic
           I: Debug + Send + Sync {
 }
 pub struct DiffLinearLayer<U,P,D,I,const NI:usize,const NO:usize>
-    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + PreTrain<U> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
@@ -985,8 +993,7 @@ pub struct DiffLinearLayer<U,P,D,I,const NI:usize,const NO:usize>
     bias:Arr<U,NO>
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> DiffLinearLayer<U,P,D,I,NI,NO>
-    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
-             BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
@@ -1010,6 +1017,14 @@ impl<U,P,D,I,const NI:usize,const NO:usize> DiffLinearLayer<U,P,D,I,NI,NO>
             units: units,
             bias:bias
         }
+    }
+
+    pub fn units(&self) -> &Arr2<U,NI,NO> {
+        &self.units
+    }
+
+    pub fn bias(&self) -> &Arr<U,NO> {
+        &self.bias
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>,Specialized> for DiffLinearLayer<U,P,D,I,NI,NO>
@@ -1116,7 +1131,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLayer<U,P,D
                 Ok(output)
             },
             DiffInput::NotDiff(input) => {
-                self.device.forward_linear(&self.bias,&self.units,&input)
+                self.device.forward_diff_linear(&self,&input)
             }
         }
     }
@@ -1145,7 +1160,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,P,
                     Ok(output)
                 },
                 DiffInput::NotDiff(input) => {
-                    self.device.forward_linear(&self.bias, &self.units, &input)
+                    self.device.forward_diff_linear(&self, &input)
                 }
             }
         })?;
@@ -1160,7 +1175,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Result<Arr<U,N
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           I: Debug + Send + Sync {
     fn backward(&mut self, input: &Arr<U,NO>) -> Result<Arr<U,NI>,TrainingError> {
-        self.device.backward_linear(&self.units, input)
+        self.device.backward_diff_linear(self, input)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,P,D,I,NI,NO>
@@ -1198,7 +1213,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U
                         Ok(())
                     },
                     DiffInput::NotDiff(input) => {
-                        let o = self.device.forward_linear(&self.bias, &self.units, input)?;
+                        let o = self.device.forward_diff_linear(&self, input)?;
 
                         for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
                             for (w,l) in u.iter_mut().zip(loss.iter()) {

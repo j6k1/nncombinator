@@ -8,16 +8,27 @@ use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelI
 use rcudnn::{Cudnn, TensorDescriptor};
 use rcudnn::utils::DataType;
 use crate::activation::Activation;
-use crate::arr::{Arr, Arr2};
+use crate::arr::{Arr, Arr2, DiffArr};
 use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, Memory};
 use crate::error::{DeviceError, EvaluateError, TrainingError};
+use crate::layer::{DiffInput, DiffLinearLayer, ForwardAll, LinearLayer};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
 use crate::UnitValue;
 
 pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&Arr2<U,NI,NO>, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
-    fn backward_linear<const NI:usize,const NO:usize>(&self, units:&Arr2<U,NI,NO>, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
+    fn forward_linear<P,I,const NI:usize,const NO:usize>(&self, layer:&LinearLayer<U,P,Self,I,NI,NO>, input:&Arr<U,NI>)
+        -> Result<Arr<U, NO>, EvaluateError> where P: ForwardAll<Input=I,Output=Arr<U,NI>>,
+                                                   I: Debug + Send + Sync;
+    fn forward_diff_linear<P,I,const NI:usize,const NO:usize>(&self, layer:&DiffLinearLayer<U,P,Self,I,NI,NO>, input:&Arr<U,NI>)
+        -> Result<Arr<U, NO>, EvaluateError> where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>>,
+                                                   I: Debug + Send + Sync;
+    fn backward_linear<P,I,const NI:usize,const NO:usize>(&self, layer:&LinearLayer<U,P,Self,I,NI,NO>, input:&Arr<U,NO>)
+        -> Result<Arr<U, NI>, TrainingError> where P: ForwardAll<Input=I,Output=Arr<U,NI>>,
+                                                   I: Debug + Send + Sync;
+    fn backward_diff_linear<P,I,const NI:usize,const NO:usize>(&self, layer:&DiffLinearLayer<U,P,Self,I,NI,NO>, input:&Arr<U,NO>)
+        -> Result<Arr<U, NI>, TrainingError> where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>>,
+                                                   I: Debug + Send + Sync;
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U>;
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
@@ -58,36 +69,28 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     }
 }
 impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&Arr2<U,NI,NO>, input:&Arr<U,NI>)
-        -> Result<Arr<U, NO>, EvaluateError> {
-
-        let mut output:Arr<U,NO> = Arr::new();
-
-        for (o,w) in output.iter_mut().zip(bias.iter()) {
-            *o += *w;
-        }
-
-        for (i,u) in input.iter().zip(units.iter()) {
-            for (o,w) in output.iter_mut().zip(u.iter()) {
-                *o += *i * *w;
-            }
-        }
-
-        Ok(output)
+    fn forward_linear<P,I,const NI:usize,const NO:usize>(&self, layer:&LinearLayer<U,P,Self,I,NI,NO>, input:&Arr<U,NI>)
+        -> Result<Arr<U, NO>, EvaluateError> where P: ForwardAll<Input=I,Output=Arr<U,NI>>,
+                                                   I: Debug + Send + Sync {
+        self.forward_linear_common(layer.bias(),layer.units(),input)
     }
 
-    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<U,NI,NO>, input: &Arr<U,NO>)
-        -> Result<Arr<U, NI>, TrainingError> {
+    fn forward_diff_linear<P, I, const NI: usize, const NO: usize>(&self, layer: &DiffLinearLayer<U, P, Self, I, NI, NO>, input: &Arr<U, NI>)
+        -> Result<Arr<U, NO>, EvaluateError> where P: ForwardAll<Input=I, Output=DiffInput<DiffArr<U, NI>, U, NI, NO>>,
+                                                   I: Debug + Send + Sync {
+        self.forward_linear_common(layer.bias(),layer.units(),input)
+    }
 
-        let mut r = Arr::new();
+    fn backward_linear<P,I,const NI:usize, const NO: usize>(&self, layer:&LinearLayer<U,P,Self,I,NI,NO>, input: &Arr<U,NO>)
+        -> Result<Arr<U, NI>, TrainingError> where P: ForwardAll<Input=I,Output=Arr<U,NI>>,
+                                                   I: Debug + Send + Sync {
+        self.backward_linear_common(layer.units(),input)
+    }
 
-        for (r,u) in r.iter_mut().zip(units.iter()) {
-            for (w,l) in u.iter().zip(input.iter()) {
-                *r += *w * *l;
-            }
-        }
-
-        Ok(r)
+    fn backward_diff_linear<P, I, const NI: usize, const NO: usize>(&self, layer: &DiffLinearLayer<U, P, Self, I, NI, NO>, input: &Arr<U, NO>)
+        -> Result<Arr<U, NI>, TrainingError> where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>>,
+                                                   I: Debug + Send + Sync {
+        self.backward_linear_common(layer.units(),input)
     }
 
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
@@ -136,6 +139,38 @@ impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     }
 }
 impl<U> DeviceCpu<U> where U: UnitValue<U> {
+    fn forward_linear_common<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&Arr2<U,NI,NO>, input:&Arr<U,NI>)
+        -> Result<Arr<U, NO>, EvaluateError> {
+
+        let mut output:Arr<U,NO> = Arr::new();
+
+        for (o,w) in output.iter_mut().zip(bias.iter()) {
+            *o += *w;
+        }
+
+        for (i,u) in input.iter().zip(units.iter()) {
+            for (o,w) in output.iter_mut().zip(u.iter()) {
+                *o += *i * *w;
+            }
+        }
+
+        Ok(output)
+    }
+
+    fn backward_linear_common<const NI:usize, const NO: usize>(&self, units:&Arr2<U,NI,NO>, input: &Arr<U,NO>)
+        -> Result<Arr<U, NI>, TrainingError> {
+
+        let mut r = Arr::new();
+
+        for (r,u) in r.iter_mut().zip(units.iter()) {
+            for (w,l) in u.iter().zip(input.iter()) {
+                *r += *w * *l;
+            }
+        }
+
+        Ok(r)
+    }
+
     pub fn loss_linear_batch<L,const N: usize>(&self, expected: &Vec<Arr<U, N>>, actual: &Vec<Arr<U, N>>, lossf: &L)
         -> Result<Vec<Arr<U, N>>, TrainingError>
         where L: LossFunction<U> {
@@ -263,8 +298,9 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
     }
 }
 impl Device<f32> for DeviceGpu<f32> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f32,NO>, units: &Arr2<f32,NI,NO>, input: &Arr<f32,NI>)
-        -> Result<Arr<f32, NO>, EvaluateError> {
+    fn forward_linear<P,I,const NI:usize,const NO:usize>(&self, layer:&LinearLayer<f32,P,Self,I,NI,NO>, input: &Arr<f32,NI>)
+        -> Result<Arr<f32, NO>, EvaluateError> where P: ForwardAll<Input=I,Output=Arr<f32,NI>>,
+                                                     I: Debug + Send + Sync {
 
         let context = Context::new()?;
 
@@ -273,8 +309,8 @@ impl Device<f32> for DeviceGpu<f32> {
         let mut output_ptr = CudaPtr::new(NO)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
-        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
-        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+        units_ptr.memcpy(layer.units().as_raw_slice().as_ptr(),NI*NO)?;
+        output_ptr.memcpy(layer.bias().as_raw_slice().as_ptr(),NO)?;
 
         unsafe {
             match cublasSgemv_v2(*context.id_c(),
@@ -314,8 +350,61 @@ impl Device<f32> for DeviceGpu<f32> {
         Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 
-    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<f32,NI,NO>, input: &Arr<f32,NO>)
-        -> Result<Arr<f32, NI>, TrainingError> {
+    fn forward_diff_linear<P, I, const NI: usize, const NO: usize>(&self, layer: &DiffLinearLayer<f32, P, Self, I, NI, NO>, input: &Arr<f32, NI>)
+        -> Result<Arr<f32, NO>, EvaluateError> where P: ForwardAll<Input=I, Output=DiffInput<DiffArr<f32, NI>, f32, NI, NO>>,
+                                                     I: Debug + Send + Sync {
+
+        let context = Context::new()?;
+
+        let mut input_ptr = CudaPtr::new(NI)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NO)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(layer.units().as_raw_slice().as_ptr(),NI*NO)?;
+        output_ptr.memcpy(layer.bias().as_raw_slice().as_ptr(),NO)?;
+
+        unsafe {
+            match cublasSgemv_v2(*context.id_c(),
+                                 cublasOperation_t::CUBLAS_OP_N,
+                                 NO as ::libc::c_int,
+                                 NI as ::libc::c_int,
+                                 &1.0f32 as *const f32,
+                                 units_ptr.as_ptr(),
+                                 NO as libc::c_int,
+                                 input_ptr.as_ptr(),
+                                 1 as libc::c_int,
+                                 &1.0f32 as *const f32,
+                                 output_ptr.as_mut_ptr(),
+                                 1 as ::libc::c_int
+            ) {
+                cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
+                cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+                },
+                cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                        "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                    )));
+                },
+                cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+                },
+                status => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                        "Unable to get cuBLAS cublasSgemv_v2",
+                        status as i32 as u64
+                    )));
+                }
+            }
+        }
+
+        Ok(output_ptr.read_to_vec()?.try_into()?)
+    }
+
+    fn backward_linear<P,I,const NI:usize, const NO: usize>(&self, layer:&LinearLayer<f32,P,Self,I,NI,NO>, input: &Arr<f32,NO>)
+        -> Result<Arr<f32, NI>, TrainingError> where P: ForwardAll<Input=I,Output=Arr<f32,NI>>,
+                                                     I: Debug + Send + Sync {
 
         let context = Context::new()?;
 
@@ -324,7 +413,7 @@ impl Device<f32> for DeviceGpu<f32> {
         let mut output_ptr = CudaPtr::new(NI)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
-        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
+        units_ptr.memcpy(layer.units().as_raw_slice().as_ptr(),NI*NO)?;
 
         unsafe {
             match cublasSgemv_v2(*context.id_c(),
@@ -339,6 +428,57 @@ impl Device<f32> for DeviceGpu<f32> {
                            &0.0f32 as *const f32,
                            output_ptr.as_mut_ptr(),
                            1 as ::libc::c_int
+            ) {
+                cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
+                cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                    return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+                },
+                cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                    return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                        "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                    )));
+                },
+                cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                    return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+                },
+                status => {
+                    return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                        "Unable to get cuBLAS cublasSgemm_v2",
+                        status as i32 as u64
+                    )));
+                }
+            }
+        }
+
+        Ok(output_ptr.read_to_vec()?.try_into()?)
+    }
+
+    fn backward_diff_linear<P, I, const NI: usize, const NO: usize>(&self, layer: &DiffLinearLayer<f32, P, Self, I, NI, NO>, input: &Arr<f32, NO>)
+        -> Result<Arr<f32, NI>, TrainingError> where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<f32,NI>,f32,NI,NO>>,
+                                                     I: Debug + Send + Sync {
+
+        let context = Context::new()?;
+
+        let mut input_ptr = CudaPtr::new(NO)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NI)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(layer.units().as_raw_slice().as_ptr(),NI*NO)?;
+
+        unsafe {
+            match cublasSgemv_v2(*context.id_c(),
+                                 cublasOperation_t::CUBLAS_OP_T,
+                                 NI as ::libc::c_int,
+                                 NO as ::libc::c_int,
+                                 &1.0f32 as *const f32,
+                                 units_ptr.as_ptr(),
+                                 NI as libc::c_int,
+                                 input_ptr.as_ptr(),
+                                 1 as libc::c_int,
+                                 &0.0f32 as *const f32,
+                                 output_ptr.as_mut_ptr(),
+                                 1 as ::libc::c_int
             ) {
                 cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
                 cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
@@ -402,10 +542,9 @@ impl Device<f32> for DeviceGpu<f32> {
         }).collect::<Result<Vec<Arr<f32,N>>,_>>()
     }
 }
-impl Device<f64> for DeviceGpu<f64> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f64,NO>, units: &Arr2<f64,NI,NO>, input: &Arr<f64,NI>)
-                                                     -> Result<Arr<f64, NO>, EvaluateError> {
-
+impl DeviceGpu<f32> {
+    fn forward_linear_common<const NI:usize,const NO:usize>(&self, bias:&Arr<f32,NO>, units:&Arr2<f32,NI,NO>, input:&Arr<f32,NI>)
+        -> Result<Arr<f32, NO>, EvaluateError> {
         let context = Context::new()?;
 
         let mut input_ptr = CudaPtr::new(NI)?;
@@ -415,6 +554,108 @@ impl Device<f64> for DeviceGpu<f64> {
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
         output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+
+        unsafe {
+            match cublasSgemv_v2(*context.id_c(),
+                                 cublasOperation_t::CUBLAS_OP_N,
+                                 NO as ::libc::c_int,
+                                 NI as ::libc::c_int,
+                                 &1.0f32 as *const f32,
+                                 units_ptr.as_ptr(),
+                                 NO as libc::c_int,
+                                 input_ptr.as_ptr(),
+                                 1 as libc::c_int,
+                                 &1.0f32 as *const f32,
+                                 output_ptr.as_mut_ptr(),
+                                 1 as ::libc::c_int
+            ) {
+                cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
+                cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+                },
+                cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                        "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                    )));
+                },
+                cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+                },
+                status => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                        "Unable to get cuBLAS cublasDgemv_v2",
+                        status as i32 as u64
+                    )));
+                }
+            }
+        }
+
+        Ok(output_ptr.read_to_vec()?.try_into()?)
+    }
+
+    fn backward_linear_common<const NI:usize, const NO: usize>(&self, units:&Arr2<f32,NI,NO>, input: &Arr<f32,NO>)
+        -> Result<Arr<f32, NI>, TrainingError> {
+        let context = Context::new()?;
+
+        let mut input_ptr = CudaPtr::new(NO)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NI)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
+
+        unsafe {
+            match cublasSgemv_v2(*context.id_c(),
+                                 cublasOperation_t::CUBLAS_OP_T,
+                                 NI as ::libc::c_int,
+                                 NO as ::libc::c_int,
+                                 &1.0f32 as *const f32,
+                                 units_ptr.as_ptr(),
+                                 NI as libc::c_int,
+                                 input_ptr.as_ptr(),
+                                 1 as libc::c_int,
+                                 &0.0f32 as *const f32,
+                                 output_ptr.as_mut_ptr(),
+                                 1 as ::libc::c_int
+            ) {
+                cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
+                cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                    return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+                },
+                cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                    return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                        "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                    )));
+                },
+                cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                    return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+                },
+                status => {
+                    return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                        "Unable to get cuBLAS cublasDgemv_v2",
+                        status as i32 as u64
+                    )));
+                }
+            }
+        }
+
+        Ok(output_ptr.read_to_vec()?.try_into()?)
+    }
+}
+impl Device<f64> for DeviceGpu<f64> {
+    fn forward_linear<P,I,const NI:usize,const NO:usize>(&self, layer:&LinearLayer<f64,P,Self,I,NI,NO>, input: &Arr<f64,NI>)
+        -> Result<Arr<f64, NO>, EvaluateError> where P: ForwardAll<Input=I,Output=Arr<f64,NI>>,
+                                                     I: Debug + Send + Sync {
+
+        let context = Context::new()?;
+
+        let mut input_ptr = CudaPtr::new(NI)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NO)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(layer.units().as_raw_slice().as_ptr(),NI*NO)?;
+        output_ptr.memcpy(layer.bias().as_raw_slice().as_ptr(),NO)?;
 
         unsafe {
             match cublasDgemv_v2(*context.id_c(),
@@ -454,8 +695,60 @@ impl Device<f64> for DeviceGpu<f64> {
         Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 
-    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<f64,NI,NO>, input: &Arr<f64,NO>)
-                                                        -> Result<Arr<f64, NI>, TrainingError> {
+    fn forward_diff_linear<P, I, const NI: usize, const NO: usize>(&self, layer: &DiffLinearLayer<f64, P, Self, I, NI, NO>, input: &Arr<f64, NI>)
+        -> Result<Arr<f64, NO>, EvaluateError> where P: ForwardAll<Input=I, Output=DiffInput<DiffArr<f64, NI>, f64, NI, NO>>,
+                                                     I: Debug + Send + Sync {
+        let context = Context::new()?;
+
+        let mut input_ptr = CudaPtr::new(NI)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NO)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(layer.units().as_raw_slice().as_ptr(),NI*NO)?;
+        output_ptr.memcpy(layer.bias().as_raw_slice().as_ptr(),NO)?;
+
+        unsafe {
+            match cublasDgemv_v2(*context.id_c(),
+                                 cublasOperation_t::CUBLAS_OP_N,
+                                 NO as ::libc::c_int,
+                                 NI as ::libc::c_int,
+                                 &1.0f64 as *const f64,
+                                 units_ptr.as_ptr(),
+                                 NO as libc::c_int,
+                                 input_ptr.as_ptr(),
+                                 1 as libc::c_int,
+                                 &1.0f64 as *const f64,
+                                 output_ptr.as_mut_ptr(),
+                                 1 as ::libc::c_int
+            ) {
+                cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
+                cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+                },
+                cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                        "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                    )));
+                },
+                cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+                },
+                status => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                        "Unable to get cuBLAS cublasDgemv_v2",
+                        status as i32 as u64
+                    )));
+                }
+            }
+        }
+
+        Ok(output_ptr.read_to_vec()?.try_into()?)
+    }
+
+    fn backward_linear<P,I,const NI:usize, const NO: usize>(&self, layer:&LinearLayer<f64,P,Self,I,NI,NO>, input: &Arr<f64,NO>)
+        -> Result<Arr<f64, NI>, TrainingError> where P: ForwardAll<Input=I,Output=Arr<f64,NI>>,
+                                                     I: Debug + Send + Sync {
 
         let context = Context::new()?;
 
@@ -464,7 +757,7 @@ impl Device<f64> for DeviceGpu<f64> {
         let mut output_ptr = CudaPtr::new(NI)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
-        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
+        units_ptr.memcpy(layer.units().as_raw_slice().as_ptr(),NI*NO)?;
 
         unsafe {
             match cublasDgemv_v2(*context.id_c(),
@@ -479,6 +772,56 @@ impl Device<f64> for DeviceGpu<f64> {
                            &0.0f64 as *const f64,
                            output_ptr.as_mut_ptr(),
                            1 as ::libc::c_int
+            ) {
+                cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
+                cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                    return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+                },
+                cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                    return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                        "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                    )));
+                },
+                cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                    return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+                },
+                status => {
+                    return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                        "Unable to get cuBLAS cublasDgemv_v2",
+                        status as i32 as u64
+                    )));
+                }
+            }
+        }
+
+        Ok(output_ptr.read_to_vec()?.try_into()?)
+    }
+
+    fn backward_diff_linear<P, I, const NI: usize, const NO: usize>(&self, layer: &DiffLinearLayer<f64, P, Self, I, NI, NO>, input: &Arr<f64, NO>)
+        -> Result<Arr<f64, NI>, TrainingError> where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<f64,NI>,f64,NI,NO>>,
+                                                     I: Debug + Send + Sync {
+        let context = Context::new()?;
+
+        let mut input_ptr = CudaPtr::new(NO)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NI)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(layer.units().as_raw_slice().as_ptr(),NI*NO)?;
+
+        unsafe {
+            match cublasDgemv_v2(*context.id_c(),
+                                 cublasOperation_t::CUBLAS_OP_T,
+                                 NI as ::libc::c_int,
+                                 NO as ::libc::c_int,
+                                 &1.0f64 as *const f64,
+                                 units_ptr.as_ptr(),
+                                 NI as libc::c_int,
+                                 input_ptr.as_ptr(),
+                                 1 as libc::c_int,
+                                 &0.0f64 as *const f64,
+                                 output_ptr.as_mut_ptr(),
+                                 1 as ::libc::c_int
             ) {
                 cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
                 cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
@@ -540,6 +883,106 @@ impl Device<f64> for DeviceGpu<f64> {
         o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
             activation.derive(&self,o,l,u)
         }).collect::<Result<Vec<Arr<f64,N>>,_>>()
+    }
+}
+impl DeviceGpu<f64> {
+    fn forward_linear_common<const NI:usize,const NO:usize>(&self, bias:&Arr<f64,NO>, units:&Arr2<f64,NI,NO>, input:&Arr<f64,NI>)
+        -> Result<Arr<f64, NO>, EvaluateError> {
+        let context = Context::new()?;
+
+        let mut input_ptr = CudaPtr::new(NI)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NO)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
+        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+
+        unsafe {
+            match cublasDgemv_v2(*context.id_c(),
+                                 cublasOperation_t::CUBLAS_OP_N,
+                                 NO as ::libc::c_int,
+                                 NI as ::libc::c_int,
+                                 &1.0f64 as *const f64,
+                                 units_ptr.as_ptr(),
+                                 NO as libc::c_int,
+                                 input_ptr.as_ptr(),
+                                 1 as libc::c_int,
+                                 &1.0f64 as *const f64,
+                                 output_ptr.as_mut_ptr(),
+                                 1 as ::libc::c_int
+            ) {
+                cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
+                cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+                },
+                cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                        "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                    )));
+                },
+                cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+                },
+                status => {
+                    return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                        "Unable to get cuBLAS cublasDgemv_v2",
+                        status as i32 as u64
+                    )));
+                }
+            }
+        }
+
+        Ok(output_ptr.read_to_vec()?.try_into()?)
+    }
+
+    fn backward_linear_common<const NI:usize, const NO: usize>(&self, units:&Arr2<f64,NI,NO>, input: &Arr<f64,NO>)
+        -> Result<Arr<f64, NI>, TrainingError> {
+        let context = Context::new()?;
+
+        let mut input_ptr = CudaPtr::new(NO)?;
+        let mut units_ptr = CudaPtr::new(NI*NO)?;
+        let mut output_ptr = CudaPtr::new(NI)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
+
+        unsafe {
+            match cublasDgemv_v2(*context.id_c(),
+                                 cublasOperation_t::CUBLAS_OP_T,
+                                 NI as ::libc::c_int,
+                                 NO as ::libc::c_int,
+                                 &1.0f64 as *const f64,
+                                 units_ptr.as_ptr(),
+                                 NI as libc::c_int,
+                                 input_ptr.as_ptr(),
+                                 1 as libc::c_int,
+                                 &0.0f64 as *const f64,
+                                 output_ptr.as_mut_ptr(),
+                                 1 as ::libc::c_int
+            ) {
+                cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
+                cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                    return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+                },
+                cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                    return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                        "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                    )));
+                },
+                cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                    return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+                },
+                status => {
+                    return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                        "Unable to get cuBLAS cublasDgemv_v2",
+                        status as i32 as u64
+                    )));
+                }
+            }
+        }
+
+        Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 }
 impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {

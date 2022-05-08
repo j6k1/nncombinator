@@ -247,3 +247,27 @@ impl<T> AsVoidMutPtr for CudaHostPtr<T> {
     }
 }
 unsafe impl<T> Send for CudaHostPtr<T> where T: Send {}
+pub struct ConstCudaPtr<T> where T: Default + Debug {
+    ptr:CudaPtr<T>
+}
+impl<T> ConstCudaPtr<T> where T: Default + Debug {
+    pub fn new(size:usize,ptr:*const T) -> Result<ConstCudaPtr<T>,CudaError> {
+        let mut p = CudaPtr::new(size)?;
+
+        p.memcpy(ptr,size)?;
+
+        Ok(ConstCudaPtr {
+            ptr: p
+        })
+    }
+}
+impl<T> AsVoidPtr for ConstCudaPtr<T> where T: Default + Debug {
+    fn as_void_ptr(&self) -> *const libc::c_void {
+        self.as_void_ptr()
+    }
+}
+impl<T> AsPtr<T> for ConstCudaPtr<T> where T: Default + Debug {
+    fn as_ptr(&self) -> *const T {
+        self.as_ptr()
+    }
+}

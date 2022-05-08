@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::ops::Deref;
+use std::sync::{Arc, Mutex};
 use rcublas::Context;
 use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasSgemv_v2, cublasStatus_t};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -194,13 +196,69 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         })).collect::<Result<Vec<Arr<U, NO>>, _>>().map_err(|e| TrainingError::from(e))
     }
 }
+pub struct SharedCublas {
+    value:Arc<Mutex<Context>>
+}
+impl SharedCublas {
+    pub fn new() -> Result<SharedCublas,rcublas::error::Error> {
+        Ok(SharedCublas {
+            value:Arc::new(Mutex::new(Context::new()?))
+        })
+    }
+}
+impl Deref for SharedCublas {
+    type Target = Arc<Mutex<Context>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+unsafe impl Send for SharedCublas {}
+unsafe impl Sync for SharedCublas {}
+impl Clone for SharedCublas {
+    fn clone(&self) -> Self {
+        SharedCublas {
+            value: Arc::clone(&self.value)
+        }
+    }
+}
+pub struct SharedCudnn {
+    value:Arc<Mutex<Cudnn>>
+}
+impl SharedCudnn {
+    pub fn new() -> Result<SharedCudnn,rcudnn::Error> {
+        Ok(SharedCudnn {
+            value:Arc::new(Mutex::new(Cudnn::new()?))
+        })
+    }
+}
+impl Deref for SharedCudnn {
+    type Target = Arc<Mutex<Cudnn>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+impl Clone for SharedCudnn {
+    fn clone(&self) -> Self {
+        SharedCudnn {
+            value: Arc::clone(&self.value)
+        }
+    }
+}
+unsafe impl Send for SharedCudnn {}
+unsafe impl Sync for SharedCudnn {}
 pub struct DeviceGpu<U> {
     u:PhantomData<U>,
+    cublas:SharedCublas,
+    cudnn:SharedCudnn
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
     pub fn new() -> Result<DeviceGpu<U>,DeviceError> {
         Ok(DeviceGpu {
             u:PhantomData::<U>,
+            cublas:SharedCublas::new()?,
+            cudnn:SharedCudnn::new()?
         })
     }
 }
@@ -488,6 +546,8 @@ impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,
+            cublas:self.cublas.clone(),
+            cudnn:self.cudnn.clone()
         }
     }
 }

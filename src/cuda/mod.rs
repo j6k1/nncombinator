@@ -346,3 +346,21 @@ impl<T> AsMutPtr<T> for CudaMemoryPoolPtr<T> {
         self.ptr
     }
 }
+impl TryFrom<f32> for CudaPtr<f32> {
+    type Error = CudaError;
+
+    fn try_from(value: f32) -> Result<Self, Self::Error> {
+        let mut ptr:CudaPtr<f32> = CudaPtr::new(1)?;
+        ptr.memcpy(&value as *const f32,1)?;
+        Ok(ptr)
+    }
+}
+impl TryFrom<f64> for CudaPtr<f64> {
+    type Error = CudaError;
+
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        let mut ptr:CudaPtr<f64> = CudaPtr::new(1)?;
+        ptr.memcpy(&value as *const f64,1)?;
+        Ok(ptr)
+    }
+}

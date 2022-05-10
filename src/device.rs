@@ -1,14 +1,16 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::sync::{Arc, Mutex};
 use rcublas::Context;
-use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, scublasSgemv_v2, cublasStatus_t, cublasZcopy_v2};
+use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasStatus_t, cublasSgemv_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcudnn::{Cudnn, TensorDescriptor};
 use rcudnn::utils::DataType;
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
-use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, Memory};
-use crate::error::{EvaluateError, TrainingError};
+use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
+use crate::cuda::mem::{MemoryPool};
+use crate::error::{CudaError, DeviceError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
 use crate::UnitValue;
@@ -47,22 +49,12 @@ impl DataTypeInfo for f64 {
 
 pub struct DeviceCpu<U> where U: UnitValue<U> {
     u:PhantomData<U>,
-    max_threads:usize,
 }
 impl<U> DeviceCpu<U> where U: UnitValue<U> {
-    pub fn with_max_threads(c:usize) -> DeviceCpu<U> {
-        DeviceCpu {
-            u:PhantomData::<U>,
-            max_threads:c
-        }
-    }
-
-    pub fn new() -> DeviceCpu<U> {
-        DeviceCpu::with_max_threads(16)
-    }
-
-    pub fn get_max_threads(&self) -> usize {
-        self.max_threads
+    pub fn new() -> Result<DeviceCpu<U>,DeviceError> {
+        Ok(DeviceCpu {
+            u: PhantomData::<U>
+        })
     }
 }
 impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
@@ -139,8 +131,7 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
         DeviceCpu {
-            u:PhantomData::<U>,
-            max_threads:self.max_threads
+            u:PhantomData::<U>
         }
     }
 }
@@ -205,63 +196,141 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         })).collect::<Result<Vec<Arr<U, NO>>, _>>().map_err(|e| TrainingError::from(e))
     }
 }
+pub struct SharedCublas {
+    cublas:Arc<Mutex<Context>>
+}
+impl SharedCublas {
+    pub fn new() -> Result<SharedCublas,rcublas::error::Error> {
+        Ok(SharedCublas {
+            cublas:Arc::new(Mutex::new(Context::new()?))
+        })
+    }
+
+    pub fn and_then_with_lock<F,E,R>(&self,f:F) -> Result<R,E>
+        where F: Fn(&Context) -> Result<R,E>, R: Send + Sync + 'static, E: From<CudaError> {
+
+        match self.cublas.lock() {
+            Ok(cublas) => {
+                f(&*cublas)
+            },
+            Err(_) => {
+                Err(E::from(CudaError::InvalidState(String::from(
+                    "Failed to exclusive lock on cublas context object."
+                ))))
+            }
+        }
+    }
+}
+impl Clone for SharedCublas {
+    fn clone(&self) -> Self {
+        SharedCublas {
+            cublas:Arc::clone(&self.cublas)
+        }
+    }
+}
+unsafe impl Send for SharedCublas {}
+unsafe impl Sync for SharedCublas {}
+pub struct SharedCudnn {
+    cudnn:Arc<Mutex<Cudnn>>
+}
+impl SharedCudnn {
+    pub fn new() -> Result<SharedCudnn,rcudnn::Error> {
+        Ok(SharedCudnn {
+            cudnn:Arc::new(Mutex::new(Cudnn::new()?))
+        })
+    }
+
+    pub fn and_then_with_lock<F,E,R>(&self,f:F) -> Result<R,E>
+        where F: Fn(&Cudnn) -> Result<R,E>, R: Send + Sync + 'static, E: From<CudaError> {
+
+        match self.cudnn.lock() {
+            Ok(cudnn) => {
+                f(&*cudnn)
+            },
+            Err(_) => {
+                Err(E::from(CudaError::InvalidState(String::from(
+                    "Failed to exclusive lock on cublas context object."
+                ))))
+            }
+        }
+    }
+}
+impl Clone for SharedCudnn {
+    fn clone(&self) -> Self {
+        SharedCudnn {
+            cudnn:Arc::clone(&self.cudnn)
+        }
+    }
+}
+unsafe impl Send for SharedCudnn {}
+unsafe impl Sync for SharedCudnn {}
 pub struct DeviceGpu<U> {
     u:PhantomData<U>,
+    cublas:SharedCublas,
+    cudnn:SharedCudnn,
+    memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
-    pub fn new() -> DeviceGpu<U> {
-        DeviceGpu {
+    pub fn new(memory_pool:MemoryPool) -> Result<DeviceGpu<U>,DeviceError> {
+        Ok(DeviceGpu {
             u:PhantomData::<U>,
-        }
+            cublas:SharedCublas::new()?,
+            cudnn:SharedCudnn::new()?,
+            memory_pool:Arc::new(Mutex::new(memory_pool))
+        })
     }
 }
 impl Device<f32> for DeviceGpu<f32> {
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f32,NO>, units: &Arr2<f32,NI,NO>, input: &Arr<f32,NI>)
         -> Result<Arr<f32, NO>, EvaluateError> {
 
-        let context = Context::new()?;
-
-        let mut input_ptr = CudaPtr::new(NI)?;
-        let mut units_ptr = CudaPtr::new(NI*NO)?;
-        let mut output_ptr = CudaPtr::new(NO)?;
+        let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
+        let mut units_ptr = CudaMemoryPoolPtr::new(NI*NO,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
         output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
 
-        match unsafe {
-            cublasSgemv_v2(*context.id_c(),
-                           cublasOperation_t::CUBLAS_OP_N,
-                           NO as ::libc::c_int,
-                           NI as ::libc::c_int,
-                           CudaPtr::try_from(1.0f32)?.as_ptr(),
-                           units_ptr.as_ptr(),
-                           NO as libc::c_int,
-                           input_ptr.as_ptr(),
-                           1,
-                           CudaPtr::try_from(1.0f32)?.as_ptr(),
-                           output_ptr.as_mut_ptr(),
-                           1
-            )
-        } {
-            cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
-            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
-            },
-            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
-                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                )));
-            },
-            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
-            },
-            status => {
-                return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
-                    status as i32 as u64
-                )));
-            }
+        {
+            let output_ptr = output_ptr.as_mut_ptr();
+
+            self.cublas.and_then_with_lock(|context| {
+                match unsafe {
+                    cublasSgemv_v2(*context.id_c(),
+                                   cublasOperation_t::CUBLAS_OP_N,
+                                   NO as ::libc::c_int,
+                                   NI as ::libc::c_int,
+                                   CudaPtr::try_from(1.0f32)?.as_ptr(),
+                                   units_ptr.as_ptr(),
+                                   NO as libc::c_int,
+                                   input_ptr.as_ptr(),
+                                   1,
+                                   CudaPtr::try_from(1.0f32)?.as_ptr(),
+                                   output_ptr,
+                                   1
+                    )
+                } {
+                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
+                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                        )));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+                    },
+                    status => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                            "Unable to get cuBLAS cublasSgemv_v2",
+                            status as i32 as u64
+                        )));
+                    }
+                }
+            })?;
         }
 
         Ok(output_ptr.read_to_vec()?.try_into()?)
@@ -270,48 +339,52 @@ impl Device<f32> for DeviceGpu<f32> {
     fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<f32,NI,NO>, input: &Arr<f32,NO>)
         -> Result<Arr<f32, NI>, TrainingError> {
 
-        let context = Context::new()?;
-
-        let mut input_ptr = CudaPtr::new(NO)?;
-        let mut units_ptr = CudaPtr::new(NI*NO)?;
-        let mut output_ptr = CudaPtr::new(NI)?;
+        let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
+        let mut units_ptr = CudaMemoryPoolPtr::new(NI*NO,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
 
-        match unsafe {
-            cublasSgemv_v2(*context.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
-                           NO as ::libc::c_int,
-                           NI as ::libc::c_int,
-                           CudaPtr::try_from(1.0f32)?.as_ptr(),
-                           units_ptr.as_ptr(),
-                           NO as libc::c_int,
-                           input_ptr.as_ptr(),
-                           1,
-                           CudaPtr::try_from(0.0f32)?.as_ptr(),
-                           output_ptr.as_mut_ptr(),
-                           1
-            )
-        } {
-            cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
-            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
-            },
-            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
-                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                )));
-            },
-            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
-            },
-            status => {
-                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
-                    status as i32 as u64
-                )));
-            }
+        {
+            let output_ptr = output_ptr.as_mut_ptr();
+
+            self.cublas.and_then_with_lock(|context| {
+                match unsafe {
+                    cublasSgemv_v2(*context.id_c(),
+                                   cublasOperation_t::CUBLAS_OP_T,
+                                   NO as ::libc::c_int,
+                                   NI as ::libc::c_int,
+                                   CudaPtr::try_from(1.0f32)?.as_ptr(),
+                                   units_ptr.as_ptr(),
+                                   NO as libc::c_int,
+                                   input_ptr.as_ptr(),
+                                   1,
+                                   CudaPtr::try_from(0.0f32)?.as_ptr(),
+                                   output_ptr,
+                                   1
+                    )
+                } {
+                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
+                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                        return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                        return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                        )));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                        return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+                    },
+                    status => {
+                        return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                            "Unable to get cuBLAS cublasSgemv_v2",
+                            status as i32 as u64
+                        )));
+                    }
+                }
+            })?;
         }
 
         Ok(output_ptr.read_to_vec()?.try_into()?)
@@ -359,49 +432,53 @@ impl Device<f64> for DeviceGpu<f64> {
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f64,NO>, units: &Arr2<f64,NI,NO>, input: &Arr<f64,NI>)
                                                      -> Result<Arr<f64, NO>, EvaluateError> {
 
-        let context = Context::new()?;
-
-        let mut input_ptr = CudaPtr::new(NI)?;
-        let mut units_ptr = CudaPtr::new(NI*NO)?;
-        let mut output_ptr = CudaPtr::new(NO)?;
+        let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
+        let mut units_ptr = CudaMemoryPoolPtr::new(NI*NO,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
         output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
 
-        match unsafe {
-            cublasDgemv_v2(*context.id_c(),
-                           cublasOperation_t::CUBLAS_OP_N,
-                           NO as ::libc::c_int,
-                           NI as ::libc::c_int,
-                           CudaPtr::try_from(1.0f64)?.as_ptr(),
-                           units_ptr.as_ptr(),
-                           NO as libc::c_int,
-                           input_ptr.as_ptr(),
-                           1,
-                           CudaPtr::try_from(1.0f64)?.as_ptr(),
-                           output_ptr.as_mut_ptr(),
-                           1
-            )
-        } {
-            cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
-            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
-            },
-            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
-                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                )));
-            },
-            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
-            },
-            status => {
-                return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
-                    status as i32 as u64
-                )));
-            }
+        {
+            let output_ptr = output_ptr.as_mut_ptr();
+
+            self.cublas.and_then_with_lock(|context| {
+                match unsafe {
+                    cublasDgemv_v2(*context.id_c(),
+                                   cublasOperation_t::CUBLAS_OP_N,
+                                   NO as ::libc::c_int,
+                                   NI as ::libc::c_int,
+                                   CudaPtr::try_from(1.0f64)?.as_ptr(),
+                                   units_ptr.as_ptr(),
+                                   NO as libc::c_int,
+                                   input_ptr.as_ptr(),
+                                   1,
+                                   CudaPtr::try_from(1.0f64)?.as_ptr(),
+                                   output_ptr,
+                                   1
+                    )
+                } {
+                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
+                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                        )));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+                    },
+                    status => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                            "Unable to get cuBLAS cublasSgemv_v2",
+                            status as i32 as u64
+                        )));
+                    }
+                }
+            })?;
         }
 
         Ok(output_ptr.read_to_vec()?.try_into()?)
@@ -410,48 +487,52 @@ impl Device<f64> for DeviceGpu<f64> {
     fn backward_linear<const NI:usize, const NO: usize>(&self, units: &Arr2<f64,NI,NO>, input: &Arr<f64,NO>)
                                                         -> Result<Arr<f64, NI>, TrainingError> {
 
-        let context = Context::new()?;
-
-        let mut input_ptr = CudaPtr::new(NO)?;
-        let mut units_ptr = CudaPtr::new(NI*NO)?;
-        let mut output_ptr = CudaPtr::new(NI)?;
+        let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
+        let mut units_ptr = CudaMemoryPoolPtr::new(NI*NO,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
 
-        match unsafe {
-            cublasDgemv_v2(*context.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
-                           NI as ::libc::c_int,
-                           NO as ::libc::c_int,
-                           CudaPtr::try_from(1.0f64)?.as_ptr(),
-                           units_ptr.as_ptr(),
-                           NI as libc::c_int,
-                           input_ptr.as_ptr(),
-                           1,
-                           CudaPtr::try_from(0.0f64)?.as_ptr(),
-                           output_ptr.as_mut_ptr(),
-                           1,
-            )
-        } {
-            cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
-            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
-            },
-            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
-                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                )));
-            },
-            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
-            },
-            status => {
-                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
-                    status as i32 as u64
-                )));
-            }
+        {
+            let output_ptr = output_ptr.as_mut_ptr();
+
+            self.cublas.and_then_with_lock(|context| {
+                match unsafe {
+                    cublasDgemv_v2(*context.id_c(),
+                                   cublasOperation_t::CUBLAS_OP_T,
+                                   NI as ::libc::c_int,
+                                   NO as ::libc::c_int,
+                                   CudaPtr::try_from(1.0f64)?.as_ptr(),
+                                   units_ptr.as_ptr(),
+                                   NI as libc::c_int,
+                                   input_ptr.as_ptr(),
+                                   1,
+                                   CudaPtr::try_from(0.0f64)?.as_ptr(),
+                                   output_ptr,
+                                   1,
+                    )
+                } {
+                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
+                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                        return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                        return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                        )));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                        return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+                    },
+                    status => {
+                        return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                            "Unable to get cuBLAS cublasSgemv_v2",
+                            status as i32 as u64
+                        )));
+                    }
+                }
+            })?;
         }
 
         Ok(output_ptr.read_to_vec()?.try_into()?)
@@ -499,6 +580,9 @@ impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,
+            cublas:self.cublas.clone(),
+            cudnn:self.cudnn.clone(),
+            memory_pool:Arc::clone(&self.memory_pool)
         }
     }
 }

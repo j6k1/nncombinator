@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use rcublas::Context;
 use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasStatus_t, cublasSgemv_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rcublas::api::PointerMode;
 use rcudnn::{Cudnn, TensorDescriptor};
 use rcudnn::utils::DataType;
 use crate::activation::Activation;
@@ -201,8 +202,12 @@ pub struct SharedCublas {
 }
 impl SharedCublas {
     pub fn new() -> Result<SharedCublas,rcublas::error::Error> {
+        let mut context = Context::new()?;
+
+        context.set_pointer_mode(PointerMode::Device)?;
+
         Ok(SharedCublas {
-            cublas:Arc::new(Mutex::new(Context::new()?))
+            cublas:Arc::new(Mutex::new(context))
         })
     }
 
@@ -296,17 +301,20 @@ impl Device<f32> for DeviceGpu<f32> {
             let output_ptr = output_ptr.as_mut_ptr();
 
             self.cublas.and_then_with_lock(|context| {
+                let alpha = CudaPtr::try_from(1.0f32)?;
+                let beta = CudaPtr::try_from(1.0f32)?;
+
                 match unsafe {
                     cublasSgemv_v2(*context.id_c(),
                                    cublasOperation_t::CUBLAS_OP_N,
                                    NO as ::libc::c_int,
                                    NI as ::libc::c_int,
-                                   CudaPtr::try_from(1.0f32)?.as_ptr(),
+                                   alpha.as_ptr(),
                                    units_ptr.as_ptr(),
                                    NO as libc::c_int,
                                    input_ptr.as_ptr(),
                                    1,
-                                   CudaPtr::try_from(1.0f32)?.as_ptr(),
+                                   beta.as_ptr(),
                                    output_ptr,
                                    1
                     )
@@ -350,17 +358,20 @@ impl Device<f32> for DeviceGpu<f32> {
             let output_ptr = output_ptr.as_mut_ptr();
 
             self.cublas.and_then_with_lock(|context| {
+                let alpha = CudaPtr::try_from(1.0f32)?;
+                let beta = CudaPtr::try_from(0.0f32)?;
+
                 match unsafe {
                     cublasSgemv_v2(*context.id_c(),
                                    cublasOperation_t::CUBLAS_OP_T,
-                                   NO as ::libc::c_int,
                                    NI as ::libc::c_int,
-                                   CudaPtr::try_from(1.0f32)?.as_ptr(),
+                                   NO as ::libc::c_int,
+                                   alpha.as_ptr(),
                                    units_ptr.as_ptr(),
-                                   NO as libc::c_int,
+                                   NI as libc::c_int,
                                    input_ptr.as_ptr(),
                                    1,
-                                   CudaPtr::try_from(0.0f32)?.as_ptr(),
+                                   beta.as_ptr(),
                                    output_ptr,
                                    1
                     )
@@ -444,17 +455,20 @@ impl Device<f64> for DeviceGpu<f64> {
             let output_ptr = output_ptr.as_mut_ptr();
 
             self.cublas.and_then_with_lock(|context| {
+                let alpha = CudaPtr::try_from(1.0f64)?;
+                let beta = CudaPtr::try_from(1.0f64)?;
+
                 match unsafe {
                     cublasDgemv_v2(*context.id_c(),
                                    cublasOperation_t::CUBLAS_OP_N,
                                    NO as ::libc::c_int,
                                    NI as ::libc::c_int,
-                                   CudaPtr::try_from(1.0f64)?.as_ptr(),
+                                   alpha.as_ptr(),
                                    units_ptr.as_ptr(),
                                    NO as libc::c_int,
                                    input_ptr.as_ptr(),
                                    1,
-                                   CudaPtr::try_from(1.0f64)?.as_ptr(),
+                                   beta.as_ptr(),
                                    output_ptr,
                                    1
                     )
@@ -498,17 +512,20 @@ impl Device<f64> for DeviceGpu<f64> {
             let output_ptr = output_ptr.as_mut_ptr();
 
             self.cublas.and_then_with_lock(|context| {
+                let alpha = CudaPtr::try_from(1.0f64)?;
+                let beta = CudaPtr::try_from(0.0f64)?;
+
                 match unsafe {
                     cublasDgemv_v2(*context.id_c(),
                                    cublasOperation_t::CUBLAS_OP_T,
                                    NI as ::libc::c_int,
                                    NO as ::libc::c_int,
-                                   CudaPtr::try_from(1.0f64)?.as_ptr(),
+                                   alpha.as_ptr(),
                                    units_ptr.as_ptr(),
                                    NI as libc::c_int,
                                    input_ptr.as_ptr(),
                                    1,
-                                   CudaPtr::try_from(0.0f64)?.as_ptr(),
+                                   beta.as_ptr(),
                                    output_ptr,
                                    1,
                     )

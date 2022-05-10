@@ -10,7 +10,8 @@ pub enum TrainingError {
     ToLargeInput(f64),
     CudaError(CudaError),
     CublasError(rcublas::error::Error),
-    CudnnError(rcudnn::Error)
+    CudnnError(rcudnn::Error),
+    InvalidStateError(InvalidStateError)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -24,6 +25,7 @@ impl fmt::Display for TrainingError {
             TrainingError::CudaError(e) => write!(f, "An error occurred in the process of cuda. ({})",e),
             TrainingError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})",e),
             TrainingError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
+            TrainingError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e)
         }
     }
 }
@@ -38,7 +40,8 @@ impl error::Error for TrainingError {
             TrainingError::ToLargeInput(_) => "The value is too large to convert.",
             TrainingError::CudaError(_) => "An error occurred in the process of cuda.",
             TrainingError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
-            TrainingError::CudnnError(_) => "An error occurred during the execution of a process in cudnn."
+            TrainingError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            TrainingError::InvalidStateError(_) => "Invalid state."
         }
     }
 
@@ -52,7 +55,8 @@ impl error::Error for TrainingError {
             TrainingError::ToLargeInput(_) => None,
             TrainingError::CudaError(e) => Some(e),
             TrainingError::CublasError(e) => Some(e),
-            TrainingError::CudnnError(e) => Some(e)
+            TrainingError::CudnnError(e) => Some(e),
+            TrainingError::InvalidStateError(e) => Some(e)
         }
     }
 }
@@ -111,6 +115,11 @@ impl From<rcublas::error::Error> for TrainingError {
 impl From<rcudnn::Error> for TrainingError {
     fn from(err: rcudnn::Error) -> TrainingError {
         TrainingError::CudnnError(err)
+    }
+}
+impl From<InvalidStateError> for TrainingError {
+    fn from(err: InvalidStateError) -> TrainingError {
+        TrainingError::InvalidStateError(err)
     }
 }
 impl From<io::Error> for ConfigReadError {
@@ -179,7 +188,8 @@ pub enum EvaluateError {
     CudaError(CudaError),
     CublasError(rcublas::error::Error),
     CudnnError(rcudnn::Error),
-    SizeMismatchError(SizeMismatchError)
+    SizeMismatchError(SizeMismatchError),
+    InvalidStateError(InvalidStateError)
 }
 impl fmt::Display for EvaluateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -188,6 +198,7 @@ impl fmt::Display for EvaluateError {
             EvaluateError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})", e),
             EvaluateError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
             EvaluateError::SizeMismatchError(e) => write!(f,"{}",e),
+            EvaluateError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e)
         }
     }
 }
@@ -198,6 +209,7 @@ impl error::Error for EvaluateError {
             EvaluateError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
             EvaluateError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
             EvaluateError::SizeMismatchError(_) => "memory size does not match.",
+            EvaluateError::InvalidStateError(_) => "Invalid state."
         }
     }
 
@@ -206,7 +218,8 @@ impl error::Error for EvaluateError {
             EvaluateError::CudaError(e) => Some(e),
             EvaluateError::CublasError(e) => Some(e),
             EvaluateError::CudnnError(e) => Some(e),
-            EvaluateError::SizeMismatchError(e) => Some(e)
+            EvaluateError::SizeMismatchError(e) => Some(e),
+            EvaluateError::InvalidStateError(e) => Some(e)
         }
     }
 }
@@ -228,6 +241,11 @@ impl From<rcudnn::Error> for EvaluateError {
 impl From<SizeMismatchError> for EvaluateError {
     fn from(err: SizeMismatchError) -> EvaluateError {
         EvaluateError::SizeMismatchError(err)
+    }
+}
+impl From<InvalidStateError> for EvaluateError {
+    fn from(err: InvalidStateError) -> EvaluateError {
+        EvaluateError::InvalidStateError(err)
     }
 }
 #[derive(Debug)]
@@ -333,5 +351,29 @@ impl From<rcublas::error::Error> for DeviceError {
 impl From<rcudnn::Error> for DeviceError {
     fn from(err: rcudnn::Error) -> DeviceError {
         DeviceError::CudnnError(err)
+    }
+}
+#[derive(Debug)]
+pub struct InvalidStateError(pub String);
+impl fmt::Display for InvalidStateError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            InvalidStateError(s) => {
+                write!(f,"{}",s)
+            }
+        }
+    }
+}
+impl error::Error for InvalidStateError {
+    fn description(&self) -> &str {
+        match self {
+            InvalidStateError(_) => "Invalid state,"
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            InvalidStateError(_) => None,
+        }
     }
 }

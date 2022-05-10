@@ -17,6 +17,7 @@ use crate::mem::{AsRawSlice};
 use crate::UnitValue;
 
 pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
+    fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>>;
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&Arr2<U,NI,NO>, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
     fn backward_linear<const NI:usize,const NO:usize>(&self, units:&Arr2<U,NI,NO>, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
@@ -59,6 +60,10 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     }
 }
 impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
+    fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>> {
+        None
+    }
+
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&Arr2<U,NI,NO>, input:&Arr<U,NI>)
         -> Result<Arr<U, NO>, EvaluateError> {
 
@@ -286,6 +291,10 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
     }
 }
 impl Device<f32> for DeviceGpu<f32> {
+    fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>> {
+        Some(Arc::clone(&self.memory_pool))
+    }
+
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f32,NO>, units: &Arr2<f32,NI,NO>, input: &Arr<f32,NI>)
         -> Result<Arr<f32, NO>, EvaluateError> {
 
@@ -440,6 +449,10 @@ impl Device<f32> for DeviceGpu<f32> {
     }
 }
 impl Device<f64> for DeviceGpu<f64> {
+    fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>> {
+        Some(Arc::clone(&self.memory_pool))
+    }
+
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f64,NO>, units: &Arr2<f64,NI,NO>, input: &Arr<f64,NI>)
                                                      -> Result<Arr<f64, NO>, EvaluateError> {
 

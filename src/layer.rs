@@ -7,6 +7,7 @@ use crate::device::*;
 use crate::persistence::*;
 use crate::{Cons, Nil, Stack};
 use crate::activation::{Activation};
+use crate::cuda::mem::CachedTensor;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
@@ -659,7 +660,7 @@ pub struct LinearLayer<U,P,D,I,const NI:usize,const NO:usize>
           I: Debug + Send + Sync {
     parent:P,
     device:D,
-    units:Arr2<U,NI,NO>,
+    units:CachedTensor<U,Arr2<U,NI,NO>>,
     bias:Arr<U,NO>
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> LinearLayer<U,P,D,I,NI,NO>
@@ -684,7 +685,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> LinearLayer<U,P,D,I,NI,NO>
         LinearLayer {
             parent:parent,
             device:device.clone(),
-            units: units,
+            units: CachedTensor::new(units,device.get_memory_pool()),
             bias:bias
         }
     }
@@ -702,7 +703,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>
             *b = persistence.read()?;
         }
 
-        for mut u in self.units.iter_mut() {
+        for mut u in self.units.scoped_mut().iter_mut() {
             for w in u.iter_mut() {
                 *w = persistence.read()?;
             }
@@ -744,7 +745,7 @@ impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for Linear
             *b = persistence.read()?;
         }
 
-        for mut u in self.units.iter_mut() {
+        for mut u in self.units.scoped_mut().iter_mut() {
             for w in u.iter_mut() {
                 *w = persistence.read()?;
             }
@@ -838,7 +839,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,P,D
             }
 
             s.map(|o| {
-                for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
+                for (mut u,o) in self.units.scoped_mut().iter_mut().zip(o.iter()) {
                     for (w,l) in u.iter_mut().zip(loss.iter()) {
                         optimizer.update(*l * *o, w);
                     }
@@ -955,7 +956,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,P,D
                             }).collect::<Vec<U>>().try_into()
                         }))
                     }).map(|o| {
-                        for (mut u, o) in self.units.iter_mut().zip(o.iter()) {
+                        for (mut u, o) in self.units.scoped_mut().iter_mut().zip(o.iter()) {
                             for (w, &l) in u.iter_mut().zip(loss.iter()) {
                                 optimizer.update(l * *o / batch_size, w);
                             }
@@ -983,7 +984,7 @@ pub struct DiffLinearLayer<U,P,D,I,const NI:usize,const NO:usize>
           I: Debug + Send + Sync {
     parent:P,
     device:D,
-    units:Arr2<U,NI,NO>,
+    units:CachedTensor<U,Arr2<U,NI,NO>>,
     bias:Arr<U,NO>
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> DiffLinearLayer<U,P,D,I,NI,NO>
@@ -1009,7 +1010,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> DiffLinearLayer<U,P,D,I,NI,NO>
         DiffLinearLayer {
             parent:parent,
             device:device.clone(),
-            units: units,
+            units: CachedTensor::new(units,device.get_memory_pool()),
             bias:bias
         }
     }
@@ -1028,7 +1029,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>
             *b = persistence.read()?;
         }
 
-        for mut u in self.units.iter_mut() {
+        for mut u in self.units.scoped_mut().iter_mut() {
             for w in u.iter_mut() {
                 *w = persistence.read()?;
             }
@@ -1071,7 +1072,7 @@ impl<T,U,P,D,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for DiffLi
             *b = persistence.read()?;
         }
 
-        for mut u in self.units.iter_mut() {
+        for mut u in self.units.scoped_mut().iter_mut() {
             for w in u.iter_mut() {
                 *w = persistence.read()?;
             }
@@ -1192,7 +1193,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U
             s.map::<_,Result<(),EvaluateError>>(|o| {
                 match o {
                     DiffInput::Diff(_, o) => {
-                        for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
+                        for (mut u,o) in self.units.scoped_mut().iter_mut().zip(o.iter()) {
                             for (w,l) in u.iter_mut().zip(loss.iter()) {
                                 optimizer.update(*l * *o, w);
                             }
@@ -1203,7 +1204,7 @@ impl<U,P,D,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U
                     DiffInput::NotDiff(input) => {
                         let o = self.device.forward_linear(&self.bias, &self.units, input)?;
 
-                        for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
+                        for (mut u,o) in self.units.scoped_mut().iter_mut().zip(o.iter()) {
                             for (w,l) in u.iter_mut().zip(loss.iter()) {
                                 optimizer.update(*l * *o, w);
                             }

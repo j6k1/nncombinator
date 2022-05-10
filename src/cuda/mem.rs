@@ -6,7 +6,7 @@ use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use libc::c_void;
-use crate::cuda::{CudaMemoryPoolPtr, CudaPtr, ffi, Memory};
+use crate::cuda::{CudaMemoryPoolPtr, ffi, Memory};
 use crate::error::{CudaError, InvalidStateError};
 use crate::list::ListNode;
 use crate::mem::AsRawSlice;
@@ -236,14 +236,14 @@ impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<
 pub struct CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value:T,
     ptr:Arc<Mutex<Option<CudaMemoryPoolPtr<U>>>>,
-    memory_pool:Arc<Mutex<MemoryPool>>
+    memory_pool:Option<Arc<Mutex<MemoryPool>>>
 }
 impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    pub fn new(value:T,memory_pool:&Arc<Mutex<MemoryPool>>) -> CachedTensor<U,T> {
+    pub fn new(value:T,memory_pool:Option<Arc<Mutex<MemoryPool>>>) -> CachedTensor<U,T> {
         CachedTensor {
             value:value,
             ptr:Arc::new(Mutex::new(None)),
-            memory_pool:Arc::clone(memory_pool)
+            memory_pool:memory_pool.as_ref().map(|memory_pool| Arc::clone(memory_pool))
         }
     }
 
@@ -264,10 +264,17 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
                     ref mut p => {
                         let len = self.value.as_raw_slice().len();
 
-                        let mut ptr = CudaMemoryPoolPtr::new(len,&self.memory_pool)?;
-                        ptr.memcpy(self.value.as_raw_slice().as_ptr(),len)?;
+                        if let Some(memory_pool) = self.memory_pool.as_ref() {
+                            let mut ptr = CudaMemoryPoolPtr::new(len, memory_pool)?;
 
-                        p.get_or_insert(ptr)
+                            ptr.memcpy(self.value.as_raw_slice().as_ptr(),len)?;
+
+                            p.get_or_insert(ptr)
+                        } else {
+                            return Err(E::from(CudaError::LogicError(String::from(
+                                "Memory pool is not set."
+                            ))));
+                        }
                     }
                 };
 
@@ -281,3 +288,12 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
         }
     }
 }
+impl<U,T> Deref for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+unsafe impl<U,T> Send for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {}
+unsafe impl<U,T> Sync for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {}

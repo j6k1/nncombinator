@@ -238,8 +238,6 @@ impl Clone for SharedCublas {
         }
     }
 }
-unsafe impl Send for SharedCublas {}
-unsafe impl Sync for SharedCublas {}
 pub struct SharedCudnn {
     cudnn:Arc<Mutex<Cudnn>>
 }
@@ -274,6 +272,7 @@ impl Clone for SharedCudnn {
 }
 unsafe impl Send for SharedCudnn {}
 unsafe impl Sync for SharedCudnn {}
+
 pub struct DeviceGpu<U> {
     u:PhantomData<U>,
     cublas:SharedCublas,

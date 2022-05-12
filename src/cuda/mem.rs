@@ -4,10 +4,10 @@ use std::fmt::Debug;
 use std::mem::size_of;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use libc::c_void;
-use crate::cuda::{CudaMemoryPoolPtr, ffi, Memory};
-use crate::error::{CudaError, InvalidStateError};
+use crate::cuda::{AsPtr, CudaMemoryPoolPtr, ffi, Memory};
+use crate::error::{CudaError};
 use crate::list::ListNode;
 use crate::mem::AsRawSlice;
 
@@ -248,10 +248,10 @@ impl Drop for MemoryPool {
 }
 pub struct ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value: &'a mut T,
-    ptr:Arc<Mutex<Option<CudaMemoryPoolPtr<U>>>>
+    ptr:Arc<RwLock<Option<CudaMemoryPoolPtr<U>>>>
 }
 impl<'a,U,T> ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    pub fn new(value:&'a mut T, ptr:Arc<Mutex<Option<CudaMemoryPoolPtr<U>>>>) -> ScopedMut<'a,U,T> {
+    pub fn new(value:&'a mut T, ptr:Arc<RwLock<Option<CudaMemoryPoolPtr<U>>>>) -> ScopedMut<'a,U,T> {
         ScopedMut {
             value:value,
             ptr:ptr
@@ -272,7 +272,7 @@ impl<'a,U,T> DerefMut for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSl
 }
 impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
     fn drop(&mut self) {
-        match self.ptr.lock() {
+        match self.ptr.write() {
             Ok(mut ptr) => {
                 if let Some(ptr) = ptr.as_mut() {
                     let len = self.value.as_raw_slice().len();
@@ -281,21 +281,21 @@ impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<
                 }
             },
             Err(_) => {
-                panic!("Failed to secure exclusive lock on memory pointer.");
+                panic!("Failed to secure exclusive lock on memory pointer.")
             }
         }
     }
 }
 pub struct CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value:T,
-    ptr:Arc<Mutex<Option<CudaMemoryPoolPtr<U>>>>,
+    ptr:Arc<RwLock<Option<CudaMemoryPoolPtr<U>>>>,
     memory_pool:Option<Arc<Mutex<MemoryPool>>>
 }
 impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     pub fn new(value:T,memory_pool:Option<Arc<Mutex<MemoryPool>>>) -> CachedTensor<U,T> {
         CachedTensor {
             value:value,
-            ptr:Arc::new(Mutex::new(None)),
+            ptr:Arc::new(RwLock::new(None)),
             memory_pool:memory_pool.as_ref().map(|memory_pool| Arc::clone(memory_pool))
         }
     }
@@ -303,17 +303,25 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     pub fn scoped_mut<'a>(&'a mut self) -> ScopedMut<'a,U,T> {
         ScopedMut {
             value:&mut self.value,
-            ptr:Arc::clone(&self.ptr)
+            ptr:self.ptr.clone()
         }
     }
 
-    pub fn and_then_with_lock<F,R,E>(&self,f:F) -> Result<R,E>
-        where E: From<CudaError> + From<InvalidStateError> + From<rcudnn::Error>, F: Fn(&CudaMemoryPoolPtr<U>) -> Result<R,E> {
+    pub fn get_or_insert_ptr(&self) -> Result<*const U,CudaError> {
+        match self.ptr.read() {
+            Ok(ptr) => {
+                if let Some(ref p) = *ptr {
+                    return Ok(p.as_ptr());
+                }
+            },
+            Err(_) => {
+                return Err(CudaError::InvalidState(String::from("Failed to allocate shared lock on memory for gpu.")))
+            }
+        };
 
-        match self.ptr.lock() {
+        match self.ptr.write() {
             Ok(mut ptr) => {
-                let p = match *ptr {
-                    Some(ref p) => p,
+                match *ptr {
                     ref mut p => {
                         let len = self.value.as_raw_slice().len();
 
@@ -322,21 +330,17 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
 
                             ptr.memcpy(self.value.as_raw_slice().as_ptr(),len)?;
 
-                            p.get_or_insert(ptr)
+                            Ok(p.get_or_insert(ptr).as_ptr())
                         } else {
-                            return Err(E::from(CudaError::LogicError(String::from(
+                            return Err(CudaError::LogicError(String::from(
                                 "Memory pool is not set."
-                            ))));
+                            )));
                         }
                     }
-                };
-
-                f(p)
+                }
             },
             Err(_) => {
-                Err(E::from(InvalidStateError(String::from(
-                    "Failed to allocate exclusive lock on memory for gpu."
-                ))))
+                Err(CudaError::InvalidState(String::from("Failed to allocate exclusive lock on memory for gpu.")))
             }
         }
     }

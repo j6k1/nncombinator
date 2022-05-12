@@ -239,28 +239,13 @@ impl Clone for SharedCublas {
     }
 }
 pub struct SharedCudnn {
-    cudnn:Arc<Mutex<Cudnn>>
+    cudnn:Arc<Cudnn>
 }
 impl SharedCudnn {
     pub fn new() -> Result<SharedCudnn,rcudnn::Error> {
         Ok(SharedCudnn {
-            cudnn:Arc::new(Mutex::new(Cudnn::new()?))
+            cudnn:Arc::new(Cudnn::new()?)
         })
-    }
-
-    pub fn and_then_with_lock<F,E,R>(&self,f:F) -> Result<R,E>
-        where F: Fn(&Cudnn) -> Result<R,E>, R: Send + Sync + 'static, E: From<CudaError> {
-
-        match self.cudnn.lock() {
-            Ok(cudnn) => {
-                f(&*cudnn)
-            },
-            Err(_) => {
-                Err(E::from(CudaError::InvalidState(String::from(
-                    "Failed to exclusive lock on cublas context object."
-                ))))
-            }
-        }
     }
 }
 impl Clone for SharedCudnn {
@@ -288,6 +273,14 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
             memory_pool:Arc::new(Mutex::new(memory_pool))
         })
     }
+
+    pub fn cublas(&self) -> &SharedCublas {
+        &self.cublas
+    }
+
+    pub fn cudnn(&self) -> &SharedCudnn {
+        &self.cudnn
+    }
 }
 impl Device<f32> for DeviceGpu<f32> {
     fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>> {
@@ -306,46 +299,44 @@ impl Device<f32> for DeviceGpu<f32> {
         {
             let output_ptr = output_ptr.as_mut_ptr();
 
-            units.and_then_with_lock(|units_ptr| {
-                self.cublas.and_then_with_lock(|context| {
-                    let alpha = CudaPtr::try_from(1.0f32)?;
-                    let beta = CudaPtr::try_from(1.0f32)?;
+            self.cublas.and_then_with_lock(|context| {
+                let alpha = CudaPtr::try_from(1.0f32)?;
+                let beta = CudaPtr::try_from(1.0f32)?;
 
-                    match unsafe {
-                        cublasSgemv_v2(*context.id_c(),
-                                       cublasOperation_t::CUBLAS_OP_N,
-                                       NO as ::libc::c_int,
-                                       NI as ::libc::c_int,
-                                       alpha.as_ptr(),
-                                       units_ptr.as_ptr(),
-                                       NO as libc::c_int,
-                                       input_ptr.as_ptr(),
-                                       1,
-                                       beta.as_ptr(),
-                                       output_ptr,
-                                       1
-                        )
-                    } {
-                        cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
-                        cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                            return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
-                        },
-                        cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                            return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
-                                "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                            )));
-                        },
-                        cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                            return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
-                        },
-                        status => {
-                            return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
-                                "Unable to get cuBLAS cublasSgemv_v2",
-                                status as i32 as u64
-                            )));
-                        }
+                match unsafe {
+                    cublasSgemv_v2(*context.id_c(),
+                                   cublasOperation_t::CUBLAS_OP_N,
+                                   NO as ::libc::c_int,
+                                   NI as ::libc::c_int,
+                                   alpha.as_ptr(),
+                                   units.get_or_insert_ptr()?,
+                                   NO as libc::c_int,
+                                   input_ptr.as_ptr(),
+                                   1,
+                                   beta.as_ptr(),
+                                   output_ptr,
+                                   1
+                    )
+                } {
+                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
+                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                        )));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+                    },
+                    status => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                            "Unable to get cuBLAS cublasSgemv_v2",
+                            status as i32 as u64
+                        )));
                     }
-                })
+                }
             })?;
         }
 
@@ -365,46 +356,44 @@ impl Device<f32> for DeviceGpu<f32> {
         {
             let output_ptr = output_ptr.as_mut_ptr();
 
-            units.and_then_with_lock(|units_ptr| {
-                self.cublas.and_then_with_lock(|context| {
-                    let alpha = CudaPtr::try_from(1.0f32)?;
-                    let beta = CudaPtr::try_from(0.0f32)?;
+            self.cublas.and_then_with_lock(|context| {
+                let alpha = CudaPtr::try_from(1.0f32)?;
+                let beta = CudaPtr::try_from(0.0f32)?;
 
-                    match unsafe {
-                        cublasSgemv_v2(*context.id_c(),
-                                       cublasOperation_t::CUBLAS_OP_T,
-                                       NI as ::libc::c_int,
-                                       NO as ::libc::c_int,
-                                       alpha.as_ptr(),
-                                       units_ptr.as_ptr(),
-                                       NI as libc::c_int,
-                                       input_ptr.as_ptr(),
-                                       1,
-                                       beta.as_ptr(),
-                                       output_ptr,
-                                       1
-                        )
-                    } {
-                        cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
-                        cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                            return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
-                        },
-                        cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                            return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
-                                "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                            )));
-                        },
-                        cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                            return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
-                        },
-                        status => {
-                            return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                                "Unable to get cuBLAS cublasSgemv_v2",
-                                status as i32 as u64
-                            )));
-                        }
+                match unsafe {
+                    cublasSgemv_v2(*context.id_c(),
+                                   cublasOperation_t::CUBLAS_OP_T,
+                                   NI as ::libc::c_int,
+                                   NO as ::libc::c_int,
+                                   alpha.as_ptr(),
+                                   units.get_or_insert_ptr()?,
+                                   NI as libc::c_int,
+                                   input_ptr.as_ptr(),
+                                   1,
+                                   beta.as_ptr(),
+                                   output_ptr,
+                                   1
+                    )
+                } {
+                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
+                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                        return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                        return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                        )));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                        return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+                    },
+                    status => {
+                        return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                            "Unable to get cuBLAS cublasSgemv_v2",
+                            status as i32 as u64
+                        )));
                     }
-                })
+                }
             })?;
         }
 
@@ -468,46 +457,44 @@ impl Device<f64> for DeviceGpu<f64> {
         {
             let output_ptr = output_ptr.as_mut_ptr();
 
-            units.and_then_with_lock(|units_ptr| {
-                self.cublas.and_then_with_lock(|context| {
-                    let alpha = CudaPtr::try_from(1.0f64)?;
-                    let beta = CudaPtr::try_from(1.0f64)?;
+            self.cublas.and_then_with_lock(|context| {
+                let alpha = CudaPtr::try_from(1.0f64)?;
+                let beta = CudaPtr::try_from(1.0f64)?;
 
-                    match unsafe {
-                        cublasDgemv_v2(*context.id_c(),
-                                       cublasOperation_t::CUBLAS_OP_N,
-                                       NO as ::libc::c_int,
-                                       NI as ::libc::c_int,
-                                       alpha.as_ptr(),
-                                       units_ptr.as_ptr(),
-                                       NO as libc::c_int,
-                                       input_ptr.as_ptr(),
-                                       1,
-                                       beta.as_ptr(),
-                                       output_ptr,
-                                       1
-                        )
-                    } {
-                        cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
-                        cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                            return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
-                        },
-                        cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                            return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
-                                "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                            )));
-                        },
-                        cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                            return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
-                        },
-                        status => {
-                            return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
-                                "Unable to get cuBLAS cublasSgemv_v2",
-                                status as i32 as u64
-                            )));
-                        }
+                match unsafe {
+                    cublasDgemv_v2(*context.id_c(),
+                                   cublasOperation_t::CUBLAS_OP_N,
+                                   NO as ::libc::c_int,
+                                   NI as ::libc::c_int,
+                                   alpha.as_ptr(),
+                                   units.get_or_insert_ptr()?,
+                                   NO as libc::c_int,
+                                   input_ptr.as_ptr(),
+                                   1,
+                                   beta.as_ptr(),
+                                   output_ptr,
+                                   1
+                    )
+                } {
+                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
+                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                        )));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+                    },
+                    status => {
+                        return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                            "Unable to get cuBLAS cublasSgemv_v2",
+                            status as i32 as u64
+                        )));
                     }
-                })
+                }
             })?;
         }
 
@@ -527,46 +514,44 @@ impl Device<f64> for DeviceGpu<f64> {
         {
             let output_ptr = output_ptr.as_mut_ptr();
 
-            units.and_then_with_lock(|units_ptr| {
-                self.cublas.and_then_with_lock(|context| {
-                    let alpha = CudaPtr::try_from(1.0f64)?;
-                    let beta = CudaPtr::try_from(0.0f64)?;
+            self.cublas.and_then_with_lock(|context| {
+                let alpha = CudaPtr::try_from(1.0f64)?;
+                let beta = CudaPtr::try_from(0.0f64)?;
 
-                    match unsafe {
-                        cublasDgemv_v2(*context.id_c(),
-                                       cublasOperation_t::CUBLAS_OP_T,
-                                       NI as ::libc::c_int,
-                                       NO as ::libc::c_int,
-                                       alpha.as_ptr(),
-                                       units_ptr.as_ptr(),
-                                       NI as libc::c_int,
-                                       input_ptr.as_ptr(),
-                                       1,
-                                       beta.as_ptr(),
-                                       output_ptr,
-                                       1,
-                        )
-                    } {
-                        cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
-                        cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                            return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
-                        },
-                        cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                            return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
-                                "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                            )));
-                        },
-                        cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                            return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
-                        },
-                        status => {
-                            return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                                "Unable to get cuBLAS cublasSgemv_v2",
-                                status as i32 as u64
-                            )));
-                        }
+                match unsafe {
+                    cublasDgemv_v2(*context.id_c(),
+                                   cublasOperation_t::CUBLAS_OP_T,
+                                   NI as ::libc::c_int,
+                                   NO as ::libc::c_int,
+                                   alpha.as_ptr(),
+                                   units.get_or_insert_ptr()?,
+                                   NI as libc::c_int,
+                                   input_ptr.as_ptr(),
+                                   1,
+                                   beta.as_ptr(),
+                                   output_ptr,
+                                   1,
+                    )
+                } {
+                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
+                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                        return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                        return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                        )));
+                    },
+                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                        return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+                    },
+                    status => {
+                        return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                            "Unable to get cuBLAS cublasSgemv_v2",
+                            status as i32 as u64
+                        )));
                     }
-                })
+                }
             })?;
         }
 

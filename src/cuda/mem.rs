@@ -26,6 +26,7 @@ pub struct MemoryPool {
     alloc_type:Alloctype,
     list:ListNode<Usage>,
     map: HashMap<*const c_void,Rc<RefCell<ListNode<Usage>>>>,
+    prev_map: HashMap<*const c_void,Rc<RefCell<ListNode<Usage>>>>,
     pool: *mut c_void
 }
 unsafe impl Send for MemoryPool {}
@@ -73,6 +74,7 @@ impl MemoryPool {
             alloc_type:alloc_type,
             list: n,
             map: HashMap::new(),
+            prev_map: HashMap::new(),
             pool: ptr
         })
     }
@@ -106,12 +108,12 @@ impl MemoryPool {
     pub fn allocate<T>(&mut self,size:usize) -> Result<*mut T,CudaError> {
         let size = size * size_of::<T>();
 
-        let p = self.pool;
-
-        let mut offset = 0;
+        let mut p = self.pool;
+        let mut prev_key = None;
 
         let n = &mut self.list;
         let mut n = n.next();
+        let mut found = false;
 
         while let Some(c) = n {
             {
@@ -120,63 +122,114 @@ impl MemoryPool {
                 if current.value.allocated == false && current.value.size >= size {
                     let remaining = current.value.size - size;
 
-                    current.split(Usage {
-                        prev_key: Some(p),
-                        size: remaining,
-                        allocated: false
-                    });
-
                     current.value.allocated = true;
                     current.value.size = size;
 
-                    let p = unsafe { p.add(offset) };
-
                     self.map.insert(p, Rc::clone(&c));
 
-                    return Ok(p as *mut T);
+                    if remaining > 0 {
+                        n = current.split(Usage {
+                            prev_key: Some(p),
+                            size: remaining,
+                            allocated: false
+                        });
+
+                        prev_key = unsafe { Some(p.add(size)) };
+                        self.prev_map.insert(p, Rc::clone(&c));
+                    } else {
+                        n = None;
+                    }
+
+                    found = true;
+
+                    break;
                 }
 
-                offset += current.value.size;
+                unsafe { p = p.add(current.value.size); }
             }
 
             n = c.deref().borrow().next();
         }
 
-        Err(CudaError::AllocFailed(String::from("Memory allocation failed.")))
+        if found {
+            n.map(|n| {
+                let current = Rc::clone(&n);
+
+                n.deref().borrow_mut().next().map(|n| {
+                    n.borrow_mut().value.prev_key = prev_key;
+
+                    if let Some(p) = prev_key {
+                        self.prev_map.insert(p, current);
+                    }
+                });
+            });
+
+            Ok(p as *mut T)
+        } else {
+            Err(CudaError::AllocFailed(String::from("Memory allocation failed.")))
+        }
     }
 
     pub fn deallocate<T>(&mut self, ptr:*const T) -> Result<(),CudaError> {
-        {
+        let mut removes = vec![];
+
+        let prev_key = ptr as *mut c_void;
+
+        let (size,prev_key) = {
             let mut n = self.map.get(&(ptr as *const c_void)).ok_or(CudaError::InvalidState(String::from(
                 "An attempt was made to release an unregistered memory address."
             )))?.deref().borrow_mut();
 
-            n.value.allocated = false;
-
-            let size = n.value.size;
-            let size = n.next().map(|n| n.deref().borrow().value.size + size).unwrap_or(size);
-
-            n.value.size = size;
-
-            if n.next().map(|n| n.deref().borrow().value.allocated == false).unwrap_or(false) {
-                n.merge_next();
+            if !n.value.allocated {
+                return Err(CudaError::InvalidState(String::from(
+                    "Attempted to release an area that has already been released."
+                )));
             }
 
-            let p = n.value.prev_key;
+            n.value.allocated = false;
 
-            if let Some(p) = p {
-                let mut n = self.map.get(&(p as *const c_void)).ok_or(CudaError::LogicError(String::from(
-                    "Memory address is unregistered."
-                )))?.deref().borrow_mut();
+            let mut size = n.value.size;
 
-                if n.value.allocated == false {
-                    n.value.size += size;
-                    n.merge_next();
-                }
+            if n.next().map(|n| n.deref().borrow().value.allocated == false).unwrap_or(false) {
+                size = n.next().map(|n| n.deref().borrow().value.size + size).unwrap_or(size);
+
+                n.value.size = size;
+
+                n.merge_next();
+                n.next().map(|n| {
+                    n.deref().borrow().value.prev_key.map(|ptr| {
+                        removes.push(ptr as *const c_void);
+                    });
+
+                    n.deref().borrow_mut().value.prev_key = Some(prev_key)
+                });
+            }
+
+            (size,n.value.prev_key)
+        };
+
+        if let Some(p) = prev_key {
+            let prev_key = p as *mut c_void;
+
+            let mut n = self.prev_map.get(&(p as *const c_void)).ok_or(CudaError::LogicError(String::from(
+                "Memory address is unregistered."
+            )))?.deref().borrow_mut();
+
+            if n.value.allocated == false {
+                n.value.size += size;
+                n.merge_next();
+
+                removes.push(ptr as *const c_void);
+
+                n.next().map(|n| n.deref().borrow_mut().value.prev_key = Some(prev_key));
             }
         }
 
         self.map.remove(&(ptr as *const c_void));
+
+        for r in removes {
+            self.prev_map.remove(&r);
+        }
 
         Ok(())
     }

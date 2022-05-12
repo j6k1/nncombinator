@@ -308,7 +308,7 @@ impl<T> Drop for CudaMemoryPoolPtr<T> {
     fn drop(&mut self) {
         match self.memory_pool.lock() {
             Ok(mut memory_pool) => {
-                memory_pool.deallocate(self.ptr).unwrap()
+                memory_pool.deallocate(self.ptr).unwrap();
             },
             Err(_) => {
                 panic!("Failed to secure exclusive lock on memory pool.");

@@ -7,12 +7,21 @@ use crate::error::CudaError;
 pub mod ffi;
 pub mod mem;
 
-pub trait AsDoubleVoidPtr {
-    fn as_double_void_ptr(&self) -> *const libc::c_void;
+pub(crate) mod private {
+    pub trait AsDoubleVoidPtrBase {
+        fn as_double_void_ptr(&self) -> *const libc::c_void;
+    }
+
+    pub trait AsDoubleVoidMutPtrBase {
+        fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void;
+    }
 }
-pub trait AsDoubleVoidMutPtr {
-    fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void;
+pub trait AsDoubleVoidPtr: private::AsDoubleVoidPtrBase {
 }
+pub trait AsDoubleVoidMutPtr: private::AsDoubleVoidMutPtrBase {
+}
+impl<T> AsDoubleVoidPtr for T where T: private::AsDoubleVoidPtrBase {}
+impl<T> AsDoubleVoidMutPtr for T where T: private::AsDoubleVoidMutPtrBase {}
 pub trait AsVoidPtr {
     fn as_void_ptr(&self) -> *const libc::c_void;
 }
@@ -105,12 +114,12 @@ impl<T> Drop for CudaPtr<T> {
         ffi::free(self.ptr).unwrap();
     }
 }
-impl<T> AsDoubleVoidPtr for CudaPtr<T> {
+impl<T> private::AsDoubleVoidPtrBase for CudaPtr<T> {
     fn as_double_void_ptr(&self) -> *const libc::c_void {
         &self.ptr as *const *mut T as *const libc::c_void
     }
 }
-impl<T> AsDoubleVoidMutPtr for CudaPtr<T> {
+impl<T> private::AsDoubleVoidMutPtrBase for CudaPtr<T> {
     fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
         &mut self.ptr as *mut *mut T as *mut libc::c_void
     }
@@ -228,12 +237,12 @@ impl<T> AsMutPtr<T> for CudaHostPtr<T> {
         self.ptr
     }
 }
-impl<T> AsDoubleVoidPtr for CudaHostPtr<T> {
+impl<T> private::AsDoubleVoidPtrBase for CudaHostPtr<T> {
     fn as_double_void_ptr(&self) -> *const libc::c_void {
         &self.ptr as *const *mut T as *const libc::c_void
     }
 }
-impl<T> AsDoubleVoidMutPtr for CudaHostPtr<T> {
+impl<T> private::AsDoubleVoidMutPtrBase for CudaHostPtr<T> {
     fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
         &mut self.ptr as *mut *mut T as *mut libc::c_void
     }
@@ -316,12 +325,12 @@ impl<T> Drop for CudaMemoryPoolPtr<T> {
         }
     }
 }
-impl<T> AsDoubleVoidPtr for CudaMemoryPoolPtr<T> {
+impl<T> private::AsDoubleVoidPtrBase for CudaMemoryPoolPtr<T> {
     fn as_double_void_ptr(&self) -> *const libc::c_void {
         &self.ptr as *const *mut T as *const libc::c_void
     }
 }
-impl<T> AsDoubleVoidMutPtr for CudaMemoryPoolPtr<T> {
+impl<T> private::AsDoubleVoidMutPtrBase for CudaMemoryPoolPtr<T> {
     fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
         &mut self.ptr as *mut *mut T as *mut libc::c_void
     }

@@ -10,7 +10,7 @@ use rcudnn::utils::DataType;
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
-use crate::cuda::mem::{CachedTensor, MemoryPool};
+use crate::cuda::mem::{CachedTensor, MemoryPool, Tensor};
 use crate::error::{CudaError, DeviceError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
@@ -18,8 +18,6 @@ use crate::UnitValue;
 
 pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
     fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>>;
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
-    fn backward_linear<const NI:usize,const NO:usize>(&self, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U>;
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
@@ -27,6 +25,10 @@ pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
     fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
         -> Result<Vec<Arr<U, N>>, TrainingError>
         where A: Activation<U,Arr<U,N>,Self>;
+}
+pub trait DeviceLinear<U,C> {
+    fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&C, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
+    fn backward_linear<const NI:usize,const NO:usize>(&self, units:&C, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
 }
 pub trait DataTypeInfo {
     fn cudnn_data_type() -> DataType;
@@ -62,38 +64,6 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
 impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
     fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>> {
         None
-    }
-
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NI>)
-        -> Result<Arr<U, NO>, EvaluateError> {
-
-        let mut output:Arr<U,NO> = Arr::new();
-
-        for (o,w) in output.iter_mut().zip(bias.iter()) {
-            *o += *w;
-        }
-
-        for (i,u) in input.iter().zip(units.iter()) {
-            for (o,w) in output.iter_mut().zip(u.iter()) {
-                *o += *i * *w;
-            }
-        }
-
-        Ok(output)
-    }
-
-    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &CachedTensor<U,Arr2<U,NI,NO>>, input: &Arr<U,NO>)
-        -> Result<Arr<U, NI>, TrainingError> {
-
-        let mut r = Arr::new();
-
-        for (r,u) in r.iter_mut().zip(units.iter()) {
-            for (w,l) in u.iter().zip(input.iter()) {
-                *r += *w * *l;
-            }
-        }
-
-        Ok(r)
     }
 
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
@@ -238,30 +208,9 @@ impl Clone for SharedCublas {
         }
     }
 }
-pub struct SharedCudnn {
-    cudnn:Arc<Cudnn>
-}
-impl SharedCudnn {
-    pub fn new() -> Result<SharedCudnn,rcudnn::Error> {
-        Ok(SharedCudnn {
-            cudnn:Arc::new(Cudnn::new()?)
-        })
-    }
-}
-impl Clone for SharedCudnn {
-    fn clone(&self) -> Self {
-        SharedCudnn {
-            cudnn:Arc::clone(&self.cudnn)
-        }
-    }
-}
-unsafe impl Send for SharedCudnn {}
-unsafe impl Sync for SharedCudnn {}
-
 pub struct DeviceGpu<U> {
     u:PhantomData<U>,
     cublas:SharedCublas,
-    cudnn:SharedCudnn,
     memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
@@ -269,7 +218,6 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
         Ok(DeviceGpu {
             u:PhantomData::<U>,
             cublas:SharedCublas::new()?,
-            cudnn:SharedCudnn::new()?,
             memory_pool:Arc::new(Mutex::new(memory_pool))
         })
     }
@@ -277,18 +225,53 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
     pub fn cublas(&self) -> &SharedCublas {
         &self.cublas
     }
-
-    pub fn cudnn(&self) -> &SharedCudnn {
-        &self.cudnn
-    }
 }
 impl Device<f32> for DeviceGpu<f32> {
     fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>> {
         Some(Arc::clone(&self.memory_pool))
     }
 
+    fn loss_linear<L,const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>, lossf: &L) -> Arr<f32, N>
+        where L: LossFunction<f32> {
+
+        let mut loss = Arr::new();
+
+        for (loss,(a, e))in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
+            *loss = lossf.derive(*a, *e);
+        }
+
+        loss
+    }
+
+    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>) -> Arr<f32, N> {
+        let mut loss = Arr::new();
+
+        for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
+            *l = *a - *e;
+        }
+
+        loss
+    }
+
+    fn loss_linear_total<L: LossFunction<f32>, const N: usize>(&self, exptected: &Arr<f32, N>, actual: &Arr<f32, N>, lossf: &L) -> f32 {
+        actual.iter().zip(exptected.iter()).fold(0.,| mut acc,(&a,&e) | {
+            acc += lossf.apply(a,e);
+            acc
+        })
+    }
+
+    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f32,N>>, loss:&Vec<Arr<f32,N>>, u:&Vec<Arr<f32,N>>, activation:&A)
+        -> Result<Vec<Arr<f32, N>>, TrainingError>
+        where A: Activation<f32,Arr<f32,N>,Self>
+    {
+        o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
+            activation.derive(&self,o,l,u)
+        }).collect::<Result<Vec<Arr<f32,N>>,_>>()
+    }
+}
+impl DeviceLinear<f32,C> for DeviceGpu<f32> where C: Tensor<U> {
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f32,NO>, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NI>)
-        -> Result<Arr<f32, NO>, EvaluateError> {
+                                                     -> Result<Arr<f32, NO>, EvaluateError> {
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
@@ -344,7 +327,7 @@ impl Device<f32> for DeviceGpu<f32> {
     }
 
     fn backward_linear<const NI:usize, const NO: usize>(&self, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NO>)
-        -> Result<Arr<f32, NI>, TrainingError> {
+                                                        -> Result<Arr<f32, NI>, TrainingError> {
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
         let mut units_ptr = CudaMemoryPoolPtr::new(NI*NO,&self.memory_pool)?;
@@ -399,9 +382,14 @@ impl Device<f32> for DeviceGpu<f32> {
 
         Ok(output_ptr.read_to_vec()?.try_into()?)
     }
+}
+impl Device<f64> for DeviceGpu<f64> {
+    fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>> {
+        Some(Arc::clone(&self.memory_pool))
+    }
 
-    fn loss_linear<L,const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>, lossf: &L) -> Arr<f32, N>
-        where L: LossFunction<f32> {
+    fn loss_linear<L,const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> Arr<f64, N>
+        where L: LossFunction<f64> {
 
         let mut loss = Arr::new();
 
@@ -412,7 +400,7 @@ impl Device<f32> for DeviceGpu<f32> {
         loss
     }
 
-    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>) -> Arr<f32, N> {
+    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>) -> Arr<f64, N> {
         let mut loss = Arr::new();
 
         for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
@@ -422,27 +410,23 @@ impl Device<f32> for DeviceGpu<f32> {
         loss
     }
 
-    fn loss_linear_total<L: LossFunction<f32>, const N: usize>(&self, exptected: &Arr<f32, N>, actual: &Arr<f32, N>, lossf: &L) -> f32 {
+    fn loss_linear_total<L: LossFunction<f64>, const N: usize>(&self, exptected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> f64 {
         actual.iter().zip(exptected.iter()).fold(0.,| mut acc,(&a,&e) | {
             acc += lossf.apply(a,e);
             acc
         })
     }
 
-    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f32,N>>, loss:&Vec<Arr<f32,N>>, u:&Vec<Arr<f32,N>>, activation:&A)
-        -> Result<Vec<Arr<f32, N>>, TrainingError>
-        where A: Activation<f32,Arr<f32,N>,Self>
+    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f64,N>>, loss:&Vec<Arr<f64,N>>, u:&Vec<Arr<f64,N>>, activation:&A)
+                                                       -> Result<Vec<Arr<f64, N>>, TrainingError>
+        where A: Activation<f64,Arr<f64,N>,Self>
     {
         o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
             activation.derive(&self,o,l,u)
-        }).collect::<Result<Vec<Arr<f32,N>>,_>>()
+        }).collect::<Result<Vec<Arr<f64,N>>,_>>()
     }
 }
-impl Device<f64> for DeviceGpu<f64> {
-    fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>> {
-        Some(Arc::clone(&self.memory_pool))
-    }
-
+impl DeviceLinear<f64,C> for DeviceGpu<f64> where C: Tensor<U> {
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f64,NO>, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &Arr<f64,NI>)
                                                      -> Result<Arr<f64, NO>, EvaluateError> {
 
@@ -557,51 +541,12 @@ impl Device<f64> for DeviceGpu<f64> {
 
         Ok(output_ptr.read_to_vec()?.try_into()?)
     }
-
-    fn loss_linear<L,const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> Arr<f64, N>
-        where L: LossFunction<f64> {
-
-        let mut loss = Arr::new();
-
-        for (loss,(a, e))in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
-            *loss = lossf.derive(*a, *e);
-        }
-
-        loss
-    }
-
-    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>) -> Arr<f64, N> {
-        let mut loss = Arr::new();
-
-        for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
-            *l = *a - *e;
-        }
-
-        loss
-    }
-
-    fn loss_linear_total<L: LossFunction<f64>, const N: usize>(&self, exptected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> f64 {
-        actual.iter().zip(exptected.iter()).fold(0.,| mut acc,(&a,&e) | {
-            acc += lossf.apply(a,e);
-            acc
-        })
-    }
-
-    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f64,N>>, loss:&Vec<Arr<f64,N>>, u:&Vec<Arr<f64,N>>, activation:&A)
-                                                       -> Result<Vec<Arr<f64, N>>, TrainingError>
-        where A: Activation<f64,Arr<f64,N>,Self>
-    {
-        o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            activation.derive(&self,o,l,u)
-        }).collect::<Result<Vec<Arr<f64,N>>,_>>()
-    }
 }
 impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,
             cublas:self.cublas.clone(),
-            cudnn:self.cudnn.clone(),
             memory_pool:Arc::clone(&self.memory_pool)
         }
     }

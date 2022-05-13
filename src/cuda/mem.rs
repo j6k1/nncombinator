@@ -286,6 +286,9 @@ impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<
         }
     }
 }
+pub trait Tensor<U> {
+    fn get_or_insert_ptr(&self) -> Result<*const U,CudaError>;
+}
 pub struct CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value:T,
     ptr:Arc<RwLock<Option<CudaMemoryPoolPtr<U>>>>,
@@ -306,8 +309,16 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
             ptr:self.ptr.clone()
         }
     }
+}
+impl<U,T> Deref for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+    type Target = T;
 
-    pub fn get_or_insert_ptr(&self) -> Result<*const U,CudaError> {
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+impl<U,T> Tensor<U> for CachedTensor<U,T> {
+    fn get_or_insert_ptr(&self) -> Result<*const U,CudaError> {
         match self.ptr.read() {
             Ok(ptr) => {
                 if let Some(ref p) = *ptr {
@@ -345,12 +356,3 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
         }
     }
 }
-impl<U,T> Deref for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-unsafe impl<U,T> Send for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {}
-unsafe impl<U,T> Sync for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {}

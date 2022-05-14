@@ -1071,7 +1071,7 @@ impl<U,C,P,D,I,const NI:usize,const NO:usize> AskDiffInput<U> for LinearLayer<U,
         stack.map_remaining(|s| self.parent.ask_diff_input(s))
     }
 }
-impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,Arr2<U,NI,NO>,P,D,I,NI,NO>
+impl<U,C,P,D,I,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,C,P,D,I,NI,NO>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,

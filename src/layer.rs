@@ -44,7 +44,7 @@ pub trait Backward<U,I,O> where U: UnitValue<U> {
     fn backward(&mut self, input:I) -> O;
 }
 pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
-    type OutStack: Stack<Head=Self::Output> + Debug + Sized + 'static;
+    type OutStack: Stack<Head=Self::Output> + Debug + Sized + Send + Sync + 'static;
     fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError>;
 }
 pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
@@ -74,7 +74,7 @@ pub trait BatchLoss<U>: BatchBackward<U> + Loss<U> where U: UnitValue<U> {
     }
 }
 pub trait BatchPreTrainBase<U>: BatchForwardBase + PreTrain<U> where U: UnitValue<U> {
-    type BatchOutStack: Stack<Head=Self::BatchOutput> + Sized + Debug;
+    type BatchOutStack: Stack<Head=Self::BatchOutput> + Sized + Debug + Send + Sync + 'static;
 }
 pub trait BatchPreTrain<U>: BatchPreTrainBase<U> + BatchForwardBase + BatchForward + where U: UnitValue<U> {
     fn batch_pre_train(&self, input:Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError>;

@@ -273,11 +273,9 @@ impl<'a,U,T> DerefMut for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSl
 }
 impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
     fn drop(&mut self) {
-        if let Some(ptr) = self.ptr.as_mut() {
-            let len = self.value.as_raw_slice().len();
+        let len = self.value.as_raw_slice().len();
 
-            ptr.memcpy(self.value.as_raw_slice().as_ptr(),len).unwrap();
-        }
+        self.ptr.memcpy(self.value.as_raw_slice().as_ptr(),len).unwrap();
     }
 }
 pub struct CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
@@ -286,18 +284,18 @@ pub struct CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    pub fn new(value:T,memory_pool:Arc<Mutex<MemoryPool>>) -> CachedTensor<U,T> {
+    pub fn new(value:T,memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CachedTensor<U,T>,CudaError> {
         let len = value.as_raw_slice().len();
 
         let mut ptr = CudaMemoryPoolPtr::new(len, &memory_pool)?;
 
         ptr.memcpy(value.as_raw_slice().as_ptr(),len)?;
 
-        CachedTensor {
+        Ok(CachedTensor {
             value:value,
             ptr:ptr,
-            memory_pool:memory_pool
-        }
+            memory_pool:memory_pool.clone()
+        })
     }
 
     pub fn scoped_mut<'a>(&'a mut self) -> ScopedMut<'a,U,T> {

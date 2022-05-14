@@ -8,9 +8,7 @@ use crate::device::*;
 use crate::error::{EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 
-pub trait Activation<U,T,D>: Send + Sync + 'static
-    where U: UnitValue<U>, D: Device<U> {
-
+pub trait Activation<U,T,D> where U: UnitValue<U>, D: Device<U> {
     fn apply(&self, device:&D, input:&T) -> Result<T, EvaluateError>;
     fn derive(&self, device:&D, o:&T, loss:&T, u:&T) -> Result<T, TrainingError>;
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;

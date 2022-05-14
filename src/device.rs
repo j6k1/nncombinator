@@ -10,7 +10,7 @@ use rcudnn::utils::DataType;
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
-use crate::cuda::mem::{MemoryPool};
+use crate::cuda::mem::{CachedTensor, MemoryPool};
 use crate::error::{CudaError, DeviceError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
@@ -21,13 +21,10 @@ pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
         where L: LossFunction<U>;
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
     fn loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&Arr<U,N>,actual:&Arr<U,N>,lossf:&L) -> U;
-    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
-        -> Result<Vec<Arr<U, N>>, TrainingError>
-        where A: Activation<U,Arr<U,N>,Self>;
 }
-pub trait DeviceLinear<U,C> where U: UnitValue<U> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&C, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
-    fn backward_linear<const NI:usize,const NO:usize>(&self, units:&C, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
+pub trait DeviceLinear<U> where U: UnitValue<U> {
+    fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
+    fn backward_linear<const NI:usize,const NO:usize>(&self, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
 }
 pub trait DataTypeInfo {
     fn cudnn_data_type() -> DataType;
@@ -89,15 +86,6 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
             acc
         })
     }
-
-    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
-                                                       -> Result<Vec<Arr<U, N>>, TrainingError>
-        where A: Activation<U,Arr<U,N>,Self> {
-
-        o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            activation.derive(&self,o,l,u)
-        }).collect::<Result<Vec<Arr<U,N>>,_>>()
-    }
 }
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
@@ -107,7 +95,7 @@ impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     }
 }
 impl<U> DeviceCpu<U> where U: UnitValue<U> {
-    pub fn forward_linear<const NI: usize, const NO: usize>(&self, bias: &Arr<f64, NO>, units: &Arr2<U, NI, NO>, input: &Arr<f64, NI>) -> Result<Arr<f64, NO>, EvaluateError> {
+    pub fn forward_linear<const NI: usize, const NO: usize>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: &Arr<U, NI>) -> Result<Arr<U, NO>, EvaluateError> {
         let mut output:Arr<U,NO> = Arr::new();
 
         for (o,w) in output.iter_mut().zip(bias.iter()) {
@@ -123,7 +111,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         Ok(output)
     }
 
-    pub fn backward_linear<const NI: usize, const NO: usize>(&self, units: &Arr2<U, NI, NO>, input: &Arr<f64, NO>) -> Result<Arr<f64, NI>, TrainingError> {
+    pub fn backward_linear<const NI: usize, const NO: usize>(&self, units: &Arr2<U, NI, NO>, input: &Arr<U, NO>) -> Result<Arr<U, NI>, TrainingError> {
         let mut r = Arr::new();
 
         for (r,u) in r.iter_mut().zip(units.iter()) {
@@ -133,6 +121,15 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         }
 
         Ok(r)
+    }
+
+    pub fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
+                                                       -> Result<Vec<Arr<U, N>>, TrainingError>
+        where A: Activation<U,Arr<U,N>,Self> + Send + Sync + 'static {
+
+        o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
+            activation.derive(&self,o,l,u)
+        }).collect::<Result<Vec<Arr<U,N>>,_>>()
     }
 
     pub fn loss_linear_batch<L,const N: usize>(&self, expected: &Vec<Arr<U, N>>, actual: &Vec<Arr<U, N>>, lossf: &L)
@@ -250,7 +247,7 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
     }
 }
 pub trait DeviceMemoryPool {
-    fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>>;
+    fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>>;
 }
 impl Device<f32> for DeviceGpu<f32> {
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>, lossf: &L) -> Arr<f32, N>
@@ -281,18 +278,9 @@ impl Device<f32> for DeviceGpu<f32> {
             acc
         })
     }
-
-    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f32,N>>, loss:&Vec<Arr<f32,N>>, u:&Vec<Arr<f32,N>>, activation:&A)
-        -> Result<Vec<Arr<f32, N>>, TrainingError>
-        where A: Activation<f32,Arr<f32,N>,Self>
-    {
-        o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            activation.derive(&self,o,l,u)
-        }).collect::<Result<Vec<Arr<f32,N>>,_>>()
-    }
 }
-impl<C> DeviceLinear<f32,C> for DeviceGpu<f32> where C: AsPtr<f32> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f32,NO>, units: &C, input: &Arr<f32,NI>)
+impl DeviceLinear<f32> for DeviceGpu<f32> {
+    fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f32,NO>, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NI>)
                                                      -> Result<Arr<f32, NO>, EvaluateError> {
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
@@ -348,15 +336,13 @@ impl<C> DeviceLinear<f32,C> for DeviceGpu<f32> where C: AsPtr<f32> {
         Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 
-    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &C, input: &Arr<f32,NO>)
+    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NO>)
                                                         -> Result<Arr<f32, NI>, TrainingError> {
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
-        let mut units_ptr = CudaMemoryPoolPtr::new(NI*NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
-        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
 
         {
             let output_ptr = output_ptr.as_mut_ptr();
@@ -406,8 +392,8 @@ impl<C> DeviceLinear<f32,C> for DeviceGpu<f32> where C: AsPtr<f32> {
     }
 }
 impl<U> DeviceMemoryPool for DeviceGpu<U> {
-    fn get_memory_pool(&self) -> Option<Arc<Mutex<MemoryPool>>> {
-        Some(Arc::clone(&self.memory_pool))
+    fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>> {
+        &self.memory_pool
     }
 }
 impl Device<f64> for DeviceGpu<f64> {
@@ -439,26 +425,15 @@ impl Device<f64> for DeviceGpu<f64> {
             acc
         })
     }
-
-    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f64,N>>, loss:&Vec<Arr<f64,N>>, u:&Vec<Arr<f64,N>>, activation:&A)
-                                                       -> Result<Vec<Arr<f64, N>>, TrainingError>
-        where A: Activation<f64,Arr<f64,N>,Self>
-    {
-        o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            activation.derive(&self,o,l,u)
-        }).collect::<Result<Vec<Arr<f64,N>>,_>>()
-    }
 }
-impl<C> DeviceLinear<f64,C> for DeviceGpu<f64> where C: AsPtr<f64> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f64,NO>, units: &C, input: &Arr<f64,NI>)
+impl DeviceLinear<f64> for DeviceGpu<f64> {
+    fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f64,NO>, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &Arr<f64,NI>)
                                                      -> Result<Arr<f64, NO>, EvaluateError> {
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
-        let mut units_ptr = CudaMemoryPoolPtr::new(NI*NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
-        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
         output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
 
         {
@@ -508,15 +483,13 @@ impl<C> DeviceLinear<f64,C> for DeviceGpu<f64> where C: AsPtr<f64> {
         Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 
-    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &C, input: &Arr<f64,NO>)
+    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &Arr<f64,NO>)
                                                         -> Result<Arr<f64, NI>, TrainingError> {
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
-        let mut units_ptr = CudaMemoryPoolPtr::new(NI*NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
-        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
 
         {
             let output_ptr = output_ptr.as_mut_ptr();
@@ -563,6 +536,23 @@ impl<C> DeviceLinear<f64,C> for DeviceGpu<f64> where C: AsPtr<f64> {
         }
 
         Ok(output_ptr.read_to_vec()?.try_into()?)
+    }
+}
+impl DeviceGpu<f32> {
+
+    pub fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f32,N>>, loss:&Vec<Arr<f32,N>>, u:&Vec<Arr<f32,N>>, activation:&A)
+                                                       -> Result<Vec<Arr<f32, N>>, TrainingError>
+        where A: Activation<f32,Arr<f32,N>,Self>
+    {
+        todo!()
+    }
+}
+impl DeviceGpu<f64> {
+    pub fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f64,N>>, loss:&Vec<Arr<f64,N>>, u:&Vec<Arr<f64,N>>, activation:&A)
+                                                       -> Result<Vec<Arr<f64, N>>, TrainingError>
+        where A: Activation<f64,Arr<f64,N>,Self>
+    {
+        todo!()
     }
 }
 impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {

@@ -1071,10 +1071,12 @@ impl<U,C,P,D,I,const NI:usize,const NO:usize> AskDiffInput<U> for LinearLayer<U,
         stack.map_remaining(|s| self.parent.ask_diff_input(s))
     }
 }
-impl<U,P,I,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+impl<U,P,D,I,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,Arr2<U,NI,NO>,P,D,I,NI,NO>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync {
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          Self: BackwardAll<U> {
 }
 impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchForwardBase for LinearLayer<U,C,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
@@ -1215,13 +1217,15 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Cac
         todo!()
     }
 }
-impl<U,P,I,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+impl<U,P,D,I,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,Arr2<U,NI,NO>,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=Vec<I>,BatchOutput=Vec<Arr<U,NI>>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=Vec<Arr<U,NI>>> + Send + Sync + 'static,
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=Vec<Arr<U,NI>>>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync {
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          Self: Loss<U> + BatchBackward<U> {
 }
 pub struct DiffLinearLayer<U,C,P,D,I,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + PreTrain<U> + Loss<U>,

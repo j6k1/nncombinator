@@ -26,6 +26,11 @@ pub trait DeviceLinear<U> where U: UnitValue<U> {
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
     fn backward_linear<const NI:usize,const NO:usize>(&self, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
 }
+pub trait DeviceActivation<U>: Device<U> where U: UnitValue<U> {
+    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
+                                                           -> Result<Vec<Arr<U, N>>, TrainingError>
+        where A: Activation<U,Arr<U,N>,Self>;
+}
 pub trait DataTypeInfo {
     fn cudnn_data_type() -> DataType;
     fn size() -> usize;
@@ -249,6 +254,11 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
 pub trait DeviceMemoryPool {
     fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>>;
 }
+impl<U> DeviceMemoryPool for DeviceGpu<U> {
+    fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>> {
+        &self.memory_pool
+    }
+}
 impl Device<f32> for DeviceGpu<f32> {
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>, lossf: &L) -> Arr<f32, N>
         where L: LossFunction<f32> {
@@ -391,9 +401,12 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
         Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 }
-impl<U> DeviceMemoryPool for DeviceGpu<U> {
-    fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>> {
-        &self.memory_pool
+impl DeviceActivation<f32> for DeviceGpu<f32> {
+    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f32,N>>, loss:&Vec<Arr<f32,N>>, u:&Vec<Arr<f32,N>>, activation:&A)
+                                                       -> Result<Vec<Arr<f32, N>>, TrainingError>
+        where A: Activation<f32,Arr<f32,N>,Self>
+    {
+        todo!()
     }
 }
 impl Device<f64> for DeviceGpu<f64> {
@@ -538,17 +551,8 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
         Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 }
-impl DeviceGpu<f32> {
-
-    pub fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f32,N>>, loss:&Vec<Arr<f32,N>>, u:&Vec<Arr<f32,N>>, activation:&A)
-                                                       -> Result<Vec<Arr<f32, N>>, TrainingError>
-        where A: Activation<f32,Arr<f32,N>,Self>
-    {
-        todo!()
-    }
-}
-impl DeviceGpu<f64> {
-    pub fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f64,N>>, loss:&Vec<Arr<f64,N>>, u:&Vec<Arr<f64,N>>, activation:&A)
+impl DeviceActivation<f64> for DeviceGpu<f64> {
+    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&Vec<Arr<f64,N>>, loss:&Vec<Arr<f64,N>>, u:&Vec<Arr<f64,N>>, activation:&A)
                                                        -> Result<Vec<Arr<f64, N>>, TrainingError>
         where A: Activation<f64,Arr<f64,N>,Self>
     {

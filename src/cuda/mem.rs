@@ -4,9 +4,10 @@ use std::fmt::Debug;
 use std::mem::size_of;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use libc::c_void;
-use crate::cuda::{AsPtr, CudaMemoryPoolPtr, ffi, Memory};
+use crate::cuda::{AsPtr, AsVoidPtr, CudaMemoryPoolPtr, ffi, Memory};
+use crate::cuda::private::{AsDoubleVoidMutPtrBase, AsDoubleVoidPtrBase};
 use crate::error::{CudaError};
 use crate::list::ListNode;
 use crate::mem::AsRawSlice;
@@ -248,10 +249,10 @@ impl Drop for MemoryPool {
 }
 pub struct ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value: &'a mut T,
-    ptr:Arc<RwLock<Option<CudaMemoryPoolPtr<U>>>>
+    ptr:&'a mut CudaMemoryPoolPtr<U>
 }
 impl<'a,U,T> ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    pub fn new(value:&'a mut T, ptr:Arc<RwLock<Option<CudaMemoryPoolPtr<U>>>>) -> ScopedMut<'a,U,T> {
+    pub fn new(value:&'a mut T, ptr:&'a mut CudaMemoryPoolPtr<U>) -> ScopedMut<'a,U,T> {
         ScopedMut {
             value:value,
             ptr:ptr
@@ -272,41 +273,37 @@ impl<'a,U,T> DerefMut for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSl
 }
 impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
     fn drop(&mut self) {
-        match self.ptr.write() {
-            Ok(mut ptr) => {
-                if let Some(ptr) = ptr.as_mut() {
-                    let len = self.value.as_raw_slice().len();
+        if let Some(ptr) = self.ptr.as_mut() {
+            let len = self.value.as_raw_slice().len();
 
-                    ptr.memcpy(self.value.as_raw_slice().as_ptr(),len).unwrap();
-                }
-            },
-            Err(_) => {
-                panic!("Failed to secure exclusive lock on memory pointer.")
-            }
+            ptr.memcpy(self.value.as_raw_slice().as_ptr(),len).unwrap();
         }
     }
 }
-pub trait Tensor<U> {
-    fn get_or_insert_ptr(&self) -> Result<*const U,CudaError>;
-}
 pub struct CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value:T,
-    ptr:Arc<RwLock<Option<CudaMemoryPoolPtr<U>>>>,
-    memory_pool:Option<Arc<Mutex<MemoryPool>>>
+    ptr:CudaMemoryPoolPtr<U>,
+    memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    pub fn new(value:T,memory_pool:Option<Arc<Mutex<MemoryPool>>>) -> CachedTensor<U,T> {
+    pub fn new(value:T,memory_pool:Arc<Mutex<MemoryPool>>) -> CachedTensor<U,T> {
+        let len = value.as_raw_slice().len();
+
+        let mut ptr = CudaMemoryPoolPtr::new(len, &memory_pool)?;
+
+        ptr.memcpy(value.as_raw_slice().as_ptr(),len)?;
+
         CachedTensor {
             value:value,
-            ptr:Arc::new(RwLock::new(None)),
-            memory_pool:memory_pool.as_ref().map(|memory_pool| Arc::clone(memory_pool))
+            ptr:ptr,
+            memory_pool:memory_pool
         }
     }
 
     pub fn scoped_mut<'a>(&'a mut self) -> ScopedMut<'a,U,T> {
         ScopedMut {
             value:&mut self.value,
-            ptr:self.ptr.clone()
+            ptr:&mut self.ptr
         }
     }
 }
@@ -317,42 +314,23 @@ impl<U,T> Deref for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U>
         &self.value
     }
 }
-impl<U,T> Tensor<U> for CachedTensor<U,T> {
-    fn get_or_insert_ptr(&self) -> Result<*const U,CudaError> {
-        match self.ptr.read() {
-            Ok(ptr) => {
-                if let Some(ref p) = *ptr {
-                    return Ok(p.as_ptr());
-                }
-            },
-            Err(_) => {
-                return Err(CudaError::InvalidState(String::from("Failed to allocate shared lock on memory for gpu.")))
-            }
-        };
-
-        match self.ptr.write() {
-            Ok(mut ptr) => {
-                match *ptr {
-                    ref mut p => {
-                        let len = self.value.as_raw_slice().len();
-
-                        if let Some(memory_pool) = self.memory_pool.as_ref() {
-                            let mut ptr = CudaMemoryPoolPtr::new(len, memory_pool)?;
-
-                            ptr.memcpy(self.value.as_raw_slice().as_ptr(),len)?;
-
-                            Ok(p.get_or_insert(ptr).as_ptr())
-                        } else {
-                            return Err(CudaError::LogicError(String::from(
-                                "Memory pool is not set."
-                            )));
-                        }
-                    }
-                }
-            },
-            Err(_) => {
-                Err(CudaError::InvalidState(String::from("Failed to allocate exclusive lock on memory for gpu.")))
-            }
-        }
+impl<U,T> AsPtr<U> for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+    fn as_ptr(&self) -> *const U {
+        self.ptr.as_ptr()
+    }
+}
+impl<U,T> AsVoidPtr for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+    fn as_void_ptr(&self) -> *const c_void {
+        self.ptr.as_void_ptr()
+    }
+}
+impl<U,T> AsDoubleVoidPtrBase for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+    fn as_double_void_ptr(&self) -> *const libc::c_void {
+        self.ptr.as_double_void_ptr()
+    }
+}
+impl<U,T> AsDoubleVoidMutPtrBase for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+    fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
+        self.ptr.as_double_void_mut_ptr()
     }
 }

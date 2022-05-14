@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use rcublas::Context;
 use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasStatus_t, cublasSgemv_v2};
@@ -11,12 +12,12 @@ use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
 use crate::cuda::mem::{CachedTensor, MemoryPool};
-use crate::error::{CudaError, DeviceError, EvaluateError, TrainingError};
+use crate::error::{DeviceError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
 use crate::UnitValue;
 
-pub trait Device<U>: Clone + Send + Sync + 'static where U: UnitValue<U> {
+pub trait Device<U>: Clone where U: UnitValue<U> {
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U>;
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
@@ -197,57 +198,25 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         })).collect::<Result<Vec<Arr<U, NO>>, _>>().map_err(|e| TrainingError::from(e))
     }
 }
-pub struct SharedCublas {
-    cublas:Arc<Mutex<Context>>
-}
-impl SharedCublas {
-    pub fn new() -> Result<SharedCublas,rcublas::error::Error> {
-        let mut context = Context::new()?;
-
-        context.set_pointer_mode(PointerMode::Device)?;
-
-        Ok(SharedCublas {
-            cublas:Arc::new(Mutex::new(context))
-        })
-    }
-
-    pub fn and_then_with_lock<F,E,R>(&self,f:F) -> Result<R,E>
-        where F: Fn(&Context) -> Result<R,E>, R: Send + Sync + 'static, E: From<CudaError> {
-
-        match self.cublas.lock() {
-            Ok(cublas) => {
-                f(&*cublas)
-            },
-            Err(_) => {
-                Err(E::from(CudaError::InvalidState(String::from(
-                    "Failed to exclusive lock on cublas context object."
-                ))))
-            }
-        }
-    }
-}
-impl Clone for SharedCublas {
-    fn clone(&self) -> Self {
-        SharedCublas {
-            cublas:Arc::clone(&self.cublas)
-        }
-    }
-}
 pub struct DeviceGpu<U> {
     u:PhantomData<U>,
-    cublas:SharedCublas,
+    cublas:Rc<Context>,
     memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
     pub fn new(memory_pool:MemoryPool) -> Result<DeviceGpu<U>,DeviceError> {
+        let mut context = Context::new()?;
+
+        context.set_pointer_mode(PointerMode::Device)?;
+
         Ok(DeviceGpu {
             u:PhantomData::<U>,
-            cublas:SharedCublas::new()?,
+            cublas:Rc::new(context),
             memory_pool:Arc::new(Mutex::new(memory_pool))
         })
     }
 
-    pub fn cublas(&self) -> &SharedCublas {
+    pub fn cublas(&self) -> &Context {
         &self.cublas
     }
 }
@@ -299,51 +268,43 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
 
-        {
-            let output_ptr = output_ptr.as_mut_ptr();
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(1.0f32)?;
 
-            self.cublas.and_then_with_lock(|context| {
-                let alpha = CudaPtr::try_from(1.0f32)?;
-                let beta = CudaPtr::try_from(1.0f32)?;
-
-                match unsafe {
-                    cublasSgemv_v2(*context.id_c(),
-                                   cublasOperation_t::CUBLAS_OP_N,
-                                   NO as ::libc::c_int,
-                                   NI as ::libc::c_int,
-                                   alpha.as_ptr(),
-                                   units.as_ptr(),
-                                   NO as libc::c_int,
-                                   input_ptr.as_ptr(),
-                                   1,
-                                   beta.as_ptr(),
-                                   output_ptr,
-                                   1
-                    )
-                } {
-                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
-                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                        return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
-                    },
-                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                        return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
-                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                        )));
-                    },
-                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                        return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
-                    },
-                    status => {
-                        return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
-                            "Unable to get cuBLAS cublasSgemv_v2",
-                            status as i32 as u64
-                        )));
-                    }
-                }
-            })?;
+        match unsafe {
+            cublasSgemv_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           NI as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input_ptr.as_ptr(),
+                           1,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           1
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.read_to_vec()?.try_into()?),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
         }
-
-        Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 
     fn backward_linear<const NI:usize, const NO: usize>(&self, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NO>)
@@ -354,51 +315,43 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
 
-        {
-            let output_ptr = output_ptr.as_mut_ptr();
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(0.0f32)?;
 
-            self.cublas.and_then_with_lock(|context| {
-                let alpha = CudaPtr::try_from(1.0f32)?;
-                let beta = CudaPtr::try_from(0.0f32)?;
-
-                match unsafe {
-                    cublasSgemv_v2(*context.id_c(),
-                                   cublasOperation_t::CUBLAS_OP_T,
-                                   NI as ::libc::c_int,
-                                   NO as ::libc::c_int,
-                                   alpha.as_ptr(),
-                                   units.as_ptr(),
-                                   NI as libc::c_int,
-                                   input_ptr.as_ptr(),
-                                   1,
-                                   beta.as_ptr(),
-                                   output_ptr,
-                                   1
-                    )
-                } {
-                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
-                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                        return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
-                    },
-                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                        return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
-                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                        )));
-                    },
-                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                        return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
-                    },
-                    status => {
-                        return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                            "Unable to get cuBLAS cublasSgemv_v2",
-                            status as i32 as u64
-                        )));
-                    }
-                }
-            })?;
+        match unsafe {
+            cublasSgemv_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_T,
+                           NI as ::libc::c_int,
+                           NO as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NI as libc::c_int,
+                           input_ptr.as_ptr(),
+                           1,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           1
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.read_to_vec()?.try_into()?),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
         }
-
-        Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 }
 impl DeviceActivation<f32> for DeviceGpu<f32> {
@@ -449,51 +402,43 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
         output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
 
-        {
-            let output_ptr = output_ptr.as_mut_ptr();
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(1.0f64)?;
 
-            self.cublas.and_then_with_lock(|context| {
-                let alpha = CudaPtr::try_from(1.0f64)?;
-                let beta = CudaPtr::try_from(1.0f64)?;
-
-                match unsafe {
-                    cublasDgemv_v2(*context.id_c(),
-                                   cublasOperation_t::CUBLAS_OP_N,
-                                   NO as ::libc::c_int,
-                                   NI as ::libc::c_int,
-                                   alpha.as_ptr(),
-                                   units.as_ptr(),
-                                   NO as libc::c_int,
-                                   input_ptr.as_ptr(),
-                                   1,
-                                   beta.as_ptr(),
-                                   output_ptr,
-                                   1
-                    )
-                } {
-                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
-                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                        return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
-                    },
-                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                        return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
-                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                        )));
-                    },
-                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                        return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
-                    },
-                    status => {
-                        return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
-                            "Unable to get cuBLAS cublasSgemv_v2",
-                            status as i32 as u64
-                        )));
-                    }
-                }
-            })?;
+        match unsafe {
+            cublasDgemv_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           NI as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input_ptr.as_ptr(),
+                           1,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           1
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.read_to_vec()?.try_into()?),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
         }
-
-        Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 
     fn backward_linear<const NI:usize, const NO: usize>(&self, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &Arr<f64,NO>)
@@ -504,51 +449,43 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
 
-        {
-            let output_ptr = output_ptr.as_mut_ptr();
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(0.0f64)?;
 
-            self.cublas.and_then_with_lock(|context| {
-                let alpha = CudaPtr::try_from(1.0f64)?;
-                let beta = CudaPtr::try_from(0.0f64)?;
-
-                match unsafe {
-                    cublasDgemv_v2(*context.id_c(),
-                                   cublasOperation_t::CUBLAS_OP_T,
-                                   NI as ::libc::c_int,
-                                   NO as ::libc::c_int,
-                                   alpha.as_ptr(),
-                                   units.as_ptr(),
-                                   NI as libc::c_int,
-                                   input_ptr.as_ptr(),
-                                   1,
-                                   beta.as_ptr(),
-                                   output_ptr,
-                                   1,
-                    )
-                } {
-                    cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(()),
-                    cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                        return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
-                    },
-                    cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                        return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
-                            "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                        )));
-                    },
-                    cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                        return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
-                    },
-                    status => {
-                        return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                            "Unable to get cuBLAS cublasSgemv_v2",
-                            status as i32 as u64
-                        )));
-                    }
-                }
-            })?;
+        match unsafe {
+            cublasDgemv_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_T,
+                           NI as ::libc::c_int,
+                           NO as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NI as libc::c_int,
+                           input_ptr.as_ptr(),
+                           1,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           1,
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.read_to_vec()?.try_into()?),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
         }
-
-        Ok(output_ptr.read_to_vec()?.try_into()?)
     }
 }
 impl DeviceActivation<f64> for DeviceGpu<f64> {
@@ -563,7 +500,7 @@ impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,
-            cublas:self.cublas.clone(),
+            cublas:Rc::clone(&self.cublas),
             memory_pool:Arc::clone(&self.memory_pool)
         }
     }

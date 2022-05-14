@@ -13,7 +13,7 @@ pub trait Activation<U,T,D> where U: UnitValue<U>, D: Device<U> {
     fn derive(&self, device:&D, o:&T, loss:&T, u:&T) -> Result<T, TrainingError>;
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;
 }
-pub trait ActivationCommonBase<U,D>: Send + Sync + 'static where U: UnitValue<U>, D: Device<U> {
+pub trait ActivationCommonBase<U,D> where U: UnitValue<U>, D: Device<U> {
     fn apply_common_base(&self, cudnn:&Cudnn,
                          src_desc:&TensorDescriptor,
                          src_ptr:*const libc::c_void,
@@ -30,7 +30,7 @@ pub trait ActivationCommonBase<U,D>: Send + Sync + 'static where U: UnitValue<U>
                           dest_diff_desc:&TensorDescriptor,
                           dest_diff_ptr:*mut libc::c_void) -> Result<(), TrainingError>;
 }
-pub trait ActivationCommon<U,T,D>: Send + Sync + 'static where U: UnitValue<U>, D: Device<U> {
+pub trait ActivationCommon<U,T,D> where U: UnitValue<U>, D: Device<U> {
     fn apply_common(&self, device:&D, input:&T) -> Result<T, EvaluateError>;
     fn derive_common(&self, device:&D, o:&T, loss:&T, u:&T) -> Result<T, TrainingError>;
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;

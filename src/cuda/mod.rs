@@ -56,6 +56,61 @@ impl AsVoidMutPtr for u64 {
         self as *mut u64 as *mut libc::c_void
     }
 }
+impl AsVoidMutPtr for usize {
+    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+        self as *mut usize as *mut libc::c_void
+    }
+}
+impl private::AsDoubleVoidPtrBase for i32 {
+    fn as_double_void_ptr(&self) -> *const libc::c_void {
+        self as *const i32 as *const libc::c_void
+    }
+}
+impl private::AsDoubleVoidMutPtrBase for i32 {
+    fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
+       self as *mut i32 as *mut libc::c_void
+    }
+}
+impl private::AsDoubleVoidPtrBase for u32 {
+    fn as_double_void_ptr(&self) -> *const libc::c_void {
+        self as *const u32 as *const libc::c_void
+    }
+}
+impl private::AsDoubleVoidMutPtrBase for u32 {
+    fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
+       self as *mut u32 as *mut libc::c_void
+    }
+}
+impl private::AsDoubleVoidPtrBase for i64 {
+    fn as_double_void_ptr(&self) -> *const libc::c_void {
+        self as *const i64 as *const libc::c_void
+    }
+}
+impl private::AsDoubleVoidMutPtrBase for i64 {
+    fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
+       self as *mut i64 as *mut libc::c_void
+    }
+}
+impl private::AsDoubleVoidPtrBase for u64 {
+    fn as_double_void_ptr(&self) -> *const libc::c_void {
+        self as *const u64 as *const libc::c_void
+    }
+}
+impl private::AsDoubleVoidMutPtrBase for u64 {
+    fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
+       self as *mut u64 as *mut libc::c_void
+    }
+}
+impl private::AsDoubleVoidPtrBase for usize {
+    fn as_double_void_ptr(&self) -> *const libc::c_void {
+        self as *const usize as *const libc::c_void
+    }
+}
+impl private::AsDoubleVoidMutPtrBase for usize {
+    fn as_double_void_mut_ptr(&mut self) -> *mut libc::c_void {
+       self as *mut usize as *mut libc::c_void
+    }
+}
 pub trait Memory<T: Default + Debug>: AsVoidMutPtr {
     fn memcpy(&mut self, p:*const T,len:usize) -> Result<usize,rcudnn::Error>;
     fn read_to_vec(&mut self) -> Result<Vec<T>,rcudnn::Error>;

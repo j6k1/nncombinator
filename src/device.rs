@@ -200,8 +200,8 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
 }
 pub struct DeviceGpu<U> {
     u:PhantomData<U>,
-    cublas:Rc<Context>,
-    memory_pool:Arc<Mutex<MemoryPool>>
+    cublas:Context,
+    pub memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
     pub fn new(memory_pool:MemoryPool) -> Result<DeviceGpu<U>,DeviceError> {
@@ -211,7 +211,7 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
 
         Ok(DeviceGpu {
             u:PhantomData::<U>,
-            cublas:Rc::new(context),
+            cublas:context,
             memory_pool:Arc::new(Mutex::new(memory_pool))
         })
     }
@@ -500,7 +500,7 @@ impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,
-            cublas:Rc::clone(&self.cublas),
+            cublas:self.cublas.clone(),
             memory_pool:Arc::clone(&self.memory_pool)
         }
     }

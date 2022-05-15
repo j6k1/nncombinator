@@ -1,6 +1,8 @@
 extern crate cc;
 
 use std::env;
+use std::path::Path;
+use std::process::Command;
 
 fn find_library_paths() -> Vec<String> {
 	match env::var("CUDA_PATH") {
@@ -15,29 +17,46 @@ fn find_library_paths() -> Vec<String> {
 
 fn main() {
 	println!("cargo:rerun-if-changed=src/kernel.cu");
-	
+
 	let library_paths = find_library_paths();
 
 	let out_dir = env::var("OUT_DIR").unwrap();
 
-	cc::Build::new()
-		.cuda(true)
-		.flag("-cudart=shared")
-		.flag("-gencode")
-		.flag("arch=compute_86,code=sm_86")
-		.flag("-gencode")
-		.flag("arch=compute_80,code=sm_80")
-		.flag("-gencode")
-		.flag("arch=compute_72,code=sm_72")
-		.flag("-gencode")
-		.flag("arch=compute_61,code=sm_61")
-		.file("src/kernel.cu")
-		.compile("libkernel.a");
+	if cfg!(target_os = "windows") {
+		Command::new("nvcc")
+			.args(&["-O3",
+				"src/kernel.cu",
+				// static library (.lib) を出力させる
+				"-lib",
+				// Cコンパイラのパスを指定
+				"-ccbin",
+				"cl.exe",
+				// Cコンパイラにwarning 4819を無視するよう指示
+				"-Xcompiler", "-wd4819",
+				"-o",
+			])
+			.arg(&format!("{}/kernel.lib", out_dir))
+			.status()
+			.unwrap();
 
-	for p in library_paths {
-		println!("cargo:rustc-link-search=native={}/lib/x64", p);
+		for p in library_paths {
+			println!("cargo:rustc-link-search=native={}/lib/x64", p);
+		}
+		println!("cargo:rustc-link-search=native={}", out_dir);
+		println!("cargo:rustc-link-lib=static=kernel");
+	} else {
+		cc::Build::new()
+			.cuda(true)
+			.flag("-cudart=shared")
+			.flag("-gencode")
+			.flag("arch=compute_86,code=sm_86")
+			.flag("-gencode")
+			.flag("arch=compute_80,code=sm_80")
+			.flag("-gencode")
+			.flag("arch=compute_72,code=sm_72")
+			.flag("-gencode")
+			.flag("arch=compute_61,code=sm_61")
+			.file("src/kernel.cu")
+			.compile("libkernel.a");
 	}
-	println!("cargo:rustc-link-lib=cudart");
-	println!("cargo:rustc-link-search=native={}", out_dir);
-	println!("cargo:rustc-link-lib=static=kernel");
 }

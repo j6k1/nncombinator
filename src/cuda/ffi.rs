@@ -1,10 +1,11 @@
 use std::{mem, result};
 use std::ptr::null_mut;
+use cuda_runtime_sys::dim3;
+use libc::c_void;
 use rcudnn_sys::{cudaError, cudaMemcpyKind, cudaStream_t};
+use crate::error::CudaRuntimeError;
 
-pub type Result<T> = result::Result<T, rcudnn::Error>;
-
-pub fn malloc<T>(size: usize) -> Result<*mut T> {
+pub fn malloc<T>(size: usize) -> Result<*mut T,rcudnn::Error> {
     let size = mem::size_of::<T>() * size;
     let mut ptr: *mut T = null_mut();
 
@@ -27,7 +28,7 @@ pub fn malloc<T>(size: usize) -> Result<*mut T> {
     }
 }
 
-pub fn malloc_host<T>(size: usize, flags:libc::c_uint) -> Result<*mut T> {
+pub fn malloc_host<T>(size: usize, flags:libc::c_uint) -> Result<*mut T,rcudnn::Error> {
     let size = mem::size_of::<T>() * size;
     let mut ptr: *mut T = null_mut();
 
@@ -50,7 +51,7 @@ pub fn malloc_host<T>(size: usize, flags:libc::c_uint) -> Result<*mut T> {
     }
 }
 
-pub fn memcpy<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind) -> Result<()> {
+pub fn memcpy<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind) -> Result<(),rcudnn::Error> {
     let size = mem::size_of::<T>() * size;
 
     match unsafe {
@@ -68,7 +69,7 @@ pub fn memcpy<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind) 
     }
 }
 
-pub fn memcpy_async<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind, stream: cudaStream_t) -> Result<()> {
+pub fn memcpy_async<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind, stream: cudaStream_t) -> Result<(),rcudnn::Error> {
     let size = mem::size_of::<T>() * size;
     match unsafe {
         rcudnn_sys::cudaMemcpyAsync(dst as *mut libc::c_void, src as *mut libc::c_void, size, kind, stream)
@@ -85,7 +86,7 @@ pub fn memcpy_async<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpy
     }
 }
 
-pub fn free<T>(devptr: *mut T) -> Result<()> {
+pub fn free<T>(devptr: *mut T) -> Result<(),rcudnn::Error> {
     match unsafe { rcudnn_sys::cudaFree(devptr as *mut libc::c_void) } {
         cudaError::cudaSuccess => Ok(()),
         cudaError::cudaErrorInvalidValue => {
@@ -96,7 +97,7 @@ pub fn free<T>(devptr: *mut T) -> Result<()> {
         }
     }
 }
-pub fn free_host<T>(devptr: *mut T) -> Result<()> {
+pub fn free_host<T>(devptr: *mut T) -> Result<(),rcudnn::Error> {
     match unsafe { rcudnn_sys::cudaFreeHost(devptr as *mut libc::c_void) } {
         cudaError::cudaSuccess => Ok(()),
         cudaError::cudaErrorInvalidValue => {
@@ -106,4 +107,39 @@ pub fn free_host<T>(devptr: *mut T) -> Result<()> {
             Err(rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64))
         }
     }
+}
+fn launch_with_stream(func: *const c_void,
+                          grid_dim: dim3,
+                          block_dim: dim3,
+                          args: &mut [*mut c_void],
+                          shared_mem: usize,
+                          stream:cuda_runtime_sys::cudaStream_t)
+                          -> Result<(),CudaRuntimeError> {
+    let cuda_error = unsafe {
+        cuda_runtime_sys::cudaLaunchKernel(func,
+                                           grid_dim,
+                                           block_dim,
+                                           args.as_mut_ptr(),
+                                           shared_mem,
+                                           stream)
+    };
+
+    if cuda_error == cuda_runtime_sys::cudaError::cudaSuccess {
+        Ok(())
+    } else {
+        Err(CudaRuntimeError::new(cuda_error))
+    }
+}
+pub fn launch(func: *const c_void,
+              grid_dim: dim3,
+              block_dim: dim3,
+              args: &mut [*mut c_void],
+              shared_mem: usize)
+              -> Result<(),CudaRuntimeError> {
+    launch_with_stream(func,
+                       grid_dim,
+                       block_dim,
+                       args,
+                       shared_mem,
+                       null_mut())
 }

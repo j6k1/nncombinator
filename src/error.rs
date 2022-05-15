@@ -1,5 +1,9 @@
 use std::{error, fmt, io};
+use std::ffi::CStr;
+use std::fmt::{Debug, Formatter, write};
 use std::num::ParseFloatError;
+use cuda_runtime_sys::cudaError_t;
+
 #[derive(Debug)]
 pub enum TrainingError {
     ReferenceCountError,
@@ -11,6 +15,7 @@ pub enum TrainingError {
     CudaError(CudaError),
     CublasError(rcublas::error::Error),
     CudnnError(rcudnn::Error),
+    CudaRuntimeError(CudaRuntimeError),
     InvalidStateError(InvalidStateError)
 }
 impl fmt::Display for TrainingError {
@@ -25,6 +30,7 @@ impl fmt::Display for TrainingError {
             TrainingError::CudaError(e) => write!(f, "An error occurred in the process of cuda. ({})",e),
             TrainingError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})",e),
             TrainingError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
+            TrainingError::CudaRuntimeError(e) => write!(f,"{}",e),
             TrainingError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e)
         }
     }
@@ -41,6 +47,7 @@ impl error::Error for TrainingError {
             TrainingError::CudaError(_) => "An error occurred in the process of cuda.",
             TrainingError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
             TrainingError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            TrainingError::CudaRuntimeError(_) => "An error occurred while running the Cuda kernel.",
             TrainingError::InvalidStateError(_) => "Invalid state."
         }
     }
@@ -56,6 +63,7 @@ impl error::Error for TrainingError {
             TrainingError::CudaError(e) => Some(e),
             TrainingError::CublasError(e) => Some(e),
             TrainingError::CudnnError(e) => Some(e),
+            TrainingError::CudaRuntimeError(_) => None,
             TrainingError::InvalidStateError(e) => Some(e)
         }
     }
@@ -115,6 +123,11 @@ impl From<rcublas::error::Error> for TrainingError {
 impl From<rcudnn::Error> for TrainingError {
     fn from(err: rcudnn::Error) -> TrainingError {
         TrainingError::CudnnError(err)
+    }
+}
+impl From<CudaRuntimeError> for TrainingError {
+    fn from(err: CudaRuntimeError) -> TrainingError {
+        TrainingError::CudaRuntimeError(err)
     }
 }
 impl From<InvalidStateError> for TrainingError {
@@ -188,6 +201,7 @@ pub enum EvaluateError {
     CudaError(CudaError),
     CublasError(rcublas::error::Error),
     CudnnError(rcudnn::Error),
+    CudaRuntimeError(CudaRuntimeError),
     SizeMismatchError(SizeMismatchError),
     InvalidStateError(InvalidStateError)
 }
@@ -197,6 +211,7 @@ impl fmt::Display for EvaluateError {
             EvaluateError::CudaError(e) => write!(f, "An error occurred in the process of cuda. ({})", e),
             EvaluateError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})", e),
             EvaluateError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
+            EvaluateError::CudaRuntimeError(e) => write!(f,"{}",e),
             EvaluateError::SizeMismatchError(e) => write!(f,"{}",e),
             EvaluateError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e)
         }
@@ -208,6 +223,7 @@ impl error::Error for EvaluateError {
             EvaluateError::CudaError(_) => "An error occurred in the process of cuda.",
             EvaluateError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
             EvaluateError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            EvaluateError::CudaRuntimeError(_) => "An error occurred while running the Cuda kernel.",
             EvaluateError::SizeMismatchError(_) => "memory size does not match.",
             EvaluateError::InvalidStateError(_) => "Invalid state."
         }
@@ -218,6 +234,7 @@ impl error::Error for EvaluateError {
             EvaluateError::CudaError(e) => Some(e),
             EvaluateError::CublasError(e) => Some(e),
             EvaluateError::CudnnError(e) => Some(e),
+            EvaluateError::CudaRuntimeError(_) => None,
             EvaluateError::SizeMismatchError(e) => Some(e),
             EvaluateError::InvalidStateError(e) => Some(e)
         }
@@ -236,6 +253,11 @@ impl From<rcublas::error::Error> for EvaluateError {
 impl From<rcudnn::Error> for EvaluateError {
     fn from(err: rcudnn::Error) -> EvaluateError {
         EvaluateError::CudnnError(err)
+    }
+}
+impl From<CudaRuntimeError> for EvaluateError {
+    fn from(err: CudaRuntimeError) -> EvaluateError {
+        EvaluateError::CudaRuntimeError(err)
     }
 }
 impl From<SizeMismatchError> for EvaluateError {
@@ -374,6 +396,37 @@ impl error::Error for InvalidStateError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             InvalidStateError(_) => None,
+        }
+    }
+}
+pub struct CudaRuntimeError {
+    raw: cudaError_t,
+}
+impl fmt::Debug for CudaRuntimeError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        write!(f,"{}",unsafe { CStr::from_ptr(cuda_runtime_sys::cudaGetErrorString(self.raw)) }.to_string_lossy())
+    }
+}
+impl fmt::Display for CudaRuntimeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f,"An error occurred while running the Cuda kernel. cause = {}",
+            unsafe { CStr::from_ptr(cuda_runtime_sys::cudaGetErrorString(self.raw)) }.to_string_lossy()
+        )
+    }
+}
+impl error::Error for CudaRuntimeError {
+    fn description(&self) -> &str {
+        "An error occurred while running the Cuda kernel."
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
+    }
+}
+impl CudaRuntimeError {
+    pub fn new(raw:cudaError_t) -> CudaRuntimeError {
+        CudaRuntimeError {
+            raw: raw
         }
     }
 }

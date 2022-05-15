@@ -1,8 +1,10 @@
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
+use cuda_runtime_sys::dim3;
+use libc::c_void;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t};
 use crate::cuda::mem::MemoryPool;
-use crate::error::CudaError;
+use crate::error::{CudaError, CudaRuntimeError};
 
 pub mod ffi;
 pub mod mem;
@@ -371,5 +373,24 @@ impl TryFrom<f64> for CudaPtr<f64> {
         let mut ptr:CudaPtr<f64> = CudaPtr::new(1)?;
         ptr.memcpy(&value as *const f64,1)?;
         Ok(ptr)
+    }
+}
+pub trait KernelArgs {
+    fn as_vec(&mut self) ->  Vec<&mut dyn AsDoubleVoidMutPtr>;
+}
+pub trait Kernel {
+    type Args: KernelArgs;
+
+    const FUNC_PTR: *const c_void;
+
+    fn launch(&mut self,grid_dim:dim3,block_dim:dim3,args:&mut Self::Args,shared_mem:usize) -> Result<(),CudaRuntimeError> {
+        ffi::launch(Self::FUNC_PTR,
+                     grid_dim,
+                     block_dim,
+                     &mut args.as_vec().into_iter()
+                         .map(|p| p.as_double_void_mut_ptr())
+                         .collect::<Vec<*mut c_void>>().as_mut_slice(),
+                     shared_mem
+        )
     }
 }

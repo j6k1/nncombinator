@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use rcublas::Context;
-use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasStatus_t, cublasSgemv_v2};
+use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasStatus_t, cublasSgemv_v2, cublasHandle_t};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
 use rcudnn::{Cudnn, TensorDescriptor};
@@ -12,7 +12,7 @@ use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
 use crate::cuda::mem::{CachedTensor, MemoryPool};
-use crate::error::{DeviceError, EvaluateError, TrainingError};
+use crate::error::{CudaError, DeviceError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
 use crate::UnitValue;
@@ -198,14 +198,45 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         })).collect::<Result<Vec<Arr<U, NO>>, _>>().map_err(|e| TrainingError::from(e))
     }
 }
+pub struct CublasContext {
+    raw:Rc<Context>
+}
+impl CublasContext {
+    pub fn new() -> Result<CublasContext, rcublas::error::Error> {
+        Ok(CublasContext {
+            raw: Rc::new(Context::new()?)
+        })
+    }
+
+    pub fn id_c(&self) -> &cublasHandle_t {
+        self.raw.id_c()
+    }
+
+    pub fn pointer_mode(&self) -> Result<PointerMode, rcublas::error::Error> {
+        self.raw.pointer_mode()
+    }
+
+    pub(crate) fn set_pointer_mode(&mut self,pointer_mode: PointerMode) -> Result<(),CudaError> {
+       Ok(Rc::get_mut(&mut self.raw).ok_or(CudaError::InvalidState(String::from(
+           "Failed to obtain mutable reference to CublasContext object."
+       )))?.set_pointer_mode(pointer_mode)?)
+    }
+}
+impl Clone for CublasContext {
+    fn clone(&self) -> Self {
+        CublasContext {
+            raw: Rc::clone(&self.raw)
+        }
+    }
+}
 pub struct DeviceGpu<U> {
     u:PhantomData<U>,
-    cublas:Context,
+    cublas:CublasContext,
     pub memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
     pub fn new(memory_pool:MemoryPool) -> Result<DeviceGpu<U>,DeviceError> {
-        let mut context = Context::new()?;
+        let mut context = CublasContext::new()?;
 
         context.set_pointer_mode(PointerMode::Device)?;
 
@@ -216,7 +247,7 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
         })
     }
 
-    pub fn cublas(&self) -> &Context {
+    pub fn cublas(&self) -> &CublasContext {
         &self.cublas
     }
 }

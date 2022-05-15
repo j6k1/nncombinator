@@ -291,6 +291,7 @@ impl error::Error for PersistenceError {
 pub enum CudaError {
     AllocFailed(String),
     CudnnError(rcudnn::Error),
+    CublasError(rcublas::error::Error),
     InvalidState(String),
     LogicError(String)
 }
@@ -299,6 +300,7 @@ impl fmt::Display for CudaError {
         match self {
             CudaError::AllocFailed(s) => write!(f, "{}", s),
             CudaError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
+            CudaError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})", e),
             CudaError::InvalidState(s) => write!(f, "{}", s),
             CudaError::LogicError(s) => write!(f,"{}",s)
         }
@@ -309,6 +311,7 @@ impl error::Error for CudaError {
         match self {
             CudaError::AllocFailed(_) => "Memory allocation failed.",
             CudaError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            CudaError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
             CudaError::InvalidState(_) => "Invalid state.s",
             CudaError::LogicError(_) => "Logic error."
         }
@@ -318,6 +321,7 @@ impl error::Error for CudaError {
         match self {
             CudaError::AllocFailed(_) => None,
             CudaError::CudnnError(e) => Some(e),
+            CudaError::CublasError(e) => Some(e),
             CudaError::InvalidState(_) => None,
             CudaError::LogicError(_) => None,
         }
@@ -326,6 +330,11 @@ impl error::Error for CudaError {
 impl From<rcudnn::Error> for CudaError {
     fn from(err: rcudnn::Error) -> CudaError {
         CudaError::CudnnError(err)
+    }
+}
+impl From<rcublas::Error> for CudaError {
+    fn from(err: rcublas::error::Error) -> CudaError {
+        CudaError::CublasError(err)
     }
 }
 #[derive(Debug)]

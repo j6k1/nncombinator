@@ -24,6 +24,12 @@ fn main() {
 		.cuda(true)
 		.flag("-cudart=shared")
 		.flag("-gencode")
+		.flag("arch=compute_86,code=sm_86")
+		.flag("-gencode")
+		.flag("arch=compute_80,code=sm_80")
+		.flag("-gencode")
+		.flag("arch=compute_72,code=sm_72")
+		.flag("-gencode")
 		.flag("arch=compute_61,code=sm_61")
 		.file("src/kernel.cu")
 		.compile("libkernel.a");

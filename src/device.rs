@@ -202,9 +202,13 @@ pub struct CublasContext {
     raw:Rc<Context>
 }
 impl CublasContext {
-    pub fn new() -> Result<CublasContext, rcublas::error::Error> {
+    pub fn new(pointer_mode:PointerMode) -> Result<CublasContext, rcublas::error::Error> {
+        let mut context = Context::new()?;
+
+        context.set_pointer_mode(pointer_mode)?;
+
         Ok(CublasContext {
-            raw: Rc::new(Context::new()?)
+            raw: Rc::new(context)
         })
     }
 
@@ -214,12 +218,6 @@ impl CublasContext {
 
     pub fn pointer_mode(&self) -> Result<PointerMode, rcublas::error::Error> {
         self.raw.pointer_mode()
-    }
-
-    pub(crate) fn set_pointer_mode(&mut self,pointer_mode: PointerMode) -> Result<(),CudaError> {
-       Ok(Rc::get_mut(&mut self.raw).ok_or(CudaError::InvalidState(String::from(
-           "Failed to obtain mutable reference to CublasContext object."
-       )))?.set_pointer_mode(pointer_mode)?)
     }
 }
 impl Clone for CublasContext {
@@ -236,9 +234,7 @@ pub struct DeviceGpu<U> {
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
     pub fn new(memory_pool:MemoryPool) -> Result<DeviceGpu<U>,DeviceError> {
-        let mut context = CublasContext::new()?;
-
-        context.set_pointer_mode(PointerMode::Device)?;
+        let mut context = CublasContext::new(PointerMode::Device)?;
 
         Ok(DeviceGpu {
             u:PhantomData::<U>,

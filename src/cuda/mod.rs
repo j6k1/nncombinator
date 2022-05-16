@@ -86,6 +86,26 @@ impl AsVoidMutPtr for usize {
         self as *mut usize as *mut libc::c_void
     }
 }
+impl AsVoidPtr for f32 {
+    fn as_void_ptr(&self) -> *const libc::c_void {
+        self as *const f32 as *const libc::c_void
+    }
+}
+impl AsVoidMutPtr for f32 {
+    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+        self as *mut f32 as *mut libc::c_void
+    }
+}
+impl AsVoidPtr for f64 {
+    fn as_void_ptr(&self) -> *const libc::c_void {
+        self as *const f64 as *const libc::c_void
+    }
+}
+impl AsVoidMutPtr for f64 {
+    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+        self as *mut f64 as *mut libc::c_void
+    }
+}
 impl private::AsKernelPtrBase for i32 {
     fn as_kernel_ptr(&self) -> *const libc::c_void {
         self as *const i32 as *const libc::c_void

@@ -642,6 +642,7 @@ impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for Arr<T,N>
 #[derive(Debug)]
 pub struct Arr2ParIter<'data,T,const N1:usize,const N2:usize>(&'data [T]);
 
+#[derive(Debug)]
 pub struct Arr2IterProducer<'data,T,const N1:usize,const N:usize>(&'data [T]);
 
 impl<'data,T,const N1:usize, const N2:usize> Arr2IterProducer<'data,T,N1,N2> {
@@ -742,5 +743,135 @@ impl<'data,T, const N1:usize, const N2:usize> IntoParallelRefIterator<'data> for
 
     fn par_iter(&'data self) -> Self::Iter {
         Arr2ParIter(&self.arr)
+    }
+}
+#[derive(Debug)]
+pub struct VecArrParIter<'data,C,T> {
+    arr: &'data [T],
+    t:PhantomData<C>,
+    len: usize
+}
+
+#[derive(Debug)]
+pub struct VecArrIterProducer<'data,C,T> {
+    arr: &'data [T],
+    t:PhantomData<C>,
+    len: usize
+}
+
+impl<'data,T,const N:usize> VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+    fn element_size(&self) -> usize {
+        N
+    }
+}
+impl<'data,T,const N:usize> Iterator for VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+    type Item = ArrView<'data,T,N>;
+
+    fn next(&mut self) -> Option<ArrView<'data,T,N>> {
+        let slice = std::mem::replace(&mut self.arr, &mut []);
+
+        if slice.is_empty() {
+            None
+        } else {
+            let (l,r) = slice.split_at(self.element_size());
+
+            self.arr = r;
+
+            Some(ArrView {
+                arr:l
+            })
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        ({self.len-1}, Some(self.len-1))
+    }
+}
+impl<'data,T,const N:usize> std::iter::ExactSizeIterator for VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+impl<'data,T,const N:usize> std::iter::DoubleEndedIterator for VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+    fn next_back(&mut self) -> Option<ArrView<'data,T,N>> {
+        let slice = std::mem::replace(&mut self.arr, &mut []);
+
+        if slice.is_empty() {
+            None
+        } else {
+            let (l,r) = slice.split_at(self.arr.len() - self.element_size());
+
+            self.arr = l;
+
+            Some(ArrView {
+                arr:r
+            })
+        }
+    }
+}
+impl<'data, T: Send + Sync + 'static,const N:usize> plumbing::Producer for VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+    type Item = ArrView<'data,T,N>;
+    type IntoIter = Self;
+
+    fn into_iter(self) -> Self { self }
+
+    fn split_at(self, mid: usize) -> (Self, Self) {
+        let (l,r) = self.arr.split_at(mid * N);
+
+        (VecArrIterProducer {
+            arr: l,
+            t:PhantomData::<Arr<T,N>>,
+            len:self.len
+        },VecArrIterProducer {
+            arr: r,
+            t:PhantomData::<Arr<T,N>>,
+            len:self.len
+        })
+    }
+}
+impl<'data, T: Send + Sync + 'static,const N:usize> ParallelIterator for VecArrParIter<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+    type Item = ArrView<'data,T,N>;
+
+    fn opt_len(&self) -> Option<usize> { Some(IndexedParallelIterator::len(self)) }
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+        where
+            C: plumbing::UnindexedConsumer<Self::Item>,
+    {
+        self.drive(consumer)
+    }
+}
+impl<'data, T: Send + Sync + 'static, const N:usize> IndexedParallelIterator for VecArrParIter<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+    fn len(&self) -> usize { self.len }
+
+    fn drive<C>(self, consumer: C) -> C::Result
+        where
+            C: plumbing::Consumer<Self::Item>,
+    {
+        plumbing::bridge(self, consumer)
+    }
+
+    fn with_producer<CB>(self, callback: CB) -> CB::Output
+        where
+            CB: plumbing::ProducerCallback<Self::Item>,
+    {
+        callback.callback(VecArrIterProducer::<'data,Arr<T,N>,T> {
+            arr:&self.arr,
+            t:PhantomData::<Arr<T,N>>,
+            len: self.len
+        })
+    }
+}
+impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for VecArr<T,Arr<T,N>>
+    where T: Default + Clone + Send + Sync + 'static {
+    type Iter = VecArrParIter<'data,Arr<T,N>,T>;
+    type Item = ArrView<'data,T,N>;
+
+    fn par_iter(&'data self) -> Self::Iter {
+        VecArrParIter {
+            arr: &self.arr,
+            t:PhantomData::<Arr<T,N>>,
+            len: self.len
+        }
     }
 }

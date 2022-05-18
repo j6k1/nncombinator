@@ -8,6 +8,7 @@ use crate::error::{CudaError, CudaRuntimeError};
 
 pub mod ffi;
 pub mod mem;
+pub mod kernel;
 
 pub(crate) mod private {
     pub trait AsKernelPtrBase {

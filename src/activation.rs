@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use rcudnn::{ActivationDescriptor, API, Cudnn, cudnnActivationMode_t, cudnnSetActivationDescriptorSwishBeta, cudnnSoftmaxAlgorithm_t, cudnnSoftmaxMode_t, cudnnStatus_t, TensorDescriptor};
 use crate::UnitValue;
 use crate::arr::*;
-use crate::cuda::{AsVoidMutPtr, Memory};
+use crate::cuda::{AsMutVoidPtr, Memory};
 use crate::device::*;
 use crate::error::{EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
@@ -175,9 +175,9 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,De
         device.linear_activation_forward(input,|cudnn,desc,mut input_output| {
             self.apply_common_base(cudnn,
                                    desc,
-                                   input_output.as_void_mut_ptr(),
+                                   input_output.as_mut_void_ptr(),
                                    desc,
-                                   input_output.as_void_mut_ptr())?;
+                                   input_output.as_mut_void_ptr())?;
             Ok(input_output.read_to_vec()?.try_into()?)
         })
     }
@@ -192,13 +192,13 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,De
                                                     mut u_ptr| {
             self.derive_common_base(cudnn,
                                     o_desc,
-                                    o_ptr.as_void_mut_ptr(),
+                                    o_ptr.as_mut_void_ptr(),
                                     loss_desc,
-                                            loss_ptr.as_void_mut_ptr(),
+                                    loss_ptr.as_mut_void_ptr(),
                                     u_desc,
-                                    u_ptr.as_void_mut_ptr(),
+                                    u_ptr.as_mut_void_ptr(),
                                     loss_desc,
-                                    loss_ptr.as_void_mut_ptr())?;
+                                    loss_ptr.as_mut_void_ptr())?;
             Ok(loss_ptr.read_to_vec()?.try_into()?)
         })
     }
@@ -316,9 +316,9 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,Devic
         device.linear_activation_forward(input,|cudnn,desc,mut input_output| {
             self.apply_common_base(cudnn,
                                    desc,
-                                   input_output.as_void_mut_ptr(),
+                                   input_output.as_mut_void_ptr(),
                                    desc,
-                                   input_output.as_void_mut_ptr())?;
+                                   input_output.as_mut_void_ptr())?;
             Ok(input_output.read_to_vec()?.try_into()?)
         })
     }
@@ -333,13 +333,13 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,Devic
                                                     mut u_ptr| {
             self.derive_common_base(cudnn,
                                     o_desc,
-                                    o_ptr.as_void_mut_ptr(),
+                                    o_ptr.as_mut_void_ptr(),
                                     loss_desc,
-                                    loss_ptr.as_void_mut_ptr(),
+                                    loss_ptr.as_mut_void_ptr(),
                                     u_desc,
-                                    u_ptr.as_void_mut_ptr(),
+                                    u_ptr.as_mut_void_ptr(),
                                     loss_desc,
-                                    loss_ptr.as_void_mut_ptr())?;
+                                    loss_ptr.as_mut_void_ptr())?;
             Ok(loss_ptr.read_to_vec()?.try_into()?)
         })
     }
@@ -487,9 +487,9 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Swish<U,Devi
         device.linear_activation_forward(input,|cudnn,desc,mut input_output| {
             self.apply_common_base(cudnn,
                                    desc,
-                                   input_output.as_void_mut_ptr(),
+                                   input_output.as_mut_void_ptr(),
                                    desc,
-                                   input_output.as_void_mut_ptr())?;
+                                   input_output.as_mut_void_ptr())?;
             Ok(input_output.read_to_vec()?.try_into()?)
         })
     }
@@ -504,13 +504,13 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Swish<U,Devi
                                                     mut u_ptr| {
             self.derive_common_base(cudnn,
                                     o_desc,
-                                    o_ptr.as_void_mut_ptr(),
+                                    o_ptr.as_mut_void_ptr(),
                                     loss_desc,
-                                    loss_ptr.as_void_mut_ptr(),
+                                    loss_ptr.as_mut_void_ptr(),
                                     u_desc,
-                                    u_ptr.as_void_mut_ptr(),
+                                    u_ptr.as_mut_void_ptr(),
                                     loss_desc,
-                                    loss_ptr.as_void_mut_ptr())?;
+                                    loss_ptr.as_mut_void_ptr())?;
             Ok(loss_ptr.read_to_vec()?.try_into()?)
         })
     }
@@ -628,9 +628,9 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Tanh<U,Devic
         device.linear_activation_forward(input,|cudnn,desc,mut input_output| {
             self.apply_common_base(cudnn,
                                    desc,
-                                   input_output.as_void_mut_ptr(),
+                                   input_output.as_mut_void_ptr(),
                                    desc,
-                                   input_output.as_void_mut_ptr())?;
+                                   input_output.as_mut_void_ptr())?;
             Ok(input_output.read_to_vec()?.try_into()?)
         })
     }
@@ -645,13 +645,13 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for Tanh<U,Devic
                                                     mut u_ptr| {
             self.derive_common_base(cudnn,
                                     o_desc,
-                                    o_ptr.as_void_mut_ptr(),
+                                    o_ptr.as_mut_void_ptr(),
                                     loss_desc,
-                                    loss_ptr.as_void_mut_ptr(),
+                                    loss_ptr.as_mut_void_ptr(),
                                     u_desc,
-                                    u_ptr.as_void_mut_ptr(),
+                                    u_ptr.as_mut_void_ptr(),
                                     loss_desc,
-                                    loss_ptr.as_void_mut_ptr())?;
+                                    loss_ptr.as_mut_void_ptr())?;
             Ok(loss_ptr.read_to_vec()?.try_into()?)
         })
     }
@@ -771,9 +771,9 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,De
         device.linear_activation_forward(input,|cudnn,desc,mut input_output| {
             self.apply_common_base(cudnn,
                                    desc,
-                                   input_output.as_void_mut_ptr(),
+                                   input_output.as_mut_void_ptr(),
                                    desc,
-                                   input_output.as_void_mut_ptr())?;
+                                   input_output.as_mut_void_ptr())?;
             Ok(input_output.read_to_vec()?.try_into()?)
         })
     }
@@ -788,13 +788,13 @@ impl<U,const N:usize> ActivationCommon<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,De
                                                     mut u_ptr| {
             self.derive_common_base(cudnn,
                                     o_desc,
-                                    o_ptr.as_void_mut_ptr(),
+                                    o_ptr.as_mut_void_ptr(),
                                     loss_desc,
-                                    loss_ptr.as_void_mut_ptr(),
+                                    loss_ptr.as_mut_void_ptr(),
                                     u_desc,
-                                    u_ptr.as_void_mut_ptr(),
+                                    u_ptr.as_mut_void_ptr(),
                                     loss_desc,
-                                    loss_ptr.as_void_mut_ptr())?;
+                                    loss_ptr.as_mut_void_ptr())?;
             Ok(loss_ptr.read_to_vec()?.try_into()?)
         })
     }

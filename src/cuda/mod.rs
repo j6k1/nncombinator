@@ -14,21 +14,21 @@ pub(crate) mod private {
         fn as_kernel_ptr(&self) -> *const libc::c_void;
     }
 
-    pub trait AsKernelMutPtrBase {
-        fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void;
+    pub trait AsMutKernelPtrBase {
+        fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void;
     }
 }
 pub trait AsKernelPtr: private::AsKernelPtrBase {
 }
-pub trait AsKernelMutPtr: private::AsKernelMutPtrBase {
+pub trait AsMutKernelPtr: private::AsMutKernelPtrBase {
 }
 impl<T> AsKernelPtr for T where T: private::AsKernelPtrBase {}
-impl<T> AsKernelMutPtr for T where T: private::AsKernelMutPtrBase {}
+impl<T> AsMutKernelPtr for T where T: private::AsMutKernelPtrBase {}
 pub trait AsVoidPtr {
     fn as_void_ptr(&self) -> *const libc::c_void;
 }
-pub trait AsVoidMutPtr {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void;
+pub trait AsMutVoidPtr {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void;
 }
 pub trait AsPtr<T> {
     fn as_ptr(&self) -> *const T;
@@ -41,8 +41,8 @@ impl AsVoidPtr for i32 {
         self as *const i32 as *const libc::c_void
     }
 }
-impl AsVoidMutPtr for i32 {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+impl AsMutVoidPtr for i32 {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self as *mut i32 as *mut libc::c_void
     }
 }
@@ -51,8 +51,8 @@ impl AsVoidPtr for u32 {
         self as *const u32 as *const libc::c_void
     }
 }
-impl AsVoidMutPtr for u32 {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+impl AsMutVoidPtr for u32 {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self as *mut u32 as *mut libc::c_void
     }
 }
@@ -61,8 +61,8 @@ impl AsVoidPtr for i64 {
         self as *const i64 as *const libc::c_void
     }
 }
-impl AsVoidMutPtr for i64 {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+impl AsMutVoidPtr for i64 {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self as *mut i64 as *mut libc::c_void
     }
 }
@@ -71,8 +71,8 @@ impl AsVoidPtr for u64 {
         self as *const u64 as *const libc::c_void
     }
 }
-impl AsVoidMutPtr for u64 {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+impl AsMutVoidPtr for u64 {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self as *mut u64 as *mut libc::c_void
     }
 }
@@ -81,8 +81,8 @@ impl AsVoidPtr for usize {
         self as *const usize as *const libc::c_void
     }
 }
-impl AsVoidMutPtr for usize {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+impl AsMutVoidPtr for usize {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self as *mut usize as *mut libc::c_void
     }
 }
@@ -91,8 +91,8 @@ impl AsVoidPtr for f32 {
         self as *const f32 as *const libc::c_void
     }
 }
-impl AsVoidMutPtr for f32 {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+impl AsMutVoidPtr for f32 {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self as *mut f32 as *mut libc::c_void
     }
 }
@@ -101,8 +101,8 @@ impl AsVoidPtr for f64 {
         self as *const f64 as *const libc::c_void
     }
 }
-impl AsVoidMutPtr for f64 {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+impl AsMutVoidPtr for f64 {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self as *mut f64 as *mut libc::c_void
     }
 }
@@ -111,8 +111,8 @@ impl private::AsKernelPtrBase for i32 {
         self as *const i32 as *const libc::c_void
     }
 }
-impl private::AsKernelMutPtrBase for i32 {
-    fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void {
+impl private::AsMutKernelPtrBase for i32 {
+    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut i32 as *mut libc::c_void
     }
 }
@@ -121,8 +121,8 @@ impl private::AsKernelPtrBase for u32 {
         self as *const u32 as *const libc::c_void
     }
 }
-impl private::AsKernelMutPtrBase for u32 {
-    fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void {
+impl private::AsMutKernelPtrBase for u32 {
+    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut u32 as *mut libc::c_void
     }
 }
@@ -131,8 +131,8 @@ impl private::AsKernelPtrBase for i64 {
         self as *const i64 as *const libc::c_void
     }
 }
-impl private::AsKernelMutPtrBase for i64 {
-    fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void {
+impl private::AsMutKernelPtrBase for i64 {
+    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut i64 as *mut libc::c_void
     }
 }
@@ -141,8 +141,8 @@ impl private::AsKernelPtrBase for u64 {
         self as *const u64 as *const libc::c_void
     }
 }
-impl private::AsKernelMutPtrBase for u64 {
-    fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void {
+impl private::AsMutKernelPtrBase for u64 {
+    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut u64 as *mut libc::c_void
     }
 }
@@ -151,8 +151,8 @@ impl private::AsKernelPtrBase for usize {
         self as *const usize as *const libc::c_void
     }
 }
-impl private::AsKernelMutPtrBase for usize {
-    fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void {
+impl private::AsMutKernelPtrBase for usize {
+    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut usize as *mut libc::c_void
     }
 }
@@ -161,8 +161,8 @@ impl private::AsKernelPtrBase for f32 {
         self as *const f32 as *const libc::c_void
     }
 }
-impl private::AsKernelMutPtrBase for f32 {
-    fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void {
+impl private::AsMutKernelPtrBase for f32 {
+    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         self as *mut f32 as *mut libc::c_void
     }
 }
@@ -171,17 +171,17 @@ impl private::AsKernelPtrBase for f64 {
         self as *const f64 as *const libc::c_void
     }
 }
-impl private::AsKernelMutPtrBase for f64 {
-    fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void {
+impl private::AsMutKernelPtrBase for f64 {
+    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         self as *mut f64 as *mut libc::c_void
     }
 }
-pub trait Memory<T: Default + Debug>: AsVoidMutPtr {
+pub trait Memory<T: Default + Debug>: AsMutVoidPtr {
     fn memcpy(&mut self, p:*const T,len:usize) -> Result<usize,rcudnn::Error>;
     fn read_to_vec(&mut self) -> Result<Vec<T>,rcudnn::Error>;
     fn read_to_vec_with_size(&mut self,size:usize) -> Result<Vec<T>,rcudnn::Error>;
 }
-pub trait MemoryAsync<T: Default + Debug>: AsVoidMutPtr {
+pub trait MemoryAsync<T: Default + Debug>: AsMutVoidPtr {
     fn memcpy_async(&mut self, p:*const T,len:usize,stream:cudaStream_t) -> Result<usize,rcudnn::Error>;
     fn read_to_vec_async(&mut self,stream:cudaStream_t) -> Result<Vec<T>,rcudnn::Error>;
     fn read_to_vec_with_size_async(&mut self,stream: cudaStream_t,size:usize) -> Result<Vec<T>,rcudnn::Error>;
@@ -241,8 +241,8 @@ impl<T> private::AsKernelPtrBase for CudaPtr<T> {
         &self.ptr as *const *mut T as *const libc::c_void
     }
 }
-impl<T> private::AsKernelMutPtrBase for CudaPtr<T> {
-    fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void {
+impl<T> private::AsMutKernelPtrBase for CudaPtr<T> {
+    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         &mut self.ptr as *mut *mut T as *mut libc::c_void
     }
 }
@@ -251,8 +251,8 @@ impl<T> AsVoidPtr for CudaPtr<T> {
         self.ptr as *const libc::c_void
     }
 }
-impl<T> AsVoidMutPtr for CudaPtr<T> {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+impl<T> AsMutVoidPtr for CudaPtr<T> {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self.ptr as *mut libc::c_void
     }
 }
@@ -364,8 +364,8 @@ impl<T> private::AsKernelPtrBase for CudaHostPtr<T> {
         &self.ptr as *const *mut T as *const libc::c_void
     }
 }
-impl<T> private::AsKernelMutPtrBase for CudaHostPtr<T> {
-    fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void {
+impl<T> private::AsMutKernelPtrBase for CudaHostPtr<T> {
+    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         &mut self.ptr as *mut *mut T as *mut libc::c_void
     }
 }
@@ -374,8 +374,8 @@ impl<T> AsVoidPtr for CudaHostPtr<T> {
         self.ptr as *const libc::c_void
     }
 }
-impl<T> AsVoidMutPtr for CudaHostPtr<T> {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+impl<T> AsMutVoidPtr for CudaHostPtr<T> {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self.ptr as *mut libc::c_void
     }
 }
@@ -452,8 +452,8 @@ impl<T> private::AsKernelPtrBase for CudaMemoryPoolPtr<T> {
         &self.ptr as *const *mut T as *const libc::c_void
     }
 }
-impl<T> private::AsKernelMutPtrBase for CudaMemoryPoolPtr<T> {
-    fn as_kernel_mut_ptr(&mut self) -> *mut libc::c_void {
+impl<T> private::AsMutKernelPtrBase for CudaMemoryPoolPtr<T> {
+    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         &mut self.ptr as *mut *mut T as *mut libc::c_void
     }
 }
@@ -462,8 +462,8 @@ impl<T> AsVoidPtr for CudaMemoryPoolPtr<T> {
         self.ptr as *const libc::c_void
     }
 }
-impl<T> AsVoidMutPtr for CudaMemoryPoolPtr<T> {
-    fn as_void_mut_ptr(&mut self) -> *mut libc::c_void {
+impl<T> AsMutVoidPtr for CudaMemoryPoolPtr<T> {
+    fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self.ptr as *mut libc::c_void
     }
 }
@@ -496,7 +496,7 @@ impl TryFrom<f64> for CudaPtr<f64> {
     }
 }
 pub trait KernelArgs {
-    fn as_vec(&mut self) ->  Vec<&mut dyn AsKernelMutPtr>;
+    fn as_vec(&mut self) ->  Vec<&mut dyn AsMutKernelPtr>;
 }
 pub trait Kernel {
     type Args: KernelArgs;
@@ -508,7 +508,7 @@ pub trait Kernel {
                      grid_dim,
                      block_dim,
                      &mut args.as_vec().into_iter()
-                         .map(|p| p.as_kernel_mut_ptr())
+                         .map(|p| p.as_mut_kernel_ptr())
                          .collect::<Vec<*mut c_void>>().as_mut_slice(),
                      shared_mem
         )

@@ -231,18 +231,18 @@ impl<'a,T,V> SoftMaxForward<'a,T,V> where T: AsMutKernelPtr + 'a, V: DataType {
 }
 impl<'a,T> Kernel for SoftMaxForward<'a,T,f32> where T: AsMutKernelPtr + 'a {
     const FUNC_PTR: *const c_void = softmax_forward_float as *const c_void;
-    type Args = ActivationSoftMaxForwardArgs<'a,T,f32>;
+    type Args = ActivationSoftMaxForwardArgs<'a,T>;
 }
-pub struct ActivationSoftMaxForwardArgs<'a,T,V> where T: AsMutKernelPtr + 'a, V: DataType {
+pub struct ActivationSoftMaxForwardArgs<'a,T> where T: AsMutKernelPtr + 'a {
     input_output: &'a mut T,
     units_len: usize,
     batch_len: usize,
-    alpha: &'a mut CudaPtr<V>,
-    sum: &'a mut CudaPtr<V>
+    alpha: &'a mut T,
+    sum: &'a mut T
 }
-impl<'a,T,V> ActivationSoftMaxForwardArgs<'a,T,V> where T: AsMutKernelPtr + 'a, V: DataType {
-    pub fn new(input_output:&'a mut T,units_len:usize,batch_len:usize,alpha:&'a mut CudaPtr<V>,sum:&'a mut CudaPtr<V>)
-               -> ActivationSoftMaxForwardArgs<'a,T,V> {
+impl<'a,T> ActivationSoftMaxForwardArgs<'a,T> where T: AsMutKernelPtr + 'a {
+    pub fn new(input_output:&'a mut T,units_len:usize,batch_len:usize,alpha:&'a mut T,sum:&'a mut T)
+               -> ActivationSoftMaxForwardArgs<'a,T> {
 
         ActivationSoftMaxForwardArgs {
             input_output: input_output,
@@ -253,7 +253,7 @@ impl<'a,T,V> ActivationSoftMaxForwardArgs<'a,T,V> where T: AsMutKernelPtr + 'a, 
         }
     }
 }
-impl<'a,T,V> KernelArgs for ActivationSoftMaxForwardArgs<'a,T,V> where T: AsMutKernelPtr + 'a, V: DataType {
+impl<'a,T> KernelArgs for ActivationSoftMaxForwardArgs<'a,T> where T: AsMutKernelPtr + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
         vec![
             self.input_output,

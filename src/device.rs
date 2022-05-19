@@ -12,7 +12,7 @@ use crate::activation::Activation;
 use crate::arr::{Arr, Arr2};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
 use crate::cuda::mem::{CachedTensor, MemoryPool};
-use crate::error::{CudaError, DeviceError, EvaluateError, TrainingError};
+use crate::error::{DeviceError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
 use crate::UnitValue;

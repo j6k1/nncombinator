@@ -1,6 +1,6 @@
 use std::{error, fmt, io};
 use std::ffi::CStr;
-use std::fmt::{Debug, Formatter, write};
+use std::fmt::{Debug, Formatter};
 use std::num::ParseFloatError;
 use cuda_runtime_sys::cudaError_t;
 

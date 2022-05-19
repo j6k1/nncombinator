@@ -1,4 +1,4 @@
-use std::{mem, result};
+use std::{mem};
 use std::ptr::null_mut;
 use cuda_runtime_sys::dim3;
 use libc::c_void;

@@ -290,3 +290,19 @@ impl<'a,T> KernelArgs for ActivationSoftMaxPreprocessingArgs<'a,T> where T: Data
         ]
     }
 }
+pub struct SoftMaxBackward<'a,T> where T: DataType + 'a {
+    l:PhantomData<&'a ()>,
+    t:PhantomData<T>
+}
+impl<'a,T> SoftMaxBackward<'a,T> where T: DataType + 'a {
+    pub fn new() -> SoftMaxBackward<'a,T> {
+        SoftMaxBackward {
+            l: PhantomData::<&'a ()>,
+            t: PhantomData::<T>
+        }
+    }
+}
+impl<'a,T> Kernel for SoftMaxBackward<'a,T> where T: DataType + 'a {
+    const FUNC_PTR: *const c_void = softmax_backward_float as *const c_void;
+    type Args = ActivationBackwardArgs<'a,T>;
+}

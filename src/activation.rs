@@ -5,20 +5,7 @@ use cuda_runtime_sys::dim3;
 use crate::UnitValue;
 use crate::arr::*;
 use crate::cuda::{CudaPtr, Kernel, Memory};
-use crate::cuda::kernel::activation::{
-    ActivationBackwardArgs,
-    ActivationForwardArgs,
-    ActivationSoftMaxForwardArgs,
-    DataType,
-    ReLuBackward,
-    ReLuForward,
-    SigmoidBackward,
-    SigmoidForward,
-    SoftMaxForward,
-    SwishBackward,
-    SwishForward,
-    TanhBackward,
-    TanhForward};
+use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationForwardArgs, ActivationSoftMaxForwardArgs, DataType, ReLuBackward, ReLuForward, SigmoidBackward, SigmoidForward, SoftMaxBackward, SoftMaxForward, SwishBackward, SwishForward, TanhBackward, TanhForward};
 use crate::device::*;
 use crate::error::{CudaError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
@@ -513,7 +500,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGp
 
         let mut args = ActivationBackwardArgs::new(&mut u_ptr, &mut loss_ptr, N,1);
 
-        let mut kernel = SigmoidBackward::new();
+        let mut kernel = SoftMaxBackward::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },

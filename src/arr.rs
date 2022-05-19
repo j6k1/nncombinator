@@ -784,7 +784,7 @@ impl<'data,T,const N:usize> Iterator for VecArrIterProducer<'data,Arr<T,N>,T> wh
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        ({self.len-1}, Some(self.len-1))
+        ({self.len}, Some(self.len))
     }
 }
 impl<'data,T,const N:usize> std::iter::ExactSizeIterator for VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {

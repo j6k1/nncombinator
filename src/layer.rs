@@ -926,9 +926,6 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,P,D
         {
             let loss = input;
 
-            let batch_size = loss.len() as f64;
-            let batch_size = U::from_f64(batch_size).ok_or(TrainingError::ToLargeInput(batch_size))?;
-
             let loss = loss.par_iter()
                            .cloned()
                            .map(|l| Ok(l)).reduce(|| Ok(Arr::<U,NO>::new()), |acc,o| {
@@ -941,7 +938,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,P,D
 
             {
                 for (w,&l) in self.bias.iter_mut().zip(loss.iter()) {
-                    optimizer.update(l / batch_size, w);
+                    optimizer.update(l, w);
                 }
 
                 s.map(|o| {
@@ -954,7 +951,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,P,D
                     }).map(|o| {
                         for (mut u, o) in self.units.iter_mut().zip(o.iter()) {
                             for (w, &l) in u.iter_mut().zip(loss.iter()) {
-                                optimizer.update(l * *o / batch_size, w);
+                                optimizer.update(l * *o, w);
                             }
                         }
                     })

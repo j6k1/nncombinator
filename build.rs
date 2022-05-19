@@ -1,7 +1,6 @@
 extern crate cc;
 
 use std::env;
-use std::path::Path;
 use std::process::Command;
 
 fn find_library_paths() -> Vec<String> {

@@ -280,8 +280,7 @@ impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<
 }
 pub struct CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value:T,
-    ptr:CudaMemoryPoolPtr<U>,
-    memory_pool:Arc<Mutex<MemoryPool>>
+    ptr:CudaMemoryPoolPtr<U>
 }
 impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     pub fn new(value:T,memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CachedTensor<U,T>,CudaError> {
@@ -293,8 +292,7 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
 
         Ok(CachedTensor {
             value:value,
-            ptr:ptr,
-            memory_pool:memory_pool.clone()
+            ptr:ptr
         })
     }
 

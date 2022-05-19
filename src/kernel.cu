@@ -14,7 +14,7 @@ extern "C" {
         }
 	}
 
-	__global__ void relu_forward_float(float *input_output, const size_t units_len, const size_t batch_len, const float *alpha, const float *sum) {
+	__global__ void relu_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
         size_t index = blockDim.x * blockIdx.x + threadIdx.x;
         size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -27,7 +27,7 @@ extern "C" {
         }
     }
 
-	__global__ void swish_forwaxd_float(float *input_output, const size_t units_len, const size_t batch_len, const float *alpha, const float *sum) {
+	__global__ void swish_forwaxd_float(float *input_output, const size_t units_len, const size_t batch_len) {
         size_t index = blockDim.x * blockIdx.x + threadIdx.x;
         size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -41,7 +41,7 @@ extern "C" {
         }
     }
 
-	__global__ void tanh_forward_float(float *input_output, const size_t units_len, const size_t batch_len, const float *alpha, const float *sum) {
+	__global__ void tanh_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
         size_t index = blockDim.x * blockIdx.x + threadIdx.x;
         size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 

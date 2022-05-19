@@ -173,12 +173,10 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
                     i * w
                 }).collect::<Vec<U>>()
             }).collect::<Vec<Vec<U>>>()
-        }).flat_map(|o| o.par_iter().cloned().map(|o| o.try_into()).reduce(|| Ok(Arr::<U,NO>::new()), |acc, o| {
-            acc.and_then(|acc| o.and_then(|o| {
-                acc.par_iter()
-                    .zip(o.par_iter())
-                    .map(|(&acc, &o)| acc + o).collect::<Vec<U>>().try_into()
-            }))
+        }).map(|o| o.par_iter().cloned().reduce(|| vec![U::default();NO], |acc, o| {
+            acc.par_iter()
+                .zip(o.par_iter())
+                .map(|(&acc, &o)| acc + o).collect::<Vec<U>>()
         })).map(|o| {
             o.par_iter().zip(bias.par_iter()).map(|(&o, &b)| {
                 o + b

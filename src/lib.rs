@@ -1,12 +1,21 @@
+extern crate libc;
+extern crate cuda_runtime_sys;
+extern crate rcublas_sys;
+extern crate rcublas;
+extern crate rcudnn;
+extern crate rcudnn_sys;
+
 use crate::ope::UnitValue;
 
 pub mod error;
 pub mod ope;
 pub mod mem;
 pub mod arr;
+pub mod list;
 pub mod optimizer;
 pub mod lossfunction;
 pub mod activation;
+pub mod cuda;
 pub mod device;
 pub mod layer;
 pub mod persistence;
@@ -66,18 +75,18 @@ mod tests {
     #[test]
     fn build_layers() {
         let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
-        let device = DeviceCpu::new();
+        let device = DeviceCpu::new().unwrap();
 
-        let _l = i.add_layer(|l| LinearLayer::<_,_,_,_,4,1>::new(l,&device, || 1., || 0.));
+        let _l = i.add_layer(|l| LinearLayer::<_,_,_,DeviceCpu<f32>,_,4,1>::new(l,&device, || 1., || 0.));
     }
 
     #[test]
     fn build_train_layers() {
         let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
-        let device = DeviceCpu::new();
+        let device = DeviceCpu::new().unwrap();
 
         let _l = i.add_layer(|l| {
-            LinearLayer::<_,_,_,_,4,1>::new(l,&device,|| 1., || 0.)
+            LinearLayer::<_,_,_,DeviceCpu<f32>,_,4,1>::new(l,&device,|| 1., || 0.)
         }).add_layer(|l| {
             ActivationLayer::new(l,ReLu::new(&device),&device)
         }).add_layer_train(|l| LinearOutputLayer::new(l,&device));

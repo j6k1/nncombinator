@@ -299,7 +299,7 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
 
         match unsafe {
             cublasSgemv_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_T,
                            NO as ::libc::c_int,
                            NI as ::libc::c_int,
                            alpha.as_ptr(),
@@ -346,7 +346,7 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
 
         match unsafe {
             cublasSgemv_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NI as ::libc::c_int,
                            NO as ::libc::c_int,
                            alpha.as_ptr(),
@@ -433,7 +433,7 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
 
         match unsafe {
             cublasDgemv_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_T,
                            NO as ::libc::c_int,
                            NI as ::libc::c_int,
                            alpha.as_ptr(),
@@ -480,7 +480,7 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
 
         match unsafe {
             cublasDgemv_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NI as ::libc::c_int,
                            NO as ::libc::c_int,
                            alpha.as_ptr(),

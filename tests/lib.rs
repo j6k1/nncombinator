@@ -1259,3 +1259,179 @@ fn test_weather_for_gpu() {
     println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }
+#[test]
+fn test_weather_by_forward_diff_for_gpu() {
+    let mut rnd = prelude::thread_rng();
+    let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
+
+    let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
+
+    let device = DeviceGpu::new(MemoryPool::new(Alloctype::Device).unwrap()).unwrap();
+
+    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_> = InputLayer::new();
+
+    let rnd = rnd_base.clone();
+
+    let mut net = net.add_layer(|l| {
+        let rnd = rnd.clone();
+        DiffLinearLayer::<_,_,_,DeviceGpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer_train(|l| {
+        LinearOutputLayer::new(l,&device)
+    });
+
+    let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
+
+    let mut reader =  BufReader::new(
+        File::open(Path::new("data")
+            .join("weather")
+            .join("training")
+            .join("weather.csv")).unwrap());
+
+    let mut line:String = String::new();
+
+    loop {
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+
+        let columns = line.trim().split(',').map(|c| c.to_string()).collect::<Vec<String>>();
+
+        line.clear();
+
+        if columns.len() != 16 {
+            continue;
+        }
+
+        let t = columns[1].find("晴").is_some();
+
+        let columns = columns.iter().skip(2)
+            .filter(|c| !c.parse::<f32>().is_err())
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
+            .collect::<Vec<f32>>();
+        if columns.len() < 14 {
+            continue;
+        }
+
+        teachers.push((t,columns));
+    }
+
+    let mut optimizer = MomentumSGD::with_params(0.0001,0.9,0.0);
+
+    let mut rng = rand::thread_rng();
+
+    let mut correct_answers = 0;
+
+    teachers.shuffle(&mut rng);
+
+    for _ in 0..1 {
+        teachers.shuffle(&mut rng);
+
+        for (t, columns) in teachers.iter() {
+            let t = *t;
+
+            let mut input = Arr::<f32,14>::new();
+
+            for (it, p) in input.iter_mut().zip(columns.iter()) {
+                *it = *p;
+            }
+
+            let mut expected = Arr::new();
+
+            expected[0] = if t {
+                1.
+            } else {
+                0.
+            };
+
+            let lossf = CrossEntropy::new();
+
+            net.train(expected, DiffInput::NotDiff(input), &mut optimizer, &lossf).unwrap();
+        }
+    }
+
+    let mut tests:Vec<(bool,Vec<f32>)> = Vec::new();
+
+    let mut reader =  BufReader::new(
+        File::open(Path::new("data")
+            .join("weather")
+            .join("testing")
+            .join("weather.csv")).unwrap());
+
+    let mut line:String = String::new();
+
+    loop {
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+
+        let columns = line.trim().split(',').map(|c| c.to_string()).collect::<Vec<String>>();
+
+        line.clear();
+
+        if columns.len() != 16 {
+            continue;
+        }
+
+        let t = columns[1].find("晴").is_some();
+
+        let columns = columns.iter().skip(2)
+            .filter(|c| !c.parse::<f32>().is_err())
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
+            .collect::<Vec<f32>>();
+        if columns.len() < 14 {
+            continue;
+        }
+
+        tests.push((t,columns));
+    }
+
+    let mut s = None;
+    let mut prev = Arr::new();
+
+    for (t, columns) in tests.iter() {
+        let t = *t;
+
+        let mut input = Arr::<f32, 14>::new();
+
+        for (it, p) in input.iter_mut().zip(columns.iter()) {
+            *it = *p;
+        }
+
+        s = if let Some(s) = s {
+            let d = input.iter().enumerate().zip(prev.iter())
+                .filter(|((_,&input),&p)| input != p)
+                .map(|((index,&input),&p)| (index,input - p))
+                .fold(DiffArr::new(),| mut acc,(i,d) | {
+                    acc.push(i,d).unwrap();
+                    acc
+                });
+
+            prev = input.clone();
+
+            let o = net.ask_diff_input(&s);
+
+            Some(net.forward_diff(DiffInput::Diff(d,o)).unwrap())
+        } else {
+            prev = input.clone();
+
+            Some(net.forward_diff(DiffInput::NotDiff(input)).unwrap())
+        };
+
+        let r = s.as_ref().map(|r| r.1[0]).unwrap();
+
+        if (t && r >= 0.5) || !t && r < 0.5 {
+            correct_answers += 1;
+        }
+    }
+
+    println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
+    debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
+}

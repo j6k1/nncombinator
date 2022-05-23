@@ -19,6 +19,10 @@ fn main() {
 
 	let library_paths = find_library_paths();
 
+	if library_paths.is_empty() {
+		return;
+	}
+
 	let out_dir = env::var("OUT_DIR").unwrap();
 
 	if cfg!(target_os = "windows") {

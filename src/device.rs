@@ -299,7 +299,7 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
 
         match unsafe {
             cublasSgemv_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NO as ::libc::c_int,
                            NI as ::libc::c_int,
                            alpha.as_ptr(),
@@ -339,14 +339,14 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
 
-        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(0.0f32)?;
 
         match unsafe {
             cublasSgemv_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_T,
                            NI as ::libc::c_int,
                            NO as ::libc::c_int,
                            alpha.as_ptr(),
@@ -433,7 +433,7 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
 
         match unsafe {
             cublasDgemv_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NO as ::libc::c_int,
                            NI as ::libc::c_int,
                            alpha.as_ptr(),
@@ -473,14 +473,14 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
 
-        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(0.0f64)?;
 
         match unsafe {
             cublasDgemv_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_T,
                            NI as ::libc::c_int,
                            NO as ::libc::c_int,
                            alpha.as_ptr(),

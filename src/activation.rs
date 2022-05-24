@@ -4,8 +4,22 @@ use std::os::raw::c_uint;
 use cuda_runtime_sys::dim3;
 use crate::UnitValue;
 use crate::arr::*;
-use crate::cuda::{CudaPtr, Kernel, Memory};
-use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationForwardArgs, ActivationSoftMaxForwardArgs, DataType, ReLuBackward, ReLuForward, SigmoidBackward, SigmoidForward, SoftMaxBackward, SoftMaxForward, SwishBackward, SwishForward, TanhBackward, TanhForward};
+use crate::cuda::{CudaPtr, DataTypeInfo, Kernel, KernelArgs, Memory};
+use crate::cuda::kernel::activation::{
+    ActivationBackwardArgs,
+    ActivationForwardArgs,
+    ActivationSoftMaxForwardArgs,
+    ReLuBackward,
+    ReLuForward,
+    SigmoidBackward,
+    SigmoidForward,
+    SoftMaxBackward,
+    SoftMaxForward,
+    SwishBackward,
+    SwishForward,
+    TanhBackward,
+    TanhForward
+};
 use crate::device::*;
 use crate::error::{CudaError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
@@ -113,21 +127,23 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCp
     }
 }
 impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataType, DeviceGpu<U>: Device<U> {
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
+             SigmoidForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
+             SigmoidBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationForwardArgs::new(&mut input_output, N,1);
+        let mut args = ActivationForwardArgs::new(input_output, N,1);
 
-        let mut kernel = SigmoidForward::new();
+        let mut kernel = SigmoidForward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(input_output.read_to_vec()?.try_into()?)
+        Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
     fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
@@ -137,15 +153,15 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGp
         let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationBackwardArgs::new(&mut u_ptr, &mut loss_ptr, N,1);
+        let mut args = ActivationBackwardArgs::new(u_ptr, loss_ptr, N,1);
 
-        let mut kernel = SigmoidBackward::new();
+        let mut kernel = SigmoidBackward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(loss_ptr.read_to_vec()?.try_into()?)
+        Ok(args.loss.read_to_vec()?.try_into()?)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -203,21 +219,24 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U
     }
 }
 impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataType, DeviceGpu<U>: Device<U> {
-
+    where U: UnitValue<U> + DataTypeInfo,
+          DeviceGpu<U>: Device<U>,
+          ReLuForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
+          ReLuBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
     fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationForwardArgs::new(&mut input_output, N,1);
+        let mut args = ActivationForwardArgs::new(input_output, N,1);
 
-        let mut kernel = ReLuForward::new();
+        let mut kernel = ReLuForward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(input_output.read_to_vec()?.try_into()?)
+        Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
     fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
@@ -227,15 +246,15 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U
         let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationBackwardArgs::new(&mut u_ptr, &mut loss_ptr, N,1);
+        let mut args = ActivationBackwardArgs::new(u_ptr, loss_ptr, N,1);
 
-        let mut kernel = ReLuBackward::new();
+        let mut kernel = ReLuBackward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(loss_ptr.read_to_vec()?.try_into()?)
+        Ok(args.loss.read_to_vec()?.try_into()?)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -287,22 +306,24 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<
         false
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataType, DeviceGpu<U>: Device<U> {
+ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
+             SwishForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
+             SwishBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationForwardArgs::new(&mut input_output, N,1);
+        let mut args = ActivationForwardArgs::new(input_output, N,1);
 
-        let mut kernel = SwishForward::new();
+        let mut kernel = SwishForward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(input_output.read_to_vec()?.try_into()?)
+        Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
     fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
@@ -312,15 +333,15 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<
         let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationBackwardArgs::new(&mut u_ptr, &mut loss_ptr, N,1);
+        let mut args = ActivationBackwardArgs::new(u_ptr, loss_ptr, N,1);
 
-        let mut kernel = SwishBackward::new();
+        let mut kernel = SwishBackward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(loss_ptr.read_to_vec()?.try_into()?)
+        Ok(args.loss.read_to_vec()?.try_into()?)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -371,22 +392,24 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U
         false
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataType, DeviceGpu<U>: Device<U> {
+ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
+             TanhForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
+             TanhBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationForwardArgs::new(&mut input_output, N,1);
+        let mut args = ActivationForwardArgs::new(input_output, N,1);
 
-        let mut kernel = TanhForward::new();
+        let mut kernel = TanhForward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(input_output.read_to_vec()?.try_into()?)
+        Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
     fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
@@ -396,15 +419,15 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U
         let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationBackwardArgs::new(&mut u_ptr, &mut loss_ptr, N,1);
+        let mut args = ActivationBackwardArgs::new(u_ptr, loss_ptr, N,1);
 
-        let mut kernel = TanhBackward::new();
+        let mut kernel = TanhBackward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(loss_ptr.read_to_vec()?.try_into()?)
+        Ok(args.loss.read_to_vec()?.try_into()?)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -463,32 +486,34 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCp
         self.c.contains(l.name())
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataType,
+ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
+    where U: UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
-          CudaPtr<U>: TryFrom<U,Error=CudaError> {
+          CudaPtr<U>: TryFrom<U,Error=CudaError>,
+          SoftMaxForward<U>: Kernel<Args=ActivationSoftMaxForwardArgs<U>>,
+          SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let alpha = input.iter().fold(U::initial_max_value(), |m, &v| v.max(&m));
         let sum = input.iter().fold(U::default(),|acc, &x| acc + (x - alpha).exp());
 
-        let mut alpha = &mut CudaPtr::try_from(alpha)?;
+        let mut alpha = CudaPtr::try_from(alpha)?;
         let mut sum = CudaPtr::try_from(sum)?;
 
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationSoftMaxForwardArgs::new(&mut input_output, N, 1,
-                                                         &mut alpha,
-                                                         &mut sum);
+        let mut args = ActivationSoftMaxForwardArgs::new(input_output, N, 1,
+                                                         alpha,
+                                                         sum);
 
-        let mut kernel = SoftMaxForward::new();
+        let mut kernel = SoftMaxForward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
                       &mut args, 0)?;
 
-        Ok(input_output.read_to_vec()?.try_into()?)
+        Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
     fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
@@ -498,15 +523,15 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGp
         let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationBackwardArgs::new(&mut u_ptr, &mut loss_ptr, N,1);
+        let mut args = ActivationBackwardArgs::new(u_ptr, loss_ptr, N,1);
 
-        let mut kernel = SoftMaxBackward::new();
+        let mut kernel = SoftMaxBackward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
                       dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(loss_ptr.read_to_vec()?.try_into()?)
+        Ok(args.loss.read_to_vec()?.try_into()?)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {

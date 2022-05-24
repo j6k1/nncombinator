@@ -210,7 +210,7 @@ impl<U,P,A,I,PI,D> ActivationLayer<U,P,A,I,PI,D>
             device:device.clone(),
             u:PhantomData::<U>,
             i:PhantomData::<I>,
-            pi:PhantomData::<PI>
+            pi:PhantomData::<PI>,
         }
     }
 }

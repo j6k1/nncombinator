@@ -32,27 +32,6 @@ pub trait DeviceActivation<U>: Device<U> where U: UnitValue<U> {
                                                            -> Result<Vec<Arr<U, N>>, TrainingError>
         where A: Activation<U,Arr<U,N>,Self>;
 }
-pub trait DataTypeInfo {
-    fn cudnn_data_type() -> DataType;
-    fn size() -> usize;
-}
-impl DataTypeInfo for f32 {
-    fn cudnn_data_type() -> DataType {
-        DataType::Float
-    }
-    fn size() -> usize {
-        4_usize
-    }
-}
-impl DataTypeInfo for f64 {
-    fn cudnn_data_type() -> DataType {
-        DataType::Double
-    }
-    fn size() -> usize {
-        8_usize
-    }
-}
-
 pub struct DeviceCpu<U> where U: UnitValue<U> {
     u:PhantomData<U>,
 }

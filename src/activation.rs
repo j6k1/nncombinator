@@ -497,8 +497,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCp
         let alpha = input.iter().fold(U::initial_max_value(), |m, &v| v.max(&m));
         let sum = input.iter().fold(U::default(),|acc, &x| acc + (x - alpha).exp());
 
-        let mut alpha = CudaPtr::try_from(alpha)?;
-        let mut sum = CudaPtr::try_from(sum)?;
+        let alpha = CudaPtr::try_from(alpha)?;
+        let sum = CudaPtr::try_from(sum)?;
 
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;

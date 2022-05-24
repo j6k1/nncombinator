@@ -157,9 +157,13 @@ impl<T> SwishForward<T> where T: DataTypeInfo {
         }
     }
 }
-impl<T> Kernel for SwishForward<T> where T: DataTypeInfo {
+impl Kernel for SwishForward<f32> {
     const FUNC_PTR: *const c_void = swish_forward_float as *const c_void;
-    type Args = ActivationForwardArgs<T>;
+    type Args = ActivationForwardArgs<f32>;
+}
+impl Kernel for SwishForward<f64> {
+    const FUNC_PTR: *const c_void = swish_forward_double as *const c_void;
+    type Args = ActivationForwardArgs<f64>;
 }
 pub struct SwishBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>

@@ -1,10 +1,6 @@
 use std::marker::PhantomData;
 use libc::{c_void, size_t};
-use crate::cuda::{AsMutKernelPtr, CudaPtr, Kernel, KernelArgs};
-
-pub trait DataType {}
-
-impl DataType for f32 {}
+use crate::cuda::{AsMutKernelPtr, CudaPtr, DataTypeInfo, Kernel, KernelArgs};
 
 extern "C" {
     fn sigmoid_forward_float(input_output: *mut f32, len: size_t, units_len: size_t) -> c_void;
@@ -18,14 +14,25 @@ extern "C" {
     fn tanh_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
     fn softmax_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
     fn softmax_preprocessing_float(input: *const f32, len: size_t, batch_len: size_t, alpha: *mut f32, sum: *mut f32) -> c_void;
+    fn sigmoid_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
+    fn relu_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
+    fn swish_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
+    fn tanh_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
+    fn softmax_forward_double(input_output: *mut f64, len: size_t, batch_len: size_t, alpha: *const f64, sum: *const f64) -> c_void;
+    fn sigmoid_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn relu_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn swish_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn tanh_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn softmax_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn softmax_preprocessing_double(input: *const f64, len: size_t, batch_len: size_t, alpha: *mut f64, sum: *mut f64) -> c_void;
 }
-pub struct ActivationForwardArgs<'a,T> where T: DataType + 'a {
-    input_output: &'a mut CudaPtr<T>,
+pub struct ActivationForwardArgs<T> where T: DataTypeInfo {
+    pub input_output: CudaPtr<T>,
     units_len: usize,
     batch_len: usize,
 }
-impl<'a,T> ActivationForwardArgs<'a,T> where T: DataType + 'a {
-    pub fn new(input_output:&'a mut CudaPtr<T>,units_len:usize,batch_len:usize) -> ActivationForwardArgs<'a,T> {
+impl<T> ActivationForwardArgs<T> where T: DataTypeInfo {
+    pub fn new(input_output:CudaPtr<T>,units_len:usize,batch_len:usize) -> ActivationForwardArgs<T> {
         ActivationForwardArgs {
             input_output: input_output,
             units_len: units_len,
@@ -33,23 +40,23 @@ impl<'a,T> ActivationForwardArgs<'a,T> where T: DataType + 'a {
         }
     }
 }
-impl<'a,T> KernelArgs for ActivationForwardArgs<'a,T> where T: DataType + 'a {
+impl<T> KernelArgs for ActivationForwardArgs<T> where T: DataTypeInfo {
     fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
         vec![
-            self.input_output,
+            &mut self.input_output,
             &mut self.units_len,
             &mut self.batch_len
         ]
     }
 }
-pub struct ActivationBackwardArgs<'a,T> where T: DataType + 'a {
-    u: &'a mut CudaPtr<T>,
-    loss: &'a mut CudaPtr<T>,
+pub struct ActivationBackwardArgs<T> where T: DataTypeInfo {
+    u: CudaPtr<T>,
+    pub loss: CudaPtr<T>,
     units_len: usize,
     batch_len: usize,
 }
-impl<'a,T> ActivationBackwardArgs<'a,T> where T: DataType + 'a {
-    pub fn new(u:&'a mut CudaPtr<T>,loss: &'a mut CudaPtr<T>,units_len:usize,batch_len:usize) -> ActivationBackwardArgs<'a,T> {
+impl<T> ActivationBackwardArgs<T> where T: DataTypeInfo {
+    pub fn new(u:CudaPtr<T>,loss: CudaPtr<T>,units_len:usize,batch_len:usize) -> ActivationBackwardArgs<T> {
         ActivationBackwardArgs {
             u: u,
             loss: loss,
@@ -58,170 +65,184 @@ impl<'a,T> ActivationBackwardArgs<'a,T> where T: DataType + 'a {
         }
     }
 }
-impl<'a,T> KernelArgs for ActivationBackwardArgs<'a,T> where T: DataType + 'a {
+impl<T> KernelArgs for ActivationBackwardArgs<T> where T: DataTypeInfo {
     fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
         vec![
-            self.u,
-            self.loss,
+            &mut self.u,
+            &mut self.loss,
             &mut self.units_len,
             &mut self.batch_len
         ]
     }
 }
-pub struct SigmoidForward<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+pub struct SigmoidForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> SigmoidForward<'a,T> where T: DataType + 'a {
-    pub fn new() -> SigmoidForward<'a,T> {
+impl<T> SigmoidForward<T> where T: DataTypeInfo {
+    pub fn new() -> SigmoidForward<T> {
         SigmoidForward {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for SigmoidForward<'a,T> where T: DataType + 'a {
+impl Kernel for SigmoidForward<f32> {
     const FUNC_PTR: *const c_void = sigmoid_forward_float as *const c_void;
-    type Args = ActivationForwardArgs<'a,T>;
+    type Args = ActivationForwardArgs<f32>;
 }
-pub struct SigmoidBackward<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+impl Kernel for SigmoidForward<f64> {
+    const FUNC_PTR: *const c_void = sigmoid_forward_double as *const c_void;
+    type Args = ActivationForwardArgs<f64>;
+}
+pub struct SigmoidBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> SigmoidBackward<'a,T> where T: DataType + 'a {
-    pub fn new() -> SigmoidBackward<'a,T> {
+impl<T> SigmoidBackward<T> where T: DataTypeInfo {
+    pub fn new() -> SigmoidBackward<T> {
         SigmoidBackward {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for SigmoidBackward<'a,T> where T: DataType + 'a {
+impl Kernel for SigmoidBackward<f32> {
     const FUNC_PTR: *const c_void = sigmoid_backward_float as *const c_void;
-    type Args = ActivationBackwardArgs<'a,T>;
+    type Args = ActivationBackwardArgs<f32>;
 }
-pub struct ReLuForward<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+impl Kernel for SigmoidBackward<f64> {
+    const FUNC_PTR: *const c_void = sigmoid_backward_double as *const c_void;
+    type Args = ActivationBackwardArgs<f64>;
+}
+pub struct ReLuForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> ReLuForward<'a,T> where T: DataType + 'a {
-    pub fn new() -> ReLuForward<'a,T> {
+impl<T> ReLuForward<T> where T: DataTypeInfo {
+    pub fn new() -> ReLuForward<T> {
         ReLuForward {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for ReLuForward<'a,T> where T: DataType + 'a {
+impl Kernel for ReLuForward<f32> {
     const FUNC_PTR: *const c_void = relu_forward_float as *const c_void;
-    type Args = ActivationForwardArgs<'a,T>;
+    type Args = ActivationForwardArgs<f32>;
 }
-pub struct ReLuBackward<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+impl Kernel for ReLuForward<f64> {
+    const FUNC_PTR: *const c_void = relu_forward_double as *const c_void;
+    type Args = ActivationForwardArgs<f64>;
+}
+pub struct ReLuBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> ReLuBackward<'a,T> where T: DataType + 'a {
-    pub fn new() -> ReLuBackward<'a,T> {
+impl<T> ReLuBackward<T> where T: DataTypeInfo {
+    pub fn new() -> ReLuBackward<T> {
         ReLuBackward {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for ReLuBackward<'a,T> where T: DataType + 'a {
+impl Kernel for ReLuBackward<f32> {
     const FUNC_PTR: *const c_void = relu_backward_float as *const c_void;
-    type Args = ActivationBackwardArgs<'a,T>;
+    type Args = ActivationBackwardArgs<f32>;
 }
-pub struct SwishForward<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+impl Kernel for ReLuBackward<f64> {
+    const FUNC_PTR: *const c_void = relu_backward_double as *const c_void;
+    type Args = ActivationBackwardArgs<f64>;
+}
+pub struct SwishForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> SwishForward<'a,T> where T: DataType + 'a {
-    pub fn new() -> SwishForward<'a,T> {
+impl<T> SwishForward<T> where T: DataTypeInfo {
+    pub fn new() -> SwishForward<T> {
         SwishForward {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for SwishForward<'a,T> where T: DataType + 'a {
+impl<T> Kernel for SwishForward<T> where T: DataTypeInfo {
     const FUNC_PTR: *const c_void = swish_forward_float as *const c_void;
-    type Args = ActivationForwardArgs<'a,T>;
+    type Args = ActivationForwardArgs<T>;
 }
-pub struct SwishBackward<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+pub struct SwishBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> SwishBackward<'a,T> where T: DataType + 'a {
-    pub fn new() -> SwishBackward<'a,T> {
+impl<T> SwishBackward<T> where T: DataTypeInfo {
+    pub fn new() -> SwishBackward<T> {
         SwishBackward {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for SwishBackward<'a,T> where T: DataType + 'a {
+impl Kernel for SwishBackward<f32> {
     const FUNC_PTR: *const c_void = swish_backward_float as *const c_void;
-    type Args = ActivationBackwardArgs<'a,T>;
+    type Args = ActivationBackwardArgs<f32>;
 }
-pub struct TanhForward<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+impl Kernel for SwishBackward<f64> {
+    const FUNC_PTR: *const c_void = swish_backward_double as *const c_void;
+    type Args = ActivationBackwardArgs<f64>;
+}
+pub struct TanhForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> TanhForward<'a,T> where T: DataType + 'a {
-    pub fn new() -> TanhForward<'a,T> {
+impl<T> TanhForward<T> where T: DataTypeInfo {
+    pub fn new() -> TanhForward<T> {
         TanhForward {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for TanhForward<'a,T> where T: DataType + 'a {
+impl Kernel for TanhForward<f32> {
     const FUNC_PTR: *const c_void = tanh_forward_float as *const c_void;
-    type Args = ActivationForwardArgs<'a,T>;
+    type Args = ActivationForwardArgs<f32>;
 }
-pub struct TanhBackward<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+impl Kernel for TanhForward<f64> {
+    const FUNC_PTR: *const c_void = tanh_forward_double as *const c_void;
+    type Args = ActivationForwardArgs<f64>;
+}
+pub struct TanhBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> TanhBackward<'a,T> where T: DataType + 'a {
-    pub fn new() -> TanhBackward<'a,T> {
+impl<T> TanhBackward<T> where T: DataTypeInfo {
+    pub fn new() -> TanhBackward<T> {
         TanhBackward {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for TanhBackward<'a,T> where T: DataType + 'a {
+impl Kernel for TanhBackward<f32> {
     const FUNC_PTR: *const c_void = tanh_backward_float as *const c_void;
-    type Args = ActivationBackwardArgs<'a,T>;
+    type Args = ActivationBackwardArgs<f32>;
 }
-pub struct SoftMaxForward<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+impl Kernel for TanhBackward<f64> {
+    const FUNC_PTR: *const c_void = tanh_backward_double as *const c_void;
+    type Args = ActivationBackwardArgs<f64>;
+}
+pub struct SoftMaxForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> SoftMaxForward<'a,T> where T: DataType + 'a {
-    pub fn new() -> SoftMaxForward<'a,T> {
+impl<T> SoftMaxForward<T> where T: DataTypeInfo {
+    pub fn new() -> SoftMaxForward<T> {
         SoftMaxForward {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for SoftMaxForward<'a,T> where T: DataType + 'a {
+impl Kernel for SoftMaxForward<f32> {
     const FUNC_PTR: *const c_void = softmax_forward_float as *const c_void;
-    type Args = ActivationSoftMaxForwardArgs<'a,T>;
+    type Args = ActivationSoftMaxForwardArgs<f32>;
 }
-pub struct ActivationSoftMaxForwardArgs<'a,T> where T: DataType + 'a {
-    input_output: &'a mut CudaPtr<T>,
+impl Kernel for SoftMaxForward<f64> {
+    const FUNC_PTR: *const c_void = softmax_forward_double as *const c_void;
+    type Args = ActivationSoftMaxForwardArgs<f64>;
+}
+pub struct ActivationSoftMaxForwardArgs<T> where T: DataTypeInfo {
+    pub input_output: CudaPtr<T>,
     units_len: usize,
     batch_len: usize,
-    alpha: &'a mut CudaPtr<T>,
-    sum: &'a mut CudaPtr<T>
+    alpha: CudaPtr<T>,
+    sum: CudaPtr<T>
 }
-impl<'a,T> ActivationSoftMaxForwardArgs<'a,T> where T: DataType + 'a {
-    pub fn new(input_output:&'a mut CudaPtr<T>,units_len:usize,batch_len:usize,alpha:&'a mut CudaPtr<T>,sum:&'a mut CudaPtr<T>)
-               -> ActivationSoftMaxForwardArgs<'a,T> {
+impl<T> ActivationSoftMaxForwardArgs<T> where T: DataTypeInfo {
+    pub fn new(input_output:CudaPtr<T>,units_len:usize,batch_len:usize,alpha:CudaPtr<T>,sum:CudaPtr<T>)
+               -> ActivationSoftMaxForwardArgs<T> {
 
         ActivationSoftMaxForwardArgs {
             input_output: input_output,
@@ -232,43 +253,45 @@ impl<'a,T> ActivationSoftMaxForwardArgs<'a,T> where T: DataType + 'a {
         }
     }
 }
-impl<'a,T> KernelArgs for ActivationSoftMaxForwardArgs<'a,T> where T: DataType + 'a {
+impl<T> KernelArgs for ActivationSoftMaxForwardArgs<T> where T: DataTypeInfo {
     fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
         vec![
-            self.input_output,
+            &mut self.input_output,
             &mut self.units_len,
             &mut self.batch_len,
-            self.alpha,
-            self.sum
+            &mut self.alpha,
+            &mut self.sum
         ]
     }
 }
-pub struct SoftMaxPreprocessing<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+pub struct SoftMaxPreprocessing<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> SoftMaxPreprocessing<'a,T> where T: DataType + 'a {
-    pub fn new() -> SoftMaxPreprocessing<'a,T> {
+impl<T> SoftMaxPreprocessing<T> where T: DataTypeInfo {
+    pub fn new() -> SoftMaxPreprocessing<T> {
         SoftMaxPreprocessing {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for SoftMaxPreprocessing<'a,T> where T: DataType + 'a {
+impl Kernel for SoftMaxPreprocessing<f32> {
     const FUNC_PTR: *const c_void = softmax_preprocessing_float as *const c_void;
-    type Args = ActivationSoftMaxPreprocessingArgs<'a,T>;
+    type Args = ActivationSoftMaxPreprocessingArgs<f32>;
 }
-pub struct ActivationSoftMaxPreprocessingArgs<'a,T> where T: DataType + 'a {
-    input: &'a mut CudaPtr<T>,
+impl Kernel for SoftMaxPreprocessing<f64> {
+    const FUNC_PTR: *const c_void = softmax_preprocessing_float as *const c_void;
+    type Args = ActivationSoftMaxPreprocessingArgs<f64>;
+}
+pub struct ActivationSoftMaxPreprocessingArgs<T> where T: DataTypeInfo {
+    input: CudaPtr<T>,
     units_len: usize,
     batch_len: usize,
-    alpha: &'a mut CudaPtr<T>,
-    sum: &'a mut CudaPtr<T>
+    pub alpha: CudaPtr<T>,
+    pub sum: CudaPtr<T>
 }
-impl<'a,T> ActivationSoftMaxPreprocessingArgs<'a,T> where T: DataType + 'a {
-    pub fn new(input:&'a mut CudaPtr<T>,units_len:usize,batch_len:usize,alpha:&'a mut CudaPtr<T>,sum:&'a mut CudaPtr<T>)
-               -> ActivationSoftMaxPreprocessingArgs<'a,T> {
+impl<T> ActivationSoftMaxPreprocessingArgs<T> where T: DataTypeInfo {
+    pub fn new(input:CudaPtr<T>,units_len:usize,batch_len:usize,alpha:CudaPtr<T>,sum:CudaPtr<T>)
+               -> ActivationSoftMaxPreprocessingArgs<T> {
 
         ActivationSoftMaxPreprocessingArgs {
             input: input,
@@ -279,30 +302,32 @@ impl<'a,T> ActivationSoftMaxPreprocessingArgs<'a,T> where T: DataType + 'a {
         }
     }
 }
-impl<'a,T> KernelArgs for ActivationSoftMaxPreprocessingArgs<'a,T> where T: DataType + 'a {
+impl<T> KernelArgs for ActivationSoftMaxPreprocessingArgs<T> where T: DataTypeInfo {
     fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
         vec![
-            self.input,
+            &mut self.input,
             &mut self.units_len,
             &mut self.batch_len,
-            self.alpha,
-            self.sum
+            &mut self.alpha,
+            &mut self.sum
         ]
     }
 }
-pub struct SoftMaxBackward<'a,T> where T: DataType + 'a {
-    l:PhantomData<&'a ()>,
+pub struct SoftMaxBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
-impl<'a,T> SoftMaxBackward<'a,T> where T: DataType + 'a {
-    pub fn new() -> SoftMaxBackward<'a,T> {
+impl<T> SoftMaxBackward<T> where T: DataTypeInfo {
+    pub fn new() -> SoftMaxBackward<T> {
         SoftMaxBackward {
-            l: PhantomData::<&'a ()>,
             t: PhantomData::<T>
         }
     }
 }
-impl<'a,T> Kernel for SoftMaxBackward<'a,T> where T: DataType + 'a {
+impl Kernel for SoftMaxBackward<f32> {
     const FUNC_PTR: *const c_void = softmax_backward_float as *const c_void;
-    type Args = ActivationBackwardArgs<'a,T>;
+    type Args = ActivationBackwardArgs<f32>;
+}
+impl Kernel for SoftMaxBackward<f64> {
+    const FUNC_PTR: *const c_void = softmax_backward_double as *const c_void;
+    type Args = ActivationBackwardArgs<f64>;
 }

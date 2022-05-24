@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
 use libc::c_void;
+use rcudnn::utils::DataType;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t};
 use crate::cuda::mem::MemoryPool;
 use crate::error::{CudaError, CudaRuntimeError};
@@ -10,6 +11,26 @@ pub mod ffi;
 pub mod mem;
 pub mod kernel;
 
+pub trait DataTypeInfo {
+    fn cudnn_data_type() -> DataType;
+    fn size() -> usize;
+}
+impl DataTypeInfo for f32 {
+    fn cudnn_data_type() -> DataType {
+        DataType::Float
+    }
+    fn size() -> usize {
+        4_usize
+    }
+}
+impl DataTypeInfo for f64 {
+    fn cudnn_data_type() -> DataType {
+        DataType::Double
+    }
+    fn size() -> usize {
+        8_usize
+    }
+}
 pub(crate) mod private {
     pub trait AsKernelPtrBase {
         fn as_kernel_ptr(&self) -> *const libc::c_void;

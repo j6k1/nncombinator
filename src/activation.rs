@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::marker::PhantomData;
+use std::mem;
 use std::os::raw::c_uint;
 use cuda_runtime_sys::dim3;
 use crate::UnitValue;
@@ -8,7 +9,6 @@ use crate::cuda::{CudaPtr, DataTypeInfo, Kernel, KernelArgs, Memory};
 use crate::cuda::kernel::activation::{
     ActivationBackwardArgs,
     ActivationForwardArgs,
-    ActivationSoftMaxForwardArgs,
     ReLuBackward,
     ReLuForward,
     SigmoidBackward,
@@ -490,28 +490,20 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCp
     where U: UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
           CudaPtr<U>: TryFrom<U,Error=CudaError>,
-          SoftMaxForward<U>: Kernel<Args=ActivationSoftMaxForwardArgs<U>>,
+          SoftMaxForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        let alpha = input.iter().fold(U::initial_max_value(), |m, &v| v.max(&m));
-        let sum = input.iter().fold(U::default(),|acc, &x| acc + (x - alpha).exp());
-
-        let alpha = CudaPtr::try_from(alpha)?;
-        let sum = CudaPtr::try_from(sum)?;
-
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationSoftMaxForwardArgs::new(input_output, N, 1,
-                                                         alpha,
-                                                         sum);
+        let mut args = ActivationForwardArgs::new(input_output, N, 1);
 
         let mut kernel = SoftMaxForward::<U>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0)?;
+                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
 
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }

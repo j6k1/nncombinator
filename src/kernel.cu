@@ -1,3 +1,5 @@
+#include<cmath>
+
 __device__ float _exp(float x) {
     return __expf(x);
 }
@@ -5,6 +7,15 @@ __device__ float _exp(float x) {
 __device__ double _exp(double x) {
     return exp(x);
 }
+
+__device__ float _fmax(float a, float b) {
+    return std::fmax(a,b);
+}
+
+__device__ double _fmax(double a, double b) {
+    return std::fmax(a,b);
+}
+#define BLOCK_SHARED 1024
 
 template<typename T>
 
@@ -67,17 +78,79 @@ __device__ void tanh_forward(T *input_output, const size_t units_len, const size
 }
 template<typename T>
 
-__device__ void softmax_forward(T *input_output, const size_t units_len, const size_t batch_len, const T *alpha, const T *sum) {
-    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
-    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+__device__ void softmax_forward(T *input_output, const size_t units_len, const size_t batch_len) {
+    return;
 
-    if (index < units_len && batch_index < batch_len) {
-        size_t i = batch_index == 0 ? index : batch_index * units_len + index;
+    extern __shared__ char smem[];
+    T *sdata = reinterpret_cast<T*>(smem);
 
-        T number = _exp(input_output[i] - alpha[batch_index]);
-        T x = number / sum[batch_index];
+    T *alpha_sdata = &sdata[0];
 
-        input_output[i] = x;
+    T *sum_sdata = &sdata[BLOCK_SHARED];
+
+    size_t tid = threadIdx.x;
+    size_t batch_index = blockIdx.x;
+
+    if (tid < units_len && batch_index < batch_len) {
+        unsigned int i = blockIdx.x * units_len + tid;
+        unsigned int n = units_len * batch_len;
+        unsigned int distance = blockDim.x;
+
+        sum_sdata[tid] = (T)0;
+        alpha_sdata[tid] = (T)0/(T)0;
+
+        while (i < n) {
+            sum_sdata[tid] += input_output[i];
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],input_output[i]);
+            i += distance;
+        }
+        __syncthreads();
+
+        if (tid < 512) {
+            sum_sdata[tid] += sum_sdata[tid + 512];
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 512]);
+        }
+        __syncthreads();
+
+        if (tid < 256) {
+            sum_sdata[tid] += sum_sdata[tid + 256];
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 256]);
+        }
+        __syncthreads();
+
+        if (tid < 128) {
+            sum_sdata[tid] += sum_sdata[tid + 128];
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 128]);
+        }
+        __syncthreads();
+
+        if (tid < 64) {
+            sum_sdata[tid] += sum_sdata[tid + 64];
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 64]);
+        }
+        __syncthreads();
+
+        if (tid < 32) {
+            sum_sdata[tid] += sum_sdata[tid + 32];
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 32]);
+        }
+        __syncthreads();
+
+        if (tid > 0 && tid < 32) {
+            sum_sdata[0] += sum_sdata[tid];
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[0]);
+        }
+        __syncthreads();
+
+        T sum = sum_sdata[0];
+        T alpha = alpha_sdata[0];
+
+        for (size_t i = batch_index == 0 ? tid : batch_index * units_len + tid; i < units_len; i++) {
+            T number = _exp(input_output[i] - alpha);
+            T x = number / sum;
+
+            input_output[i] = x;
+        }
     }
 }
 template<typename T>
@@ -199,8 +272,8 @@ extern "C" {
         tanh_forward(input_output,units_len,batch_len);
     }
 
-	__global__ void softmax_forward_float(float *input_output, const size_t units_len, const size_t batch_len, const float *alpha, const float *sum) {
-        softmax_forward(input_output,units_len,batch_len,alpha,sum);
+	__global__ void softmax_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
+        softmax_forward(input_output,units_len,batch_len);
     }
 
     __global__ void softmax_preprocessing_float(const float *input, const size_t units_len, const size_t batch_len, float *alpha, float *sum) {
@@ -242,8 +315,8 @@ extern "C" {
         tanh_forward(input_output,units_len,batch_len);
     }
 
-	__global__ void softmax_forward_double(float *input_output, const size_t units_len, const size_t batch_len, const float *alpha, const float *sum) {
-        softmax_forward(input_output,units_len,batch_len,alpha,sum);
+	__global__ void softmax_forward_double(float *input_output, const size_t units_len, const size_t batch_len) {
+        softmax_forward(input_output,units_len,batch_len);
     }
 
     __global__ void softmax_preprocessing_double(const float *input, const size_t units_len, const size_t batch_len, float *alpha, float *sum) {

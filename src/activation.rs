@@ -290,8 +290,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(u.iter()) {
-            // Todo +rが常に0の状態でrにかけてる。代りに*iと書くか、*rの値を*iで初期化する必要がある。
-            *r = *r * (U::one() / (U::one() + (-*i).exp())) +
+            *r = *i * (U::one() / (U::one() + (-*i).exp())) +
                 (U::one() / (U::one() + (-*i).exp())) * (U::one() - (*i * (U::one() / (U::one() + (-*i).exp()))))
         }
 

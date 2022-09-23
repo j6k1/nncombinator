@@ -89,17 +89,17 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
     T *sum_sdata = &sdata[BLOCK_SHARED];
 
     size_t tid = threadIdx.x;
-    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+    size_t batch_index = blockIdx.x;
 
     if (tid < units_len && batch_index < batch_len) {
-        unsigned int i = blockIdx.x * units_len + tid;
-        unsigned int n = units_len * batch_len;
+        unsigned int i = batch_index * units_len + tid;
+        unsigned int end_block = (batch_index + 1) * units_len;
         unsigned int distance = blockDim.x;
 
         sum_sdata[tid] = (T)0;
         alpha_sdata[tid] = (T)0/(T)0;
 
-        while (i < n) {
+        while (i < end_block) {
             sum_sdata[tid] += input_output[i];
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],input_output[i]);
             i += distance;
@@ -145,7 +145,7 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
         T sum = sum_sdata[0];
         T alpha = alpha_sdata[0];
 
-        for (size_t i = batch_index == 0 ? tid : batch_index * units_len + tid; i < n; i+=distance) {
+        for (size_t i = batch_index == 0 ? tid : batch_index * units_len + tid; i < end_block; i+=distance) {
             T number = _exp(input_output[i] - alpha);
             T x = number / sum;
 

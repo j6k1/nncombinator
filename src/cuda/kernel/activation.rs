@@ -7,7 +7,7 @@ extern "C" {
     fn relu_forward_float(input_output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn swish_forward_float(input_output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn tanh_forward_float(input_output: *mut f32, len: size_t, units_len: size_t) -> c_void;
-    fn softmax_forward_float(input_output: *mut f32, len: size_t, batch_len: size_t, alpha: *const f32, sum: *const f32) -> c_void;
+    fn softmax_forward_float(input_output: *mut f32, len: size_t, batch_len: size_t) -> c_void;
     fn sigmoid_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
     fn relu_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
     fn swish_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
@@ -18,7 +18,7 @@ extern "C" {
     fn relu_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn swish_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn tanh_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
-    fn softmax_forward_double(input_output: *mut f64, len: size_t, batch_len: size_t, alpha: *const f64, sum: *const f64) -> c_void;
+    fn softmax_forward_double(input_output: *mut f64, len: size_t, batch_len: size_t) -> c_void;
     fn sigmoid_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
     fn relu_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
     fn swish_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
@@ -157,9 +157,13 @@ impl<T> SwishForward<T> where T: DataTypeInfo {
         }
     }
 }
-impl<T> Kernel for SwishForward<T> where T: DataTypeInfo {
+impl Kernel for SwishForward<f32> {
     const FUNC_PTR: *const c_void = swish_forward_float as *const c_void;
-    type Args = ActivationForwardArgs<T>;
+    type Args = ActivationForwardArgs<f32>;
+}
+impl Kernel for SwishForward<f64> {
+    const FUNC_PTR: *const c_void = swish_forward_double as *const c_void;
+    type Args = ActivationForwardArgs<f64>;
 }
 pub struct SwishBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
@@ -227,42 +231,11 @@ impl<T> SoftMaxForward<T> where T: DataTypeInfo {
 }
 impl Kernel for SoftMaxForward<f32> {
     const FUNC_PTR: *const c_void = softmax_forward_float as *const c_void;
-    type Args = ActivationSoftMaxForwardArgs<f32>;
+    type Args = ActivationForwardArgs<f32>;
 }
 impl Kernel for SoftMaxForward<f64> {
     const FUNC_PTR: *const c_void = softmax_forward_double as *const c_void;
-    type Args = ActivationSoftMaxForwardArgs<f64>;
-}
-pub struct ActivationSoftMaxForwardArgs<T> where T: DataTypeInfo {
-    pub input_output: CudaPtr<T>,
-    units_len: usize,
-    batch_len: usize,
-    alpha: CudaPtr<T>,
-    sum: CudaPtr<T>
-}
-impl<T> ActivationSoftMaxForwardArgs<T> where T: DataTypeInfo {
-    pub fn new(input_output:CudaPtr<T>,units_len:usize,batch_len:usize,alpha:CudaPtr<T>,sum:CudaPtr<T>)
-               -> ActivationSoftMaxForwardArgs<T> {
-
-        ActivationSoftMaxForwardArgs {
-            input_output: input_output,
-            units_len: units_len,
-            batch_len: batch_len,
-            alpha,
-            sum
-        }
-    }
-}
-impl<T> KernelArgs for ActivationSoftMaxForwardArgs<T> where T: DataTypeInfo {
-    fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
-        vec![
-            &mut self.input_output,
-            &mut self.units_len,
-            &mut self.batch_len,
-            &mut self.alpha,
-            &mut self.sum
-        ]
-    }
+    type Args = ActivationForwardArgs<f64>;
 }
 pub struct SoftMaxPreprocessing<T> where T: DataTypeInfo {
     t:PhantomData<T>

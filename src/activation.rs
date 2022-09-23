@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::marker::PhantomData;
+use std::mem;
 use std::os::raw::c_uint;
 use cuda_runtime_sys::dim3;
 use crate::UnitValue;
@@ -8,7 +9,6 @@ use crate::cuda::{CudaPtr, DataTypeInfo, Kernel, KernelArgs, Memory};
 use crate::cuda::kernel::activation::{
     ActivationBackwardArgs,
     ActivationForwardArgs,
-    ActivationSoftMaxForwardArgs,
     ReLuBackward,
     ReLuForward,
     SigmoidBackward,
@@ -139,8 +139,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGp
 
         let mut kernel = SigmoidForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
-                      dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.input_output.read_to_vec()?.try_into()?)
@@ -157,8 +157,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGp
 
         let mut kernel = SigmoidBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
-                      dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.loss.read_to_vec()?.try_into()?)
@@ -232,8 +232,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U
 
         let mut kernel = ReLuForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
-                      dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.input_output.read_to_vec()?.try_into()?)
@@ -250,8 +250,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U
 
         let mut kernel = ReLuBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
-                      dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.loss.read_to_vec()?.try_into()?)
@@ -290,8 +290,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(u.iter()) {
-            // Todo +rが常に0の状態でrにかけてる。代りに*iと書くか、*rの値を*iで初期化する必要がある。
-            *r = *r * (U::one() / (U::one() + (-*i).exp())) +
+            *r = *i * (U::one() / (U::one() + (-*i).exp())) +
                 (U::one() / (U::one() + (-*i).exp())) * (U::one() - (*i * (U::one() / (U::one() + (-*i).exp()))))
         }
 
@@ -319,8 +318,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<
 
         let mut kernel = SwishForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
-                      dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.input_output.read_to_vec()?.try_into()?)
@@ -337,8 +336,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<
 
         let mut kernel = SwishBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
-                      dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.loss.read_to_vec()?.try_into()?)
@@ -405,8 +404,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U
 
         let mut kernel = TanhForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
-                      dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.input_output.read_to_vec()?.try_into()?)
@@ -423,8 +422,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U
 
         let mut kernel = TanhBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
-                      dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.loss.read_to_vec()?.try_into()?)
@@ -490,28 +489,20 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCp
     where U: UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
           CudaPtr<U>: TryFrom<U,Error=CudaError>,
-          SoftMaxForward<U>: Kernel<Args=ActivationSoftMaxForwardArgs<U>>,
+          SoftMaxForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        let alpha = input.iter().fold(U::initial_max_value(), |m, &v| v.max(&m));
-        let sum = input.iter().fold(U::default(),|acc, &x| acc + (x - alpha).exp());
-
-        let mut alpha = CudaPtr::try_from(alpha)?;
-        let mut sum = CudaPtr::try_from(sum)?;
-
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
-        let mut args = ActivationSoftMaxForwardArgs::new(input_output, N, 1,
-                                                         alpha,
-                                                         sum);
+        let mut args = ActivationForwardArgs::new(input_output, N, 1);
 
         let mut kernel = SoftMaxForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
-                      dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
-                      &mut args, 0)?;
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
+                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
 
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
@@ -527,8 +518,8 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCp
 
         let mut kernel = SoftMaxBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 * 1024 - 1) / 1024 / 1024, y: 1, z: 1 },
-                      dim3 { x: ((N as c_uint + 1023) / 1024).min(1024), y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.loss.read_to_vec()?.try_into()?)

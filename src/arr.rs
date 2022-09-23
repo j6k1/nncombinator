@@ -670,12 +670,12 @@ impl<'data,T,const N1:usize,const N2:usize> Iterator for Arr2IterProducer<'data,
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        ({N1*N2-1}, Some(N1*N2-1))
+        (N1, Some(N1))
     }
 }
 impl<'data,T,const N1:usize,const N2:usize> std::iter::ExactSizeIterator for Arr2IterProducer<'data,T,N1,N2> {
     fn len(&self) -> usize {
-        N1 * N2
+        N1
     }
 }
 impl<'data,T,const N1:usize,const N2:usize> std::iter::DoubleEndedIterator for Arr2IterProducer<'data,T,N1,N2> {

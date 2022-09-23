@@ -89,7 +89,7 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
     T *sum_sdata = &sdata[BLOCK_SHARED];
 
     size_t tid = threadIdx.x;
-    size_t batch_index = blockIdx.x;
+    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (tid < units_len && batch_index < batch_len) {
         unsigned int i = blockIdx.x * units_len + tid;

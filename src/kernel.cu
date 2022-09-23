@@ -145,7 +145,7 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
         T sum = sum_sdata[0];
         T alpha = alpha_sdata[0];
 
-        for (size_t i = batch_index == 0 ? tid : batch_index * units_len + tid; i < units_len; i++) {
+        for (size_t i = batch_index == 0 ? tid : batch_index * units_len + tid; i < n; i+=distance) {
             T number = _exp(input_output[i] - alpha);
             T x = number / sum;
 

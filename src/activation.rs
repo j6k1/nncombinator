@@ -25,9 +25,9 @@ use crate::error::{CudaError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 
-pub trait Activation<U,T,D> where U: UnitValue<U>, D: Device<U> {
-    fn apply(&self, device:&D, input:&T) -> Result<T, EvaluateError>;
-    fn derive(&self, device:&D, o:&T, loss:&T, u:&T) -> Result<T, TrainingError>;
+pub trait Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
+    fn apply(&self, device:&D, input:&T) -> Result<R, EvaluateError>;
+    fn derive(&self, device:&D, o:&T, loss:&T, u:&T) -> Result<R, TrainingError>;
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;
 }
 pub struct Identity<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -47,29 +47,44 @@ impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
+impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
+    where U: UnitValue<U>, I: Iterator<Item=U> {
 
-    fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        Ok((*input).clone())
+    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
+        Ok(input.collect::<Vec<U>>().into())
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, _: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        Ok(loss.clone())
+    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, _: &I) -> Result<Arr<U,N>, TrainingError> {
+        Ok(loss.collect::<Vec<U>>().into())
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         self.c.contains(l.name())
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        self.c.contains(l.name())
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>>
     where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
 
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         Ok((*input).clone())
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, _: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, _: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         Ok(loss.clone())
     }
 
@@ -94,28 +109,28 @@ impl<U,D> Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
+impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
+    where U: UnitValue<U>, I: Iterator<Item=U> {
 
-    fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
-        for (r,&i) in r.iter_mut().zip(input.iter()) {
+        for (r,&i) in r.iter_mut().zip(input) {
             *r = U::one() / (U::one() + (-i).exp());
         }
 
         Ok(r)
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(u.iter()) {
+        for (r,i) in r.iter_mut().zip(u) {
             let e = U::one() / (U::one() + (-*i).exp());
             *r = e * (U::one() - e);
         }
 
-        for (r,&l) in r.iter_mut().zip(loss.iter()) {
+        for (r,&l) in r.iter_mut().zip(loss) {
             *r = *r * l;
         }
 
@@ -126,12 +141,27 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCp
         self.c.contains(l.name())
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        self.c.contains(l.name())
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
              SigmoidForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
              SigmoidBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
@@ -146,7 +176,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGp
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
@@ -180,13 +210,13 @@ impl<U,D> ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
+impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
+    where U: UnitValue<U>, I: Iterator<Item=U> {
 
-    fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(input.iter()) {
+        for (r,i) in r.iter_mut().zip(input) {
             *r = if *i > U::default() || i.is_nan() {
                 *i
             } else {
@@ -196,10 +226,10 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U
         Ok(r)
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(u.iter()) {
+        for (r,i) in r.iter_mut().zip(u) {
             if *i > U::default() {
                 *r = U::one()
             } else {
@@ -207,7 +237,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U
             };
         }
 
-        for (r,&l) in r.iter_mut().zip(loss.iter()) {
+        for (r,&l) in r.iter_mut().zip(loss) {
             *r = *r * l;
         }
 
@@ -218,12 +248,27 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U
         false
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        false
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
           ReLuForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           ReLuBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
 
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
@@ -239,7 +284,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
@@ -273,28 +318,28 @@ impl<U,D> Swish<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
+impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
+    where U: UnitValue<U>, I: Iterator<Item=U> {
 
-    fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(input.iter()) {
+        for (r,i) in r.iter_mut().zip(input) {
             *r = *r * (U::one() / (U::one() + (-*i).exp()))
         }
 
         Ok(r)
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(u.iter()) {
+        for (r,i) in r.iter_mut().zip(u) {
             *r = *i * (U::one() / (U::one() + (-*i).exp())) +
                 (U::one() / (U::one() + (-*i).exp())) * (U::one() - (*i * (U::one() / (U::one() + (-*i).exp()))))
         }
 
-        for (r,&l) in r.iter_mut().zip(loss.iter()) {
+        for (r,&l) in r.iter_mut().zip(loss) {
             *r = *r * l;
         }
 
@@ -305,12 +350,27 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<
         false
     }
 }
- impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        false
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
              SwishForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
              SwishBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
@@ -325,7 +385,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
@@ -359,28 +419,28 @@ impl<U,D> Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
+impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
+    where U: UnitValue<U>, I: Iterator<Item=U> {
 
-    fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(input.iter()) {
+        for (r,i) in r.iter_mut().zip(input) {
             *r = i.tanh();
         }
 
         Ok(r)
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(u.iter()) {
+        for (r,i) in r.iter_mut().zip(u) {
             let e = i.tanh();
             *r = U::one() - e * e;
         }
 
-        for (r,&l) in r.iter_mut().zip(loss.iter()) {
+        for (r,&l) in r.iter_mut().zip(loss) {
             *r = *r * l;
         }
 
@@ -391,12 +451,27 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U
         false
     }
 }
- impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        false
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
              TanhForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
              TanhBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
@@ -411,7 +486,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
@@ -450,16 +525,16 @@ impl<U,D> SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
+impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
+    where U: UnitValue<U>, I: Iterator<Item=U> {
 
-    fn apply(&self, _: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
-        let alpha = input.iter().fold(U::initial_max_value(), |m, &v| v.max(&m));
-        let sum = input.iter().fold(U::default(),|acc, &x| acc + (x - alpha).exp());
+        let alpha = input.clone().fold(U::initial_max_value(), |m, &v| v.max(&m));
+        let sum = input.clone().fold(U::default(),|acc, &x| acc + (x - alpha).exp());
 
-        for (r,i) in r.iter_mut().zip(input.iter()) {
+        for (r,i) in r.iter_mut().zip(input) {
             let number = (*i - alpha).exp();
             *r = number / sum;
         }
@@ -467,14 +542,14 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCp
         Ok(r)
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(u.iter()) {
+        for (r,i) in r.iter_mut().zip(u) {
             *r = *i * (U::one() - *i);
         }
 
-        for (r,&l) in r.iter_mut().zip(loss.iter()) {
+        for (r,&l) in r.iter_mut().zip(loss) {
             *r = *r * l;
         }
 
@@ -485,14 +560,29 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCp
         self.c.contains(l.name())
     }
 }
- impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        self.c.contains(l.name())
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
           CudaPtr<U>: TryFrom<U,Error=CudaError>,
           SoftMaxForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
@@ -507,7 +597,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCp
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 

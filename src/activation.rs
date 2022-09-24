@@ -30,6 +30,11 @@ pub trait Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
     fn derive(&self, device:&D, o:&T, loss:&T, u:&T) -> Result<R, TrainingError>;
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;
 }
+
+pub trait BatchActivation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
+    fn batch_apply(&self, device:&D, input:&VecArr<U,T>) -> Result<VecArr<U,R>, TrainingError>;
+    fn batch_derive(&self, device:&D, o:&VecArr<U,T>, loss:&VecArr<U,T>, u:&VecArr<U,T>) -> Result<VecArr<U,R>, TrainingError>;
+}
 pub struct Identity<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>,
@@ -45,6 +50,17 @@ impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
             d:PhantomData::<D>,
             c:c
         }
+    }
+}
+impl<T,U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for T
+    where T: Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>>, U: UnitValue<U>, I: Iterator<Item=U> {
+
+    fn batch_apply(&self, device: &DeviceCpu<U>, input: &VecArr<U, Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        device.batch_linear_forward_activation(input,self)
+    }
+
+    fn batch_derive(&self, device: &DeviceCpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        device.batch_loss_linear_by_activaton(o,loss,u,self)
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
@@ -92,6 +108,17 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Identity<
         self.c.contains(l.name())
     }
 }
+impl<U,I,const N:usize> BatchActivation<U,I,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceGpu<U>>
+    where T: Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>>, U: UnitValue<U>, I: Iterator<Item=U> {
+
+    fn batch_apply(&self, device: &DeviceCpu<U>, input: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+
+    fn batch_derive(&self, device: &DeviceCpu<U>, o: &VecArr<U, I>, loss: &VecArr<U, I>, u: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+}
 pub struct Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>,
@@ -107,6 +134,21 @@ impl<U,D> Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
             d:PhantomData::<D>,
             c:c
         }
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter().cloned())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        self.c.contains(l.name())
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
@@ -135,21 +177,6 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,Devi
         }
 
         Ok(r)
-    }
-
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
-        self.c.contains(l.name())
-    }
-}
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
-
-    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter().cloned())
-    }
-
-    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -198,6 +225,17 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U
         self.c.contains(l.name())
     }
 }
+impl<U,I,const N:usize> BatchActivation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceGpu<U>>
+    where T: Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>>, U: UnitValue<U>, I: Iterator<Item=U> {
+
+    fn batch_apply(&self, device: &DeviceCpu<U>, input: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+
+    fn batch_derive(&self, device: &DeviceCpu<U>, o: &VecArr<U, I>, loss: &VecArr<U, I>, u: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+}
 pub struct ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>
@@ -208,6 +246,21 @@ impl<U,D> ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
             u: PhantomData::<U>,
             d:PhantomData::<D>
         }
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter().cloned())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        false
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
@@ -245,21 +298,6 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceC
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
-        false
-    }
-}
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
-
-    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter().cloned())
-    }
-
-    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
-    }
-
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         false
     }
 }
@@ -306,6 +344,17 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,De
         false
     }
 }
+impl<U,I,const N:usize> BatchActivation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceGpu<U>>
+    where T: Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>>, U: UnitValue<U>, I: Iterator<Item=U> {
+
+    fn batch_apply(&self, device: &DeviceCpu<U>, input: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+
+    fn batch_derive(&self, device: &DeviceCpu<U>, o: &VecArr<U, I>, loss: &VecArr<U, I>, u: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+}
 pub struct Swish<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>
@@ -316,6 +365,21 @@ impl<U,D> Swish<U,D> where U: UnitValue<U>, D: Device<U> {
             u: PhantomData::<U>,
             d:PhantomData::<D>
         }
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter().cloned())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        false
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
@@ -347,21 +411,6 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,Device
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
-        false
-    }
-}
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
-
-    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter().cloned())
-    }
-
-    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
-    }
-
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         false
     }
 }
@@ -407,6 +456,17 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,D
         false
     }
 }
+impl<U,I,const N:usize> BatchActivation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceGpu<U>>
+    where T: Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>>, U: UnitValue<U>, I: Iterator<Item=U> {
+
+    fn batch_apply(&self, device: &DeviceCpu<U>, input: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+
+    fn batch_derive(&self, device: &DeviceCpu<U>, o: &VecArr<U, I>, loss: &VecArr<U, I>, u: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+}
 pub struct Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>
@@ -417,6 +477,21 @@ impl<U,D> Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
             u: PhantomData::<U>,
             d:PhantomData::<D>
         }
+    }
+}
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter().cloned())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        false
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
@@ -448,21 +523,6 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceC
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
-        false
-    }
-}
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
-
-    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter().cloned())
-    }
-
-    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
-    }
-
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         false
     }
 }
@@ -508,6 +568,17 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,De
         false
     }
 }
+impl<U,I,const N:usize> BatchActivation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceGpu<U>>
+    where T: Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>>, U: UnitValue<U>, I: Iterator<Item=U> {
+
+    fn batch_apply(&self, device: &DeviceCpu<U>, input: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+
+    fn batch_derive(&self, device: &DeviceCpu<U>, o: &VecArr<U, I>, loss: &VecArr<U, I>, u: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+}
 pub struct SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>,
@@ -525,14 +596,29 @@ impl<U,D> SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
+impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter().cloned())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+        self.c.contains(l.name())
+    }
+}
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
     where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
-        let alpha = input.clone().fold(U::initial_max_value(), |m, &v| v.max(&m));
-        let sum = input.clone().fold(U::default(),|acc, &x| acc + (x - alpha).exp());
+        let alpha = input.clone().fold(U::initial_max_value(), |m, v| v.max(&m));
+        let sum = input.clone().fold(U::default(),|acc, x| acc + (x - alpha).exp());
 
         for (r,i) in r.iter_mut().zip(input.clone()) {
             let number = (i - alpha).exp();
@@ -546,7 +632,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,Devi
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(u.clone()) {
-            *r = *i * (U::one() - i);
+            *r = i * (U::one() - i);
         }
 
         for (r,l) in r.iter_mut().zip(loss.clone()) {
@@ -554,21 +640,6 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,Devi
         }
 
         Ok(r)
-    }
-
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
-        self.c.contains(l.name())
-    }
-}
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
-    where U: UnitValue<U> {
-
-    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter().cloned())
-    }
-
-    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -617,5 +688,16 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         self.c.contains(l.name())
+    }
+}
+impl<U,I,const N:usize> BatchActivation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceGpu<U>>
+    where T: Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>>, U: UnitValue<U>, I: Iterator<Item=U> {
+
+    fn batch_apply(&self, device: &DeviceCpu<U>, input: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
+    }
+
+    fn batch_derive(&self, device: &DeviceCpu<U>, o: &VecArr<U, I>, loss: &VecArr<U, I>, u: &VecArr<U, I>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        todo!()
     }
 }

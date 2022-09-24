@@ -373,9 +373,9 @@ impl<U,P,A,I,V,const N:usize> BatchForward for ActivationLayer<U,P,A,I,Arr<U,N>,
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        input.par_iter().map(|i| {
+        Ok(input.par_iter().map(|i| {
             self.f.apply(&self.device, &i)
-        }).collect::<Result<VecArr<U,Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))
+        }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 }
 impl<U,P,A,I,V,const N:usize> BatchForward for ActivationLayer<U,P,A,I,Arr<U,N>,V,DeviceGpu<U>>
@@ -416,7 +416,7 @@ impl<U,P,A,I,V,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,Arr<U
 
         let u = r.map(|input| input.par_iter().map(|i| {
             self.f.apply(&self.device, &i)
-        }).collect::<Result<Vec<Arr<U,N>>,_>>())?;
+        }).collect::<Result<Vec<Arr<U,N>>,_>>())?.into();
 
         Ok(Cons(r,u))
     }

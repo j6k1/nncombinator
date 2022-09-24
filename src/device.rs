@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use rcublas::Context;
 use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasStatus_t, cublasSgemv_v2, cublasHandle_t};
-use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
 use rcudnn::{Cudnn, TensorDescriptor};
 use rcudnn::utils::DataType;
@@ -112,13 +112,13 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         -> Result<VecArr<U,Arr<U, N>>, TrainingError>
         where L: LossFunction<U> {
 
-        actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
+        Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
             a.par_iter()
              .zip(e.par_iter())
              .map(|(&a,&e)| lossf.derive(a,e))
              .collect::<Vec<U>>()
              .try_into().map_err(|e| TrainingError::from(e))
-        }).collect::<Result<Vec<Arr<U,N>>,_>>().into()
+        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 
     pub fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
@@ -131,12 +131,12 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
 
     pub fn backward_linear_batch<const NI:usize, const NO: usize>(&self, units: &Arr2<U, NI, NO>, input: &VecArr<U,Arr<U, NO>>)
                                                                   -> Result<VecArr<U,Arr<U, NI>>, TrainingError> {
-        input.par_iter().map(|input| {
+        Ok(input.par_iter().map(|input| {
             units.par_iter().map(|u| {
                 u.par_iter().cloned().zip(input.par_iter().cloned())
                     .reduce(|| (U::default(),U::default()), | (sum,d), (w,l) | (sum + w * l,d))
             }).map(|(r,_)| r).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
-        }).collect::<Result<Vec<Arr<U,NI>>,_>>().into()
+        }).collect::<Result<Vec<Arr<U,NI>>,_>>()?.into())
     }
 
     pub fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&VecArr<U,Arr<U,N>>,actual:&VecArr<U,Arr<U,N>>,lossf:&L) -> U {
@@ -167,13 +167,23 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         }).collect::<Result<Vec<Arr<U, NO>>, _>>().map(|r| r.into()).map_err(|e| TrainingError::from(e))
     }
 
-    pub fn batch_loss_linear_by_activaton<A,I,const N:usize>(&self, o:&Vec<Arr<f32,N>>, loss:&Vec<Arr<f32,N>>, u:&Vec<Arr<f32,N>>, activation:&A)
-                                                       -> Result<Vec<Arr<f32, N>>, TrainingError>
-        where A: Activation<U,I,Arr<U,N>,Self>, U: UnitValue<U>, I: Iterator<Item=U>
+    pub fn batch_linear_forward_activation<A,I,const N:usize>(&self,input:&VecArr<U,Arr<U,N>>, activation:&A)
+                                                    -> Result<VecArr<U,Arr<U,N>>,TrainingError>
+        where A: Activation<U,I,Arr<U,N>,Self>, U: UnitValue<U>, I: Iterator<Item=U>,
+            Vec<Arr<f32, N>>: FromParallelIterator<Arr<U, N>> {
+        Ok(input.par_iter().map(|i| {
+            activation.apply(&self.device, &i)
+        }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
+    }
+
+    pub fn batch_loss_linear_by_activaton<A,I,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
+                                                       -> Result<VecArr<U,Arr<U, N>>, TrainingError>
+        where A: Activation<U,I,Arr<U,N>,Self>, U: UnitValue<U>, I: Iterator<Item=U>,
+                                                Vec<Arr<f32, N>>: FromParallelIterator<Arr<U, N>>
     {
-        o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            activation.derive(&self, &o.into(), &l.into(), &u.into())
-        }).collect::<Result<Vec<Arr<U,N>>,_>>()
+        Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
+            activation.derive(&self, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
+        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
 pub struct CublasContext {

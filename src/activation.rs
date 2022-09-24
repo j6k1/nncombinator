@@ -51,11 +51,11 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Identity<U,Dev
     where U: UnitValue<U>, I: Iterator<Item=U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
-        Ok(input.collect::<Vec<U>>().into())
+        Ok(input.collect::<Vec<U>>().try_into()?)
     }
 
     fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, _: &I) -> Result<Arr<U,N>, TrainingError> {
-        Ok(loss.collect::<Vec<U>>().into())
+        Ok(loss.collect::<Vec<U>>().try_into()?)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -66,11 +66,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Identity<
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned())
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -110,12 +110,12 @@ impl<U,D> Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
-    where U: UnitValue<U>, I: Iterator<Item=U> {
+    where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
-        for (r,&i) in r.iter_mut().zip(input) {
+        for (r,i) in r.iter_mut().zip(input.clone()) {
             *r = U::one() / (U::one() + (-i).exp());
         }
 
@@ -125,12 +125,12 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,Devi
     fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(u) {
-            let e = U::one() / (U::one() + (-*i).exp());
+        for (r,i) in r.iter_mut().zip(u.clone()) {
+            let e = U::one() / (U::one() + (-i).exp());
             *r = e * (U::one() - e);
         }
 
-        for (r,&l) in r.iter_mut().zip(loss) {
+        for (r,l) in r.iter_mut().zip(loss.clone()) {
             *r = *r * l;
         }
 
@@ -145,11 +145,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -211,14 +211,14 @@ impl<U,D> ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
-    where U: UnitValue<U>, I: Iterator<Item=U> {
+    where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(input) {
-            *r = if *i > U::default() || i.is_nan() {
-                *i
+        for (r,i) in r.iter_mut().zip(input.clone()) {
+            *r = if i > U::default() || i.is_nan() {
+                i
             } else {
                 U::default()
             };
@@ -229,15 +229,15 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceC
     fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(u) {
-            if *i > U::default() {
+        for (r,i) in r.iter_mut().zip(u.clone()) {
+            if i > U::default() {
                 *r = U::one()
             } else {
                 *r = U::default()
             };
         }
 
-        for (r,&l) in r.iter_mut().zip(loss) {
+        for (r,l) in r.iter_mut().zip(loss.clone()) {
             *r = *r * l;
         }
 
@@ -252,11 +252,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,De
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -319,13 +319,13 @@ impl<U,D> Swish<U,D> where U: UnitValue<U>, D: Device<U> {
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
-    where U: UnitValue<U>, I: Iterator<Item=U> {
+    where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(input) {
-            *r = *r * (U::one() / (U::one() + (-*i).exp()))
+        for (r,i) in r.iter_mut().zip(input.clone()) {
+            *r = *r * (U::one() / (U::one() + (-i).exp()))
         }
 
         Ok(r)
@@ -334,12 +334,12 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,Device
     fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(u) {
-            *r = *i * (U::one() / (U::one() + (-*i).exp())) +
-                (U::one() / (U::one() + (-*i).exp())) * (U::one() - (*i * (U::one() / (U::one() + (-*i).exp()))))
+        for (r,i) in r.iter_mut().zip(u.clone()) {
+            *r = i * (U::one() / (U::one() + (-i).exp())) +
+                (U::one() / (U::one() + (-i).exp())) * (U::one() - (i * (U::one() / (U::one() + (-i).exp()))))
         }
 
-        for (r,&l) in r.iter_mut().zip(loss) {
+        for (r,l) in r.iter_mut().zip(loss.clone()) {
             *r = *r * l;
         }
 
@@ -354,11 +354,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,D
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -420,12 +420,12 @@ impl<U,D> Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
-    where U: UnitValue<U>, I: Iterator<Item=U> {
+    where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(input) {
+        for (r,i) in r.iter_mut().zip(input.clone()) {
             *r = i.tanh();
         }
 
@@ -435,12 +435,12 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceC
     fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(u) {
+        for (r,i) in r.iter_mut().zip(u.clone()) {
             let e = i.tanh();
             *r = U::one() - e * e;
         }
 
-        for (r,&l) in r.iter_mut().zip(loss) {
+        for (r,l) in r.iter_mut().zip(loss.clone()) {
             *r = *r * l;
         }
 
@@ -455,11 +455,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Tanh<U,De
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -526,7 +526,7 @@ impl<U,D> SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
-    where U: UnitValue<U>, I: Iterator<Item=U> {
+    where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
@@ -534,8 +534,8 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,Devi
         let alpha = input.clone().fold(U::initial_max_value(), |m, &v| v.max(&m));
         let sum = input.clone().fold(U::default(),|acc, &x| acc + (x - alpha).exp());
 
-        for (r,i) in r.iter_mut().zip(input) {
-            let number = (*i - alpha).exp();
+        for (r,i) in r.iter_mut().zip(input.clone()) {
+            let number = (i - alpha).exp();
             *r = number / sum;
         }
 
@@ -545,11 +545,11 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,Devi
     fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,i) in r.iter_mut().zip(u) {
-            *r = *i * (U::one() - *i);
+        for (r,i) in r.iter_mut().zip(u.clone()) {
+            *r = *i * (U::one() - i);
         }
 
-        for (r,&l) in r.iter_mut().zip(loss) {
+        for (r,l) in r.iter_mut().zip(loss.clone()) {
             *r = *r * l;
         }
 
@@ -564,11 +564,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for SoftMax<U
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.iter())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.iter(),&loss.iter(),&u.iter(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {

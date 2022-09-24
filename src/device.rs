@@ -122,11 +122,11 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     }
 
     pub fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
-        -> Result<Vec<Arr<U, N>>, TrainingError> {
-        actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
+        -> Result<VecArr<U,Arr<U, N>>, TrainingError> {
+        Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
             a.par_iter().zip(e.par_iter())
              .map(|(&a,&e)| a - e).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
-        }).collect::<Result<Vec<Arr<U,N>>,_>>().into()
+        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 
     pub fn backward_linear_batch<const NI:usize, const NO: usize>(&self, units: &Arr2<U, NI, NO>, input: &VecArr<U,Arr<U, NO>>)
@@ -165,25 +165,6 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
                 o + b
             }).collect::<Vec<U>>().try_into()
         }).collect::<Result<Vec<Arr<U, NO>>, _>>().map(|r| r.into()).map_err(|e| TrainingError::from(e))
-    }
-
-    pub fn batch_linear_forward_activation<A,I,const N:usize>(&self,input:&VecArr<U,Arr<U,N>>, activation:&A)
-                                                    -> Result<VecArr<U,Arr<U,N>>,TrainingError>
-        where A: Activation<U,I,Arr<U,N>,Self>, U: UnitValue<U>, I: Iterator<Item=U>,
-            Vec<Arr<f32, N>>: FromParallelIterator<Arr<U, N>> {
-        Ok(input.par_iter().map(|i| {
-            activation.apply(&self.device, &i)
-        }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
-    }
-
-    pub fn batch_loss_linear_by_activaton<A,I,const N:usize>(&self, o:&Vec<Arr<U,N>>, loss:&Vec<Arr<U,N>>, u:&Vec<Arr<U,N>>, activation:&A)
-                                                       -> Result<VecArr<U,Arr<U, N>>, TrainingError>
-        where A: Activation<U,I,Arr<U,N>,Self>, U: UnitValue<U>, I: Iterator<Item=U>,
-                                                Vec<Arr<f32, N>>: FromParallelIterator<Arr<U, N>>
-    {
-        Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            activation.derive(&self, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
-        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
 pub struct CublasContext {

@@ -7,7 +7,7 @@ use crate::arr::*;
 use crate::device::*;
 use crate::persistence::*;
 use crate::{Cons, Nil, Stack};
-use crate::activation::{Activation};
+use crate::activation::{Activation, BatchActivation};
 use crate::cuda::mem::CachedTensor;
 use crate::error::{ConfigReadError, CudaError, EvaluateError, PersistenceError, TrainingError};
 use crate::ope::UnitValue;
@@ -367,15 +367,13 @@ impl<U,P,A,I,V,const N:usize> BatchForward for ActivationLayer<U,P,A,I,Arr<U,N>,
              BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=VecArr<U,Arr<U,N>>> +
              Send + Sync + 'static,
           U: Default + Clone + Copy + UnitValue<U>,
-          A: Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> + Send + Sync + 'static,
+          A: BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> + Send + Sync + 'static,
           I: Debug + Send + Sync,
           V: Iterator<Item=U> {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        Ok(input.par_iter().map(|i| {
-            self.f.apply(&self.device, &i)
-        }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
+        self.f.batch_apply(&self.device,&input)
     }
 }
 impl<U,P,A,I,V,const N:usize> BatchForward for ActivationLayer<U,P,A,I,Arr<U,N>,V,DeviceGpu<U>>
@@ -408,15 +406,15 @@ impl<U,P,A,I,V,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,Arr<U
              BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=VecArr<U,Arr<U,N>>> +
              Send + Sync + 'static,
           U: Default + Clone + Copy + UnitValue<U>,
-          A: Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> + Send + Sync + 'static,
+          A: BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> + Send + Sync + 'static,
           I: Debug + Send + Sync,
           V: Iterator<Item=U> {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let r = self.parent.batch_pre_train(input)?;
 
-        let u = r.map(|input| input.par_iter().map(|i| {
-            self.f.apply(&self.device, &i)
-        }).collect::<Result<Vec<Arr<U,N>>,_>>())?.into();
+        let u = r.map(|input| {
+            self.f.batch_apply(&self.device,&input)
+        })?;
 
         Ok(Cons(r,u))
     }
@@ -456,14 +454,14 @@ impl<U,P,A,I,V,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=VecArr<U,Arr<U,N>>> + Send + Sync + 'static,
           U: Default + Clone + Copy + UnitValue<U>,
-          A: Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> + Activation<U,V,Arr<U,N>,DeviceCpu<U>> + Send + Sync + 'static,
+          A: BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> + Activation<U,V,Arr<U,N>,DeviceCpu<U>> + Send + Sync + 'static,
           I: Debug + Send + Sync,
           V: Iterator<Item=U> {
     fn batch_loss<L: LossFunction<U>>(&self, loss: Self::BatchLossInput, _: &L, stack: Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
         let (s,o) = stack.pop();
 
         let r = s.map(|u| {
-            self.device.batch_loss_linear_by_activaton(&o,&loss, u, &self.f)
+            self.f.batch_derive(&self.device,&o,&loss, u)
         })?;
 
         Ok((Cons(s,o),r))

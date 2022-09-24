@@ -112,10 +112,10 @@ fn test_mnist() {
 
                 let lossf = CrossEntropyMulticlass::new();
 
-                let loss = net.batch_train(batch_data.0, batch_data.1.clone(), &mut optimizer, &lossf).unwrap();
+                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
                 total_loss += loss;
 
-                let _ = net.batch_forward(batch_data.1).unwrap();
+                let _ = net.batch_forward(batch_data.1.into()).unwrap();
 
                 if count >= 100 {
                     break;
@@ -612,7 +612,7 @@ fn test_weather_batch_train() {
 
                 acc
             });
-            let loss = net.batch_train(train_data.0,train_data.1,&mut optimizer,&lossf).unwrap();
+            let loss = net.batch_train(train_data.0.into(),train_data.1.into(),&mut optimizer,&lossf).unwrap();
 
             println!("total_loss = {}",loss);
         }

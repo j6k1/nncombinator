@@ -54,14 +54,26 @@ impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
-    where U: UnitValue<U>, I: Iterator<Item=U> {
+    where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
-        Ok(input.collect::<Vec<U>>().try_into()?)
+        let mut r = Arr::new();
+
+        for (r,i) in r.iter_mut().zip(input.clone()) {
+            *r = i;
+        }
+
+        Ok(r)
     }
 
     fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, _: &I) -> Result<Arr<U,N>, TrainingError> {
-        Ok(loss.collect::<Vec<U>>().try_into()?)
+        let mut r = Arr::new();
+
+        for (r,l) in r.iter_mut().zip(loss.clone()) {
+            *r = l;
+        }
+
+        Ok(r)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {

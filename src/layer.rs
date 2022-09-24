@@ -1184,7 +1184,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr
             let loss = input;
 
             let loss = loss.par_iter()
-                           .cloned()
+                           .map(|l| l.into())
                            .map(|l| Ok(l)).reduce(|| Ok(Arr::<U,NO>::new()), |acc,o| {
                 acc.and_then(|acc| o.and_then(|o| {
                     acc.par_iter().cloned()
@@ -1199,7 +1199,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr
                 }
 
                 s.map(|o| {
-                    o.par_iter().cloned().map(|o| Ok(o)).reduce(|| Ok(Arr::new()), |acc,o| {
+                    o.par_iter().map(|o| o.into()).map(|o| Ok(o)).reduce(|| Ok(Arr::new()), |acc,o| {
                         acc.and_then(|acc| o.and_then(|o| {
                             acc.par_iter().zip(o.par_iter()).map(|(&acc, &o)| {
                                 acc + o

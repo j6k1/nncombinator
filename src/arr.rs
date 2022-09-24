@@ -34,8 +34,19 @@ impl<T,const N:usize> DerefMut for Arr<T,N> where T: Default + Clone + Send  {
 }
 impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
     fn clone(&self) -> Self {
-        Arr{
+        Arr {
             arr:self.arr.clone()
+        }
+    }
+}
+impl<'data,U,const N:usize> From<ArrView<'data,U,N>> for Arr<U,N> where U: Default + Clone + Copy + Send {
+    fn from(view: ArrView<'data,U, N>) -> Self {
+        let mut v = Vec::new();
+
+        v.extend_from_slice(view.arr);
+
+        Arr {
+            arr:v.into_boxed_slice()
         }
     }
 }

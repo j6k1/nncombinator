@@ -1163,15 +1163,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr
         {
             let loss = input;
 
-            let loss = loss.par_iter()
-                           .map(|l| l.into())
-                           .map(|l| Ok(l)).reduce(|| Ok(Arr::<U,NO>::new()), |acc,o| {
-                acc.and_then(|acc| o.and_then(|o| {
-                    acc.par_iter().cloned()
-                        .zip(o.par_iter().cloned())
-                        .map(|(acc, o)| acc + o).collect::<Vec<U>>().try_into()
-                }))
-            })?;
+            let loss = self.device.batch_linear_reduce(&loss)?;
 
             {
                 for (w,&l) in self.bias.iter_mut().zip(loss.iter()) {
@@ -1179,13 +1171,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr
                 }
 
                 s.map(|o| {
-                    o.par_iter().map(|o| o.into()).map(|o| Ok(o)).reduce(|| Ok(Arr::new()), |acc,o| {
-                        acc.and_then(|acc| o.and_then(|o| {
-                            acc.par_iter().zip(o.par_iter()).map(|(&acc, &o)| {
-                                acc + o
-                            }).collect::<Vec<U>>().try_into()
-                        }))
-                    }).map(|o| {
+                    self.device.batch_linear_reduce(&o).map(|o| {
                         for (mut u, o) in self.units.iter_mut().zip(o.iter()) {
                             for (w, &l) in u.iter_mut().zip(loss.iter()) {
                                 optimizer.update(l * *o, w);

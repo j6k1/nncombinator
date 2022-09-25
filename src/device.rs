@@ -27,6 +27,7 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
                                                                -> Result<VecArr<U,Arr<U, N>>, TrainingError>;
 
+    fn batch_linear_reduce<const N: usize>(&self, loss:&VecArr<U,Arr<U,N>>) -> Result<Arr<U,N>,  TrainingError>;
     fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&VecArr<U,Arr<U,N>>,actual:&VecArr<U,Arr<U,N>>,lossf:&L) -> U {
         actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
             a.par_iter().cloned()
@@ -100,6 +101,18 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
             a.par_iter().zip(e.par_iter())
                 .map(|(&a,&e)| a - e).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
+    }
+
+    fn batch_linear_reduce<const N: usize>(&self, loss: &VecArr<U, Arr<U, N>>) -> Result<Arr<U,N>,  TrainingError> {
+        Ok(loss.par_iter()
+            .map(|l| l.into())
+            .map(|l| Ok(l)).reduce(|| Ok(Arr::new()), |acc,l| {
+            acc.and_then(|acc| l.and_then(|l| {
+                acc.par_iter().cloned()
+                    .zip(l.par_iter().cloned())
+                    .map(|(acc, l)| acc + l).collect::<Vec<U>>().try_into()
+            }))
+        })?)
     }
 }
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
@@ -260,6 +273,10 @@ impl Device<f32> for DeviceGpu<f32> {
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f32, Arr<f32, N>>, actual: &VecArr<f32, Arr<f32, N>>) -> Result<VecArr<f32, Arr<f32, N>>, TrainingError> {
         todo!()
     }
+
+    fn batch_linear_reduce<const N: usize>(&self, loss: &VecArr<f32, Arr<f32, N>>) -> Result<Arr<f32, N>, TrainingError> {
+        todo!()
+    }
 }
 impl DeviceLinear<f32> for DeviceGpu<f32> {
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f32,NO>, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NI>)
@@ -392,6 +409,10 @@ impl Device<f64> for DeviceGpu<f64> {
     }
 
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f64, Arr<f64, N>>, actual: &VecArr<f64, Arr<f64, N>>) -> Result<VecArr<f64, Arr<f64, N>>, TrainingError> {
+        todo!()
+    }
+
+    fn batch_linear_reduce<const N: usize>(&self, loss: &VecArr<f64, Arr<f64, N>>) -> Result<Arr<f64, N>, TrainingError> {
         todo!()
     }
 }

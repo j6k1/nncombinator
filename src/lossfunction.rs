@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::{Arr, VecArr};
-use crate::device::{Device, DeviceCpu};
+use crate::device::{Device, DeviceCpu, DeviceGpu};
 use crate::error::TrainingError;
 use crate::UnitValue;
 
@@ -47,6 +47,7 @@ impl<U> LossFunction<U> for Mse<U> where U: Clone + Copy + UnitValue<U> {
     }
 }
 impl<U> BatchLossFunction<U,DeviceCpu<U>> for Mse<U> where U: Clone + Copy + UnitValue<U> {}
+impl<U> BatchLossFunction<U,DeviceGpu<U>> for Mse<U> where U: Clone + Copy + UnitValue<U>, DeviceGpu<U>:  Device<U> {}
 pub struct CrossEntropy<U>  where U: Clone + Copy + UnitValue<U> {
     u:PhantomData<U>
 }
@@ -71,6 +72,7 @@ impl<U> LossFunction<U> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U>
     }
 }
 impl<U> BatchLossFunction<U,DeviceCpu<U>> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U> {}
+impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U>, DeviceGpu<U>:  Device<U> {}
 pub struct CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {
     u:PhantomData<U>
 }
@@ -95,3 +97,4 @@ impl<U> LossFunction<U> for CrossEntropyMulticlass<U> where U: Clone + Copy + Un
     }
 }
 impl<U> BatchLossFunction<U,DeviceCpu<U>> for CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {}
+impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U>, DeviceGpu<U>:  Device<U> {}

@@ -22,15 +22,24 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
         where L: LossFunction<U>;
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
     fn loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&Arr<U,N>,actual:&Arr<U,N>,lossf:&L) -> U;
+    fn loss_linear_batch<L,const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>, lossf: &L)
+                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError> where L: LossFunction<U>;
+    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
+                                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError>;
+
+    fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&VecArr<U,Arr<U,N>>,actual:&VecArr<U,Arr<U,N>>,lossf:&L) -> U {
+        actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
+            a.par_iter().cloned()
+                .zip(e.par_iter().cloned())
+                .reduce(|| (U::default(),U::default()), |(sum,d),(a,e)| {
+                    (sum + lossf.apply(a,e),d)
+                })
+        }).map(|(sum,_)| sum).reduce(|| U::default(), |sum,l| sum + l)
+    }
 }
 pub trait DeviceLinear<U> where U: UnitValue<U> {
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
     fn backward_linear<const NI:usize,const NO:usize>(&self, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
-}
-pub trait DeviceActivation<U>: Device<U> where U: UnitValue<U> {
-    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&VecArr<U,Arr<U,N>>, loss:&VecArr<U,Arr<U,N>>, u:&VecArr<U,Arr<U,N>>, activation:&A)
-                                                           -> Result<VecArr<U,Arr<U, N>>, TrainingError>
-        where A: Activation<U,Arr<U,N>,Arr<U,N>,Self>;
 }
 pub struct DeviceCpu<U> where U: UnitValue<U> {
     u:PhantomData<U>,
@@ -71,6 +80,27 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
             acc
         })
     }
+
+    fn loss_linear_batch<L,const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>, lossf: &L)
+                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError>
+        where L: LossFunction<U> {
+
+        Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
+            a.par_iter()
+                .zip(e.par_iter())
+                .map(|(&a,&e)| lossf.derive(a,e))
+                .collect::<Vec<U>>()
+                .try_into().map_err(|e| TrainingError::from(e))
+        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
+    }
+
+    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
+                                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError> {
+        Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
+            a.par_iter().zip(e.par_iter())
+                .map(|(&a,&e)| a - e).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
+        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
+    }
 }
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
@@ -108,27 +138,6 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         Ok(r)
     }
 
-    pub fn loss_linear_batch<L,const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>, lossf: &L)
-        -> Result<VecArr<U,Arr<U, N>>, TrainingError>
-        where L: LossFunction<U> {
-
-        Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
-            a.par_iter()
-             .zip(e.par_iter())
-             .map(|(&a,&e)| lossf.derive(a,e))
-             .collect::<Vec<U>>()
-             .try_into().map_err(|e| TrainingError::from(e))
-        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
-    }
-
-    pub fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
-        -> Result<VecArr<U,Arr<U, N>>, TrainingError> {
-        Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
-            a.par_iter().zip(e.par_iter())
-             .map(|(&a,&e)| a - e).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
-        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
-    }
-
     pub fn backward_linear_batch<const NI:usize, const NO: usize>(&self, units: &Arr2<U, NI, NO>, input: &VecArr<U,Arr<U, NO>>)
                                                                   -> Result<VecArr<U,Arr<U, NI>>, TrainingError> {
         Ok(input.par_iter().map(|input| {
@@ -137,16 +146,6 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
                     .reduce(|| (U::default(),U::default()), | (sum,d), (w,l) | (sum + w * l,d))
             }).map(|(r,_)| r).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,NI>>,_>>()?.into())
-    }
-
-    pub fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&VecArr<U,Arr<U,N>>,actual:&VecArr<U,Arr<U,N>>,lossf:&L) -> U {
-        actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
-            a.par_iter().cloned()
-             .zip(e.par_iter().cloned())
-             .reduce(|| (U::default(),U::default()), |(sum,d),(a,e)| {
-                 (sum + lossf.apply(a,e),d)
-             })
-        }).map(|(sum,_)| sum).reduce(|| U::default(), |sum,l| sum + l)
     }
 
     pub fn batch_forward_linear<const NI:usize,const NO:usize>(&self,input:&VecArr<U,Arr<U,NI>>,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>) -> Result<VecArr<U,Arr<U,NO>>,TrainingError> {
@@ -253,6 +252,14 @@ impl Device<f32> for DeviceGpu<f32> {
             acc
         })
     }
+
+    fn loss_linear_batch<L, const N: usize>(&self, expected: &VecArr<f32, Arr<f32, N>>, actual: &VecArr<f32, Arr<f32, N>>, lossf: &L) -> Result<VecArr<f32, Arr<f32, N>>, TrainingError> {
+        todo!()
+    }
+
+    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f32, Arr<f32, N>>, actual: &VecArr<f32, Arr<f32, N>>) -> Result<VecArr<f32, Arr<f32, N>>, TrainingError> {
+        todo!()
+    }
 }
 impl DeviceLinear<f32> for DeviceGpu<f32> {
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f32,NO>, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NI>)
@@ -350,14 +357,6 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
         }
     }
 }
-impl DeviceActivation<f32> for DeviceGpu<f32> {
-    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&VecArr<f32,Arr<f32,N>>, loss:&VecArr<f32,Arr<f32,N>>, u:&VecArr<f32,Arr<f32,N>>, activation:&A)
-                                                       -> Result<VecArr<f32,Arr<f32, N>>, TrainingError>
-        where A: Activation<f32,Arr<f32,N>,Arr<f32,N>,Self>
-    {
-        todo!()
-    }
-}
 impl Device<f64> for DeviceGpu<f64> {
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> Arr<f64, N>
         where L: LossFunction<f64> {
@@ -386,6 +385,14 @@ impl Device<f64> for DeviceGpu<f64> {
             acc += lossf.apply(a,e);
             acc
         })
+    }
+
+    fn loss_linear_batch<L, const N: usize>(&self, expected: &VecArr<f64, Arr<f64, N>>, actual: &VecArr<f64, Arr<f64, N>>, lossf: &L) -> Result<VecArr<f64, Arr<f64, N>>, TrainingError> {
+        todo!()
+    }
+
+    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f64, Arr<f64, N>>, actual: &VecArr<f64, Arr<f64, N>>) -> Result<VecArr<f64, Arr<f64, N>>, TrainingError> {
+        todo!()
     }
 }
 impl DeviceLinear<f64> for DeviceGpu<f64> {
@@ -482,14 +489,6 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
                 )));
             }
         }
-    }
-}
-impl DeviceActivation<f64> for DeviceGpu<f64> {
-    fn batch_loss_linear_by_activaton<A,const N:usize>(&self, o:&VecArr<f64,Arr<f64,N>>, loss:&VecArr<f64,Arr<f64,N>>, u:&VecArr<f64,Arr<f64,N>>, activation:&A)
-                                                       -> Result<VecArr<f64,Arr<f64, N>>, TrainingError>
-        where A: Activation<f64,Arr<f64,N>,Arr<f64,N>,Self>
-    {
-        todo!()
     }
 }
 impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {

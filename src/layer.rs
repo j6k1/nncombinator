@@ -661,7 +661,7 @@ impl<U,P,I,const N:usize> BatchTrain<U> for LinearOutputLayer<U,P,DeviceCpu<U>,I
             (stack,loss)
         } else {
             let loss = stack.map(|actual| {
-                self.device.loss_linear_batch(&expected,&actual,lossf)
+                lossf.batch_linear_derive(&expected,&actual)
             })?;
 
             self.parent.batch_loss(loss,lossf,stack)?

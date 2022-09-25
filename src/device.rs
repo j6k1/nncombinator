@@ -41,6 +41,10 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
 pub trait DeviceLinear<U> where U: UnitValue<U> {
     fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
     fn backward_linear<const NI:usize,const NO:usize>(&self, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
+    fn backward_linear_batch<const NI:usize, const NO: usize>(&self, units: &CachedTensor<U,Arr2<U, NI, NO>>, input: &VecArr<U,Arr<U, NO>>)
+                                                                    -> Result<VecArr<U,Arr<U, NI>>, TrainingError>;
+    fn batch_forward_linear<const NI:usize,const NO:usize>(&self,input:&VecArr<U,Arr<U,NI>>,bias:&Arr<U,NO>,units:&CachedTensor<U,Arr2<U,NI,NO>>)
+                                                                    -> Result<VecArr<U,Arr<U,NO>>,TrainingError>;
 }
 pub struct DeviceCpu<U> where U: UnitValue<U> {
     u:PhantomData<U>,
@@ -373,6 +377,14 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
             }
         }
     }
+
+    fn batch_forward_linear<const NI: usize, const NO: usize>(&self, input: &VecArr<f32, Arr<f32, NI>>, bias: &Arr<f32, NO>, units: &CachedTensor<f32, Arr2<f32, NI, NO>>) -> Result<VecArr<f32, Arr<f32, NO>>, TrainingError> {
+        todo!()
+    }
+
+    fn backward_linear_batch<const NI: usize, const NO: usize>(&self, units: &CachedTensor<f32, Arr2<f32, NI, NO>>, input: &VecArr<f32, Arr<f32, NO>>) -> Result<VecArr<f32, Arr<f32, NI>>, TrainingError> {
+        todo!()
+    }
 }
 impl Device<f64> for DeviceGpu<f64> {
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> Arr<f64, N>
@@ -510,6 +522,14 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
                 )));
             }
         }
+    }
+
+    fn batch_forward_linear<const NI: usize, const NO: usize>(&self, input: &VecArr<f64, Arr<f64, NI>>, bias: &Arr<f64, NO>, units: &CachedTensor<f64, Arr2<f64, NI, NO>>) -> Result<VecArr<f64, Arr<f64, NO>>, TrainingError> {
+        todo!()
+    }
+
+    fn backward_linear_batch<const NI: usize, const NO: usize>(&self, units: &CachedTensor<f64, Arr2<f64, NI, NO>>, input: &VecArr<f64, Arr<f64, NO>>) -> Result<VecArr<f64, Arr<f64, NI>>, TrainingError> {
+        todo!()
     }
 }
 impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {

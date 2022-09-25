@@ -1105,7 +1105,9 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,CachedT
           DeviceGpu<U>: Device<U> + DeviceLinear<U>,
           I: Debug + Send + Sync {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
-        todo!()
+        let input = self.parent.batch_forward(input)?;
+
+        self.device.batch_forward_linear(&input,&self.bias,&self.units,)
     }
 }
 impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for LinearLayer<U,C,P,D,I,NI,NO>
@@ -1141,7 +1143,11 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U,Cac
           I: Debug + Send + Sync,
           DeviceGpu<U>: Device<U> + DeviceLinear<U> {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
-        todo!()
+        let r = self.parent.batch_pre_train(input)?;
+
+        let u = r.map(|input| self.device.batch_forward_linear(input,&self.bias,&self.units))?;
+
+        Ok(Cons(r,u))
     }
 }
 impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
@@ -1196,7 +1202,35 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Cac
     type BatchLossInput = VecArr<U,Arr<U,NO>>;
 
     fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
-        todo!()
+        let (s, _) = stack.pop();
+
+        let loss = self.device.backward_linear_batch(&self.units,&input)?;
+
+        let (s,loss) = self.parent.batch_loss(loss,lossf,s)?;
+
+        {
+            let loss = input;
+
+            let loss = self.device.batch_linear_reduce(&loss)?;
+
+            {
+                for (w,&l) in self.bias.iter_mut().zip(loss.iter()) {
+                    optimizer.update(l, w);
+                }
+
+                s.map(|o| {
+                    self.device.batch_linear_reduce(&o).map(|o| {
+                        for (mut u, o) in self.units.scoped_mut().iter_mut().zip(o.iter()) {
+                            for (w, &l) in u.iter_mut().zip(loss.iter()) {
+                                optimizer.update(l * *o, w);
+                            }
+                        }
+                    })
+                })?;
+            }
+        }
+
+        self.parent.batch_backward(loss, s, optimizer, lossf)
     }
 }
 impl<U,P,D,I,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,Arr2<U,NI,NO>,P,D,I,NI,NO>

@@ -309,6 +309,17 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
         }
     }
 }
+template<typename T>
+
+__device__ void loss_linear_batch_by_canonical_link(const T *expected, T *actual, const int nlen, const int batch_size) {
+    const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+    const size_t index = blockDim.x * blockDim.x + threadIdx.x;
+
+    if (batch_index < batch_size && index < nlen) {
+        const size_t i = batch_index * nlen + index;
+        actual[i] = actual[i] - expected[i];
+    }
+}
 extern "C" {
 	__global__ void sigmoid_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
         sigmoid_forward(input_output,units_len,batch_len);
@@ -403,5 +414,13 @@ extern "C" {
 
     __global__ void reduce_linear_batch_double(const double *input, double *output, const int nlen, const int batch_size) {
         reduce_linear_batch(input,output,nlen,batch_size);
+    }
+
+    __global__ void loss_linear_batch_by_canonical_link_float(const float *expected, float *actual, const int nlen, const int batch_size) {
+        loss_linear_batch_by_canonical_link(expected,actual,nlen,batch_size);
+    }
+
+    __global__ void loss_linear_batch_by_canonical_link_double(const double *expected, double *actual, const int nlen, const int batch_size) {
+        loss_linear_batch_by_canonical_link(expected,actual,nlen,batch_size);
     }
 }

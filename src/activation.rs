@@ -752,7 +752,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U
 
         let mut kernel = SoftMaxForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: 1, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 1024 * mem::size_of::<U>() * 2)?;
 
@@ -770,7 +770,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U
 
         let mut kernel = SoftMaxBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: 1, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 

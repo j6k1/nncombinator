@@ -15,7 +15,7 @@ use rcudnn::utils::DataType;
 use crate::activation::Activation;
 use crate::arr::{Arr, Arr2, ArrView, VecArr};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Kernel, Memory};
-use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
+use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::cuda::mem::{CachedTensor, MemoryPool};
 use crate::error::{DeviceError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
@@ -261,7 +261,21 @@ impl Device<f32> for DeviceGpu<f32> {
     }
 
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f32, Arr<f32, N>>, actual: &VecArr<f32, Arr<f32, N>>) -> Result<VecArr<f32, Arr<f32, N>>, TrainingError> {
-        todo!()
+        let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
+        expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
+
+        let mut actual_ptr = CudaPtr::new(N).unwrap();
+        actual_ptr.memcpy(actual.as_raw_slice().as_ptr(), actual.len() * N).unwrap();
+
+        let mut args = LossLinearBatchByCanonicalLinkArgs::new(expected_ptr, actual_ptr, N, expected.len());
+
+        let mut kernel = LossLinearBatchByCanonicalLink::<CudaPtr<f32>>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
+                                     y: (expected.len() as c_uint + 1023) / 1024 * 1024, z: 1},
+                      dim3 { x: 1024, y: 1024, z: 1 },&mut args,1024 * mem::size_of::<f32>()).unwrap();
+
+        Ok(args.actual.read_to_vec()?.into())
     }
 
     fn batch_linear_reduce<const N: usize>(&self, loss: &VecArr<f32, Arr<f32, N>>) -> Result<Arr<f32, N>, TrainingError> {
@@ -508,7 +522,21 @@ impl Device<f64> for DeviceGpu<f64> {
     }
 
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f64, Arr<f64, N>>, actual: &VecArr<f64, Arr<f64, N>>) -> Result<VecArr<f64, Arr<f64, N>>, TrainingError> {
-        todo!()
+        let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
+        expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
+
+        let mut actual_ptr = CudaPtr::new(N).unwrap();
+        actual_ptr.memcpy(actual.as_raw_slice().as_ptr(), actual.len() * N).unwrap();
+
+        let mut args = LossLinearBatchByCanonicalLinkArgs::new(expected_ptr, actual_ptr, N, expected.len());
+
+        let mut kernel = LossLinearBatchByCanonicalLink::<CudaPtr<f64>>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
+            y: (expected.len() as c_uint + 1023) / 1024 * 1024, z: 1},
+                      dim3 { x: 1024, y: 1024, z: 1 },&mut args,1024 * mem::size_of::<f64>()).unwrap();
+
+        Ok(args.actual.read_to_vec()?.into())
     }
 
     fn batch_linear_reduce<const N: usize>(&self, loss: &VecArr<f64, Arr<f64, N>>) -> Result<Arr<f64, N>, TrainingError> {

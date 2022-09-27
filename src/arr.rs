@@ -522,7 +522,7 @@ impl<T,const N:usize> Div<T> for DiffArr<T,N>
         r
     }
 }
-#[derive(Debug,Eq,PartialEq)]
+#[derive(Debug,Eq,PartialEq,Clone)]
 pub struct VecArr<U,T> {
     arr:Box<[U]>,
     len:usize,

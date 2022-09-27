@@ -103,7 +103,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Identity<
     }
 
     fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, _: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        Ok(loss.clone())
+        Ok((*loss).clone())
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -115,26 +115,22 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Iden
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &VecArr<U, Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.iter().cloned())
-        }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
+        Ok((*input).clone())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
-        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
+        Ok((*loss).clone())
     }
 }
 impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>>
     where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
 
     fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+        Ok((*input).clone())
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+        Ok((*loss).clone())
     }
 }
 pub struct Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -214,7 +210,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U
 
         let mut kernel = SigmoidForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -232,7 +228,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U
 
         let mut kernel = SigmoidBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -264,12 +260,39 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
           SigmoidForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           SigmoidBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+    fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U, Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
+        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
+
+        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
+
+        let mut kernel = SigmoidForward::<U>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
+            y: (input.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+                      dim3 { x: 1024, y: 1024, z: 1 },
+                      &mut args, 0).unwrap();
+
+        Ok(args.input_output.read_to_vec()?.into())
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
+        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
+
+        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
+
+        let mut args = ActivationBackwardArgs::new(u_ptr, loss_ptr, N,loss.len());
+
+        let mut kernel = SigmoidBackward::<U>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
+            y: (loss.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+                      dim3 { x: 1024, y: 1024, z: 1 },
+                      &mut args, 0).unwrap();
+
+        Ok(args.loss.read_to_vec()?.into())
     }
 }
 pub struct ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -351,7 +374,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,De
 
         let mut kernel = ReLuForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -369,7 +392,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,De
 
         let mut kernel = ReLuBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -403,11 +426,39 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
           ReLuBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+
+        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
+        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
+
+        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
+
+        let mut kernel = ReLuForward::<U>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
+                                     y: (input.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+                      dim3 { x: 1024, y: 1024, z: 1 },
+                      &mut args, 0).unwrap();
+
+        Ok(args.input_output.read_to_vec()?.into())
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
+        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
+
+        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
+
+        let mut args = ActivationBackwardArgs::new(u_ptr, loss_ptr, N,loss.len());
+
+        let mut kernel = ReLuBackward::<U>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
+                                     y: (loss.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+                      dim3 { x: 1024, y: 1024, z: 1 },
+                      &mut args, 0).unwrap();
+
+        Ok(args.loss.read_to_vec()?.into())
     }
 }
 pub struct Swish<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -482,7 +533,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,D
 
         let mut kernel = SwishForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -500,7 +551,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,D
 
         let mut kernel = SwishBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -533,11 +584,38 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
           SwishBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
+        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
+
+        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
+
+        let mut kernel = SwishForward::<U>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
+                                     y: (input.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+                      dim3 { x: 1024, y: 1024, z: 1 },
+                      &mut args, 0).unwrap();
+
+        Ok(args.input_output.read_to_vec()?.into())
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
+        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
+
+        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
+
+        let mut args = ActivationBackwardArgs::new(u_ptr, loss_ptr, N,loss.len());
+
+        let mut kernel = SwishBackward::<U>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
+                                     y: (loss.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+                      dim3 { x: 1024, y: 1024, z: 1 },
+                      &mut args, 0).unwrap();
+
+        Ok(args.loss.read_to_vec()?.into())
     }
 }
 pub struct Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -612,7 +690,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,De
 
         let mut kernel = TanhForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -630,7 +708,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,De
 
         let mut kernel = TanhBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -663,11 +741,38 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
           TanhBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
+        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
+
+        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
+
+        let mut kernel = TanhForward::<U>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
+                                     y: (input.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+                      dim3 { x: 1024, y: 1024, z: 1 },
+                      &mut args, 0).unwrap();
+
+        Ok(args.input_output.read_to_vec()?.into())
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
+        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
+
+        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
+
+        let mut args = ActivationBackwardArgs::new(u_ptr, loss_ptr, N,loss.len());
+
+        let mut kernel = TanhBackward::<U>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
+                                     y: (loss.len() as c_uint + 1023) / 1023 * 1024, z: 1 },
+                      dim3 { x: 1024, y: 1024, z: 1 },
+                      &mut args, 0).unwrap();
+
+        Ok(args.loss.read_to_vec()?.into())
     }
 }
 pub struct SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -805,10 +910,35 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
           SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
+        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
+
+        let mut args = ActivationForwardArgs::new(input_output, N, input.len());
+
+        let mut kernel = SoftMaxForward::<U>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
+                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
+
+        Ok(args.input_output.read_to_vec()?.into())
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-        todo!()
+        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
+        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
+
+        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
+
+        let mut args = ActivationBackwardArgs::new(u_ptr, loss_ptr, N,loss.len());
+
+        let mut kernel = SoftMaxBackward::<U>::new();
+
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1023 * 1024, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
+                      &mut args, 0).unwrap();
+
+        Ok(args.loss.read_to_vec()?.into())
     }
 }

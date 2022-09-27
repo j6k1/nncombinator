@@ -255,6 +255,60 @@ __device__ void softmax_backward(T *u, T *loss, const size_t units_len, const si
         loss[i] = loss[i] * x;
     }
 }
+template<typename T>
+
+__device__ void reduce_linear_batch(const T *input, T *output, const int nlen, const int batch_size) {
+    extern __shared__ char smem[];
+    T *sdata = reinterpret_cast<T*>(smem);
+
+    if (blockIdx.x < nlen) {
+        unsigned int tid = threadIdx.x;
+        unsigned int i = blockIdx.x + tid * nlen;
+        unsigned int n = nlen * batch_size;
+        unsigned int distance = blockDim.x * nlen;
+
+        sdata[tid] = (T)0;
+
+        while (i < n) {
+            sdata[tid] += input[i];
+            i += distance;
+        }
+        __syncthreads();
+
+        if (tid < 512) {
+            sdata[tid] += sdata[tid + 512];
+        }
+        __syncthreads();
+
+        if (tid < 256) {
+            sdata[tid] += sdata[tid + 256];
+        }
+        __syncthreads();
+
+        if (tid < 128) {
+            sdata[tid] += sdata[tid + 128];
+        }
+        __syncthreads();
+
+        if (tid < 64) {
+            sdata[tid] += sdata[tid + 64];
+        }
+        __syncthreads();
+
+        if (tid < 32) {
+            sdata[tid] += sdata[tid + 32];
+        }
+        __syncthreads();
+
+        if (tid > 0 && tid < 32) {
+            sdata[0] += sdata[tid];
+        }
+
+        if (tid == 0) {
+            output[blockIdx.x] = sdata[0];
+        }
+    }
+}
 extern "C" {
 	__global__ void sigmoid_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
         sigmoid_forward(input_output,units_len,batch_len);
@@ -341,5 +395,13 @@ extern "C" {
 
 	__global__ void softmax_backward_double(float *u, float *loss, const size_t units_len, const size_t batch_len) {
         softmax_backward(u,loss,units_len,batch_len);
+    }
+
+    __global__ void reduce_linear_batch_float(const float *input, float *output, const int nlen, const int batch_size) {
+        reduce_linear_batch(input,output,nlen,batch_size);
+    }
+
+    __global__ void reduce_linear_batch_double(const double *input, double *output, const int nlen, const int batch_size) {
+        reduce_linear_batch(input,output,nlen,batch_size);
     }
 }

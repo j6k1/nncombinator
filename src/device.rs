@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use rcublas::Context;
-use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasStatus_t, cublasSgemv_v2, cublasHandle_t};
+use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasStatus_t, cublasSgemv_v2, cublasHandle_t, cublasSgemm_v2, cublasDgemm_v2};
 use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
 use rcudnn::{Cudnn, TensorDescriptor};
@@ -360,11 +360,104 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     }
 
     fn batch_forward_linear(&self, input: &VecArr<f32, Arr<f32, NI>>, bias: &Arr<f32, NO>, units: &CachedTensor<f32, Arr2<f32, NI, NO>>) -> Result<VecArr<f32, Arr<f32, NO>>, TrainingError> {
-        todo!()
+
+        let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(1.0f32)?;
+
+        match unsafe {
+            cublasSgemm_v2(*self.cublas.id_c(),
+                                        cublasOperation_t::CUBLAS_OP_N,
+                                        cublasOperation_t::CUBLAS_OP_N,
+                                        NO as ::libc::c_int,
+                                        input.len() as libc::c_int,
+                                        NI as ::libc::c_int,
+                                        alpha.as_ptr(),
+                                        units.as_ptr(),
+                                        NO as libc::c_int,
+                                        input_ptr.as_ptr(),
+                                        NI as libc::c_int,
+                                        beta.as_ptr(),
+                                        output_ptr.as_mut_ptr(),
+                                        NO as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output_ptr.read_to_vec()?.into())
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
     }
 
     fn backward_linear_batch(&self, units: &CachedTensor<f32, Arr2<f32, NI, NO>>, input: &VecArr<f32, Arr<f32, NO>>) -> Result<VecArr<f32, Arr<f32, NI>>, TrainingError> {
-        todo!()
+
+        let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
+
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(0.0f32)?;
+
+        match unsafe {
+            cublasSgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_T,
+                           NI as ::libc::c_int,
+                           input.len() as libc::c_int,
+                           NO as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NI as libc::c_int,
+                           input_ptr.as_ptr(),
+                           NO as libc::c_int,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           NI as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output_ptr.read_to_vec()?.into())
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
     }
 }
 impl Device<f64> for DeviceGpu<f64> {
@@ -502,11 +595,102 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
     }
 
     fn batch_forward_linear(&self, input: &VecArr<f64, Arr<f64, NI>>, bias: &Arr<f64, NO>, units: &CachedTensor<f64, Arr2<f64, NI, NO>>) -> Result<VecArr<f64, Arr<f64, NO>>, TrainingError> {
-        todo!()
+        let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
+        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(1.0f64)?;
+
+        match unsafe {
+            cublasDgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           input.len() as libc::c_int,
+                           NI as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input_ptr.as_ptr(),
+                           NI as libc::c_int,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           NO as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output_ptr.read_to_vec()?.into())
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
     }
 
     fn backward_linear_batch(&self, units: &CachedTensor<f64, Arr2<f64, NI, NO>>, input: &VecArr<f64, Arr<f64, NO>>) -> Result<VecArr<f64, Arr<f64, NI>>, TrainingError> {
-        todo!()
+        let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
+
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(0.0f64)?;
+
+        match unsafe {
+            cublasDgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_T,
+                           NI as ::libc::c_int,
+                           input.len() as libc::c_int,
+                           NO as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NI as libc::c_int,
+                           input_ptr.as_ptr(),
+                           NO as libc::c_int,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           NI as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output_ptr.read_to_vec()?.into())
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
     }
 }
 impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {

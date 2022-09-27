@@ -570,6 +570,17 @@ impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Defaul
         }
     }
 }
+impl<U,const N:usize> From<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
+    fn from(items: Vec<U>) -> Self {
+        let len = items.len() / N;
+
+        VecArr {
+            arr:items.into_boxed_slice(),
+            len:len,
+            t:PhantomData::<Arr<U,N>>
+        }
+    }
+}
 impl<'a,T,const N:usize> AsRawSlice<T> for VecArr<T,Arr<T,N>> where T: Default + Clone + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr

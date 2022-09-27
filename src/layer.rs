@@ -881,28 +881,20 @@ impl<T,U,P,I,const NI:usize,const NO:usize> Persistence<U,T,Linear> for LinearLa
         Ok(())
     }
 }
-impl<U,P,I,const NI:usize,const NO:usize> Forward<Arr<U,NI>,Result<Arr<U,NO>,EvaluateError>> for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+impl<U,C,P,D,I,const NI:usize,const NO:usize> Forward<Arr<U,NI>,Result<Arr<U,NO>,EvaluateError>> for LinearLayer<U,C,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync {
-
-    fn forward(&self,input:&Arr<U,NI>) -> Result<Arr<U,NO>,EvaluateError> {
-        self.device.forward_linear(&self.bias,&self.units,input)
-    }
-}
-impl<U,P,I,const NI:usize,const NO:usize> Forward<Arr<U,NI>,Result<Arr<U,NO>,EvaluateError>> for LinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
-    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO>,
+          D: Device<U> + DeviceLinear<U,C,NI,NO>,
           I: Debug + Send + Sync {
 
     fn forward(&self,input:&Arr<U,NI>) -> Result<Arr<U,NO>,EvaluateError> {
         self.device.forward_linear(&self.bias,&self.units,&input)
     }
 }
-impl<U,P,I,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+impl<U,C,P,D,I,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,C,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
+          D: Device<U> + DeviceLinear<U,C,NI,NO>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync {
     type Input = I;
@@ -911,20 +903,9 @@ impl<U,P,I,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,Arr2<U,NI
         self.forward(&self.parent.forward_all(input)?)
     }
 }
-impl<U,P,I,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
-    where P: ForwardAll<Input=I,Output=Arr<U,NI>> +
-             BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO> {
-    type Input = I;
-    type Output = Arr<U,NO>;
-    fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
-        self.forward(&self.parent.forward_all(input)?)
-    }
-}
-impl<U,P,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+impl<U,C,P,D,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,C,P,D,I,NI,NO>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
+          D: Device<U> + DeviceLinear<U,C,NI,NO>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack,Self::Output>;
@@ -937,34 +918,11 @@ impl<U,P,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,Arr2<U,N
         Ok(Cons(r,u))
     }
 }
-impl<U,P,I,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO> {
-    type OutStack = Cons<<P as PreTrain<U>>::OutStack,Self::Output>;
-
-    fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
-        let r = self.parent.pre_train(input)?;
-
-        let u = r.map(|r| self.forward(r))?;
-
-        Ok(Cons(r,u))
-    }
-}
-impl<U,P,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Result<Arr<U,NI>,TrainingError>> for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+impl<U,C,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Result<Arr<U,NI>,TrainingError>> for LinearLayer<U,C,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U> + DeviceLinear<U,C,NI,NO>,
           I: Debug + Send + Sync {
-    fn backward(&mut self, input: &Arr<U,NO>) -> Result<Arr<U,NI>,TrainingError> {
-        self.device.backward_linear(&self.units,input)
-    }
-}
-impl<U,P,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Result<Arr<U,NI>,TrainingError>> for LinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
-    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO> {
     fn backward(&mut self, input: &Arr<U,NO>) -> Result<Arr<U,NI>,TrainingError> {
         self.device.backward_linear(&self.units,input)
     }
@@ -1075,22 +1033,11 @@ impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchForwardBase for LinearLayer<U
     type BatchInput = VecArr<U,I>;
     type BatchOutput = VecArr<U,Arr<U, NO>>;
 }
-impl<U,P,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,C,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,Arr<U,NI>>> + BatchForward,
+          D: Device<U> + DeviceLinear<U,C,NI,NO>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync {
-    fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
-        let input = self.parent.batch_forward(input)?;
-
-        self.device.batch_forward_linear(&input,&self.bias,&self.units,)
-    }
-}
-impl<U,P,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
-    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,Arr<U,NI>>> + BatchForward,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO>,
           I: Debug + Send + Sync {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
@@ -1108,27 +1055,13 @@ impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for LinearLay
           Self: PreTrain<U> {
     type BatchOutStack = Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,Self::BatchOutput>;
 }
-impl<U,P,I,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U,C,P,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,Arr<U,NI>>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U> + DeviceLinear<U,C,NI,NO>,
           I: Debug + Send + Sync {
-    fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
-        let r = self.parent.batch_pre_train(input)?;
-
-        let u = r.map(|input| self.device.batch_forward_linear(input,&self.bias,&self.units))?;
-
-        Ok(Cons(r,u))
-    }
-}
-impl<U,P,I,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
-    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,Arr<U,NI>>> + BatchForward +
-             BatchPreTrainBase<U> + BatchPreTrain<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO> {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let r = self.parent.batch_pre_train(input)?;
 
@@ -1476,6 +1409,7 @@ impl<U,P,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLayer<U,Arr2<
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
+          DeviceCpu<U>: Device<U> + DeviceLinear<U,Arr2<U,NI,NO>,NI,NO>,
           I: Debug + Send + Sync {
     type Input = I;
     type Output = Arr<U,NO>;
@@ -1500,10 +1434,10 @@ impl<U,P,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLayer<U,Arr2<
 }
 impl<U,P,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
-             BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
+    BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO> {
+          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO>,
+          I: Debug + Send + Sync {
     type Input = I;
     type Output = Arr<U,NO>;
 
@@ -1529,6 +1463,7 @@ impl<U,P,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,Arr2
     where P: PreTrain<U> + ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
+          DeviceCpu<U>: Device<U> + DeviceLinear<U,Arr2<U,NI,NO>,NI,NO>,
           I: Debug + Send + Sync {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack,Arr<U,NO>>;
 
@@ -1560,8 +1495,8 @@ impl<U,P,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,Cach
     where P: PreTrain<U> + ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO> {
+          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO>,
+          I: Debug + Send + Sync {
     type OutStack = Cons<<P as PreTrain<U>>::OutStack,Arr<U,NO>>;
 
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
@@ -1580,7 +1515,7 @@ impl<U,P,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,Cach
                     Ok(output)
                 },
                 DiffInput::NotDiff(input) => {
-                    self.device.forward_linear(&self.bias, &self.units, &input)
+                    self.device.forward_linear(&self.bias,&self.units,&input)
                 }
             }
         })?;
@@ -1588,23 +1523,14 @@ impl<U,P,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<U,Cach
         Ok(Cons(s,u))
     }
 }
-impl<U,P,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Result<Arr<U,NI>,TrainingError>> for DiffLinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+impl<U,C,P,D,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Result<Arr<U,NI>,TrainingError>> for DiffLinearLayer<U,C,P,D,I,NI,NO>
     where U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U> + DeviceLinear<U,C,NI,NO>,
           P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           I: Debug + Send + Sync {
     fn backward(&mut self, input: &Arr<U,NO>) -> Result<Arr<U,NI>,TrainingError> {
         self.device.backward_linear(&self.units,input)
-    }
-}
-impl<U,P,I,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Result<Arr<U,NI>,TrainingError>> for DiffLinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
-    where U: Default + Clone + Copy + UnitValue<U>,
-          P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
-             BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
-          I: Debug + Send + Sync,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CachedTensor<U,Arr2<U,NI,NO>>,NI,NO> {
-    fn backward(&mut self, input: &Arr<U,NO>) -> Result<Arr<U,NI>,TrainingError> {
-        self.device.backward_linear(&self.units, input)
     }
 }
 impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>

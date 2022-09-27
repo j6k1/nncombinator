@@ -36,12 +36,12 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
         }).map(|(sum,_)| sum).reduce(|| U::default(), |sum,l| sum + l)
     }
 }
-pub trait DeviceLinear<U> where U: UnitValue<U> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias:&Arr<U,NO>, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
-    fn backward_linear<const NI:usize,const NO:usize>(&self, units:&CachedTensor<U,Arr2<U,NI,NO>>, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
-    fn backward_linear_batch<const NI:usize, const NO: usize>(&self, units: &CachedTensor<U,Arr2<U, NI, NO>>, input: &VecArr<U,Arr<U, NO>>)
+pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U> {
+    fn forward_linear(&self, bias:&Arr<U,NO>, units:&T, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
+    fn backward_linear(&self, units:&T, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
+    fn backward_linear_batch(&self, units: &T, input: &VecArr<U,Arr<U, NO>>)
                                                                     -> Result<VecArr<U,Arr<U, NI>>, TrainingError>;
-    fn batch_forward_linear<const NI:usize,const NO:usize>(&self,input:&VecArr<U,Arr<U,NI>>,bias:&Arr<U,NO>,units:&CachedTensor<U,Arr2<U,NI,NO>>)
+    fn batch_forward_linear(&self,input:&VecArr<U,Arr<U,NI>>,bias:&Arr<U,NO>,units:&T)
                                                                     -> Result<VecArr<U,Arr<U,NO>>,TrainingError>;
 }
 pub struct DeviceCpu<U> where U: UnitValue<U> {
@@ -111,8 +111,8 @@ impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
         }
     }
 }
-impl<U> DeviceCpu<U> where U: UnitValue<U> {
-    pub fn forward_linear<const NI: usize, const NO: usize>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: &Arr<U, NI>) -> Result<Arr<U, NO>, EvaluateError> {
+impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U> where U: UnitValue<U> {
+    fn forward_linear(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: &Arr<U, NI>) -> Result<Arr<U, NO>, EvaluateError> {
         let mut output:Arr<U,NO> = Arr::new();
 
         for (o,w) in output.iter_mut().zip(bias.iter()) {
@@ -128,7 +128,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         Ok(output)
     }
 
-    pub fn backward_linear<const NI: usize, const NO: usize>(&self, units: &Arr2<U, NI, NO>, input: &Arr<U, NO>) -> Result<Arr<U, NI>, TrainingError> {
+    fn backward_linear(&self, units: &Arr2<U, NI, NO>, input: &Arr<U, NO>) -> Result<Arr<U, NI>, TrainingError> {
         let mut r = Arr::new();
 
         for (r,u) in r.iter_mut().zip(units.iter()) {
@@ -140,7 +140,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         Ok(r)
     }
 
-    pub fn backward_linear_batch<const NI:usize, const NO: usize>(&self, units: &Arr2<U, NI, NO>, input: &VecArr<U,Arr<U, NO>>)
+    fn backward_linear_batch(&self, units: &Arr2<U, NI, NO>, input: &VecArr<U,Arr<U, NO>>)
                                                                   -> Result<VecArr<U,Arr<U, NI>>, TrainingError> {
         Ok(input.par_iter().map(|input| {
             units.par_iter().map(|u| {
@@ -150,7 +150,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         }).collect::<Result<Vec<Arr<U,NI>>,_>>()?.into())
     }
 
-    pub fn batch_forward_linear<const NI:usize,const NO:usize>(&self,input:&VecArr<U,Arr<U,NI>>,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>) -> Result<VecArr<U,Arr<U,NO>>,TrainingError> {
+    fn batch_forward_linear(&self,input:&VecArr<U,Arr<U,NI>>,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>) -> Result<VecArr<U,Arr<U,NO>>,TrainingError> {
         input.par_iter().map(|input| {
             input.par_iter().zip(units.par_iter()).map(|(&i, unit)| {
                 unit.par_iter().map(|&w| {
@@ -263,8 +263,8 @@ impl Device<f32> for DeviceGpu<f32> {
         todo!()
     }
 }
-impl DeviceLinear<f32> for DeviceGpu<f32> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f32,NO>, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NI>)
+impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f32,NI,NO>>,NI,NO> for DeviceGpu<f32> {
+    fn forward_linear(&self, bias: &Arr<f32,NO>, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NI>)
                                                      -> Result<Arr<f32, NO>, EvaluateError> {
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
@@ -312,7 +312,7 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
         }
     }
 
-    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NO>)
+    fn backward_linear(&self, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NO>)
                                                         -> Result<Arr<f32, NI>, TrainingError> {
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
@@ -359,11 +359,11 @@ impl DeviceLinear<f32> for DeviceGpu<f32> {
         }
     }
 
-    fn batch_forward_linear<const NI: usize, const NO: usize>(&self, input: &VecArr<f32, Arr<f32, NI>>, bias: &Arr<f32, NO>, units: &CachedTensor<f32, Arr2<f32, NI, NO>>) -> Result<VecArr<f32, Arr<f32, NO>>, TrainingError> {
+    fn batch_forward_linear(&self, input: &VecArr<f32, Arr<f32, NI>>, bias: &Arr<f32, NO>, units: &CachedTensor<f32, Arr2<f32, NI, NO>>) -> Result<VecArr<f32, Arr<f32, NO>>, TrainingError> {
         todo!()
     }
 
-    fn backward_linear_batch<const NI: usize, const NO: usize>(&self, units: &CachedTensor<f32, Arr2<f32, NI, NO>>, input: &VecArr<f32, Arr<f32, NO>>) -> Result<VecArr<f32, Arr<f32, NI>>, TrainingError> {
+    fn backward_linear_batch(&self, units: &CachedTensor<f32, Arr2<f32, NI, NO>>, input: &VecArr<f32, Arr<f32, NO>>) -> Result<VecArr<f32, Arr<f32, NI>>, TrainingError> {
         todo!()
     }
 }
@@ -405,8 +405,8 @@ impl Device<f64> for DeviceGpu<f64> {
         todo!()
     }
 }
-impl DeviceLinear<f64> for DeviceGpu<f64> {
-    fn forward_linear<const NI:usize,const NO:usize>(&self, bias: &Arr<f64,NO>, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &Arr<f64,NI>)
+impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f64,NI,NO>>,NI,NO> for DeviceGpu<f64> {
+    fn forward_linear(&self, bias: &Arr<f64,NO>, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &Arr<f64,NI>)
                                                      -> Result<Arr<f64, NO>, EvaluateError> {
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
@@ -454,7 +454,7 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
         }
     }
 
-    fn backward_linear<const NI:usize, const NO: usize>(&self, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &Arr<f64,NO>)
+    fn backward_linear(&self, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &Arr<f64,NO>)
                                                         -> Result<Arr<f64, NI>, TrainingError> {
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
@@ -501,11 +501,11 @@ impl DeviceLinear<f64> for DeviceGpu<f64> {
         }
     }
 
-    fn batch_forward_linear<const NI: usize, const NO: usize>(&self, input: &VecArr<f64, Arr<f64, NI>>, bias: &Arr<f64, NO>, units: &CachedTensor<f64, Arr2<f64, NI, NO>>) -> Result<VecArr<f64, Arr<f64, NO>>, TrainingError> {
+    fn batch_forward_linear(&self, input: &VecArr<f64, Arr<f64, NI>>, bias: &Arr<f64, NO>, units: &CachedTensor<f64, Arr2<f64, NI, NO>>) -> Result<VecArr<f64, Arr<f64, NO>>, TrainingError> {
         todo!()
     }
 
-    fn backward_linear_batch<const NI: usize, const NO: usize>(&self, units: &CachedTensor<f64, Arr2<f64, NI, NO>>, input: &VecArr<f64, Arr<f64, NO>>) -> Result<VecArr<f64, Arr<f64, NI>>, TrainingError> {
+    fn backward_linear_batch(&self, units: &CachedTensor<f64, Arr2<f64, NI, NO>>, input: &VecArr<f64, Arr<f64, NO>>) -> Result<VecArr<f64, Arr<f64, NI>>, TrainingError> {
         todo!()
     }
 }

@@ -19,8 +19,8 @@ use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLu, Sigmoid, SoftMax};
-use nncombinator::arr::{Arr, DiffArr};
-use nncombinator::cuda::mem::{Alloctype, MemoryPool};
+use nncombinator::arr::{Arr, Arr2, DiffArr};
+use nncombinator::cuda::mem::{Alloctype, CachedTensor, MemoryPool};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
 use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass};
@@ -173,7 +173,155 @@ fn test_mnist() {
 
     debug_assert!(correct_answers > 10)
 }
+#[test]
+fn test_mnist_for_gpu() {
+    let mut rnd = prelude::thread_rng();
+    let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
+    let n1 = Normal::<f32>::new(0.0, 1f32/(2f32/(28f32*28f32)).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/(28f32*28f32).sqrt()).unwrap();
+
+    let memory_pool = MemoryPool::new(Alloctype::Device).unwrap();
+
+    let device = DeviceGpu::new(memory_pool).unwrap();
+
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+
+    let rnd = rnd_base.clone();
+
+    let mut net = net.add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayer::<_,_,_,DeviceGpu<f32>,_,{ 28*28 },64>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayer::<_,_,_,DeviceGpu<f32>,_,64,10>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,SoftMax::new(&device),&device)
+    }).add_layer_train(|l| {
+        LinearOutputLayer::new(l,&device)
+    });
+
+    let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
+
+    for n in 0..10 {
+        for entry in fs::read_dir(Path::new("mnist")
+            .join("mnist_png")
+            .join("training")
+            .join(n.to_string())).unwrap() {
+            let path = entry.unwrap().path();
+
+            teachers.push((n,path));
+        }
+    }
+    let mut optimizer = MomentumSGD::with_params(0.0001,0.9,0.0);
+
+    let mut rng = rand::thread_rng();
+
+    teachers.shuffle(&mut rng);
+
+    let mut correct_answers = 0;
+
+    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+
+    for _ in 0..2 {
+        let mut total_loss = 0.;
+        let mut count = 0;
+
+        for _ in 0..5 {
+            teachers.shuffle(&mut rng);
+
+            for teachers in teachers.chunks(50) {
+                count += 1;
+
+                let batch_data = teachers.iter().map(|(n, path)| {
+                    let b = BufReader::new(File::open(path).unwrap()).bytes();
+
+                    let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+
+                    let n = *n;
+
+                    let mut input = Arr::<f32, 784>::new();
+
+                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                        *it = *p;
+                    }
+
+                    let mut expected = Arr::new();
+
+                    expected[n as usize] = 1.0;
+
+                    (expected, input)
+                }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                    acc.0.push(e);
+                    acc.1.push(i);
+                    acc
+                });
+
+                let lossf = CrossEntropyMulticlass::new();
+
+                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+                total_loss += loss;
+
+                let _ = net.batch_forward(batch_data.1.into()).unwrap();
+
+                if count >= 100 {
+                    break;
+                }
+            }
+        }
+        println!("total_loss = {}", total_loss);
+        println!("loss_average = {}", total_loss as f32 / count as f32);
+    }
+
+    let mut tests: Vec<(usize, PathBuf)> = Vec::new();
+
+    for n in 0..10 {
+        for entry in fs::read_dir(Path::new("mnist")
+            .join("mnist_png")
+            .join("testing")
+            .join(n.to_string())).unwrap() {
+            let path = entry.unwrap().path();
+
+            tests.push((n, path));
+        }
+    }
+
+    tests.shuffle(&mut rng);
+
+    for (n, path) in tests.iter().take(100) {
+        let b = BufReader::new(File::open(path).unwrap()).bytes();
+
+        let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+
+        let n = *n;
+
+        let mut input = Arr::<f32, 784>::new();
+
+        for (it, p) in input.iter_mut().zip(pixels.iter()) {
+            *it = *p;
+        }
+
+        let r = net.forward_all(input).unwrap();
+
+        let r = r.iter().enumerate().fold((0, 0.0), |acc, (n, &t)| {
+            if t > acc.1 {
+                (n, t)
+            } else {
+                acc
+            }
+        }).0;
+
+        if n == r {
+            correct_answers += 1;
+        }
+    }
+
+    println!("correct_answers = {}",correct_answers);
+
+    debug_assert!(correct_answers > 10)
+}
 #[test]
 fn test_weather() {
     let mut rnd = prelude::thread_rng();

@@ -311,8 +311,8 @@ impl<U,T> Deref for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U>
     }
 }
 impl<U,T> Index<(usize,usize)> for CachedTensor<U,T>
-    where U: Debug + Default, T: Index<(usize,usize),Output=T> + AsRawSlice<U> {
-    type Output = T;
+    where U: Debug + Default, T: Index<(usize,usize),Output=U> + AsRawSlice<U> {
+    type Output = U;
 
     fn index(&self, index:(usize,usize)) -> &Self::Output {
         self.value.index(index)

@@ -78,9 +78,7 @@ __device__ void tanh_forward(T *input_output, const size_t units_len, const size
 }
 template<typename T>
 
-__device__ void softmax_forward(T *input_output, const size_t units_len, const size_t batch_len) {
-    return;
-
+__device__ void softmax_forward(T *input_output, const size_t units_len, const size_t batch_len, const T zero) {
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
@@ -96,8 +94,8 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
         unsigned int end_block = (batch_index + 1) * units_len;
         unsigned int distance = blockDim.x;
 
-        sum_sdata[tid] = (T)0;
-        alpha_sdata[tid] = (T)0/(T)0;
+        sum_sdata[tid] = zero;
+        alpha_sdata[tid] = zero;
 
         while (i < end_block) {
             sum_sdata[tid] += input_output[i];
@@ -371,7 +369,7 @@ extern "C" {
     }
 
 	__global__ void softmax_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
-        softmax_forward(input_output,units_len,batch_len);
+        softmax_forward(input_output,units_len,batch_len,0.0F);
     }
 
     __global__ void softmax_preprocessing_float(const float *input, const size_t units_len, const size_t batch_len, float *alpha, float *sum) {
@@ -414,7 +412,7 @@ extern "C" {
     }
 
 	__global__ void softmax_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
-        softmax_forward(input_output,units_len,batch_len);
+        softmax_forward(input_output,units_len,batch_len,0.0);
     }
 
     __global__ void softmax_preprocessing_double(const double *input, const size_t units_len, const size_t batch_len, double *alpha, double *sum) {

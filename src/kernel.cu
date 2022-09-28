@@ -153,30 +153,6 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
 }
 template<typename T>
 
-__device__ void softmax_preprocessing(const T *input, const size_t units_len, const size_t batch_len, T *alpha, T *sum) {
-    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
-    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
-
-    if (index < units_len && batch_index < batch_len) {
-        T a = 0.0;
-        T s = 0.0;
-
-        for (size_t i=0; i < units_len; i++) {
-            size_t idx = batch_index == 0 ? index : batch_index * units_len + index;
-
-            if (input[idx] > a) {
-                a = input[idx];
-            }
-
-            s += input[idx];
-        }
-
-        alpha[batch_index] = a;
-        sum[batch_index] = s;
-    }
-}
-template<typename T>
-
 __device__ void sigmoid_backward(T *u, T *loss, const size_t units_len, const size_t batch_len) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;

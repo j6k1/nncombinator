@@ -454,7 +454,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         match unsafe {
             cublasSgemm_v2(*self.cublas.id_c(),
                            cublasOperation_t::CUBLAS_OP_T,
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NI as ::libc::c_int,
                            input.len() as libc::c_int,
                            NO as ::libc::c_int,
@@ -713,7 +713,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         match unsafe {
             cublasDgemm_v2(*self.cublas.id_c(),
                            cublasOperation_t::CUBLAS_OP_T,
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NI as ::libc::c_int,
                            input.len() as libc::c_int,
                            NO as ::libc::c_int,

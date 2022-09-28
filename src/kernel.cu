@@ -339,7 +339,7 @@ __device__ void loss_linear_batch_cross_entropy_derive(const T *r, T *t, const i
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        t[i] = -(r[i] / (t[i] + (T)1e-7) + (1.0 - t[i]) / (1.0 - r[i]);
+        t[i] = -(r[i] / (t[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i]);
     }
 }
 template<typename T>
@@ -397,47 +397,47 @@ extern "C" {
 	__global__ void softmax_backward_float(float *u, float *loss, const size_t units_len, const size_t batch_len) {
         softmax_backward(u,loss,units_len,batch_len);
     }
-	__global__ void sigmoid_forward_double(float *input_output, const size_t units_len, const size_t batch_len) {
+	__global__ void sigmoid_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
         sigmoid_forward(input_output,units_len,batch_len);
 	}
 
-	__global__ void relu_forward_double(float *input_output, const size_t units_len, const size_t batch_len) {
+	__global__ void relu_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
         relu_forward(input_output,units_len,batch_len);
     }
 
-	__global__ void swish_forwaxd_double(float *input_output, const size_t units_len, const size_t batch_len) {
+	__global__ void swish_forwaxd_double(double *input_output, const size_t units_len, const size_t batch_len) {
         swish_forwaxd(input_output,units_len,batch_len);
     }
 
-	__global__ void tanh_forward_double(float *input_output, const size_t units_len, const size_t batch_len) {
+	__global__ void tanh_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
         tanh_forward(input_output,units_len,batch_len);
     }
 
-	__global__ void softmax_forward_double(float *input_output, const size_t units_len, const size_t batch_len) {
+	__global__ void softmax_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
         softmax_forward(input_output,units_len,batch_len);
     }
 
-    __global__ void softmax_preprocessing_double(const float *input, const size_t units_len, const size_t batch_len, float *alpha, float *sum) {
+    __global__ void softmax_preprocessing_double(const double *input, const size_t units_len, const size_t batch_len, double *alpha, double *sum) {
         softmax_preprocessing(input,units_len,batch_len,alpha,sum);
     }
 
-	__global__ void sigmoid_backward_double(float *u, float *loss, const size_t units_len, const size_t batch_len) {
+	__global__ void sigmoid_backward_double(double *u, double *loss, const size_t units_len, const size_t batch_len) {
         sigmoid_backward(u,loss,units_len,batch_len);
     }
 
-	__global__ void relu_backward_double(float *u, float *loss, const size_t units_len, const size_t batch_len) {
+	__global__ void relu_backward_double(double *u, double *loss, const size_t units_len, const size_t batch_len) {
         relu_backward(u,loss,units_len,batch_len);
     }
 
-	__global__ void swish_backward_double(float *u, float *loss, const size_t units_len, const size_t batch_len) {
+	__global__ void swish_backward_double(double *u, double *loss, const size_t units_len, const size_t batch_len) {
         swish_backward(u,loss,units_len,batch_len);
     }
 
-	__global__ void tanh_backward_double(float *u, float *loss, const size_t units_len, const size_t batch_len) {
+	__global__ void tanh_backward_double(double *u, double *loss, const size_t units_len, const size_t batch_len) {
         tanh_backward(u,loss,units_len,batch_len);
     }
 
-	__global__ void softmax_backward_double(float *u, float *loss, const size_t units_len, const size_t batch_len) {
+	__global__ void softmax_backward_double(double *u, double *loss, const size_t units_len, const size_t batch_len) {
         softmax_backward(u,loss,units_len,batch_len);
     }
 

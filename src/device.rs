@@ -271,9 +271,9 @@ impl Device<f32> for DeviceGpu<f32> {
 
         let mut kernel = LossLinearBatchByCanonicalLink::<CudaPtr<f32>>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
-                                     y: (expected.len() as c_uint + 1023) / 1024, z: 1},
-                      dim3 { x: 1024, y: 1024, z: 1 },&mut args,1024 * mem::size_of::<f32>()).unwrap();
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
+                      dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
         Ok(args.actual.read_to_vec()?.into())
     }
@@ -532,9 +532,9 @@ impl Device<f64> for DeviceGpu<f64> {
 
         let mut kernel = LossLinearBatchByCanonicalLink::<CudaPtr<f64>>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
-            y: (expected.len() as c_uint + 1023) / 1024, z: 1},
-                      dim3 { x: 1024, y: 1024, z: 1 },&mut args,1024 * mem::size_of::<f64>()).unwrap();
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
+                      dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
         Ok(args.actual.read_to_vec()?.into())
     }

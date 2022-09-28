@@ -68,9 +68,9 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for Mse<U> where U: Clone + Copy + Uni
 
         let mut kernel = LinearBatchMse::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-            y: (expected.len() as c_uint + 1023) / 1024 * 1024, z: 1},
-                      dim3 { x: 1024, y: 1024, z: 1 },&mut args,1024 * mem::size_of::<U>()).unwrap();
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
+                      dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
         Ok(args.actual.read_to_vec()?.into())
     }
@@ -114,9 +114,9 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropy<U> where U: Clone + C
 
         let mut kernel = LinearBatchCrossEntropy::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-            y: (expected.len() as c_uint + 1023) / 1024 * 1024, z: 1},
-                      dim3 { x: 1024, y: 1024, z: 1 },&mut args,1024 * mem::size_of::<U>()).unwrap();
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
+                      dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
         Ok(args.actual.read_to_vec()?.into())
     }
@@ -160,9 +160,9 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropyMulticlass<U> where U:
 
         let mut kernel = LinearBatchCrossEntropyMulticlass::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-            y: (expected.len() as c_uint + 1023) / 1024 * 1024, z: 1},
-                      dim3 { x: 1024, y: 1024, z: 1 },&mut args,1024 * mem::size_of::<U>()).unwrap();
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
+                      dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
         Ok(args.actual.read_to_vec()?.into())
     }

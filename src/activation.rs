@@ -268,9 +268,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
 
         let mut kernel = SigmoidForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
-                                     y: (input.len() as c_uint + 1023) / 1024, z: 1 },
-                      dim3 { x: 1024, y: 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                             y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
+                      dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.input_output.read_to_vec()?.into())
@@ -287,9 +287,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
 
         let mut kernel = SigmoidBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
-                                     y: (loss.len() as c_uint + 1023) / 1024, z: 1 },
-                      dim3 { x: 1024, y: 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
+                      dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.loss.read_to_vec()?.into())
@@ -434,9 +434,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
 
         let mut kernel = ReLuForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
-                                     y: (input.len() as c_uint + 1023) / 1024, z: 1 },
-                      dim3 { x: 1024, y: 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+            y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
+                      dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.input_output.read_to_vec()?.into())
@@ -453,9 +453,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
 
         let mut kernel = ReLuBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-                                     y: (loss.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
-                      dim3 { x: 1024, y: 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
+                      dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.loss.read_to_vec()?.into())
@@ -591,9 +591,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
 
         let mut kernel = SwishForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
-                                     y: (input.len() as c_uint + 1023) / 1024, z: 1 },
-                      dim3 { x: 1024, y: 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
+                      dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.input_output.read_to_vec()?.into())
@@ -610,9 +610,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
 
         let mut kernel = SwishBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
-                                     y: (loss.len() as c_uint + 1023) / 1024, z: 1 },
-                      dim3 { x: 1024, y: 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
+                      dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.loss.read_to_vec()?.into())
@@ -748,9 +748,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
 
         let mut kernel = TanhForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
-                                     y: (input.len() as c_uint + 1023) / 1024, z: 1 },
-                      dim3 { x: 1024, y: 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
+                      dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.input_output.read_to_vec()?.into())
@@ -767,9 +767,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
 
         let mut kernel = TanhBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
-                                     y: (loss.len() as c_uint + 1023) / 1024, z: 1 },
-                      dim3 { x: 1024, y: 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
+                                     y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
+                      dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
         Ok(args.loss.read_to_vec()?.into())

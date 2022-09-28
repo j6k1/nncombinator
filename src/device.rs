@@ -446,10 +446,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
 
-        let output = vec![0.;NI];
-
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
-        output_ptr.memcpy(output.as_ptr(),NO)?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(0.0f32)?;
@@ -707,11 +704,8 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
     fn backward_linear_batch(&self, units: &CachedTensor<f64, Arr2<f64, NI, NO>>, input: &VecArr<f64, Arr<f64, NO>>) -> Result<VecArr<f64, Arr<f64, NI>>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
-        
-        let output = vec![0.;NI];
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
-        output_ptr.memcpy(output.as_ptr(),NO)?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(0.0f64)?;

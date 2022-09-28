@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::mem::size_of;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Index};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use libc::c_void;
@@ -308,6 +308,14 @@ impl<U,T> Deref for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U>
 
     fn deref(&self) -> &Self::Target {
         &self.value
+    }
+}
+impl<U,T> Index<(usize,usize)> for CachedTensor<U,T>
+    where U: Debug + Default, T: Index<(usize,usize),Output=T> + AsRawSlice<U> {
+    type Output = T;
+
+    fn index(&self, index:(usize,usize)) -> &Self::Output {
+        self.value.index(index)
     }
 }
 impl<U,T> AsPtr<U> for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {

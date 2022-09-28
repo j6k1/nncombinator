@@ -210,7 +210,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U
 
         let mut kernel = SigmoidForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -228,7 +228,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U
 
         let mut kernel = SigmoidBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -268,8 +268,8 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
 
         let mut kernel = SigmoidForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-            y: (input.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
+                                     y: (input.len() as c_uint + 1023) / 1024, z: 1 },
                       dim3 { x: 1024, y: 1024, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -287,8 +287,8 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
 
         let mut kernel = SigmoidBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-            y: (loss.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
+                                     y: (loss.len() as c_uint + 1023) / 1024, z: 1 },
                       dim3 { x: 1024, y: 1024, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -374,7 +374,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,De
 
         let mut kernel = ReLuForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -392,7 +392,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,De
 
         let mut kernel = ReLuBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -434,8 +434,8 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
 
         let mut kernel = ReLuForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-                                     y: (input.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
+                                     y: (input.len() as c_uint + 1023) / 1024, z: 1 },
                       dim3 { x: 1024, y: 1024, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -533,7 +533,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,D
 
         let mut kernel = SwishForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -551,7 +551,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,D
 
         let mut kernel = SwishBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -591,8 +591,8 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
 
         let mut kernel = SwishForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-                                     y: (input.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
+                                     y: (input.len() as c_uint + 1023) / 1024, z: 1 },
                       dim3 { x: 1024, y: 1024, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -610,8 +610,8 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
 
         let mut kernel = SwishBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-                                     y: (loss.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
+                                     y: (loss.len() as c_uint + 1023) / 1024, z: 1 },
                       dim3 { x: 1024, y: 1024, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -690,7 +690,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,De
 
         let mut kernel = TanhForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -708,7 +708,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,De
 
         let mut kernel = TanhBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -748,8 +748,8 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
 
         let mut kernel = TanhForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-                                     y: (input.len() as c_uint + 1023) / 1024 * 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
+                                     y: (input.len() as c_uint + 1023) / 1024, z: 1 },
                       dim3 { x: 1024, y: 1024, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -767,8 +767,8 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
 
         let mut kernel = TanhBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024,
-                                     y: (loss.len() as c_uint + 1023) / 1023 * 1024, z: 1 },
+        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024,
+                                     y: (loss.len() as c_uint + 1023) / 1024, z: 1 },
                       dim3 { x: 1024, y: 1024, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -917,7 +917,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
 
         let mut kernel = SoftMaxForward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 1024 * mem::size_of::<U>() * 2)?;
 
@@ -935,9 +935,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
 
         let mut kernel = SoftMaxBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1023 * 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
+                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
 
         Ok(args.loss.read_to_vec()?.into())
     }

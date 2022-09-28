@@ -348,10 +348,6 @@ extern "C" {
         softmax_forward(input_output,units_len,batch_len,0.0F);
     }
 
-    __global__ void softmax_preprocessing_float(const float *input, const size_t units_len, const size_t batch_len, float *alpha, float *sum) {
-        softmax_preprocessing(input,units_len,batch_len,alpha,sum);
-    }
-
 	__global__ void sigmoid_backward_float(float *u, float *loss, const size_t units_len, const size_t batch_len) {
         sigmoid_backward(u,loss,units_len,batch_len);
     }
@@ -389,10 +385,6 @@ extern "C" {
 
 	__global__ void softmax_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
         softmax_forward(input_output,units_len,batch_len,0.0);
-    }
-
-    __global__ void softmax_preprocessing_double(const double *input, const size_t units_len, const size_t batch_len, double *alpha, double *sum) {
-        softmax_preprocessing(input,units_len,batch_len,alpha,sum);
     }
 
 	__global__ void sigmoid_backward_double(double *u, double *loss, const size_t units_len, const size_t batch_len) {

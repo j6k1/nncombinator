@@ -41,12 +41,6 @@ fn main() {
 			.arg(&format!("{}/kernel.lib", out_dir))
 			.status()
 			.unwrap();
-
-		for p in library_paths {
-			println!("cargo:rustc-link-search=native={}/lib/x64", p);
-		}
-		println!("cargo:rustc-link-search=native={}", out_dir);
-		println!("cargo:rustc-link-lib=static=kernel");
 	} else {
 		cc::Build::new()
 			.cuda(true)
@@ -62,4 +56,10 @@ fn main() {
 			.file("src/kernel.cu")
 			.compile("libkernel.a");
 	}
+
+	for p in library_paths {
+		println!("cargo:rustc-link-search=native={}/lib/x64", p);
+	}
+	println!("cargo:rustc-link-search=native={}", out_dir);
+	println!("cargo:rustc-link-lib=static=kernel");
 }

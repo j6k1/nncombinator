@@ -8,7 +8,7 @@ use crate::persistence::*;
 use crate::{Cons, Nil, Stack};
 use crate::activation::{Activation, BatchActivation};
 use crate::cuda::mem::CachedTensor;
-use crate::error::{ConfigReadError, CudaError, EvaluateError, PersistenceError, TrainingError};
+use crate::error::{ConfigReadError, CudaError, DeviceError, EvaluateError, PersistenceError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
@@ -95,6 +95,22 @@ impl<T> AddLayer for T where T: ForwardAll + Sized {
 }
 impl<T,U> AddLayerTrain<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
     fn add_layer_train<C, F>(self, f: F) -> C where C: Train<U>, F: FnOnce(Self) -> C {
+        f(self)
+    }
+}
+pub trait TryAddLayer: ForwardAll where Self: Sized {
+    fn try_add_layer<C,F>(self,f:F) -> Result<C,DeviceError> where C: ForwardAll, F: FnOnce(Self) -> Result<C,DeviceError>;
+}
+pub trait TryAddLayerTrain<U>: PreTrain<U> where Self: Sized, U: UnitValue<U> {
+    fn try_add_layer_train<C,F>(self,f:F) -> Result<C,DeviceError> where C: Train<U>, F: FnOnce(Self) -> Result<C,DeviceError>;
+}
+impl<T> TryAddLayer for T where T: ForwardAll + Sized {
+    fn try_add_layer<C, F>(self, f: F) -> Result<C,DeviceError> where C: ForwardAll, F: FnOnce(Self) -> Result<C,DeviceError> {
+        f(self)
+    }
+}
+impl<T,U> TryAddLayerTrain<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
+    fn try_add_layer_train<C, F>(self, f: F) -> Result<C,DeviceError> where C: Train<U>, F: FnOnce(Self) -> Result<C,DeviceError> {
         f(self)
     }
 }

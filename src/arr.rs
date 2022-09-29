@@ -34,8 +34,19 @@ impl<T,const N:usize> DerefMut for Arr<T,N> where T: Default + Clone + Send  {
 }
 impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
     fn clone(&self) -> Self {
-        Arr{
+        Arr {
             arr:self.arr.clone()
+        }
+    }
+}
+impl<'data,U,const N:usize> From<ArrView<'data,U,N>> for Arr<U,N> where U: Default + Clone + Copy + Send {
+    fn from(view: ArrView<'data,U, N>) -> Self {
+        let mut v = Vec::new();
+
+        v.extend_from_slice(view.arr);
+
+        Arr {
+            arr:v.into_boxed_slice()
         }
     }
 }
@@ -511,7 +522,7 @@ impl<T,const N:usize> Div<T> for DiffArr<T,N>
         r
     }
 }
-#[derive(Debug,Eq,PartialEq)]
+#[derive(Debug,Eq,PartialEq,Clone)]
 pub struct VecArr<U,T> {
     arr:Box<[U]>,
     len:usize,
@@ -554,6 +565,17 @@ impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Defaul
 
         VecArr {
             arr:buffer.into_boxed_slice(),
+            len:len,
+            t:PhantomData::<Arr<U,N>>
+        }
+    }
+}
+impl<U,const N:usize> From<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
+    fn from(items: Vec<U>) -> Self {
+        let len = items.len() / N;
+
+        VecArr {
+            arr:items.into_boxed_slice(),
             len:len,
             t:PhantomData::<Arr<U,N>>
         }

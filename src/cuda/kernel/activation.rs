@@ -13,7 +13,6 @@ extern "C" {
     fn swish_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
     fn tanh_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
     fn softmax_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
-    fn softmax_preprocessing_float(input: *const f32, len: size_t, batch_len: size_t, alpha: *mut f32, sum: *mut f32) -> c_void;
     fn sigmoid_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn relu_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn swish_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
@@ -24,7 +23,6 @@ extern "C" {
     fn swish_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
     fn tanh_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
     fn softmax_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
-    fn softmax_preprocessing_double(input: *const f64, len: size_t, batch_len: size_t, alpha: *mut f64, sum: *mut f64) -> c_void;
 }
 pub struct ActivationForwardArgs<T> where T: DataTypeInfo {
     pub input_output: CudaPtr<T>,
@@ -236,55 +234,6 @@ impl Kernel for SoftMaxForward<f32> {
 impl Kernel for SoftMaxForward<f64> {
     const FUNC_PTR: *const c_void = softmax_forward_double as *const c_void;
     type Args = ActivationForwardArgs<f64>;
-}
-pub struct SoftMaxPreprocessing<T> where T: DataTypeInfo {
-    t:PhantomData<T>
-}
-impl<T> SoftMaxPreprocessing<T> where T: DataTypeInfo {
-    pub fn new() -> SoftMaxPreprocessing<T> {
-        SoftMaxPreprocessing {
-            t: PhantomData::<T>
-        }
-    }
-}
-impl Kernel for SoftMaxPreprocessing<f32> {
-    const FUNC_PTR: *const c_void = softmax_preprocessing_float as *const c_void;
-    type Args = ActivationSoftMaxPreprocessingArgs<f32>;
-}
-impl Kernel for SoftMaxPreprocessing<f64> {
-    const FUNC_PTR: *const c_void = softmax_preprocessing_float as *const c_void;
-    type Args = ActivationSoftMaxPreprocessingArgs<f64>;
-}
-pub struct ActivationSoftMaxPreprocessingArgs<T> where T: DataTypeInfo {
-    input: CudaPtr<T>,
-    units_len: usize,
-    batch_len: usize,
-    pub alpha: CudaPtr<T>,
-    pub sum: CudaPtr<T>
-}
-impl<T> ActivationSoftMaxPreprocessingArgs<T> where T: DataTypeInfo {
-    pub fn new(input:CudaPtr<T>,units_len:usize,batch_len:usize,alpha:CudaPtr<T>,sum:CudaPtr<T>)
-               -> ActivationSoftMaxPreprocessingArgs<T> {
-
-        ActivationSoftMaxPreprocessingArgs {
-            input: input,
-            units_len: units_len,
-            batch_len: batch_len,
-            alpha,
-            sum
-        }
-    }
-}
-impl<T> KernelArgs for ActivationSoftMaxPreprocessingArgs<T> where T: DataTypeInfo {
-    fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
-        vec![
-            &mut self.input,
-            &mut self.units_len,
-            &mut self.batch_len,
-            &mut self.alpha,
-            &mut self.sum
-        ]
-    }
 }
 pub struct SoftMaxBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>

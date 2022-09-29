@@ -38,7 +38,7 @@ fn main() {
 				"-Xcompiler", "-wd4819",
 				"-o",
 			])
-			.arg(&format!("{}/kernel.lib", out_dir))
+			.arg(&format!("{}/kernel.lib", &out_dir))
 			.status()
 			.unwrap();
 	} else {
@@ -54,12 +54,15 @@ fn main() {
 			.flag("-gencode")
 			.flag("arch=compute_61,code=sm_61")
 			.file("src/kernel.cu")
+			.out_dir(&out_dir)
 			.compile("libkernel.a");
+
+		println!("cargo:rustc-link-lib=cudart");
 	}
 
 	for p in library_paths {
 		println!("cargo:rustc-link-search=native={}/lib/x64", p);
 	}
-	println!("cargo:rustc-link-search=native={}", out_dir);
+	println!("cargo:rustc-link-search=native={}", &out_dir);
 	println!("cargo:rustc-link-lib=static=kernel");
 }

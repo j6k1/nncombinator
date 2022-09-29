@@ -203,13 +203,13 @@ pub struct DeviceGpu<U> {
     pub memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
-    pub fn new(memory_pool:MemoryPool) -> Result<DeviceGpu<U>,DeviceError> {
+    pub fn new(memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<DeviceGpu<U>,DeviceError> {
         let context = CublasContext::new(PointerMode::Device)?;
 
         Ok(DeviceGpu {
             u:PhantomData::<U>,
             cublas:context,
-            memory_pool:Arc::new(Mutex::new(memory_pool))
+            memory_pool:Arc::clone(memory_pool)
         })
     }
 

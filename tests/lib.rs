@@ -4,6 +4,7 @@ extern crate rand;
 extern crate rand_xorshift;
 extern crate statrs;
 extern crate csv;
+extern crate lazy_static;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -13,7 +14,9 @@ use std::io::{BufRead, BufReader, Read};
 use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use csv::Reader;
+use lazy_static::lazy_static;
 use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
@@ -25,6 +28,10 @@ use nncombinator::device::{DeviceCpu, DeviceGpu};
 use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass};
 use nncombinator::optimizer::{MomentumSGD};
+
+lazy_static! {
+    static ref SHARED_MEMORY_POOL:Arc<Mutex<MemoryPool>> = Arc::new(Mutex::new(MemoryPool::new(Alloctype::Device).unwrap()));
+}
 
 #[test]
 fn test_mnist() {
@@ -181,7 +188,7 @@ fn test_mnist_for_gpu() {
     let n1 = Normal::<f32>::new(0.0, 1f32/(2f32/(28f32*28f32)).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/(28f32*28f32).sqrt()).unwrap();
 
-    let memory_pool = MemoryPool::new(Alloctype::Device).unwrap();
+    let memory_pool = &SHARED_MEMORY_POOL.clone();
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
@@ -330,7 +337,7 @@ fn test_mnist_for_gpu_double() {
     let n1 = Normal::<f64>::new(0.0, 1f64/(2f64/(28f64*28f64)).sqrt()).unwrap();
     let n2 = Normal::<f64>::new(0.0, 1f64/(28f64*28f64).sqrt()).unwrap();
 
-    let memory_pool = MemoryPool::new(Alloctype::Device).unwrap();
+    let memory_pool = &SHARED_MEMORY_POOL.clone();
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
@@ -983,7 +990,7 @@ fn test_weather_batch_train_for_gpu() {
     let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
 
-    let memory_pool = MemoryPool::new(Alloctype::Device).unwrap();
+    let memory_pool = &SHARED_MEMORY_POOL.clone();
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
@@ -1155,7 +1162,7 @@ fn test_weather_batch_train_for_gpu_double() {
     let n1 = Normal::<f64>::new(0.0, (2f64/14f64).sqrt()).unwrap();
     let n2 = Normal::<f64>::new(0.0, 1f64/100f64.sqrt()).unwrap();
 
-    let memory_pool = MemoryPool::new(Alloctype::Device).unwrap();
+    let memory_pool = &SHARED_MEMORY_POOL.clone();
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
@@ -1537,7 +1544,7 @@ fn test_penguins_for_gpu() {
     let n1 = Normal::<f32>::new(0.0, (2f32/6f32).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/50f32.sqrt()).unwrap();
 
-    let memory_pool = MemoryPool::new(Alloctype::Device).unwrap();
+    let memory_pool = &SHARED_MEMORY_POOL.clone();
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
@@ -1750,7 +1757,7 @@ fn test_weather_for_gpu() {
     let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
 
-    let device = DeviceGpu::new(MemoryPool::new(Alloctype::Device).unwrap()).unwrap();
+    let device = DeviceGpu::new(&SHARED_MEMORY_POOL.clone()).unwrap();
 
     let net:InputLayer<f32,Arr<f32,14>,_> = InputLayer::new();
 
@@ -1908,7 +1915,7 @@ fn test_weather_by_forward_diff_for_gpu() {
     let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
 
-    let device = DeviceGpu::new(MemoryPool::new(Alloctype::Device).unwrap()).unwrap();
+    let device = DeviceGpu::new(&SHARED_MEMORY_POOL.clone()).unwrap();
 
     let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_> = InputLayer::new();
 
@@ -2084,7 +2091,7 @@ fn test_penguins_for_gpu_double() {
     let n1 = Normal::<f64>::new(0.0, (2f64/6f64).sqrt()).unwrap();
     let n2 = Normal::<f64>::new(0.0, 1f64/50f64.sqrt()).unwrap();
 
-    let memory_pool = MemoryPool::new(Alloctype::Device).unwrap();
+    let memory_pool = &SHARED_MEMORY_POOL.clone();
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
@@ -2297,7 +2304,7 @@ fn test_weather_for_gpu_double() {
     let n1 = Normal::<f64>::new(0.0, (2f64/14f64).sqrt()).unwrap();
     let n2 = Normal::<f64>::new(0.0, 1f64/100f64.sqrt()).unwrap();
 
-    let device = DeviceGpu::new(MemoryPool::new(Alloctype::Device).unwrap()).unwrap();
+    let device = DeviceGpu::new(&SHARED_MEMORY_POOL.clone()).unwrap();
 
     let net:InputLayer<f64,Arr<f64,14>,_> = InputLayer::new();
 
@@ -2455,7 +2462,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
     let n1 = Normal::<f64>::new(0.0, (2f64/14f64).sqrt()).unwrap();
     let n2 = Normal::<f64>::new(0.0, 1f64/100f64.sqrt()).unwrap();
 
-    let device = DeviceGpu::new(MemoryPool::new(Alloctype::Device).unwrap()).unwrap();
+    let device = DeviceGpu::new(&SHARED_MEMORY_POOL.clone()).unwrap();
 
     let net:InputLayer<f64,DiffInput<DiffArr<f64,14>,f64,14,100>,_> = InputLayer::new();
 

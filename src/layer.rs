@@ -1,8 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::{Deref, Index};
+use std::ops::{Index};
 use std::str::FromStr;
-use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::*;
 use crate::device::*;
 use crate::persistence::*;
@@ -12,7 +11,6 @@ use crate::cuda::mem::CachedTensor;
 use crate::error::{ConfigReadError, CudaError, EvaluateError, PersistenceError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
-use crate::mem::AsRawSlice;
 use crate::optimizer::*;
 
 #[derive(Debug)]

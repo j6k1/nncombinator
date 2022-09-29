@@ -1,19 +1,14 @@
-use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::mem;
-use std::os::raw::c_int;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use rcublas::Context;
 use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasStatus_t, cublasSgemv_v2, cublasHandle_t, cublasSgemm_v2, cublasDgemm_v2};
-use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
-use rcudnn::{Cudnn, TensorDescriptor};
-use rcudnn::utils::DataType;
-use crate::activation::Activation;
-use crate::arr::{Arr, Arr2, ArrView, VecArr};
+use crate::arr::{Arr, Arr2, VecArr};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Kernel, Memory};
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::cuda::mem::{CachedTensor, MemoryPool};
@@ -272,7 +267,7 @@ impl Device<f32> for DeviceGpu<f32> {
         let mut kernel = LossLinearBatchByCanonicalLink::<CudaPtr<f32>>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
+                             y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
                       dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
         Ok(args.actual.read_to_vec()?.into())
@@ -281,14 +276,14 @@ impl Device<f32> for DeviceGpu<f32> {
     fn batch_linear_reduce<const N: usize>(&self, loss: &VecArr<f32, Arr<f32, N>>) -> Result<Arr<f32, N>, TrainingError> {
         let mut loss_ptr = CudaPtr::new(loss.len() * N).unwrap();
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),loss.len() * N).unwrap();
-        let mut output_ptr = CudaPtr::new(N).unwrap();
+        let output_ptr = CudaPtr::new(N).unwrap();
 
         let mut args = ReduceLinearBatchArgs::new(loss_ptr,output_ptr,N,loss.len());
 
         let mut kernel = ReduceLinearBatch::<CudaPtr<f32>>::new();
 
         kernel.launch(dim3 { x: N as c_uint,
-                             y: 1, z: 1},
+                                     y: 1, z: 1},
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<f32>()).unwrap();
 
         Ok(args.output.read_to_vec()?.try_into()?)
@@ -404,7 +399,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         match unsafe {
             cublasSgemm_v2(*self.cublas.id_c(),
                                         cublasOperation_t::CUBLAS_OP_N,
-                                        cublasOperation_t::CUBLAS_OP_T,
+                                        cublasOperation_t::CUBLAS_OP_N,
                                         NO as ::libc::c_int,
                                         input.len() as libc::c_int,
                                         NI as ::libc::c_int,
@@ -453,8 +448,8 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
 
         match unsafe {
             cublasSgemm_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NI as ::libc::c_int,
                            input.len() as libc::c_int,
                            NO as ::libc::c_int,
@@ -542,14 +537,13 @@ impl Device<f64> for DeviceGpu<f64> {
     fn batch_linear_reduce<const N: usize>(&self, loss: &VecArr<f64, Arr<f64, N>>) -> Result<Arr<f64, N>, TrainingError> {
         let mut loss_ptr = CudaPtr::new(loss.len() * N).unwrap();
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),loss.len() * N).unwrap();
-        let mut output_ptr = CudaPtr::new(N).unwrap();
+        let output_ptr = CudaPtr::new(N).unwrap();
 
         let mut args = ReduceLinearBatchArgs::new(loss_ptr,output_ptr,N,loss.len());
 
         let mut kernel = ReduceLinearBatch::<CudaPtr<f64>>::new();
 
-        kernel.launch(dim3 { x: N as c_uint,
-            y: 1, z: 1},
+        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1},
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<f64>()).unwrap();
 
         Ok(args.output.read_to_vec()?.try_into()?)
@@ -664,7 +658,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         match unsafe {
             cublasDgemm_v2(*self.cublas.id_c(),
                            cublasOperation_t::CUBLAS_OP_N,
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NO as ::libc::c_int,
                            input.len() as libc::c_int,
                            NI as ::libc::c_int,
@@ -712,8 +706,8 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
 
         match unsafe {
             cublasDgemm_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NI as ::libc::c_int,
                            input.len() as libc::c_int,
                            NO as ::libc::c_int,

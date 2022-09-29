@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use libc::{c_int, c_void};
-use crate::cuda::{AsMutKernelPtr, CudaHostPtr, CudaPtr, Kernel, KernelArgs};
+use crate::cuda::{AsMutKernelPtr, CudaPtr, Kernel, KernelArgs};
 
 extern "C" {
     fn reduce_linear_batch_float(input: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;

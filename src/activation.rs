@@ -6,7 +6,7 @@ use cuda_runtime_sys::dim3;
 use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::UnitValue;
 use crate::arr::*;
-use crate::cuda::{CudaPtr, DataTypeInfo, Kernel, KernelArgs, Memory};
+use crate::cuda::{CudaPtr, DataTypeInfo, Kernel, Memory};
 use crate::cuda::kernel::activation::{
     ActivationBackwardArgs,
     ActivationForwardArgs,
@@ -56,7 +56,7 @@ impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
     where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
-    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(input.clone()) {
@@ -66,7 +66,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Identity<U,Dev
         Ok(r)
     }
 
-    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, _: &I) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceCpu<U>, _: &I, loss: &I, _: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
         for (r,l) in r.iter_mut().zip(loss.clone()) {
@@ -98,11 +98,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Identity<
 impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>>
     where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
 
-    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         Ok((*input).clone())
     }
 
-    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, _: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, _: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         Ok((*loss).clone())
     }
 
@@ -114,22 +114,22 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Iden
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
-    fn batch_apply(&self, device: &DeviceCpu<U>, input: &VecArr<U, Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_apply(&self, _: &DeviceCpu<U>, input: &VecArr<U, Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         Ok((*input).clone())
     }
 
-    fn batch_derive(&self, device: &DeviceCpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceCpu<U>, _: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, _: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         Ok((*loss).clone())
     }
 }
 impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>>
     where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_apply(&self, _: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         Ok((*input).clone())
     }
 
-    fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, _: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, _: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         Ok((*loss).clone())
     }
 }
@@ -168,7 +168,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
-    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(input.clone()) {
@@ -178,7 +178,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,Devi
         Ok(r)
     }
 
-    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(u.clone()) {
@@ -202,7 +202,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U
              SigmoidForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
              SigmoidBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
@@ -217,7 +217,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
-    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
@@ -260,7 +260,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
           SigmoidForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           SigmoidBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U, Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_apply(&self, _: &DeviceGpu<U>, input: &VecArr<U, Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
 
@@ -276,7 +276,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
         Ok(args.input_output.read_to_vec()?.into())
     }
 
-    fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
 
@@ -325,7 +325,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,De
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
     where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
-    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(input.clone()) {
@@ -338,7 +338,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceC
         Ok(r)
     }
 
-    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(u.clone()) {
@@ -365,7 +365,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,De
           DeviceGpu<U>: Device<U>,
           ReLuForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           ReLuBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
 
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
@@ -381,7 +381,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,De
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
-    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
@@ -425,7 +425,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
           ReLuForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           ReLuBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_apply(&self, _: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
 
         let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
@@ -442,7 +442,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
         Ok(args.input_output.read_to_vec()?.into())
     }
 
-    fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
 
@@ -491,7 +491,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,D
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
-    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(input.clone()) {
@@ -501,7 +501,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,Device
         Ok(r)
     }
 
-    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(u.clone()) {
@@ -525,7 +525,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,D
              SwishForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
              SwishBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
@@ -540,7 +540,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,D
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
-    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
@@ -583,7 +583,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
           SwishForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           SwishBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_apply(&self, _: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
 
@@ -599,7 +599,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
         Ok(args.input_output.read_to_vec()?.into())
     }
 
-    fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
 
@@ -648,7 +648,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Tanh<U,De
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
     where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
-    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(input.clone()) {
@@ -658,7 +658,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceC
         Ok(r)
     }
 
-    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(u.clone()) {
@@ -682,7 +682,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,De
              TanhForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
              TanhBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
@@ -697,7 +697,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,De
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
-    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
@@ -740,7 +740,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
           TanhForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           TanhBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_apply(&self, _: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
 
@@ -756,7 +756,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
         Ok(args.input_output.read_to_vec()?.into())
     }
 
-    fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
 
@@ -810,7 +810,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for SoftMax<U
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
     where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
-    fn apply(&self, device: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         let mut r = Arr::new();
 
         let alpha = input.clone().fold(U::initial_max_value(), |m, v| v.max(&m));
@@ -824,7 +824,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,Devi
         Ok(r)
     }
 
-    fn derive(&self, device: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(u.clone()) {
@@ -849,7 +849,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U
           SoftMaxForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn apply(&self, device: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
 
@@ -864,7 +864,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
-    fn derive(&self, device: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
 
@@ -909,7 +909,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
           SoftMaxForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
           SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_apply(&self, _: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
 
@@ -924,7 +924,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
         Ok(args.input_output.read_to_vec()?.into())
     }
 
-    fn batch_derive(&self, device: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
 

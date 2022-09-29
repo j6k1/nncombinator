@@ -1,10 +1,9 @@
 use std::marker::PhantomData;
-use std::mem;
 use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::{Arr, VecArr};
-use crate::cuda::{AsMutKernelPtr, CudaPtr, DataTypeInfo, Kernel, Memory};
+use crate::cuda::{AsMutKernelPtr, CudaPtr, Kernel, Memory};
 use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs};
 use crate::device::{Device, DeviceCpu, DeviceGpu};
 use crate::error::{CudaError, TrainingError};
@@ -18,7 +17,7 @@ pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy + UnitVal
 }
 pub trait BatchLossFunction<U,D>: LossFunction<U> + Send + Sync + 'static
     where U: Clone + Copy + UnitValue<U>, D: Device<U> {
-    fn batch_linear_derive<const N: usize>(&self,device: &D,expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
+    fn batch_linear_derive<const N: usize>(&self,_: &D,expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
                                            -> Result<VecArr<U,Arr<U, N>>, TrainingError> {
         Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
             a.par_iter()
@@ -57,7 +56,7 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for Mse<U> where U: Clone + Copy + Uni
                                                               DeviceGpu<U>:  Device<U>,
                                                               CudaPtr<U>: TryFrom<U,Error=CudaError>,
                                                               LinearBatchMse<U>: Kernel<Args=LinearBatchMseArgs<U>> {
-    fn batch_linear_derive<const N: usize>(&self, device: &DeviceGpu<U>, expected: &VecArr<U, Arr<U, N>>, actual: &VecArr<U, Arr<U, N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_linear_derive<const N: usize>(&self, _: &DeviceGpu<U>, expected: &VecArr<U, Arr<U, N>>, actual: &VecArr<U, Arr<U, N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 
@@ -103,7 +102,7 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropy<U> where U: Clone + C
                                                                     DeviceGpu<U>:  Device<U>,
                                                                     CudaPtr<U>: TryFrom<U,Error=CudaError>,
                                                                     LinearBatchCrossEntropy<U>: Kernel<Args=LinearBatchCrossEntropyArgs<U>> {
-    fn batch_linear_derive<const N: usize>(&self, device: &DeviceGpu<U>, expected: &VecArr<U, Arr<U, N>>, actual: &VecArr<U, Arr<U, N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_linear_derive<const N: usize>(&self, _: &DeviceGpu<U>, expected: &VecArr<U, Arr<U, N>>, actual: &VecArr<U, Arr<U, N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 
@@ -149,7 +148,7 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropyMulticlass<U> where U:
                                                                               DeviceGpu<U>:  Device<U>,
                                                                               CudaPtr<U>: TryFrom<U,Error=CudaError>,
                                                                               LinearBatchCrossEntropyMulticlass<U>: Kernel<Args=LinearBatchCrossEntropyMulticlassArgs<U>> {
-    fn batch_linear_derive<const N: usize>(&self, device: &DeviceGpu<U>, expected: &VecArr<U, Arr<U, N>>, actual: &VecArr<U, Arr<U, N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_linear_derive<const N: usize>(&self, _: &DeviceGpu<U>, expected: &VecArr<U, Arr<U, N>>, actual: &VecArr<U, Arr<U, N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 

@@ -46,6 +46,8 @@ fn main() {
 			.cuda(true)
 			.flag("-cudart=shared")
 			.flag("-gencode")
+			.flag("arch=compute_87,code=sm_87")
+			.flag("-gencode")
 			.flag("arch=compute_86,code=sm_86")
 			.flag("-gencode")
 			.flag("arch=compute_80,code=sm_80")

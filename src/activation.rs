@@ -276,7 +276,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
         Ok(args.input_output.read_to_vec()?.into())
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, _: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
 
@@ -318,7 +318,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,De
         self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
@@ -399,7 +399,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,De
         Ok(args.loss.read_to_vec()?.try_into()?)
     }
 
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
@@ -442,7 +442,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
         Ok(args.input_output.read_to_vec()?.into())
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, _: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
 
@@ -484,7 +484,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,D
         self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
@@ -558,7 +558,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,D
         Ok(args.loss.read_to_vec()?.try_into()?)
     }
 
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
@@ -599,7 +599,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
         Ok(args.input_output.read_to_vec()?.into())
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, _: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
 
@@ -641,7 +641,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Tanh<U,De
         self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
@@ -715,7 +715,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,De
         Ok(args.loss.read_to_vec()?.try_into()?)
     }
 
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
@@ -756,7 +756,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
         Ok(args.input_output.read_to_vec()?.into())
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, _: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
 
@@ -924,7 +924,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
         Ok(args.input_output.read_to_vec()?.into())
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceGpu<U>, _: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
         let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
         u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
 

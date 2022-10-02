@@ -175,7 +175,9 @@ __device__ void relu_backward(T *u, T *loss, const size_t units_len, const size_
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        if (u[i] <= 0.0) {
+        if (u[i] > 0.0) {
+            loss[i] = 1.0;
+        } else {
             loss[i] = 0.0;
         }
     }

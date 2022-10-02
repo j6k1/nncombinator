@@ -5,6 +5,13 @@ use libc::c_void;
 use rcudnn_sys::{cudaError, cudaMemcpyKind, cudaStream_t};
 use crate::error::CudaRuntimeError;
 
+/// Device Memory allocation
+/// # Arguments
+/// * `size` - memory size
+///
+/// note: The actual size of memory allocated is automatically calculated
+///       by multiplying the size of the return type by the value of the argument passed.
+///       There is no need for the caller to multiply the size of the return type.
 pub fn malloc<T>(size: usize) -> Result<*mut T,rcudnn::Error> {
     let size = mem::size_of::<T>() * size;
     let mut ptr: *mut T = null_mut();
@@ -28,6 +35,13 @@ pub fn malloc<T>(size: usize) -> Result<*mut T,rcudnn::Error> {
     }
 }
 
+/// Host Memory allocation
+/// # Arguments
+/// * `size` - memory size
+///
+/// note: The actual size of memory allocated is automatically calculated
+///       by multiplying the size of the return type by the value of the argument passed.
+///       There is no need for the caller to multiply the size of the return type.
 pub fn malloc_host<T>(size: usize, flags:libc::c_uint) -> Result<*mut T,rcudnn::Error> {
     let size = mem::size_of::<T>() * size;
     let mut ptr: *mut T = null_mut();
@@ -51,6 +65,12 @@ pub fn malloc_host<T>(size: usize, flags:libc::c_uint) -> Result<*mut T,rcudnn::
     }
 }
 
+/// Sync Copy memory
+/// # Arguments
+/// * `dst` - copy destination
+/// * `src` - copy source
+/// * `size` - Size to copy (number of elements, not bytes)
+/// * `kind` - Type of memory copy defined by cuda
 pub fn memcpy<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind) -> Result<(),rcudnn::Error> {
     let size = mem::size_of::<T>() * size;
 
@@ -69,6 +89,13 @@ pub fn memcpy<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind) 
     }
 }
 
+/// Async Copy memory
+/// # Arguments
+/// * `dst` - copy destination
+/// * `src` - copy source
+/// * `size` - Size to copy (number of elements, not bytes)
+/// * `kind` - Type of memory copy defined by cuda
+/// * `stream` - cuda stream
 pub fn memcpy_async<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpyKind, stream: cudaStream_t) -> Result<(),rcudnn::Error> {
     let size = mem::size_of::<T>() * size;
     match unsafe {
@@ -86,6 +113,9 @@ pub fn memcpy_async<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpy
     }
 }
 
+/// free up memoru
+/// # Arguments
+/// * `devptr` - Device Memory object to be free
 pub fn free<T>(devptr: *mut T) -> Result<(),rcudnn::Error> {
     match unsafe { rcudnn_sys::cudaFree(devptr as *mut libc::c_void) } {
         cudaError::cudaSuccess => Ok(()),
@@ -97,6 +127,10 @@ pub fn free<T>(devptr: *mut T) -> Result<(),rcudnn::Error> {
         }
     }
 }
+
+/// free up memoru
+/// # Arguments
+/// * `devptr` - Host Memory object to be free
 pub fn free_host<T>(devptr: *mut T) -> Result<(),rcudnn::Error> {
     match unsafe { rcudnn_sys::cudaFreeHost(devptr as *mut libc::c_void) } {
         cudaError::cudaSuccess => Ok(()),
@@ -130,6 +164,13 @@ fn launch_with_stream(func: *const c_void,
         Err(CudaRuntimeError::new(cuda_error))
     }
 }
+/// cuda kernel startup function
+/// # Arguments
+/// * `func` - Pointer to cuda kernel function
+/// * `grid_dim` - Number of dims in grid
+/// * `block_dim` - Number of blocks in grid
+/// * `args` - List of arguments passed to cuda kernel functions
+/// * `shared_mem` - Size (in bytes) of shared memory to allocate for use within cuda kernel functions.
 pub fn launch(func: *const c_void,
               grid_dim: dim3,
               block_dim: dim3,

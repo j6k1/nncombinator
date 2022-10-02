@@ -1,10 +1,15 @@
+//! Definition and implementation of optimizers to be used during training
+
 use std::collections::HashMap;
 use crate::UnitValue;
 
+/// Optimizer Definition
 pub trait Optimizer<U> where U: Clone + Copy + UnitValue<U> {
     fn update(&mut self,e:U,w:&mut U);
 }
+/// SGD Implementation
 pub struct SGD<U> where U: UnitValue<U> {
+    /// Learning rate
     a:U,
     lambda:U
 }

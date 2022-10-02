@@ -1,7 +1,10 @@
+///! Definition and implementation of various operations on Units
+
 use std::ops::{Add, Mul, Sub, Div, AddAssign, Neg};
 use std::fmt::Debug;
 use num_traits::FromPrimitive;
 
+/// Trait to consolidate traits that define various operations in the unit
 pub trait UnitValue<T>: Add<Output=T> + Sub<Output=T> + Mul<Output=T> + Div<Output=T> + Neg<Output=T> +
     AddAssign + PartialOrd +
     Clone + Copy + Default + Debug + Send + Sync + 'static +
@@ -9,6 +12,7 @@ pub trait UnitValue<T>: Add<Output=T> + Sub<Output=T> + Mul<Output=T> + Div<Outp
     Infinity + Neginfinity + IsNaN +
     Bias + FromPrimitive {
 }
+/// Trait to calculate bias
 pub trait Bias where Self: Sized {
     fn bias() -> Self;
 }
@@ -24,6 +28,7 @@ impl Bias for f32 {
         1f32
     }
 }
+/// Trait to calculate max
 pub trait Max {
     fn max(&self,other:&Self) -> Self;
 }
@@ -39,6 +44,7 @@ impl Max for f32 {
         (*self).max(*other)
     }
 }
+/// Trait to calculate min
 pub trait Min {
     fn min(&self,other:&Self) -> Self;
 }
@@ -54,6 +60,7 @@ impl Min for f32 {
         (*self).min(*other)
     }
 }
+/// Trait to calculate the maximum value defined for the type
 pub trait MaxValue {
     fn max_value() -> Self;
 }
@@ -63,12 +70,14 @@ impl MaxValue for f64 {
         f64::MAX
     }
 }
+/// Trait to calculate the minimum value defined for the type
 impl MaxValue for f32 {
     #[inline]
     fn max_value() -> f32 {
         f32::MAX
     }
 }
+/// Trait to calculate the initial value defined for the type
 pub trait InitialMaxValue {
     fn initial_max_value() -> Self;
 }
@@ -82,6 +91,7 @@ impl InitialMaxValue for f32 {
         0.0/0.0
     }
 }
+/// Trait that returns 1 of that type
 pub trait One {
     fn one() -> Self;
 }
@@ -97,6 +107,7 @@ impl One for f32 {
         1f32
     }
 }
+/// Trait that returns the result of applying exp
 pub trait Exp {
     fn exp(&self) -> Self;
 }
@@ -112,6 +123,7 @@ impl Exp for f32 {
         (*self).exp()
     }
 }
+/// Trait that returns the result of applying tanh
 pub trait Tanh {
     fn tanh(&self) -> Self;
 }
@@ -127,6 +139,7 @@ impl Tanh for f32 {
         (*self).tanh()
     }
 }
+/// Trait to return absolute value
 pub trait Abs {
     fn abs(&self) -> Self;
 }
@@ -142,6 +155,7 @@ impl Abs for f32 {
         (*self).abs()
     }
 }
+/// Trait that returns the result of applying sqrt
 pub trait Sqrt {
     fn sqrt(&self) -> Self;
 }
@@ -157,6 +171,7 @@ impl Sqrt for f32 {
         (*self).sqrt()
     }
 }
+/// Trait that returns the natural logarithm
 pub trait Ln {
     fn ln(&self) -> Self;
 }
@@ -172,6 +187,7 @@ impl Ln for f32 {
         (*self).ln()
     }
 }
+/// Trait that returns negative infinity defined on the type
 pub trait Neginfinity {
     fn neg_infinity() -> Self;
 }
@@ -188,6 +204,7 @@ impl Neginfinity for f32 {
         f32::NEG_INFINITY
     }
 }
+/// Trait that returns infinity defined on the type
 pub trait Infinity {
     fn infinity() -> Self;
 }
@@ -203,6 +220,7 @@ impl Infinity for f32 {
         f32::INFINITY
     }
 }
+/// NaN or not? Trait that returns the
 pub trait IsNaN {
     fn is_nan(&self) -> bool;
 }

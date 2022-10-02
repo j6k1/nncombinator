@@ -1,14 +1,26 @@
+//! Definition and implementation of optimizers to be used during training
+
 use std::collections::HashMap;
 use crate::UnitValue;
 
+/// Optimizer Definition
 pub trait Optimizer<U> where U: Clone + Copy + UnitValue<U> {
+    /// Update Weights
+    /// # Arguments
+    /// * `e` - error
+    /// * `w` - weight
     fn update(&mut self,e:U,w:&mut U);
 }
+/// SGD Implementation
 pub struct SGD<U> where U: UnitValue<U> {
+    /// Learning rate
     a:U,
     lambda:U
 }
 impl<U> SGD<U> where U: UnitValue<U> {
+    /// Create an instance of SGD
+    /// # Arguments
+    /// * `a` - Learning rate
     pub fn new(a:U) -> SGD<U> {
         SGD {
             a:a,
@@ -30,6 +42,7 @@ impl<U> Optimizer<U> for SGD<U> where U: UnitValue<U> {
         *w = *w - a * (e + lambda * *w);
     }
 }
+/// MomentumSGD Implementation
 pub struct MomentumSGD<U> where U: UnitValue<U> {
     a:U,
     mu:U,
@@ -37,6 +50,9 @@ pub struct MomentumSGD<U> where U: UnitValue<U> {
     vt:HashMap<*const U,U>
 }
 impl<U> MomentumSGD<U> where U: UnitValue<U> {
+    /// Create an instance of MomentumSGD
+    /// # Arguments
+    /// * `a` - Learning rate
     pub fn new(a:U) -> MomentumSGD<U> {
         MomentumSGD {
             a:a,
@@ -45,6 +61,13 @@ impl<U> MomentumSGD<U> where U: UnitValue<U> {
             vt:HashMap::new()
         }
     }
+    /// Create an instance of MomentumSGD with additional parameters other than the default values
+    /// # Arguments
+    /// * `a` - Learning rate
+    /// * `mu` - mu
+    /// * `lambda` - lambda
+    ///
+    /// note: See the mu and lambda sections of the MomentumSGD algorithm formula.
     pub fn with_params(a:U,mu:U,lambda:U) -> MomentumSGD<U> {
         MomentumSGD {
             a:a,
@@ -67,12 +90,14 @@ impl<U> Optimizer<U> for MomentumSGD<U> where U: UnitValue<U> {
         *w = *w + *vt;
     }
 }
+/// Adagrad Implementation
 pub struct Adagrad<U> where U: UnitValue<U> {
     a:U,
     gt:HashMap<*const U,U>,
     eps:U
 }
 impl<U> Adagrad<U> where U: UnitValue<U> {
+    /// Create an instance of Adagrad
     pub fn new() -> Adagrad<U> {
         Adagrad {
             a:U::from_f64(0.01).expect("Error in type conversion from f64."),
@@ -92,6 +117,7 @@ impl<U> Optimizer<U> for Adagrad<U> where U: UnitValue<U> {
         *w = *w - a * e / (gt.sqrt() + self.eps);
     }
 }
+/// Adagrad Implementation
 pub struct RMSprop<U> where U: UnitValue<U> {
     a:U,
     mu:U,
@@ -99,6 +125,7 @@ pub struct RMSprop<U> where U: UnitValue<U> {
     eps:U
 }
 impl<U> RMSprop<U> where U: UnitValue<U> {
+    /// Create an instance of RMSprop
     pub fn new() -> RMSprop<U> {
         RMSprop {
             a:U::from_f64(0.0001f64).expect("Error in type conversion from f64."),
@@ -120,6 +147,7 @@ impl<U> Optimizer<U> for RMSprop<U> where U: UnitValue<U> {
         *w = *w - a * e / (gt.sqrt() + self.eps);
     }
 }
+/// Adam Implementation
 pub struct Adam<U> where U: UnitValue<U> {
     a:U,
     mt:HashMap<* const U,U>,
@@ -131,6 +159,7 @@ pub struct Adam<U> where U: UnitValue<U> {
     eps:U
 }
 impl<U> Adam<U> where U: UnitValue<U> {
+    /// Create an instance of Adam
     pub fn new() -> Adam<U> {
         Adam {
             a:U::from_f64(0.001f64).expect("Error in type conversion from f64."),

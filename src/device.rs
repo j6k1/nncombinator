@@ -1,3 +1,5 @@
+//! Computational processes used in the implementation of neural networks
+
 use std::marker::PhantomData;
 use std::mem;
 use std::rc::Rc;
@@ -17,15 +19,47 @@ use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
 use crate::UnitValue;
 
+/// Trait that defines devices responsible for various computational processes of neural networks
 pub trait Device<U>: Clone where U: UnitValue<U> {
+    /// Calculation of Losses
+    /// # Arguments
+    /// * `expected` - expected value
+    /// * `actual` - actual value
+    /// * `lossf` - loss function
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
         where L: LossFunction<U>;
+    /// Calculation of Losses by canonical link
+    /// # Arguments
+    /// * `expected` - expected value
+    /// * `actual` - actual value
     fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
+    /// Calculation of total Losses
+    /// # Arguments
+    /// * `expected` - expected value
+    /// * `actual` - actual value
+    /// * `lossf` - loss function
     fn loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&Arr<U,N>,actual:&Arr<U,N>,lossf:&L) -> U;
+    /// Calculation of loss during batch execution by canonical link
+    /// # Arguments
+    /// * `expected` - expected value
+    /// * `actual` - actual value
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
                                                                -> Result<VecArr<U,Arr<U, N>>, TrainingError>;
 
+    /// convolutional calculation
+    /// # Arguments
+    /// * `loss` - loss
     fn batch_linear_reduce<const N: usize>(&self, loss:&VecArr<U,Arr<U,N>>) -> Result<Arr<U,N>,  TrainingError>;
+    /// Calculation of total Losses (all batch)
+    /// # Arguments
+    /// * `expected` - expected value
+    /// * `actual` - actual value
+    /// * `lossf` - loss function
     fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&VecArr<U,Arr<U,N>>,actual:&VecArr<U,Arr<U,N>>,lossf:&L) -> U {
         actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
             a.par_iter().cloned()
@@ -36,18 +70,61 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
         }).map(|(sum,_)| sum).reduce(|| U::default(), |sum,l| sum + l)
     }
 }
+/// Trait that defines the implementation of various calculation processes in the linear layer
 pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U> {
+    /// Forward propagation calculation
+    /// # Arguments
+    /// * `bias` - bias weights
+    /// * `units` - unit weights
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
     fn forward_linear(&self, bias:&Arr<U,NO>, units:&T, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
+    /// Error back propagation calculation
+    /// # Arguments
+    /// * `units` - unit weights
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn backward_linear(&self, units:&T, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
+    /// Error back propagation in batch
+    /// # Arguments
+    /// * `units` - unit weights
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn backward_linear_batch(&self, units: &T, input: &VecArr<U,Arr<U, NO>>)
                                                                     -> Result<VecArr<U,Arr<U, NI>>, TrainingError>;
+    /// Forward propagation calculation in batch
+    /// # Arguments
+    /// * `input` - input
+    /// * `bias` - bias weights
+    /// * `units` - unit weights
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn batch_forward_linear(&self,input:&VecArr<U,Arr<U,NI>>,bias:&Arr<U,NO>,units:&T)
                                                                     -> Result<VecArr<U,Arr<U,NO>>,TrainingError>;
 }
+/// Implementation of Device to be computed by CPU
 pub struct DeviceCpu<U> where U: UnitValue<U> {
     u:PhantomData<U>,
 }
 impl<U> DeviceCpu<U> where U: UnitValue<U> {
+    /// note: For the sake of implementation uniformity,
+    /// DeviceCpu::new is defined as if it may return a DeviceError of type Result,
+    /// but this error is never actually returned.
     pub fn new() -> Result<DeviceCpu<U>,DeviceError> {
         Ok(DeviceCpu {
             u: PhantomData::<U>
@@ -168,10 +245,19 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
         }).collect::<Result<Vec<Arr<U, NO>>, _>>().map(|r| r.into()).map_err(|e| TrainingError::from(e))
     }
 }
+/// cublas context
 pub struct CublasContext {
     raw:Rc<Context>
 }
 impl CublasContext {
+    /// Create an instance of CublasContext
+    /// # Arguments
+    /// * `pointer_mode` - Host or Device
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`rcublas::error::Error`]
     pub fn new(pointer_mode:PointerMode) -> Result<CublasContext, rcublas::error::Error> {
         let mut context = Context::new()?;
 
@@ -182,10 +268,16 @@ impl CublasContext {
         })
     }
 
+    /// Returns a reference to the raw handle (pointer) of the cublas context
     pub fn id_c(&self) -> &cublasHandle_t {
         self.raw.id_c()
     }
 
+    /// Returns the PointerMode that has been set.
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`rcublas::error::Error`]
     pub fn pointer_mode(&self) -> Result<PointerMode, rcublas::error::Error> {
         self.raw.pointer_mode()
     }
@@ -197,12 +289,22 @@ impl Clone for CublasContext {
         }
     }
 }
+/// Implementation of Device to be computed by GPU
 pub struct DeviceGpu<U> {
     u:PhantomData<U>,
     cublas:CublasContext,
+    /// Memory pool for cuda memory allocation
     pub memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<U> DeviceGpu<U> where U: UnitValue<U> {
+    /// Create an instance of DeviceGpu
+    /// # Arguments
+    /// * `memory_pool` - Memory pool for cuda memory allocation
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`DeviceError`]
     pub fn new(memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<DeviceGpu<U>,DeviceError> {
         let context = CublasContext::new(PointerMode::Device)?;
 
@@ -213,11 +315,13 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
         })
     }
 
+    /// Returns the CublasContext owned by itself
     pub fn cublas(&self) -> &CublasContext {
         &self.cublas
     }
 }
 pub trait DeviceMemoryPool {
+    /// Returns the memory pool object owned by itself
     fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>>;
 }
 impl<U> DeviceMemoryPool for DeviceGpu<U> {

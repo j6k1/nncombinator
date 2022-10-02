@@ -1,3 +1,5 @@
+//! Activation Function Implementation
+
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::mem;
@@ -26,22 +28,69 @@ use crate::error::{CudaError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 
+/// Trait defining activation functions
 pub trait Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
+    /// Apply the activation function
+    /// # Arguments
+    /// * `device` - Device objects available for processing
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
     fn apply(&self, device:&D, input:&T) -> Result<R, EvaluateError>;
+    /// Apply derivatives of the activation function
+    /// # Arguments
+    /// * `device` - Device objects available for processing
+    /// * `o` - Input from upper layers
+    /// * `loss` - Losses calculated at lower tiers
+    /// * `u` - Value before passing through the activation function of the input from the upper layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn derive(&self, device:&D, o:&T, loss:&T, u:&T) -> Result<R, TrainingError>;
+    /// Returns whether or not the canonical linkage function can be used.
+    /// # Arguments
+    /// * `l` - loss function
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;
 }
 
+/// Trait that defines the activation function during batch processing
 pub trait BatchActivation<U,T,R,D>: Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
+    /// Apply the activation function
+    /// # Arguments
+    /// * `device` - Device objects available for processing
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn batch_apply(&self, device:&D, input:&VecArr<U,T>) -> Result<VecArr<U,R>, TrainingError>;
+    /// Apply derivatives of the activation function
+    /// # Arguments
+    /// * `device` - Device objects available for processing
+    /// * `o` - Input from upper layers
+    /// * `loss` - Losses calculated at lower tiers
+    /// * `u` - Value before passing through the activation function of the input from the upper layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn batch_derive(&self, device:&D, o:&VecArr<U,T>, loss:&VecArr<U,T>, u:&VecArr<U,T>) -> Result<VecArr<U,R>, TrainingError>;
 }
+/// Identity Implementation
 pub struct Identity<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>,
     c:HashSet<&'static str>
 }
 impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of Identity
     pub fn new(_:&D) -> Identity<U,D> {
         let mut c = HashSet::new();
         c.insert("mse");
@@ -133,12 +182,14 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Iden
         Ok((*loss).clone())
     }
 }
+/// Sigmoid Implementation
 pub struct Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>,
     c:HashSet<&'static str>
 }
 impl<U,D> Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of Sigmoid
     pub fn new(_:&D) -> Sigmoid<U,D> {
         let mut c = HashSet::new();
         c.insert("crossentropy");
@@ -295,11 +346,13 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
         Ok(args.loss.read_to_vec()?.into())
     }
 }
+/// ReLu Implementation
 pub struct ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>
 }
 impl<U,D> ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of ReLu
     pub fn new(_:&D) -> ReLu<U,D> {
         ReLu {
             u: PhantomData::<U>,
@@ -461,11 +514,13 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
         Ok(args.loss.read_to_vec()?.into())
     }
 }
+/// Swish Implementation
 pub struct Swish<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>
 }
 impl<U,D> Swish<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of Swish
     pub fn new(_:&D) -> Swish<U,D> {
         Swish {
             u: PhantomData::<U>,
@@ -618,11 +673,13 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
         Ok(args.loss.read_to_vec()?.into())
     }
 }
+/// Tanh Implementation
 pub struct Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>
 }
 impl<U,D> Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of Tanh
     pub fn new(_:&D) -> Tanh<U,D> {
         Tanh {
             u: PhantomData::<U>,
@@ -775,12 +832,14 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
         Ok(args.loss.read_to_vec()?.into())
     }
 }
+/// SoftMax Implementation
 pub struct SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>,
     c:HashSet<&'static str>
 }
 impl<U,D> SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of SoftMax
     pub fn new(_:&D) -> SoftMax<U,D> {
         let mut c = HashSet::new();
         c.insert("crossentropymulticlass");

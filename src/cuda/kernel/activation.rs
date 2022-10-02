@@ -1,3 +1,5 @@
+//! This module is related to the cuda implementation of the activation function
+
 use std::marker::PhantomData;
 use libc::{c_void, size_t};
 use crate::cuda::{AsMutKernelPtr, CudaPtr, DataTypeInfo, Kernel, KernelArgs};
@@ -24,12 +26,20 @@ extern "C" {
     fn tanh_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
     fn softmax_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
 }
+/// Defines the list of passed to the cuda kernel function for the arguments of the activation function.
 pub struct ActivationForwardArgs<T> where T: DataTypeInfo {
+    /// Input buffer (shared with output buffer)
     pub input_output: CudaPtr<T>,
     units_len: usize,
     batch_len: usize,
 }
+/// Create an instance of an object representing the argument list at the time of activation function forward.
 impl<T> ActivationForwardArgs<T> where T: DataTypeInfo {
+    /// Create a ActivationForwardArgs instance
+    /// #Arguments
+    /// * `input_output` - Input buffer (shared with output buffer)
+    /// * `units_len` - count of inputs and outputs of linear layer weights
+    /// * `batch_lne` - batches count
     pub fn new(input_output:CudaPtr<T>,units_len:usize,batch_len:usize) -> ActivationForwardArgs<T> {
         ActivationForwardArgs {
             input_output: input_output,
@@ -47,13 +57,22 @@ impl<T> KernelArgs for ActivationForwardArgs<T> where T: DataTypeInfo {
         ]
     }
 }
+/// Create an instance of an object representing the argument list during error back propagation of the activation function.
 pub struct ActivationBackwardArgs<T> where T: DataTypeInfo {
     u: CudaPtr<T>,
+    /// loss value
     pub loss: CudaPtr<T>,
     units_len: usize,
     batch_len: usize,
 }
+/// Create an instance of an object representing the list of arguments during error back propagation of the activation function.
 impl<T> ActivationBackwardArgs<T> where T: DataTypeInfo {
+    /// Create a ActivationBackwardArgs instance
+    /// #Arguments
+    /// * `u` - Input values from upper layers
+    /// * `loss` - loss value
+    /// * `units_len` - count of inputs and outputs of linear layer weights
+    /// * `batch_len` - batch count
     pub fn new(u:CudaPtr<T>,loss: CudaPtr<T>,units_len:usize,batch_len:usize) -> ActivationBackwardArgs<T> {
         ActivationBackwardArgs {
             u: u,
@@ -73,10 +92,12 @@ impl<T> KernelArgs for ActivationBackwardArgs<T> where T: DataTypeInfo {
         ]
     }
 }
+/// Sigmoid activation function implementation
 pub struct SigmoidForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SigmoidForward<T> where T: DataTypeInfo {
+    /// Create a SigmoidForward instance
     pub fn new() -> SigmoidForward<T> {
         SigmoidForward {
             t: PhantomData::<T>
@@ -95,6 +116,7 @@ pub struct SigmoidBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SigmoidBackward<T> where T: DataTypeInfo {
+    /// Create a SigmoidBackward instance
     pub fn new() -> SigmoidBackward<T> {
         SigmoidBackward {
             t: PhantomData::<T>
@@ -109,10 +131,12 @@ impl Kernel for SigmoidBackward<f64> {
     const FUNC_PTR: *const c_void = sigmoid_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<f64>;
 }
+/// ReLu activation function implementation activation function implementation
 pub struct ReLuForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> ReLuForward<T> where T: DataTypeInfo {
+    /// Create a ReLuForward instance
     pub fn new() -> ReLuForward<T> {
         ReLuForward {
             t: PhantomData::<T>
@@ -131,6 +155,7 @@ pub struct ReLuBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> ReLuBackward<T> where T: DataTypeInfo {
+    /// Create a ReLuBackward instance
     pub fn new() -> ReLuBackward<T> {
         ReLuBackward {
             t: PhantomData::<T>
@@ -149,6 +174,7 @@ pub struct SwishForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SwishForward<T> where T: DataTypeInfo {
+    /// Create a SwishForward instance
     pub fn new() -> SwishForward<T> {
         SwishForward {
             t: PhantomData::<T>
@@ -163,10 +189,12 @@ impl Kernel for SwishForward<f64> {
     const FUNC_PTR: *const c_void = swish_forward_double as *const c_void;
     type Args = ActivationForwardArgs<f64>;
 }
+/// Swish activation function implementation
 pub struct SwishBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SwishBackward<T> where T: DataTypeInfo {
+    /// Create a SwishBackward instance
     pub fn new() -> SwishBackward<T> {
         SwishBackward {
             t: PhantomData::<T>
@@ -185,6 +213,7 @@ pub struct TanhForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> TanhForward<T> where T: DataTypeInfo {
+    /// Create a TanhForward instance
     pub fn new() -> TanhForward<T> {
         TanhForward {
             t: PhantomData::<T>
@@ -199,10 +228,12 @@ impl Kernel for TanhForward<f64> {
     const FUNC_PTR: *const c_void = tanh_forward_double as *const c_void;
     type Args = ActivationForwardArgs<f64>;
 }
+/// Tanh activation function implementation
 pub struct TanhBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> TanhBackward<T> where T: DataTypeInfo {
+    /// Create a TanhBackward instance
     pub fn new() -> TanhBackward<T> {
         TanhBackward {
             t: PhantomData::<T>
@@ -217,10 +248,12 @@ impl Kernel for TanhBackward<f64> {
     const FUNC_PTR: *const c_void = tanh_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<f64>;
 }
+/// SoftMax activation function implementation
 pub struct SoftMaxForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SoftMaxForward<T> where T: DataTypeInfo {
+    /// Create a SoftMaxForward instance
     pub fn new() -> SoftMaxForward<T> {
         SoftMaxForward {
             t: PhantomData::<T>
@@ -239,6 +272,7 @@ pub struct SoftMaxBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SoftMaxBackward<T> where T: DataTypeInfo {
+    /// Create a SoftMaxForward instance
     pub fn new() -> SoftMaxBackward<T> {
         SoftMaxBackward {
             t: PhantomData::<T>

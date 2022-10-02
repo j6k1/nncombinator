@@ -1,3 +1,5 @@
+//! This is a memory-related module for CUDA.
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -13,16 +15,18 @@ use crate::list::ListNode;
 use crate::mem::AsRawSlice;
 
 #[derive(Debug)]
-pub struct Usage {
+struct Usage {
     prev_key: Option<*mut c_void>,
     size: usize,
     allocated: bool
 }
+/// Momory Alloctype (Device or Host)
 #[derive(Debug)]
 pub enum Alloctype {
     Device,
     Host(libc::c_uint)
 }
+/// Cuda Memory pool
 pub struct MemoryPool {
     alloc_type:Alloctype,
     list:ListNode<Usage>,
@@ -33,12 +37,27 @@ pub struct MemoryPool {
 unsafe impl Send for MemoryPool {}
 unsafe impl Sync for MemoryPool {}
 impl MemoryPool {
+    /// # Arguments
+    /// * `alloc_type` - Type of cuda memory to be allocated
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
     pub fn new(alloc_type:Alloctype) -> Result<MemoryPool,CudaError> {
         let size = 1024 * 1024 * 1024;
 
         Self::with_size(size,alloc_type)
     }
 
+    /// # Arguments
+    /// * `size` - Size of memory allocated (in bytes)
+    /// * `alloc_type` - Type of cuda memory to be allocated
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
     pub fn with_size(size:usize,alloc_type:Alloctype) -> Result<MemoryPool,CudaError> {
         match alloc_type {
             Alloctype::Device => {
@@ -80,6 +99,15 @@ impl MemoryPool {
         })
     }
 
+    /// Allocate device memory from memory pool
+    ///
+    /// # Arguments
+    /// * `size` - Size of memory to be allocated (number of elements, not bytes)
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
     pub fn alloc_device<T>(&mut self,size:usize) -> Result<*mut T,CudaError> {
         match self.alloc_type {
             Alloctype::Device => (),
@@ -93,6 +121,15 @@ impl MemoryPool {
         self.allocate(size)
     }
 
+    /// Allocate host memory from memory pool
+    ///
+    /// # Arguments
+    /// * `size` - Size of memory to be allocated (number of elements, not bytes)
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
     pub fn alloc_host<T>(&mut self,size:usize) -> Result<*mut T,CudaError> {
         match self.alloc_type {
             Alloctype::Host(_) => (),
@@ -105,7 +142,15 @@ impl MemoryPool {
 
         self.allocate(size)
     }
-
+    /// Allocate memory from memory pool
+    ///
+    /// # Arguments
+    /// * `size` - Size of memory to be allocated (number of elements, not bytes)
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
     pub fn allocate<T>(&mut self,size:usize) -> Result<*mut T,CudaError> {
         let size = size * size_of::<T>();
 
@@ -171,6 +216,14 @@ impl MemoryPool {
         }
     }
 
+    /// Free up memory
+    /// # Arguments
+    /// * `ptr` - Pointer to the first address of the memory to be freed
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
     pub fn deallocate<T>(&mut self, ptr:*const T) -> Result<(),CudaError> {
         let mut removes = vec![];
 
@@ -247,11 +300,16 @@ impl Drop for MemoryPool {
         }
     }
 }
+/// Mutable object that automatically updates cuda memory when exiting scope
 pub struct ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value: &'a mut T,
     ptr:&'a mut CudaMemoryPoolPtr<U>
 }
 impl<'a,U,T> ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
+    /// Creation of ScopedMut instance
+    /// # Arguments
+    /// * `value` - Wrapping value
+    /// * `ptr` - cuda memory whose value is reflected
     pub fn new(value:&'a mut T, ptr:&'a mut CudaMemoryPoolPtr<U>) -> ScopedMut<'a,U,T> {
         ScopedMut {
             value:value,
@@ -278,11 +336,21 @@ impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<
         self.ptr.memcpy(self.value.as_raw_slice().as_ptr(),len).unwrap();
     }
 }
+/// Object that collectively manages cuda memory paired with a value of a specified type
 pub struct CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value:T,
     ptr:CudaMemoryPoolPtr<U>
 }
 impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+    /// Creation of CachedTensor instance
+    /// # Arguments
+    /// * `value` - Wrapping value
+    /// * `memory_pool` - Memory pool for allocating cuda memory paired with value
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
     pub fn new(value:T,memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CachedTensor<U,T>,CudaError> {
         let len = value.as_raw_slice().len();
 
@@ -296,6 +364,7 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
         })
     }
 
+    /// Returns the ScopedMut object associated with the value it has
     pub fn scoped_mut<'a>(&'a mut self) -> ScopedMut<'a,U,T> {
         ScopedMut {
             value:&mut self.value,

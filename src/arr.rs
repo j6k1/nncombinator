@@ -7,6 +7,7 @@ use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallel
 use crate::error::{IndexOutBoundError, SizeMismatchError};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 
+/// Fixed-length one-dimensional array implementation
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr<T,const N:usize> where T: Default + Clone + Send {
     arr:Box<[T]>
@@ -99,6 +100,7 @@ impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for Arr<T,N> where T: Default + Clo
         &mut self.arr
     }
 }
+/// Fixed-length 2D array implementation
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr2<T,const N1:usize, const N2:usize> where T: Default {
     arr:Box<[T]>
@@ -160,6 +162,7 @@ impl<'a,T,const N1:usize, const N2:usize> AsRawMutSlice<'a,T> for Arr2<T,N1,N2> 
         &mut self.arr
     }
 }
+/// Fixed-length 3D array implementation
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr3<T,const N1:usize, const N2:usize, const N3:usize> where T: Default {
     arr:Box<[T]>
@@ -215,6 +218,7 @@ impl<T,const N1:usize, const N2:usize, const N3:usize> IndexMut<(usize,usize,usi
         &mut self.arr[z * N2 * N3 + y * N3 + x]
     }
 }
+/// Fixed-length 4D array implementation
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr4<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> where T: Default {
     arr:Box<[T]>
@@ -276,6 +280,7 @@ impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> IndexMut<
         &mut self.arr[i * N2 * N3 * N4 + z * N3 * N4 + y * N4 + x]
     }
 }
+/// Implementation of an immutable view of a fixed-length 1D array
 #[derive(Debug,Eq,PartialEq)]
 pub struct ArrView<'a,T,const N:usize> {
     arr:&'a [T]
@@ -293,6 +298,7 @@ impl<'a,T,const N:usize> Deref for ArrView<'a,T,N> {
         &self.arr
     }
 }
+/// Implementation of an mutable view of a fixed-length 1D array
 #[derive(Debug,Eq,PartialEq)]
 pub struct ArrViewMut<'a,T,const N:usize> {
     arr:&'a mut [T]
@@ -313,9 +319,9 @@ impl<'a,T,const N:usize> AsRawSlice<T> for ArrView<'a,T,N> where T: Default + Cl
         &self.arr
     }
 }
+/// Implementation of an immutable iterator for fixed-length 2D arrays
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr2Iter<'a,T,const N:usize>(&'a [T]);
-
 impl<'a,T,const N:usize> Arr2Iter<'a,T,N> {
     const fn element_size(&self) -> usize {
         N
@@ -344,6 +350,7 @@ impl<'a,T,const N:usize> AsRawSlice<T> for Arr2Iter<'a,T,N> {
         &self.0
     }
 }
+/// Implementation of an mutable iterator for fixed-length 2D arrays
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr2IterMut<'a,T,const N:usize>(&'a mut [T]);
 
@@ -370,6 +377,7 @@ impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N> {
         }
     }
 }
+/// Implementation of an immutable iterator for fixed-length 3D arrays
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr3Iter<'a,T,const N1:usize,const N2:usize>(&'a [T]);
 
@@ -394,6 +402,7 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3Iter<'a,T,N1,N2> {
         }
     }
 }
+/// Implementation of an mutable iterator for fixed-length 3D arrays
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr3IterMut<'a,T,const N1:usize,const N2:usize>(&'a mut [T]);
 
@@ -418,6 +427,7 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3IterMut<'a,T,N1,N2> {
         }
     }
 }
+/// Implementation of an immutable iterator for fixed-length 4D arrays
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr4Iter<'a,T,const N1:usize,const N2:usize,const N3:usize>(&'a [T]);
 
@@ -442,6 +452,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4Iter<'a
         }
     }
 }
+/// Implementation of an mutable iterator for fixed-length 4D arrays
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr4IterMut<'a,T,const N1:usize,const N2:usize, const N3:usize>(&'a mut [T]);
 
@@ -466,6 +477,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4IterMut
         }
     }
 }
+/// Array difference information
 #[derive(Debug,Clone)]
 pub struct DiffArr<T,const N:usize> where T: Debug {
     items:Vec<(usize,T)>
@@ -478,6 +490,16 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
         }
     }
 
+    /// Adding Elements
+    /// # Arguments
+    /// * `i` - index
+    /// * `v` - value
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`IndexOutBoundError`]
+    /// [`IndexOutBoundError`]: ../error/struct.IndexOutBoundError
     pub fn push(&mut self,i:usize,v:T) -> Result<(),IndexOutBoundError> {
         if i >= N {
             return Err(IndexOutBoundError::new(N,i));
@@ -522,6 +544,7 @@ impl<T,const N:usize> Div<T> for DiffArr<T,N>
         r
     }
 }
+/// Implementation of fixed-length arrays whose size is not specified by a type parameter
 #[derive(Debug,Eq,PartialEq,Clone)]
 pub struct VecArr<U,T> {
     arr:Box<[U]>,
@@ -529,6 +552,9 @@ pub struct VecArr<U,T> {
     t:PhantomData<T>
 }
 impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
+    /// Create a VecArr instance of the specified size
+    /// # Arguments
+    /// * `size`- Size to be secured
     pub fn with_size(size:usize) -> VecArr<U,Arr<U,N>> {
         let mut arr = Vec::with_capacity(N * size);
 
@@ -591,6 +617,7 @@ impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for VecArr<T,Arr<T,N>> where T: Def
         &mut self.arr
     }
 }
+/// VecArr's Immutable Iterator
 #[derive(Debug,Eq,PartialEq)]
 pub struct VecArrIter<'a,T,const N:usize>(&'a [T]);
 
@@ -617,6 +644,8 @@ impl<'a,T,const N:usize> Iterator for VecArrIter<'a,T,N> {
         }
     }
 }
+
+/// VecArr's mutable Iterator
 #[derive(Debug,Eq,PartialEq)]
 pub struct VecArrIterMut<'a,T,const N:usize>(&'a mut [T]);
 
@@ -661,9 +690,11 @@ impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for Arr<T,N>
         <&[T]>::into_par_iter(&self.arr)
     }
 }
+/// ParallelIterator implementation for Arr2
 #[derive(Debug)]
 pub struct Arr2ParIter<'data,T,const N1:usize,const N2:usize>(&'data [T]);
 
+/// Implementation of plumbing::Producer for Arr2
 #[derive(Debug)]
 pub struct Arr2IterProducer<'data,T,const N1:usize,const N:usize>(&'data [T]);
 
@@ -767,6 +798,7 @@ impl<'data,T, const N1:usize, const N2:usize> IntoParallelRefIterator<'data> for
         Arr2ParIter(&self.arr)
     }
 }
+/// Implementation of ParallelIterator for VecArr
 #[derive(Debug)]
 pub struct VecArrParIter<'data,C,T> {
     arr: &'data [T],
@@ -774,6 +806,7 @@ pub struct VecArrParIter<'data,C,T> {
     len: usize
 }
 
+/// Implementation of plumbing::Producer for VecArr
 #[derive(Debug)]
 pub struct VecArrIterProducer<'data,C,T> {
     arr: &'data [T],

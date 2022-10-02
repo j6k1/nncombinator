@@ -13,18 +13,34 @@ use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
 
+/// Differential input
 #[derive(Debug)]
 pub enum DiffInput<T,U,const NI:usize,const NO:usize>
     where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
+    /// diff
     Diff(T,Arr<U,NO>),
+    /// all
     NotDiff(Arr<U,NI>)
 }
+/// Trait defining the internal implementation of forward propagation of a neural network
 pub trait Forward<I,O> {
+    /// Forward propagation implementation
+    /// # Arguments
+    /// * `input` - input
     fn forward(&self,input:&I) -> O;
 }
+/// Trait defining the implementation of forward propagation of neural networks
 pub trait ForwardAll {
     type Input: Debug;
     type Output: Debug;
+    /// #Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
+    /// [`EvaluateError`]: ../error/enum.EvaluateError
     fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError>;
 }
 pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {

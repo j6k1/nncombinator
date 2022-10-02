@@ -20,14 +20,22 @@ pub mod device;
 pub mod layer;
 pub mod persistence;
 
+/// Trait that defines a stack to store the results computed by forward propagation when training a neural network.
 pub trait Stack {
     type Remaining: Stack;
     type Head;
 
+    /// Returns a tuple of the top item in the stack and the rest of the stack
     fn pop(self) -> (Self::Remaining, Self::Head);
+    /// Returns the result of applying the callback function to the top element of the stack
+    /// # Arguments
+    /// * `f` - Applicable callbacks
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O;
+    /// Returns the result of applying the callback to a stack that does not contain the top element of the stack
+    /// * `f` - Applicable callbacks
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O;
 }
+/// Stack containing elements
 #[derive(Debug,Clone)]
 pub struct Cons<R,T>(pub R,pub T) where R: Stack;
 
@@ -48,6 +56,7 @@ impl<R,T> Stack for Cons<R,T> where R: Stack {
     }
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O { f(&self.0) }
 }
+/// Empty stack, containing no elements
 #[derive(Debug,Clone)]
 pub struct Nil;
 

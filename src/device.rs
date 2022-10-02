@@ -1,3 +1,5 @@
+//! Computational processes used in the implementation of neural networks
+
 use std::marker::PhantomData;
 use std::mem;
 use std::rc::Rc;
@@ -271,6 +273,7 @@ impl CublasContext {
         })
     }
 
+    /// Returns a reference to the raw handle (pointer) of the cublas context
     pub fn id_c(&self) -> &cublasHandle_t {
         self.raw.id_c()
     }
@@ -318,11 +321,13 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
         })
     }
 
+    /// Returns the CublasContext owned by itself
     pub fn cublas(&self) -> &CublasContext {
         &self.cublas
     }
 }
 pub trait DeviceMemoryPool {
+    /// Returns the memory pool object owned by itself
     fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>>;
 }
 impl<U> DeviceMemoryPool for DeviceGpu<U> {

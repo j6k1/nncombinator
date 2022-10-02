@@ -1,3 +1,5 @@
+//! The various layers that make up a neural network and the traits they implement
+
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Index};
@@ -31,7 +33,9 @@ pub trait Forward<I,O> {
 }
 /// Trait defining the implementation of forward propagation of neural networks
 pub trait ForwardAll {
+    /// Input to this layer of the neural network
     type Input: Debug;
+    /// Output from this layer of the neural network
     type Output: Debug;
     /// Forward propagation
     /// #Arguments
@@ -46,6 +50,7 @@ pub trait ForwardAll {
 }
 /// Trait defining the implementation of error back propagation in neural networks
 pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {
+    /// Losses during neural network training
     type LossInput: Debug;
 
     /// Back propagation of errors
@@ -143,7 +148,9 @@ pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
 }
 /// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForwardBase: ForwardAll {
+    /// Input to this layer of the neural network for batch execution
     type BatchInput: Debug;
+    /// Output from this layer of the neural network for batch execution
     type BatchOutput: Debug;
 }
 /// Trait defining the implementation of forward propagation of neural networks by batch processing.
@@ -161,6 +168,7 @@ pub trait BatchForward: BatchForwardBase {
 }
 /// Trait defining an implementation of error back propagation for neural networks with batch processing.
 pub trait BatchBackward<U>: BatchPreTrainBase<U> where U: UnitValue<U> {
+    /// Losses during neural network training for batch execution
     type BatchLossInput: Debug;
     /// Back propagation of errors
     /// #Arguments

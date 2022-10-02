@@ -95,6 +95,7 @@ pub struct SigmoidForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SigmoidForward<T> where T: DataTypeInfo {
+    /// Create a SigmoidForward instance
     pub fn new() -> SigmoidForward<T> {
         SigmoidForward {
             t: PhantomData::<T>
@@ -113,6 +114,7 @@ pub struct SigmoidBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SigmoidBackward<T> where T: DataTypeInfo {
+    /// Create a SigmoidBackward instance
     pub fn new() -> SigmoidBackward<T> {
         SigmoidBackward {
             t: PhantomData::<T>
@@ -132,6 +134,7 @@ pub struct ReLuForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> ReLuForward<T> where T: DataTypeInfo {
+    /// Create a ReLuForward instance
     pub fn new() -> ReLuForward<T> {
         ReLuForward {
             t: PhantomData::<T>
@@ -150,6 +153,7 @@ pub struct ReLuBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> ReLuBackward<T> where T: DataTypeInfo {
+    /// Create a ReLuBackward instance
     pub fn new() -> ReLuBackward<T> {
         ReLuBackward {
             t: PhantomData::<T>
@@ -168,6 +172,7 @@ pub struct SwishForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SwishForward<T> where T: DataTypeInfo {
+    /// Create a SwishForward instance
     pub fn new() -> SwishForward<T> {
         SwishForward {
             t: PhantomData::<T>
@@ -187,6 +192,7 @@ pub struct SwishBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SwishBackward<T> where T: DataTypeInfo {
+    /// Create a SwishBackward instance
     pub fn new() -> SwishBackward<T> {
         SwishBackward {
             t: PhantomData::<T>
@@ -205,6 +211,7 @@ pub struct TanhForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> TanhForward<T> where T: DataTypeInfo {
+    /// Create a TanhForward instance
     pub fn new() -> TanhForward<T> {
         TanhForward {
             t: PhantomData::<T>
@@ -224,6 +231,7 @@ pub struct TanhBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> TanhBackward<T> where T: DataTypeInfo {
+    /// Create a TanhBackward instance
     pub fn new() -> TanhBackward<T> {
         TanhBackward {
             t: PhantomData::<T>
@@ -243,6 +251,7 @@ pub struct SoftMaxForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SoftMaxForward<T> where T: DataTypeInfo {
+    /// Create a SoftMaxForward instance
     pub fn new() -> SoftMaxForward<T> {
         SoftMaxForward {
             t: PhantomData::<T>
@@ -261,6 +270,7 @@ pub struct SoftMaxBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
 impl<T> SoftMaxBackward<T> where T: DataTypeInfo {
+    /// Create a SoftMaxForward instance
     pub fn new() -> SoftMaxBackward<T> {
         SoftMaxBackward {
             t: PhantomData::<T>

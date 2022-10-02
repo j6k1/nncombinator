@@ -1,3 +1,5 @@
+//! Activation Function Implementation
+
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::mem;
@@ -92,6 +94,7 @@ pub struct Identity<U,D> where U: UnitValue<U>, D: Device<U> {
     c:HashSet<&'static str>
 }
 impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of Identity
     pub fn new(_:&D) -> Identity<U,D> {
         let mut c = HashSet::new();
         c.insert("mse");
@@ -190,6 +193,7 @@ pub struct Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
     c:HashSet<&'static str>
 }
 impl<U,D> Sigmoid<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of Sigmoid
     pub fn new(_:&D) -> Sigmoid<U,D> {
         let mut c = HashSet::new();
         c.insert("crossentropy");
@@ -352,6 +356,7 @@ pub struct ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>
 }
 impl<U,D> ReLu<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of ReLu
     pub fn new(_:&D) -> ReLu<U,D> {
         ReLu {
             u: PhantomData::<U>,
@@ -519,6 +524,7 @@ pub struct Swish<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>
 }
 impl<U,D> Swish<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of Swish
     pub fn new(_:&D) -> Swish<U,D> {
         Swish {
             u: PhantomData::<U>,
@@ -677,6 +683,7 @@ pub struct Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>
 }
 impl<U,D> Tanh<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of Tanh
     pub fn new(_:&D) -> Tanh<U,D> {
         Tanh {
             u: PhantomData::<U>,
@@ -836,6 +843,7 @@ pub struct SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
     c:HashSet<&'static str>
 }
 impl<U,D> SoftMax<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of SoftMax
     pub fn new(_:&D) -> SoftMax<U,D> {
         let mut c = HashSet::new();
         c.insert("crossentropymulticlass");

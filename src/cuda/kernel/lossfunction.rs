@@ -49,6 +49,7 @@ pub struct LinearBatchMse<T> where T: AsMutKernelPtr {
     t:PhantomData<T>
 }
 impl<T> LinearBatchMse<T> where T: AsMutKernelPtr {
+    /// Create a LinearBatchMse instance
     pub fn new() -> LinearBatchMse<T> {
         LinearBatchMse {
             t: PhantomData::<T>
@@ -101,6 +102,7 @@ pub struct LinearBatchCrossEntropy<T> where T: AsMutKernelPtr {
     t:PhantomData<T>
 }
 impl<T> LinearBatchCrossEntropy<T> where T: AsMutKernelPtr {
+    /// Create a LinearBatchCrossEntropy instance
     pub fn new() -> LinearBatchCrossEntropy<T> {
         LinearBatchCrossEntropy {
             t: PhantomData::<T>
@@ -152,6 +154,7 @@ pub struct LinearBatchCrossEntropyMulticlass<T> where T: AsMutKernelPtr {
     t:PhantomData<T>
 }
 impl<T> LinearBatchCrossEntropyMulticlass<T> where T: AsMutKernelPtr {
+    /// Create a LinearBatchCrossEntropyMulticlass instance
     pub fn new() -> LinearBatchCrossEntropyMulticlass<T> {
         LinearBatchCrossEntropyMulticlass {
             t: PhantomData::<T>

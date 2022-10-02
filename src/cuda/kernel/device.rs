@@ -49,6 +49,7 @@ pub struct ReduceLinearBatch<T> where T: AsMutKernelPtr {
     t:PhantomData<T>
 }
 impl<T> ReduceLinearBatch<T> where T: AsMutKernelPtr {
+    /// Create a ReduceLinearBatch instance
     pub fn new() -> ReduceLinearBatch<T> {
         ReduceLinearBatch {
             t: PhantomData::<T>
@@ -101,6 +102,7 @@ pub struct LossLinearBatchByCanonicalLink<T> where T: AsMutKernelPtr {
     t:PhantomData<T>
 }
 impl<T> LossLinearBatchByCanonicalLink<T> where T: AsMutKernelPtr {
+    /// Create a LossLinearBatchByCanonicalLink instance
     pub fn new() -> LossLinearBatchByCanonicalLink<T> {
         LossLinearBatchByCanonicalLink {
             t: PhantomData::<T>

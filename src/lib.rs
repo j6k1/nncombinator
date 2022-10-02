@@ -1,3 +1,5 @@
+//! nncombinator is a neural network library that allows type-safe implementation.
+
 extern crate libc;
 extern crate cuda_runtime_sys;
 extern crate rcublas_sys;
@@ -22,7 +24,9 @@ pub mod persistence;
 
 /// Trait that defines a stack to store the results computed by forward propagation when training a neural network.
 pub trait Stack {
+    /// Stack containing elements that do not include the top element of the stack
     type Remaining: Stack;
+    /// Top element of the stack
     type Head;
 
     /// Returns a tuple of the top item in the stack and the rest of the stack

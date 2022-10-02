@@ -11,6 +11,9 @@ pub struct ListNode<T> {
     pub value:T
 }
 impl<T> ListNode<T> {
+    /// Create an instance of ListNode
+    /// # Arguments
+    /// * `value` - item value
     pub fn new(value:T) -> ListNode<T> {
         ListNode {
             next:None,

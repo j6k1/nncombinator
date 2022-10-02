@@ -371,6 +371,7 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
         })
     }
 
+    /// Returns the ScopedMut object associated with the value it has
     pub fn scoped_mut<'a>(&'a mut self) -> ScopedMut<'a,U,T> {
         ScopedMut {
             value:&mut self.value,

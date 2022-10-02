@@ -1,3 +1,5 @@
+//! Array-related data structures such as fixed-length arrays
+
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut, Div, Index, IndexMut, Mul};
@@ -13,6 +15,7 @@ pub struct Arr<T,const N:usize> where T: Default + Clone + Send {
     arr:Box<[T]>
 }
 impl<T,const N:usize> Arr<T,N> where T: Default + Clone + Send {
+    /// Create an instance of Arr
     pub fn new() -> Arr<T,N> {
         let mut arr = Vec::with_capacity(N);
         arr.resize_with(N,Default::default);
@@ -106,6 +109,7 @@ pub struct Arr2<T,const N1:usize, const N2:usize> where T: Default {
     arr:Box<[T]>
 }
 impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2> where T: Default {
+    /// Create an instance of Arr2
     pub fn new() -> Arr2<T,N1,N2> {
         let mut arr = Vec::with_capacity(N1 * N2);
         arr.resize_with(N1*N2,Default::default);
@@ -115,10 +119,12 @@ impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2> where T: Default {
         }
     }
 
+    /// Obtaining a immutable iterator
     pub fn iter<'a>(&'a self) -> Arr2Iter<'a,T,N2> {
         Arr2Iter(&*self.arr)
     }
 
+    /// Obtaining a mutable iterator
     pub fn iter_mut<'a>(&'a mut self) -> Arr2IterMut<'a,T,N2> {
         Arr2IterMut(&mut *self.arr)
     }
@@ -175,6 +181,7 @@ impl<T,const N1:usize,const N2:usize,const N3:usize> Clone for Arr3<T,N1,N2,N3> 
     }
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: Default {
+    /// Create an instance of Arr3
     pub fn new() -> Arr3<T,N1,N2,N3> {
         let mut arr = Vec::with_capacity(N1 * N2 * N3);
         arr.resize_with(N1*N2*N3,Default::default);
@@ -184,10 +191,12 @@ impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: D
         }
     }
 
+    /// Obtaining a immutable iterator
     pub fn iter<'a>(&'a self) -> Arr3Iter<'a,T,N2,N3> {
         Arr3Iter(&*self.arr)
     }
 
+    /// Obtaining a mutable iterator
     pub fn iter_mut<'a>(&'a mut self) -> Arr3IterMut<'a,T,N2,N3> {
         Arr3IterMut(&mut *self.arr)
     }
@@ -231,19 +240,22 @@ impl<T,const N1:usize,const N2:usize,const N3:usize, const N4:usize> Clone for A
     }
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize, const N4:usize> Arr4<T,N1,N2,N3,N4> where T: Default {
-    pub fn new() -> Arr3<T,N1,N2,N3> {
+    /// Create an instance of Arr4
+    pub fn new() -> Arr4<T,N1,N2,N3,N4> {
         let mut arr = Vec::with_capacity(N1 * N2 * N3 * N4);
         arr.resize_with(N1*N2*N3*N4,Default::default);
 
-        Arr3 {
+        Arr4 {
             arr:arr.into_boxed_slice()
         }
     }
 
+    /// Obtaining a immutable iterator
     pub fn iter<'a>(&'a self) -> Arr4Iter<'a,T,N2,N3,N4> {
         Arr4Iter(&*self.arr)
     }
 
+    /// Obtaining a mutable iterator
     pub fn iter_mut<'a>(&'a mut self) -> Arr4IterMut<'a,T,N2,N3,N4> {
         Arr4IterMut(&mut *self.arr)
     }
@@ -323,6 +335,7 @@ impl<'a,T,const N:usize> AsRawSlice<T> for ArrView<'a,T,N> where T: Default + Cl
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr2Iter<'a,T,const N:usize>(&'a [T]);
 impl<'a,T,const N:usize> Arr2Iter<'a,T,N> {
+    /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
         N
     }
@@ -355,6 +368,7 @@ impl<'a,T,const N:usize> AsRawSlice<T> for Arr2Iter<'a,T,N> {
 pub struct Arr2IterMut<'a,T,const N:usize>(&'a mut [T]);
 
 impl<'a,T,const N:usize> Arr2IterMut<'a,T,N> {
+    /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
         N
     }
@@ -382,6 +396,7 @@ impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N> {
 pub struct Arr3Iter<'a,T,const N1:usize,const N2:usize>(&'a [T]);
 
 impl<'a,T,const N1:usize,const N2:usize> Arr3Iter<'a,T,N1,N2> {
+    /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
         N1 * N2
     }
@@ -407,6 +422,7 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3Iter<'a,T,N1,N2> {
 pub struct Arr3IterMut<'a,T,const N1:usize,const N2:usize>(&'a mut [T]);
 
 impl<'a,T,const N1:usize,const N2:usize> Arr3IterMut<'a,T,N1,N2> {
+    /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
         N1 * N2
     }
@@ -432,6 +448,7 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3IterMut<'a,T,N1,N2> {
 pub struct Arr4Iter<'a,T,const N1:usize,const N2:usize,const N3:usize>(&'a [T]);
 
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr4Iter<'a,T,N1,N2,N3> {
+    /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
         N1 * N2 * N3
     }
@@ -457,6 +474,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4Iter<'a
 pub struct Arr4IterMut<'a,T,const N1:usize,const N2:usize, const N3:usize>(&'a mut [T]);
 
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr4IterMut<'a,T,N1,N2,N3> {
+    /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
         N1 * N2 * N3
     }
@@ -484,6 +502,7 @@ pub struct DiffArr<T,const N:usize> where T: Debug {
 }
 
 impl<T,const N:usize> DiffArr<T,N> where T: Debug {
+    /// Create an instance of DiffArr
     pub fn new() -> DiffArr<T,N> {
         DiffArr {
             items:Vec::new()
@@ -510,6 +529,7 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
         Ok(())
     }
 
+    /// Obtaining a immutable iterator
     pub fn iter<'a>(&'a self) -> impl Iterator<Item=&(usize,T)> {
         self.items.iter()
     }
@@ -567,14 +587,17 @@ impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send 
         }
     }
 
+    /// Obtaining a immutable iterator
     pub fn iter(&self) -> VecArrIter<U,N> {
         VecArrIter(&*self.arr)
     }
 
+    /// Obtaining a mutable iterator
     pub fn iter_mut(&mut self) -> VecArrIterMut<U,N> {
         VecArrIterMut(&mut *self.arr)
     }
 
+    /// get the numger of element
     pub fn len(&self) -> usize {
         self.len
     }
@@ -622,6 +645,7 @@ impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for VecArr<T,Arr<T,N>> where T: Def
 pub struct VecArrIter<'a,T,const N:usize>(&'a [T]);
 
 impl<'a,T,const N:usize> VecArrIter<'a,T,N> {
+    /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
         N
     }
@@ -650,6 +674,7 @@ impl<'a,T,const N:usize> Iterator for VecArrIter<'a,T,N> {
 pub struct VecArrIterMut<'a,T,const N:usize>(&'a mut [T]);
 
 impl<'a,T,const N:usize> VecArrIterMut<'a,T,N> {
+    /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
         N
     }
@@ -699,6 +724,7 @@ pub struct Arr2ParIter<'data,T,const N1:usize,const N2:usize>(&'data [T]);
 pub struct Arr2IterProducer<'data,T,const N1:usize,const N:usize>(&'data [T]);
 
 impl<'data,T,const N1:usize, const N2:usize> Arr2IterProducer<'data,T,N1,N2> {
+    /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
         N2
     }
@@ -815,6 +841,7 @@ pub struct VecArrIterProducer<'data,C,T> {
 }
 
 impl<'data,T,const N:usize> VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+    /// Number of elements encompassed by the iterator element
     fn element_size(&self) -> usize {
         N
     }

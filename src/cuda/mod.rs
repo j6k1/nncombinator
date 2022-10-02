@@ -1,3 +1,5 @@
+//! Function to wrap and handle cuda kernel
+
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
@@ -13,7 +15,9 @@ pub mod kernel;
 
 /// Trait to associate a type with a cudnn type
 pub trait DataTypeInfo {
+    /// get cudnn data type
     fn cudnn_data_type() -> DataType;
+    /// get size
     fn size() -> usize;
 }
 impl DataTypeInfo for f32 {
@@ -589,8 +593,10 @@ pub trait KernelArgs {
 }
 /// Trait defining cuda kernel functions
 pub trait Kernel {
+    /// Object to be converted into a list of arguments to be passed to the cuda kernel function
     type Args: KernelArgs;
 
+    /// Pointer to cuda kernel function
     const FUNC_PTR: *const c_void;
 
     /// cuda kernel startup function

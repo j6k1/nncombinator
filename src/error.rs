@@ -1,3 +1,4 @@
+//! Definition of various errors
 use std::{error, fmt, io};
 use std::ffi::CStr;
 use std::fmt::{Debug, Formatter};
@@ -210,6 +211,10 @@ impl error::Error for IndexOutBoundError {
     }
 }
 impl IndexOutBoundError {
+    /// Creation of an instance of IndexOutBoundError
+    /// # Arguments
+    /// * `len` - max len
+    /// * `index` - Specified index
     pub fn new(len:usize,index:usize) -> IndexOutBoundError {
         IndexOutBoundError {
             len:len,
@@ -474,6 +479,7 @@ impl error::Error for CudaRuntimeError {
     }
 }
 impl CudaRuntimeError {
+    /// Creation of an instance of CudaRuntimeError
     pub fn new(raw:cudaError_t) -> CudaRuntimeError {
         CudaRuntimeError {
             raw: raw

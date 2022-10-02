@@ -160,6 +160,12 @@ pub fn free<T>(devptr: *mut T) -> Result<(),rcudnn::Error> {
 /// free up memoru
 /// # Arguments
 /// * `devptr` - Host Memory object to be free
+///
+/// # Errors
+///
+/// This function may return the following errors
+/// * [`rcudnn::Error`]
+///
 pub fn free_host<T>(devptr: *mut T) -> Result<(),rcudnn::Error> {
     match unsafe { rcudnn_sys::cudaFreeHost(devptr as *mut libc::c_void) } {
         cudaError::cudaSuccess => Ok(()),

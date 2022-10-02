@@ -1,3 +1,5 @@
+//! Implementation on persistence of neural network models
+
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -16,19 +18,57 @@ pub struct Linear;
 impl PersistenceType for Specialized {}
 impl PersistenceType for Linear {}
 
+/// Trait that defines the implementation of the ability to save a model to a file
 pub trait SaveToFile<U> {
+    /// Save to File
+    /// # Arguments
+    /// * `file` - Destination path
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`io::Error`]
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error>;
 }
+/// Trait to define an implementation to persist the model in a flat data structure
 pub trait LinearPersistence<U> {
+    /// Read to restore the persisted model
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ConfigReadError`]
+    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     fn read(&mut self) -> Result<U, ConfigReadError>;
+    /// Write to persist model information
+    /// # Arguments
+    /// * `u` - Weight value
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`PersistenceError`]
+    /// [`PersistenceError`]: ../error/enum.PersistenceError
     fn write(&mut self, u:U) -> Result<(), PersistenceError>;
+    /// Has the read position of the persisted information reached EOF?
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ConfigReadError`]
+    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     fn verify_eof(&mut self) -> Result<(),ConfigReadError>;
 }
+/// Types for passing identifiable information about layers and unit boundaries when persisting models
 pub enum UnitOrMarker<U> {
+    /// Not a boundary.
     Unit(U),
+    /// layer boundary
     LayerStart,
+    /// boundary
     UnitsStart
 }
+/// Persistent object for saving to a text file
 pub struct TextFilePersistence<U> where U: FromStr + Sized {
     reader:Option<BufReader<File>>,
     line:Option<Vec<String>>,
@@ -36,6 +76,15 @@ pub struct TextFilePersistence<U> where U: FromStr + Sized {
     data:Vec<UnitOrMarker<U>>
 }
 impl<U> TextFilePersistence<U> where U: FromStr + Sized {
+    /// Create an instance of TextFilePersistence
+    /// # Arguments
+    /// * `file` - File path to be persisted
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ConfigReadError`]
+    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     pub fn new (file:&str) -> Result<TextFilePersistence<U>,ConfigReadError> {
         if Path::new(file).exists() {
             Ok(TextFilePersistence {
@@ -119,6 +168,13 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
         Ok(t)
     }
 
+    /// Has the read position of the persisted information reached EOF?
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ConfigReadError`]
+    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     pub fn verify_eof(&mut self) -> Result<(),ConfigReadError> {
         match self.reader {
             Some(ref mut reader) => {
@@ -149,11 +205,21 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
     }
 }
 impl<U> TextFilePersistence<U> where U: FromStr + Sized, ConfigReadError: From<<U as FromStr>::Err> {
+    /// Read the weight values from a file
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ConfigReadError`]
+    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     pub fn read(&mut self) -> Result<U, ConfigReadError> {
         Ok(self.next_token()?.parse::<U>()?)
     }
 }
 impl<U> TextFilePersistence<U> where U: FromStr + Sized {
+    /// Layer weights are added to the end of the internal buffer
+    /// # Arguments
+    /// * `v` - Weight value
     pub fn write(&mut self,v:UnitOrMarker<U>) {
         self.data.push(v);
     }
@@ -179,11 +245,22 @@ impl<U> SaveToFile<U> for TextFilePersistence<U> where U: FromStr + Sized + Disp
         Ok(())
     }
 }
+/// Trait that defines a Persistence implementation
+/// that stores and loads in fixed length record format.
 pub struct BinFilePersistence<U> {
     reader:Option<BufReader<File>>,
     data:Vec<U>
 }
 impl<U> BinFilePersistence<U> {
+    /// Create an instance of TextFilePersistence
+    /// # Arguments
+    /// * `file` - File path to be persisted
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ConfigReadError`]
+    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     pub fn new (file:&str) -> Result<BinFilePersistence<U>, ConfigReadError> {
         if Path::new(file).exists() {
             Ok(BinFilePersistence {

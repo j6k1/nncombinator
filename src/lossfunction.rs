@@ -1,3 +1,5 @@
+//! Implementing the loss function of a neural network
+
 use std::marker::PhantomData;
 use cuda_runtime_sys::dim3;
 use libc::c_uint;
@@ -10,9 +12,13 @@ use crate::error::{CudaError, TrainingError};
 use crate::mem::AsRawSlice;
 use crate::UnitValue;
 
+/// Trait that defines the implementation of the loss function used in neural networks during training.
 pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy + UnitValue<U> {
+    /// Differentiation of loss functions
     fn derive(&self,r:U,t:U) -> U;
+    /// Applying the loss function
     fn apply(&self,r:U,t:U) -> U;
+    /// this loss function name
     fn name(&self) -> &'static str;
 }
 pub trait BatchLossFunction<U,D>: LossFunction<U> + Send + Sync + 'static
@@ -28,6 +34,7 @@ pub trait BatchLossFunction<U,D>: LossFunction<U> + Send + Sync + 'static
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
+/// Mse implementation
 pub struct Mse<U> where U: Clone + Copy + UnitValue<U> {
     u:PhantomData<U>
 }
@@ -74,6 +81,7 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for Mse<U> where U: Clone + Copy + Uni
         Ok(args.actual.read_to_vec()?.into())
     }
 }
+/// CrossEntropy implementation
 pub struct CrossEntropy<U>  where U: Clone + Copy + UnitValue<U> {
     u:PhantomData<U>
 }
@@ -120,6 +128,7 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropy<U> where U: Clone + C
         Ok(args.actual.read_to_vec()?.into())
     }
 }
+/// CrossEntropyMulticlass implementation
 pub struct CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {
     u:PhantomData<U>
 }

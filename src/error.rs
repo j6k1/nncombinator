@@ -4,18 +4,33 @@ use std::fmt::{Debug, Formatter};
 use std::num::ParseFloatError;
 use cuda_runtime_sys::cudaError_t;
 
+/// Errors made during neural network training
 #[derive(Debug)]
 pub enum TrainingError {
+    /// Tried to get two or more mutable references from Arc in multiple threads at the same time
+    /// (this error is currently not used within crate)
     ReferenceCountError,
+    /// Errors occurring within the launched external thread
+    /// (this error is currently not used within crate)
     ThreadError(String),
+    /// Errors caused by generating fixed-length arrays from different size Vecs
     SizeMismatchError(SizeMismatchError),
+    /// Illegal input value
     InvalidInputError(String),
+    /// Error during forward propagation of neural network
     EvaluateError(EvaluateError),
+    /// The value is too large to convert.
+    /// (this error is currently not used within crate)
     ToLargeInput(f64),
+    /// Error in cuda processing
     CudaError(CudaError),
+    /// Error in cublas processing
     CublasError(rcublas::error::Error),
+    /// Error in cudnn processing
     CudnnError(rcudnn::Error),
+    /// Error in cuda runtime
     CudaRuntimeError(CudaRuntimeError),
+    /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidStateError(InvalidStateError)
 }
 impl fmt::Display for TrainingError {
@@ -68,10 +83,14 @@ impl error::Error for TrainingError {
         }
     }
 }
+/// Error when reading settings
 #[derive(Debug)]
 pub enum ConfigReadError {
+    /// IO Error
     IOError(io::Error),
+    /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidState(String),
+    /// Error when trying to parse a numeric string into numbers
     ParseFloatError(ParseFloatError)
 }
 impl fmt::Display for ConfigReadError {
@@ -145,6 +164,7 @@ impl From<ParseFloatError> for ConfigReadError {
         ConfigReadError::ParseFloatError(err)
     }
 }
+/// Errors caused by generating fixed-length arrays from different size Vecs
 #[derive(Debug)]
 pub struct SizeMismatchError(pub usize, pub usize);
 impl fmt::Display for SizeMismatchError {
@@ -165,6 +185,7 @@ impl error::Error for SizeMismatchError {
         None
     }
 }
+/// Error when accessing array out of range
 #[derive(Debug)]
 pub struct IndexOutBoundError {
     len:usize,
@@ -196,13 +217,20 @@ impl IndexOutBoundError {
         }
     }
 }
+/// Error during forward propagation of neural network
 #[derive(Debug)]
 pub enum EvaluateError {
+    /// Error in cuda processing
     CudaError(CudaError),
+    /// Error in cublas processing
     CublasError(rcublas::error::Error),
+    /// Error in cudnn processing
     CudnnError(rcudnn::Error),
+    /// Error in cuda runtime
     CudaRuntimeError(CudaRuntimeError),
+    /// Errors caused by generating fixed-length arrays from different size Vecs
     SizeMismatchError(SizeMismatchError),
+    /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidStateError(InvalidStateError)
 }
 impl fmt::Display for EvaluateError {
@@ -287,12 +315,19 @@ impl error::Error for PersistenceError {
         None
     }
 }
+
+/// Error in cuda processing
 #[derive(Debug)]
 pub enum CudaError {
+    /// Memory allocation failed.
     AllocFailed(String),
+    /// Error in cudnn processing
     CudnnError(rcudnn::Error),
+    /// Error in cublas processing
     CublasError(rcublas::error::Error),
+    /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidState(String),
+    /// There is a problem with the implementation logic of the program
     LogicError(String)
 }
 impl fmt::Display for CudaError {
@@ -337,10 +372,14 @@ impl From<rcublas::Error> for CudaError {
         CudaError::CublasError(err)
     }
 }
+/// Errors that occur in processes implemented in objects that implement Device Traits
 #[derive(Debug)]
 pub enum DeviceError {
+    /// Error in cuda processing
     CudaError(CudaError),
+    /// Error in cublas processing
     CublasError(rcublas::error::Error),
+    /// Error in cudnn processing
     CudnnError(rcudnn::Error),
 }
 impl fmt::Display for DeviceError {
@@ -384,6 +423,7 @@ impl From<rcudnn::Error> for DeviceError {
         DeviceError::CudnnError(err)
     }
 }
+/// Errors that occur when the internal state of a particular object or other object is abnormal.
 #[derive(Debug)]
 pub struct InvalidStateError(pub String);
 impl fmt::Display for InvalidStateError {
@@ -408,6 +448,7 @@ impl error::Error for InvalidStateError {
         }
     }
 }
+/// Error in cuda runtime
 pub struct CudaRuntimeError {
     raw: cudaError_t,
 }

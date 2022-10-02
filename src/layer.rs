@@ -33,6 +33,7 @@ pub trait Forward<I,O> {
 pub trait ForwardAll {
     type Input: Debug;
     type Output: Debug;
+    /// Forward propagation
     /// #Arguments
     /// * `input` - input
     ///
@@ -43,65 +44,204 @@ pub trait ForwardAll {
     /// [`EvaluateError`]: ../error/enum.EvaluateError
     fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError>;
 }
+/// Trait defining the implementation of error back propagation in neural networks
 pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {
     type LossInput: Debug;
 
+    /// Back propagation of errors
+    /// #Arguments
+    /// * `input` - loss
+    /// * `stack` - Stack to store calculation results at upper layers
+    /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
+    /// * `lossf` - loss function
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    /// [`TrainingError`]: ../error/enum.TrainingError
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::LossInput, stack:Self::OutStack, optimizer:&mut OP, lossf:&L) -> Result<(), TrainingError>;
     fn is_canonical_link<L: LossFunction<U>>(&self,_:&L) -> bool {
         false
     }
 }
+/// Trait defining the calculation of the error during error back propagation.
 pub trait Loss<U>: BackwardAll<U> where U: UnitValue<U> {
-    fn loss<L: LossFunction<U>>(&mut self, loss:Self::LossInput, _:&L, stack:Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
+    /// Error Calculation
+    /// # Arguments
+    /// * `loss` - Lower layer error
+    /// * `_lossf` - loss function
+    /// * `stack` - Stack to store calculation results at upper layers
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    /// [`TrainingError`]: ../error/enum.TrainingError
+    fn loss<L: LossFunction<U>>(&mut self, loss:Self::LossInput, _lossf:&L, stack:Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         Ok((stack,loss))
     }
 }
+/// Characteristics defining the internal implementation of the error back propagation method in neural networks
 pub trait Backward<U,I,O> where U: UnitValue<U> {
+    /// Back propagation of errors
+    /// #Arguments
+    /// * `input` - loss
     fn backward(&mut self, input:I) -> O;
 }
+/// Trait that defines the process of forward propagation performed prior to the process of error back propagation.
 pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
+    /// Type of object to keep the results of forward propagation needed to perform error back propagation.
     type OutStack: Stack<Head=Self::Output> + Debug + Sized + Send + Sync + 'static;
+    /// Perform forward propagation required to perform error back propagation
+    /// #Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
+    /// [`EvaluateError`]: ../error/enum.EvaluateError
     fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError>;
 }
+/// Trait that defines the function of differential application of inputs in the process of forward propagation to neural networks.
 pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
+    /// Forward propagation (differential application)
+    /// #Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
+    /// [`EvaluateError`]: ../error/enum.EvaluateError
     fn forward_diff(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError>;
 }
+/// Trait that defines the learning process of a neural network.
 pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
+    /// Train neural networks.
+    /// #Arguments
+    /// * `expected` - expected value
+    /// * `input` - loss
+    /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
+    /// * `lossf` - loss function
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    /// [`TrainingError`]: ../error/enum.TrainingError
     fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, optimizer:&mut OP, lossf:&L) -> Result<U, TrainingError>;
 }
+/// Trait that defines the function to query information to calculate the difference when applying the difference of neural networks.
 pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
     type DiffInput: Debug;
+    /// Data inquiry for creating difference information
+    /// # Arguments
+    /// * `stack` - Stack to store calculation results at upper layers
     fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput;
 }
+/// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForwardBase: ForwardAll {
     type BatchInput: Debug;
     type BatchOutput: Debug;
 }
+/// Trait defining the implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForward: BatchForwardBase {
+    /// Forward propagation
+    /// #Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    /// [`TrainingError`]: ../error/enum.TrainingError
     fn batch_forward(&self,input:Self::BatchInput) -> Result<Self::BatchOutput, TrainingError>;
 }
+/// Trait defining an implementation of error back propagation for neural networks with batch processing.
 pub trait BatchBackward<U>: BatchPreTrainBase<U> where U: UnitValue<U> {
     type BatchLossInput: Debug;
+    /// Back propagation of errors
+    /// #Arguments
+    /// * `input` - loss
+    /// * `stack` - Stack to store calculation results at upper layers
+    /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
+    /// * `lossf` - loss function
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    /// [`TrainingError`]: ../error/enum.TrainingError
     fn batch_backward<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, optimizer:&mut OP, lossf:&L) -> Result<(), TrainingError>;
 }
+/// Trait that defines the implementation of the process of calculating the loss during error back propagation of neural networks by batch processing.
 pub trait BatchLoss<U>: BatchBackward<U> + Loss<U> where U: UnitValue<U> {
-    fn batch_loss<L: LossFunction<U>>(&self, loss:Self::BatchLossInput, _:&L, stack:Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
+    /// Error Calculation
+    /// # Arguments
+    /// * `loss` - Lower layer error
+    /// * `_lossf` - loss function
+    /// * `stack` - Stack to store calculation results at upper layers
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    /// [`TrainingError`]: ../error/enum.TrainingError
+    fn batch_loss<L: LossFunction<U>>(&self, loss:Self::BatchLossInput, _lossf:&L, stack:Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
         Ok((stack,loss))
     }
 }
+/// Trait that defines the relevant type of implementation that
+/// calculates the results of forward propagation prior to processing
+/// the error back propagation of the neural network by batch processing.
 pub trait BatchPreTrainBase<U>: BatchForwardBase + PreTrain<U> where U: UnitValue<U> {
     type BatchOutStack: Stack<Head=Self::BatchOutput> + Sized + Debug;
 }
+/// Trait that defines an implementation that calculates
+/// the results of forward propagation prior to
+/// the error back propagation process of a neural network through batch processing.
 pub trait BatchPreTrain<U>: BatchPreTrainBase<U> + BatchForwardBase + BatchForward + where U: UnitValue<U> {
+    /// Perform forward propagation required to perform error back propagation
+    /// #Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    /// [`TrainingError`]: ../error/enum.TrainingError
     fn batch_pre_train(&self, input:Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError>;
 }
+/// Trait that defines the implementation of neural network training by batch processing.
 pub trait BatchTrain<U,D>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + PreTrain<U> where U: UnitValue<U>, D: Device<U> {
+    /// Train neural networks.
+    /// #Arguments
+    /// * `expected` - expected value
+    /// * `input` - loss
+    /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
+    /// * `lossf` - loss function
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    /// [`TrainingError`]: ../error/enum.TrainingError
     fn batch_train<OP: Optimizer<U>,L: BatchLossFunction<U,D>>(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, optimizer:&mut OP, lossf:&L) -> Result<U, TrainingError>;
 }
+/// Trait that defines the ability to add layers to a neural network.
 pub trait AddLayer: ForwardAll where Self: Sized {
+    /// Adding Layers
+    /// # Arguments
+    /// * `f` - Callback that takes itself and returns an object with an internally generated layer added
     fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
 }
+/// Trait that defines the ability to add a layer with learning capabilities to a neural network.
 pub trait AddLayerTrain<U>: PreTrain<U> where Self: Sized, U: UnitValue<U> {
+    /// Adding Layers
+    /// # Arguments
+    /// * `f` - Callback that takes itself and returns an object with an internally generated layer added
     fn add_layer_train<C,F>(self,f:F) -> C where C: Train<U>, F: FnOnce(Self) -> C;
 }
 impl<T> AddLayer for T where T: ForwardAll + Sized {
@@ -114,10 +254,30 @@ impl<T,U> AddLayerTrain<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
         f(self)
     }
 }
+/// Trait defined functionality that attempts to add layers to a neural network.
 pub trait TryAddLayer: ForwardAll where Self: Sized {
+    /// Adding Layers
+    /// # Arguments
+    /// * `f` - Callback that takes itself and returns an object of type Result with an internally generated layer added
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`DeviceError`]
+    /// [`DeviceError`]: ../error/enum.DeviceError
     fn try_add_layer<C,F>(self,f:F) -> Result<C,DeviceError> where C: ForwardAll, F: FnOnce(Self) -> Result<C,DeviceError>;
 }
+/// Trait defined functionality that attempts to add a layer of trainable functionality to a neural network
 pub trait TryAddLayerTrain<U>: PreTrain<U> where Self: Sized, U: UnitValue<U> {
+    /// Adding Layers
+    /// # Arguments
+    /// * `f` - Callback that takes itself and returns an object of type Result with an internally generated layer added
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`DeviceError`]
+    /// [`DeviceError`]: ../error/enum.DeviceError
     fn try_add_layer_train<C,F>(self,f:F) -> Result<C,DeviceError> where C: Train<U>, F: FnOnce(Self) -> Result<C,DeviceError>;
 }
 impl<T> TryAddLayer for T where T: ForwardAll + Sized {
@@ -215,6 +375,7 @@ impl<U,O,LI> BatchBackward<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: D
     }
 }
 impl<U,O,LI> BatchLoss<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {}
+/// Activation layer Implementation
 pub struct ActivationLayer<U,P,A,I,PI,D> where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
                                                U: UnitValue<U>,
                                                D: Device<U>,
@@ -235,6 +396,10 @@ impl<U,P,A,I,PI,D> ActivationLayer<U,P,A,I,PI,D>
           A: Activation<U,PI,PI,D>,
           PI: Debug,
           I: Debug + Send + Sync {
+    /// Create and return an instance of ActivationLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
     pub fn new(parent:P,f:A,device:&D) -> ActivationLayer<U,P,A,I,PI,D> {
         ActivationLayer {
             parent:parent,
@@ -456,6 +621,7 @@ impl<U,P,A,I,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,
         Ok((Cons(s,o),r))
     }
 }
+/// Layer implementation of the output layer (linear layer)
 pub struct LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
@@ -474,6 +640,10 @@ impl<U,P,D,I,IO> LinearOutputLayer<U,P,D,I,IO>
           D: Device<U>,
           IO: Debug,
           I: Debug + Send + Sync {
+    /// Create and return an instance of LinearOutputLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
     pub fn new(parent:P,device:&D) -> LinearOutputLayer<U,P,D,I,IO> {
         LinearOutputLayer {
             u:PhantomData::<U>,
@@ -685,6 +855,7 @@ impl<U,P,D,I,const N:usize> BatchTrain<U,D> for LinearOutputLayer<U,P,D,I,Arr<U,
         Ok(total_loss)
     }
 }
+/// Linear Layer Implementation
 pub struct LinearLayer<U,C,P,D,I,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
@@ -699,6 +870,12 @@ impl<U,P,I,const NI:usize,const NO:usize> LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCp
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync {
+    /// Create and return an instance of LinearLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    /// * `ui` - Callback to generate weight of unit
+    /// * `bi` - Callback to generate weight of bias
     pub fn new<UI: FnMut() -> U, BI: FnMut() -> U>(parent:P,device:&DeviceCpu<U>,mut ui:UI,mut bi:BI)
                                                    -> LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO> {
 
@@ -728,6 +905,12 @@ impl<U,P,I,const NI:usize,const NO:usize> LinearLayer<U,CachedTensor<U,Arr2<U,NI
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           DeviceGpu<U>: Device<U> {
+    /// Attempt to create and return an instance of LinearLayer.
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    /// * `ui` - Callback to generate weight of unit
+    /// * `bi` - Callback to generate weight of bias
     pub fn new<UI: FnMut() -> U, BI: FnMut() -> U>(parent:P,device:&DeviceGpu<U>,mut ui:UI,mut bi:BI)
         -> Result<LinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>,CudaError> {
 
@@ -1202,6 +1385,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,CachedT
           DeviceGpu<U>: Device<U>,
           Self: Loss<U> + BatchBackward<U> {
 }
+/// Implementation of differentially applicable linear layers
 pub struct DiffLinearLayer<U,C,P,D,I,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
@@ -1217,6 +1401,12 @@ impl<U,P,I,const NI:usize,const NO:usize> DiffLinearLayer<U,Arr2<U,NI,NO>,P,Devi
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync {
+    /// Create and return an instance of DiffLinearLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    /// * `ui` - Callback to generate weight of unit
+    /// * `bi` - Callback to generate weight of bias
     pub fn new<UI: FnMut() -> U, BI: FnMut() -> U>(parent:P,device:&DeviceCpu<U>,mut ui:UI,mut bi:BI)
                                                    -> DiffLinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO> {
 

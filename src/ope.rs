@@ -1,4 +1,4 @@
-///! Definition and implementation of various operations on Units
+//! Definition and implementation of various operations on Units
 
 use std::ops::{Add, Mul, Sub, Div, AddAssign, Neg};
 use std::fmt::Debug;

@@ -20,6 +20,7 @@ pub struct ReduceLinearBatchArgs<T> where T: AsMutKernelPtr {
 }
 /// Create an instance of an object representing the argument list during convolution computation.
 impl<T> ReduceLinearBatchArgs<T> where T: AsMutKernelPtr {
+    /// Create a ReduceLinearBatchArgs instance
     /// # Arguments
     /// * `input` - input
     /// * `output` - output
@@ -74,6 +75,7 @@ pub struct LossLinearBatchByCanonicalLinkArgs<T> where T: AsMutKernelPtr {
 }
 /// Create an instance of an object that represents the argument list for the canonical link application calculation.
 impl<T> LossLinearBatchByCanonicalLinkArgs<T> where T: AsMutKernelPtr {
+    /// Create a LossLinearBatchByCanonicalLinkArgs instance
     /// # Arguments
     /// * `expected` - Expected Value
     /// * `actual` - Actual Value

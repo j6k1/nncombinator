@@ -211,7 +211,6 @@ fn launch_with_stream(func: *const c_void,
 ///
 /// This function may return the following errors
 /// * [`CudaRuntimeError`]
-/// [`CudaRuntimeError`]: ../../error/enum.CudaRuntimeError
 pub fn launch(func: *const c_void,
               grid_dim: dim3,
               block_dim: dim3,

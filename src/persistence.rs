@@ -9,7 +9,23 @@ use std::str::FromStr;
 use crate::error::*;
 
 pub trait Persistence<U,P,K> where K: PersistenceType {
+    /// Load Model
+    /// # Arguments
+    /// * `persistence` - model persistent object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ConfigReadError`]
     fn load(&mut self, persistence:&mut P) -> Result<(),ConfigReadError>;
+    /// Save Model
+    /// # Arguments
+    /// * `persistence` - model persistent object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`PersistenceError`]
     fn save(&mut self, persistence:&mut P) -> Result<(), PersistenceError>;
 }
 pub trait PersistenceType {}
@@ -38,7 +54,6 @@ pub trait LinearPersistence<U> {
     ///
     /// This function may return the following errors
     /// * [`ConfigReadError`]
-    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     fn read(&mut self) -> Result<U, ConfigReadError>;
     /// Write to persist model information
     /// # Arguments
@@ -48,7 +63,6 @@ pub trait LinearPersistence<U> {
     ///
     /// This function may return the following errors
     /// * [`PersistenceError`]
-    /// [`PersistenceError`]: ../error/enum.PersistenceError
     fn write(&mut self, u:U) -> Result<(), PersistenceError>;
     /// Has the read position of the persisted information reached EOF?
     ///
@@ -56,7 +70,6 @@ pub trait LinearPersistence<U> {
     ///
     /// This function may return the following errors
     /// * [`ConfigReadError`]
-    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     fn verify_eof(&mut self) -> Result<(),ConfigReadError>;
 }
 /// Types for passing identifiable information about layers and unit boundaries when persisting models
@@ -84,7 +97,6 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
     ///
     /// This function may return the following errors
     /// * [`ConfigReadError`]
-    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     pub fn new (file:&str) -> Result<TextFilePersistence<U>,ConfigReadError> {
         if Path::new(file).exists() {
             Ok(TextFilePersistence {
@@ -174,7 +186,6 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
     ///
     /// This function may return the following errors
     /// * [`ConfigReadError`]
-    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     pub fn verify_eof(&mut self) -> Result<(),ConfigReadError> {
         match self.reader {
             Some(ref mut reader) => {
@@ -211,7 +222,6 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized, ConfigReadError: From<<
     ///
     /// This function may return the following errors
     /// * [`ConfigReadError`]
-    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     pub fn read(&mut self) -> Result<U, ConfigReadError> {
         Ok(self.next_token()?.parse::<U>()?)
     }
@@ -260,7 +270,6 @@ impl<U> BinFilePersistence<U> {
     ///
     /// This function may return the following errors
     /// * [`ConfigReadError`]
-    /// [`ConfigReadError`]: ../error/enum.ConfigReadError
     pub fn new (file:&str) -> Result<BinFilePersistence<U>, ConfigReadError> {
         if Path::new(file).exists() {
             Ok(BinFilePersistence {

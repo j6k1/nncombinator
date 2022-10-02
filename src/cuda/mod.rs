@@ -45,8 +45,10 @@ pub(crate) mod private {
         fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void;
     }
 }
+/// Trait defining the conversion to an immutable pointer type passed to the cuda kernel
 pub trait AsKernelPtr: private::AsKernelPtrBase {
 }
+/// Trait defining the conversion to an smutable pointer type passed to the cuda kernel
 pub trait AsMutKernelPtr: private::AsMutKernelPtrBase {
 }
 impl<T> AsKernelPtr for T where T: private::AsKernelPtrBase {}
@@ -241,8 +243,38 @@ pub trait Memory<T: Default + Debug>: AsMutVoidPtr {
 }
 /// Trait defining cuda's asynchronous memory operations
 pub trait MemoryAsync<T: Default + Debug>: AsMutVoidPtr {
+    /// Memory Copy
+    /// # Arguments
+    /// * `p` - Pointer to source memory
+    /// * `len` - Number of elements of the value to be copied
+    /// * `stream` - cuda stream
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`rcudnn::Error`]
+    ///
     fn memcpy_async(&mut self, p:*const T,len:usize,stream:cudaStream_t) -> Result<usize,rcudnn::Error>;
+    /// Read memory as Vec
+    /// # Arguments
+    /// * `stream` - cuda stream
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`rcudnn::Error`]
+    ///
     fn read_to_vec_async(&mut self,stream:cudaStream_t) -> Result<Vec<T>,rcudnn::Error>;
+    /// Read memory as Vec with size specified
+    /// # Arguments
+    /// * `stream` - cuda stream
+    /// * `size` - Number of elements of the value to be read
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`rcudnn::Error`]
+    ///
     fn read_to_vec_with_size_async(&mut self,stream: cudaStream_t,size:usize) -> Result<Vec<T>,rcudnn::Error>;
 }
 /// Wrapper to handle cuda device memory
@@ -259,7 +291,6 @@ impl<T> CudaPtr<T> {
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    /// [`CudaError`]: ../../error/enum.CudaError
     pub fn new(size: usize) -> Result<CudaPtr<T>, CudaError> {
         let ptr: *mut T = ffi::malloc(size)?;
 
@@ -344,12 +375,12 @@ impl<T> CudaHostPtr<T> {
     /// Create an instance of CudaHostPtr
     /// # Arguments
     /// * `size`- Number of value elements to be allocated
+    /// * `flags` - Requested properties of allocated memory
     ///
     /// # Errors
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    /// [`CudaError`]: ../../error/enum.CudaError
     pub fn new(size: usize, flags:libc::c_uint) -> Result<CudaHostPtr<T>, CudaError> {
         let ptr: *mut T = ffi::malloc_host(size,flags)?;
 
@@ -474,7 +505,6 @@ impl<T> CudaMemoryPoolPtr<T> {
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    /// [`CudaError`]: ../../error/enum.CudaError
     pub fn new(size: usize,memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CudaMemoryPoolPtr<T>, CudaError> {
         let ptr:* mut T = match memory_pool.lock() {
             Ok(mut memory_pool) => {
@@ -610,7 +640,6 @@ pub trait Kernel {
     ///
     /// This function may return the following errors
     /// * [`CudaRuntimeError`]
-    /// [`CudaRuntimeError`]: ../../error/enum.CudaRuntimeError
     fn launch(&mut self,grid_dim:dim3,block_dim:dim3,args:&mut Self::Args,shared_mem:usize) -> Result<(),CudaRuntimeError> {
         ffi::launch(Self::FUNC_PTR,
                      grid_dim,

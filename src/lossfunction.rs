@@ -15,14 +15,25 @@ use crate::UnitValue;
 /// Trait that defines the implementation of the loss function used in neural networks during training.
 pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy + UnitValue<U> {
     /// Differentiation of loss functions
+    /// # Arguments
+    /// * `r` - actual value
+    /// * `t` - expected value
     fn derive(&self,r:U,t:U) -> U;
     /// Applying the loss function
+    /// # Arguments
+    /// * `r` - actual value
+    /// * `t` - expected value
     fn apply(&self,r:U,t:U) -> U;
     /// this loss function name
     fn name(&self) -> &'static str;
 }
+/// Trait defining the implementation of the loss function with batch processing
 pub trait BatchLossFunction<U,D>: LossFunction<U> + Send + Sync + 'static
     where U: Clone + Copy + UnitValue<U>, D: Device<U> {
+    /// Differentiation of loss functions
+    /// # Arguments
+    /// * `expected` - expected value
+    /// * `actual` - actual value
     fn batch_linear_derive<const N: usize>(&self,_: &D,expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
                                            -> Result<VecArr<U,Arr<U, N>>, TrainingError> {
         Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
@@ -39,6 +50,7 @@ pub struct Mse<U> where U: Clone + Copy + UnitValue<U> {
     u:PhantomData<U>
 }
 impl<U> Mse<U> where U: UnitValue<U> {
+    /// Create a Mse instance
     pub fn new() -> Mse<U> {
         Mse {
             u:PhantomData::<U>
@@ -86,6 +98,7 @@ pub struct CrossEntropy<U>  where U: Clone + Copy + UnitValue<U> {
     u:PhantomData<U>
 }
 impl<U> CrossEntropy<U> where U: Clone + Copy + UnitValue<U> {
+    /// Create a CrossEntropy instance
     pub fn new() -> CrossEntropy<U> {
         CrossEntropy {
             u:PhantomData::<U>
@@ -132,7 +145,8 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropy<U> where U: Clone + C
 pub struct CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {
     u:PhantomData<U>
 }
-impl<U> CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U>{
+impl<U> CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {
+    /// Create a CrossEntropyMulticlass instance
     pub fn new() -> CrossEntropyMulticlass<U> {
         CrossEntropyMulticlass {
             u:PhantomData::<U>

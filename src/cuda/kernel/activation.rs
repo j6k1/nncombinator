@@ -35,6 +35,7 @@ pub struct ActivationForwardArgs<T> where T: DataTypeInfo {
 }
 /// Create an instance of an object representing the argument list at the time of activation function forward.
 impl<T> ActivationForwardArgs<T> where T: DataTypeInfo {
+    /// Create a ActivationForwardArgs instance
     /// #Arguments
     /// * `input_output` - Input buffer (shared with output buffer)
     /// * `units_len` - count of inputs and outputs of linear layer weights
@@ -66,6 +67,7 @@ pub struct ActivationBackwardArgs<T> where T: DataTypeInfo {
 }
 /// Create an instance of an object representing the list of arguments during error back propagation of the activation function.
 impl<T> ActivationBackwardArgs<T> where T: DataTypeInfo {
+    /// Create a ActivationBackwardArgs instance
     /// #Arguments
     /// * `u` - Input values from upper layers
     /// * `loss` - loss value

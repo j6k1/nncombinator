@@ -44,7 +44,6 @@ impl MemoryPool {
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    /// [`CudaError`]: ../../error/enum.CudaError
     pub fn new(alloc_type:Alloctype) -> Result<MemoryPool,CudaError> {
         let size = 1024 * 1024 * 1024;
 
@@ -59,7 +58,6 @@ impl MemoryPool {
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    /// [`CudaError`]: ../../error/enum.CudaError
     pub fn with_size(size:usize,alloc_type:Alloctype) -> Result<MemoryPool,CudaError> {
         match alloc_type {
             Alloctype::Device => {
@@ -110,7 +108,6 @@ impl MemoryPool {
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    /// [`CudaError`]: ../../error/enum.CudaError
     pub fn alloc_device<T>(&mut self,size:usize) -> Result<*mut T,CudaError> {
         match self.alloc_type {
             Alloctype::Device => (),
@@ -133,7 +130,6 @@ impl MemoryPool {
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    /// [`CudaError`]: ../../error/enum.CudaError
     pub fn alloc_host<T>(&mut self,size:usize) -> Result<*mut T,CudaError> {
         match self.alloc_type {
             Alloctype::Host(_) => (),
@@ -155,7 +151,6 @@ impl MemoryPool {
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    /// [`CudaError`]: ../../error/enum.CudaError
     pub fn allocate<T>(&mut self,size:usize) -> Result<*mut T,CudaError> {
         let size = size * size_of::<T>();
 
@@ -229,7 +224,6 @@ impl MemoryPool {
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    /// [`CudaError`]: ../../error/enum.CudaError
     pub fn deallocate<T>(&mut self, ptr:*const T) -> Result<(),CudaError> {
         let mut removes = vec![];
 
@@ -357,7 +351,6 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    /// [`CudaError`]: ../../error/enum.CudaError
     pub fn new(value:T,memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CachedTensor<U,T>,CudaError> {
         let len = value.as_raw_slice().len();
 

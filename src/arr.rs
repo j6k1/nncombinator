@@ -518,7 +518,6 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
     ///
     /// This function may return the following errors
     /// * [`IndexOutBoundError`]
-    /// [`IndexOutBoundError`]: ../error/struct.IndexOutBoundError
     pub fn push(&mut self,i:usize,v:T) -> Result<(),IndexOutBoundError> {
         if i >= N {
             return Err(IndexOutBoundError::new(N,i));
@@ -597,7 +596,7 @@ impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send 
         VecArrIterMut(&mut *self.arr)
     }
 
-    /// get the numger of element
+    /// get the number of element
     pub fn len(&self) -> usize {
         self.len
     }

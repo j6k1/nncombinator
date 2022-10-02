@@ -21,6 +21,7 @@ pub struct LinearBatchMseArgs<T> where T: AsMutKernelPtr {
 }
 /// Create an instance of an object representing the argument list for computing the loss function mse.
 impl<T> LinearBatchMseArgs<T> where T: AsMutKernelPtr {
+    /// Create a LinearBatchMseArgs instance
     /// # Arguments
     /// * `expected` - Expected Value
     /// * `actual` - Actual Value
@@ -74,6 +75,7 @@ pub struct LinearBatchCrossEntropyArgs<T> where T: AsMutKernelPtr {
 }
 /// Create an instance of an object representing the argument list for computing the loss function cross entropy.
 impl<T> LinearBatchCrossEntropyArgs<T> where T: AsMutKernelPtr {
+    /// Create a LinearBatchCrossEntropyArgs instance
     /// # Arguments
     /// * `expected` - Expected Value
     /// * `actual` - Actual Value
@@ -126,6 +128,7 @@ pub struct LinearBatchCrossEntropyMulticlassArgs<T> where T: AsMutKernelPtr {
     batch_len: usize,
 }
 impl<T> LinearBatchCrossEntropyMulticlassArgs<T> where T: AsMutKernelPtr {
+    /// Create a LinearBatchCrossEntropyMulticlassArgs instance
     /// # Arguments
     /// * `expected` - Expected Value
     /// * `actual` - Actual Value

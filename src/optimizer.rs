@@ -6,6 +6,9 @@ use crate::UnitValue;
 /// Optimizer Definition
 pub trait Optimizer<U> where U: Clone + Copy + UnitValue<U> {
     /// Update Weights
+    /// # Arguments
+    /// * `e` - error
+    /// * `w` - weight
     fn update(&mut self,e:U,w:&mut U);
 }
 /// SGD Implementation
@@ -94,7 +97,7 @@ pub struct Adagrad<U> where U: UnitValue<U> {
     eps:U
 }
 impl<U> Adagrad<U> where U: UnitValue<U> {
-    /// Create an instance of MomentumSGD
+    /// Create an instance of Adagrad
     pub fn new() -> Adagrad<U> {
         Adagrad {
             a:U::from_f64(0.01).expect("Error in type conversion from f64."),

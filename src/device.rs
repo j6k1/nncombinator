@@ -48,7 +48,6 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    /// [`TrainingError`]: ../error/enum.TrainingError
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
                                                                -> Result<VecArr<U,Arr<U, N>>, TrainingError>;
 
@@ -83,7 +82,6 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    /// [`EvaluateError`]: ../error/enum.EvaluateError
     fn forward_linear(&self, bias:&Arr<U,NO>, units:&T, input:&Arr<U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
     /// Error back propagation calculation
     /// # Arguments
@@ -94,7 +92,6 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    /// [`TrainingError`]: ../error/enum.TrainingError
     fn backward_linear(&self, units:&T, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
     /// Error back propagation in batch
     /// # Arguments
@@ -105,7 +102,6 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    /// [`TrainingError`]: ../error/enum.TrainingError
     fn backward_linear_batch(&self, units: &T, input: &VecArr<U,Arr<U, NO>>)
                                                                     -> Result<VecArr<U,Arr<U, NI>>, TrainingError>;
     /// Forward propagation calculation in batch
@@ -118,7 +114,6 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    /// [`TrainingError`]: ../error/enum.TrainingError
     fn batch_forward_linear(&self,input:&VecArr<U,Arr<U,NI>>,bias:&Arr<U,NO>,units:&T)
                                                                     -> Result<VecArr<U,Arr<U,NO>>,TrainingError>;
 }
@@ -310,7 +305,6 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`DeviceError`]
-    /// [`DeviceError`]: ../error/enum.DeviceError
     pub fn new(memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<DeviceGpu<U>,DeviceError> {
         let context = CublasContext::new(PointerMode::Device)?;
 

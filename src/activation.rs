@@ -39,7 +39,6 @@ pub trait Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    /// [`EvaluateError`]: ../error/enum.EvaluateError
     fn apply(&self, device:&D, input:&T) -> Result<R, EvaluateError>;
     /// Apply derivatives of the activation function
     /// # Arguments
@@ -52,7 +51,6 @@ pub trait Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    /// [`TrainingError`]: ../error/enum.TrainingError
     fn derive(&self, device:&D, o:&T, loss:&T, u:&T) -> Result<R, TrainingError>;
     /// Returns whether or not the canonical linkage function can be used.
     /// # Arguments
@@ -71,7 +69,6 @@ pub trait BatchActivation<U,T,R,D>: Activation<U,T,R,D> where U: UnitValue<U>, D
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    /// [`TrainingError`]: ../error/enum.TrainingError
     fn batch_apply(&self, device:&D, input:&VecArr<U,T>) -> Result<VecArr<U,R>, TrainingError>;
     /// Apply derivatives of the activation function
     /// # Arguments
@@ -84,7 +81,6 @@ pub trait BatchActivation<U,T,R,D>: Activation<U,T,R,D> where U: UnitValue<U>, D
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    /// [`TrainingError`]: ../error/enum.TrainingError
     fn batch_derive(&self, device:&D, o:&VecArr<U,T>, loss:&VecArr<U,T>, u:&VecArr<U,T>) -> Result<VecArr<U,R>, TrainingError>;
 }
 /// Identity Implementation

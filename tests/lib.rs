@@ -38,7 +38,7 @@ fn test_mnist() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
-    let n1 = Normal::<f32>::new(0.0, 1f32/(2f32/(28f32*28f32)).sqrt()).unwrap();
+    let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/(64f32).sqrt()).unwrap();
 
     let device = DeviceCpu::new().unwrap();

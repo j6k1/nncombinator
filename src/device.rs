@@ -116,6 +116,17 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     /// * [`TrainingError`]
     fn batch_forward_linear(&self,input:&VecArr<U,Arr<U,NI>>,bias:&Arr<U,NO>,units:&T)
                                                                     -> Result<VecArr<U,Arr<U,NO>>,TrainingError>;
+    /// Forward propagation calculation in batch
+    /// # Arguments
+    /// * `o` - Input values from upper layers
+    /// * `loss` - loss
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn backward_linear_batch_weight_gradient(&self, o: &VecArr<U,Arr<U, NI>>, loss: &VecArr<U,Arr<U,NO>>)
+                             -> Result<VecArr<U,Arr<U, NI>>, TrainingError>;
 }
 /// Implementation of Device to be computed by CPU
 pub struct DeviceCpu<U> where U: UnitValue<U> {
@@ -243,6 +254,23 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
                 o + b
             }).collect::<Vec<U>>().try_into()
         }).collect::<Result<Vec<Arr<U, NO>>, _>>().map(|r| r.into()).map_err(|e| TrainingError::from(e))
+    }
+
+    fn backward_linear_batch_weight_gradient(&self, o: &VecArr<U, Arr<U, NI>>, loss: &VecArr<U, Arr<U, NO>>)
+        -> Result<VecArr<U, Arr<U, NI>>, TrainingError> {
+        o.par_iter().map(|o| {
+            o.par_iter().zip(loss.par_iter()).map(|(&o, l)| {
+                l.par_iter().map(|&l| {
+                    o * l
+                }).collect::<Vec<U>>()
+            }).collect::<Vec<Vec<U>>>()
+        }).map(|o| o.par_iter().cloned().reduce(|| vec![U::default();NI], |acc, o| {
+            acc.par_iter()
+                .zip(o.par_iter())
+                .map(|(&acc, &o)| acc + o).collect::<Vec<U>>()
+        })).map(|r| r.try_into())
+           .map(|r| r.into()).collect::<Result<Vec<Arr<U,NI>>,_>>()
+           .map(|r| r.into()).map_err(|e| TrainingError::from(e))
     }
 }
 /// cublas context
@@ -589,6 +617,59 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             }
         }
     }
+
+    fn backward_linear_batch_weight_gradient(&self, o: &VecArr<f32, Arr<f32, NI>>, loss: &VecArr<f32, Arr<f32, NO>>) -> Result<VecArr<f32, Arr<f32, NI>>, TrainingError> {
+        let n = o.len();
+
+        let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;
+        let mut loss_ptr = CudaMemoryPoolPtr::new(NO * n,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
+
+        o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI * n)?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * n)?;
+
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(0.0f32)?;
+
+        match unsafe {
+            cublasSgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_T,
+                           NI as ::libc::c_int,
+                           NO as libc::c_int,
+                           n as ::libc::c_int,
+                           alpha.as_ptr(),
+                           o_ptr.as_ptr(),
+                           NI as libc::c_int,
+                           loss_ptr.as_ptr(),
+                           n as libc::c_int,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           NI as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output_ptr.read_to_vec()?.into())
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+    }
 }
 impl Device<f64> for DeviceGpu<f64> {
     fn loss_linear<L,const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> Arr<f64, N>
@@ -820,6 +901,59 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
                            NO as libc::c_int,
                            input_ptr.as_ptr(),
                            NO as libc::c_int,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           NI as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output_ptr.read_to_vec()?.into())
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+    }
+
+    fn backward_linear_batch_weight_gradient(&self, o: &VecArr<f64, Arr<f64, NI>>, loss: &VecArr<f64, Arr<f64, NO>>) -> Result<VecArr<f64, Arr<f64, NI>>, TrainingError> {
+        let n = o.len();
+
+        let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;
+        let mut loss_ptr = CudaMemoryPoolPtr::new(NO * n,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
+
+        o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI * n)?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * n)?;
+
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(0.0f64)?;
+
+        match unsafe {
+            cublasDgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_T,
+                           NI as ::libc::c_int,
+                           NO as libc::c_int,
+                           n as ::libc::c_int,
+                           alpha.as_ptr(),
+                           o_ptr.as_ptr(),
+                           NI as libc::c_int,
+                           loss_ptr.as_ptr(),
+                           n as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
                            NI as ::libc::c_int

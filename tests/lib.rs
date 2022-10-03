@@ -334,7 +334,7 @@ fn test_mnist_for_gpu_double() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
-    let n1 = Normal::<f64>::new(0.0, 1f64/(2f64/(28f64*28f64)).sqrt()).unwrap();
+    let n1 = Normal::<f64>::new(0.0, (2f64/(28f64*28f64)).sqrt()).unwrap();
     let n2 = Normal::<f64>::new(0.0, 1f64/(64f64).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
@@ -483,7 +483,7 @@ fn test_weather() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
-    let n1 = Normal::<f32>::new(0.0, (1f32/14f32).sqrt()).unwrap();
+    let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
     let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
 
     let device = DeviceCpu::new().unwrap();

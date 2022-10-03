@@ -126,7 +126,7 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn backward_linear_batch_weight_gradient(&self, o: &VecArr<U,Arr<U, NI>>, loss: &VecArr<U,Arr<U,NO>>)
-                             -> Result<VecArr<U,Arr<U, NI>>, TrainingError>;
+                             -> Result<VecArr<U,Arr<U, NO>>, TrainingError>;
 }
 /// Implementation of Device to be computed by CPU
 pub struct DeviceCpu<U> where U: UnitValue<U> {
@@ -257,7 +257,7 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
     }
 
     fn backward_linear_batch_weight_gradient(&self, o: &VecArr<U, Arr<U, NI>>, loss: &VecArr<U, Arr<U, NO>>)
-        -> Result<VecArr<U, Arr<U, NI>>, TrainingError> {
+        -> Result<VecArr<U, Arr<U, NO>>, TrainingError> {
         o.par_iter().map(|o| {
             o.par_iter().zip(loss.par_iter()).map(|(&o, l)| {
                 l.par_iter().map(|&l| {
@@ -269,7 +269,7 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
                 .zip(o.par_iter())
                 .map(|(&acc, &o)| acc + o).collect::<Vec<U>>()
         })).map(|r| r.try_into())
-           .map(|r| r.into()).collect::<Result<Vec<Arr<U,NI>>,_>>()
+           .map(|r| r.into()).collect::<Result<Vec<Arr<U,NO>>,_>>()
            .map(|r| r.into()).map_err(|e| TrainingError::from(e))
     }
 }
@@ -618,7 +618,8 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         }
     }
 
-    fn backward_linear_batch_weight_gradient(&self, o: &VecArr<f32, Arr<f32, NI>>, loss: &VecArr<f32, Arr<f32, NO>>) -> Result<VecArr<f32, Arr<f32, NI>>, TrainingError> {
+    fn backward_linear_batch_weight_gradient(&self, o: &VecArr<f32, Arr<f32, NI>>, loss: &VecArr<f32, Arr<f32, NO>>)
+        -> Result<VecArr<f32, Arr<f32, NO>>, TrainingError> {
         let n = o.len();
 
         let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;
@@ -929,7 +930,8 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         }
     }
 
-    fn backward_linear_batch_weight_gradient(&self, o: &VecArr<f64, Arr<f64, NI>>, loss: &VecArr<f64, Arr<f64, NO>>) -> Result<VecArr<f64, Arr<f64, NI>>, TrainingError> {
+    fn backward_linear_batch_weight_gradient(&self, o: &VecArr<f64, Arr<f64, NI>>, loss: &VecArr<f64, Arr<f64, NO>>)
+        -> Result<VecArr<f64, Arr<f64, NO>>, TrainingError> {
         let n = o.len();
 
         let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;

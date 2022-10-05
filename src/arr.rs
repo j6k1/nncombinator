@@ -168,6 +168,47 @@ impl<'a,T,const N1:usize, const N2:usize> AsRawMutSlice<'a,T> for Arr2<T,N1,N2> 
         &mut self.arr
     }
 }
+impl<T,const N1:usize, const N2: usize> TryFrom<Vec<T>> for Arr2<T,N1,N2> where T: Default + Clone + Send {
+    type Error = SizeMismatchError;
+
+    fn try_from(v: Vec<T>) -> Result<Self, Self::Error> {
+        if v.len() != N1 * N2 {
+            Err(SizeMismatchError(v.len(),N1 * N2))
+        } else {
+            if v.len() != N1 {
+                Err(SizeMismatchError(v.len(), N1))
+            } else {
+                let arr = v.into_boxed_slice();
+
+                Ok(Arr2 {
+                    arr:arr
+                })
+            }
+        }
+    }
+}
+impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2> where T: Default + Clone + Send {
+    type Error = SizeMismatchError;
+
+    fn try_from(v: Vec<Arr<T,N2>>) -> Result<Self, Self::Error> {
+        if v.len() != N1 {
+            Err(SizeMismatchError(v.len(),N1))
+        } else {
+            if v.len() != N1 {
+                Err(SizeMismatchError(v.len(), N1))
+            } else {
+                let mut buffer = Vec::with_capacity(N1 * N2);
+
+                for v in v.into_iter() {
+                    buffer.extend_from_slice(&v);
+                }
+                Ok(Arr2 {
+                    arr: buffer.into_boxed_slice()
+                })
+            }
+        }
+    }
+}
 /// Fixed-length 3D array implementation
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr3<T,const N1:usize, const N2:usize, const N3:usize> where T: Default {
@@ -618,6 +659,23 @@ impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Defaul
         }
     }
 }
+impl<'data,U,const N:usize> From<Vec<ArrView<'data,U,N>>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
+    fn from(items: Vec<ArrView<'data,U, N>>) -> Self {
+        let len = items.len();
+
+        let mut buffer = Vec::with_capacity(len * N);
+
+        for item in items.into_iter() {
+            buffer.extend_from_slice(&item);
+        }
+
+        VecArr {
+            arr:buffer.into_boxed_slice(),
+            len:len,
+            t:PhantomData::<Arr<U,N>>
+        }
+    }
+}
 impl<U,const N:usize> From<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
     fn from(items: Vec<U>) -> Self {
         let len = items.len() / N;
@@ -703,6 +761,15 @@ impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for ArrView<'data,T,
 
     fn par_iter(&'data self) -> Self::Iter {
         <&[T]>::into_par_iter(&self.arr)
+    }
+}
+impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for &'data ArrView<'data,T,N>
+    where T: Send + Sync + 'static + Default + Clone {
+    type Iter = rayon::slice::Iter<'data,T>;
+    type Item = &'data T;
+
+    fn par_iter(&'data self) -> Self::Iter {
+        <&[T]>::into_par_iter(&*self.arr)
     }
 }
 impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for Arr<T,N>

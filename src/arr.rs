@@ -175,15 +175,11 @@ impl<T,const N1:usize, const N2: usize> TryFrom<Vec<T>> for Arr2<T,N1,N2> where 
         if v.len() != N1 * N2 {
             Err(SizeMismatchError(v.len(),N1 * N2))
         } else {
-            if v.len() != N1 {
-                Err(SizeMismatchError(v.len(), N1))
-            } else {
-                let arr = v.into_boxed_slice();
+            let arr = v.into_boxed_slice();
 
-                Ok(Arr2 {
-                    arr:arr
-                })
-            }
+            Ok(Arr2 {
+                arr:arr
+            })
         }
     }
 }

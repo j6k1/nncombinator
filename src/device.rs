@@ -634,10 +634,10 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     }
 
     fn backward_linear_batch(&self, units: &CachedTensor<f32, Arr2<f32, NI, NO>>, input: &VecArr<f32, Arr<f32, NO>>) -> Result<VecArr<f32, Arr<f32, NI>>, TrainingError> {
-        let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
+        let mut input_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NI * input.len(),&self.memory_pool)?;
 
-        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO * input.len())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(0.0f32)?;
@@ -686,12 +686,13 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
                                       -> Result<Arr2<f32, NI, NO>, TrainingError> {
         let n = o.len();
 
+
         let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;
-        let mut loss_ptr = CudaMemoryPoolPtr::new(NO * n,&self.memory_pool)?;
+        let mut loss_ptr = CudaMemoryPoolPtr::new(NO * loss.len(),&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
 
         o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI * n)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * n)?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * loss.len())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(0.0f32)?;
@@ -999,10 +1000,10 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
     }
 
     fn backward_linear_batch(&self, units: &CachedTensor<f64, Arr2<f64, NI, NO>>, input: &VecArr<f64, Arr<f64, NO>>) -> Result<VecArr<f64, Arr<f64, NI>>, TrainingError> {
-        let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
+        let mut input_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NI * input.len(),&self.memory_pool)?;
 
-        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO * input.len())?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(0.0f64)?;
@@ -1052,11 +1053,11 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         let n = o.len();
 
         let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;
-        let mut loss_ptr = CudaMemoryPoolPtr::new(NO * n,&self.memory_pool)?;
+        let mut loss_ptr = CudaMemoryPoolPtr::new(NO * loss.len(),&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
 
         o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI * n)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * n)?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * loss.len())?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(0.0f64)?;

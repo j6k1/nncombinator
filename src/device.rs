@@ -495,18 +495,20 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         let beta = CudaPtr::try_from(0.0f32)?;
 
         match unsafe {
-            cublasSgemv_v2(*self.cublas.id_c(),
+            cublasSgemm_v2(*self.cublas.id_c(),
                            cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NI as ::libc::c_int,
+                           1 as libc::c_int,
                            NO as ::libc::c_int,
                            alpha.as_ptr(),
                            units.as_ptr(),
                            NO as libc::c_int,
                            input_ptr.as_ptr(),
-                           1,
+                           NO as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
-                           1
+                           NI as ::libc::c_int
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.read_to_vec()?.try_into()?),
@@ -544,12 +546,12 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
 
         match unsafe {
             cublasSgemv_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NO as ::libc::c_int,
                            1 as ::libc::c_int,
                            alpha.as_ptr(),
                            loss_ptr.as_ptr(),
-                           1 as libc::c_int,
+                           NO as libc::c_int,
                            o_ptr.as_ptr(),
                            1,
                            beta.as_ptr(),
@@ -632,7 +634,6 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     }
 
     fn backward_linear_batch(&self, units: &CachedTensor<f32, Arr2<f32, NI, NO>>, input: &VecArr<f32, Arr<f32, NO>>) -> Result<VecArr<f32, Arr<f32, NI>>, TrainingError> {
-
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
 
@@ -697,19 +698,19 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
 
         match unsafe {
             cublasSgemm_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
                            cublasOperation_t::CUBLAS_OP_N,
-                           NI as ::libc::c_int,
-                           NO as libc::c_int,
+                           cublasOperation_t::CUBLAS_OP_T,
+                           NO as ::libc::c_int,
+                           NI as libc::c_int,
                            n as ::libc::c_int,
                            alpha.as_ptr(),
                            o_ptr.as_ptr(),
-                           n as libc::c_int,
+                           NO as libc::c_int,
                            loss_ptr.as_ptr(),
-                           n as libc::c_int,
+                           NI as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
-                           n as ::libc::c_int
+                           NO as ::libc::c_int
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
@@ -856,22 +857,24 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI * NO)?;
 
-        let alpha = CudaPtr::try_from(1.0f64)?;
+        let alpha = CudaPtr::try_from(1.064)?;
         let beta = CudaPtr::try_from(0.0f64)?;
 
         match unsafe {
-            cublasDgemv_v2(*self.cublas.id_c(),
+            cublasDgemm_v2(*self.cublas.id_c(),
                            cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NI as ::libc::c_int,
+                           1 as libc::c_int,
                            NO as ::libc::c_int,
                            alpha.as_ptr(),
                            units.as_ptr(),
                            NO as libc::c_int,
                            input_ptr.as_ptr(),
-                           1,
+                           NO as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
-                           1
+                           NI as ::libc::c_int
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.read_to_vec()?.try_into()?),
@@ -896,6 +899,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
     }
 
     fn backward_weight_gradient(&self, o: &Arr<f64, NI>, loss: &Arr<f64, NO>) -> Result<Arr2<f64,NI,NO>, TrainingError> {
+
         let mut o_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
@@ -908,12 +912,12 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
 
         match unsafe {
             cublasDgemv_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NO as ::libc::c_int,
                            1 as ::libc::c_int,
                            alpha.as_ptr(),
                            loss_ptr.as_ptr(),
-                           1 as libc::c_int,
+                           NO as libc::c_int,
                            o_ptr.as_ptr(),
                            1,
                            beta.as_ptr(),
@@ -1059,19 +1063,19 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
 
         match unsafe {
             cublasDgemm_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
                            cublasOperation_t::CUBLAS_OP_N,
-                           NI as ::libc::c_int,
-                           NO as libc::c_int,
+                           cublasOperation_t::CUBLAS_OP_T,
+                           NO as ::libc::c_int,
+                           NI as libc::c_int,
                            n as ::libc::c_int,
                            alpha.as_ptr(),
                            o_ptr.as_ptr(),
-                           n as libc::c_int,
+                           NO as libc::c_int,
                            loss_ptr.as_ptr(),
-                           n as libc::c_int,
+                           NI as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
-                           n as ::libc::c_int
+                           NO as ::libc::c_int
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {

@@ -539,24 +539,26 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
 
         o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NI)?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO)?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(0.0f32)?;
 
         match unsafe {
-            cublasSgemv_v2(*self.cublas.id_c(),
+            cublasSgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
                            cublasOperation_t::CUBLAS_OP_N,
                            NO as ::libc::c_int,
+                           NI as libc::c_int,
                            1 as ::libc::c_int,
                            alpha.as_ptr(),
                            loss_ptr.as_ptr(),
                            NO as libc::c_int,
                            o_ptr.as_ptr(),
-                           1,
+                           1 as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
-                           1
+                           NO as ::libc::c_int
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
@@ -700,15 +702,15 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         match unsafe {
             cublasSgemm_v2(*self.cublas.id_c(),
                            cublasOperation_t::CUBLAS_OP_N,
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NO as ::libc::c_int,
                            NI as libc::c_int,
                            n as ::libc::c_int,
                            alpha.as_ptr(),
-                           o_ptr.as_ptr(),
-                           NO as libc::c_int,
                            loss_ptr.as_ptr(),
-                           NI as libc::c_int,
+                           NO as libc::c_int,
+                           o_ptr.as_ptr(),
+                           n as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
                            NO as ::libc::c_int
@@ -858,7 +860,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
         units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI * NO)?;
 
-        let alpha = CudaPtr::try_from(1.064)?;
+        let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(0.0f64)?;
 
         match unsafe {
@@ -906,24 +908,26 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
 
         o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NI)?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO)?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(0.0f64)?;
 
         match unsafe {
-            cublasDgemv_v2(*self.cublas.id_c(),
+            cublasDgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
                            cublasOperation_t::CUBLAS_OP_N,
                            NO as ::libc::c_int,
+                           NI as libc::c_int,
                            1 as ::libc::c_int,
                            alpha.as_ptr(),
                            loss_ptr.as_ptr(),
                            NO as libc::c_int,
                            o_ptr.as_ptr(),
-                           1,
+                           1 as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
-                           1
+                           NO as ::libc::c_int
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
@@ -1065,15 +1069,15 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         match unsafe {
             cublasDgemm_v2(*self.cublas.id_c(),
                            cublasOperation_t::CUBLAS_OP_N,
-                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NO as ::libc::c_int,
                            NI as libc::c_int,
                            n as ::libc::c_int,
                            alpha.as_ptr(),
-                           o_ptr.as_ptr(),
-                           NO as libc::c_int,
                            loss_ptr.as_ptr(),
-                           NI as libc::c_int,
+                           NO as libc::c_int,
+                           o_ptr.as_ptr(),
+                           n as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
                            NO as ::libc::c_int

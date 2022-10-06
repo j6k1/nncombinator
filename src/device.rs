@@ -238,11 +238,8 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
 
     fn backward_weight_gradient(&self, o: &Arr<U, NI>, loss: &Arr<U, NO>) -> Result<Arr2<U, NI, NO>, TrainingError> {
         Ok(o.par_iter().cloned().map(|o| {
-            loss.par_iter().cloned().map(|l| o * l)
-                .reduce(|| U::default(), |acc,g| {
-                acc + g
-            })
-        }).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))?)
+            loss.par_iter().cloned().map(|l| o * l).collect::<Vec<U>>().try_into()
+        }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.try_into().map_err(|e| TrainingError::from(e))?)
     }
 
     fn backward_linear_batch(&self, units: &Arr2<U, NI, NO>, input: &VecArr<U,Arr<U, NO>>)
@@ -277,13 +274,15 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
 
     fn backward_batch_weight_gradient(&self, o: &VecArr<U, Arr<U, NI>>, loss: &VecArr<U, Arr<U, NO>>)
                                       -> Result<Arr2<U,NI,NO>, TrainingError> {
-        Ok(o.par_iter().zip(loss.par_iter()).map(|(o,l)| {
-            o.par_iter().map(|&o| l.par_iter().map(|&l| o * l).collect::<Vec<U>>().try_into()).collect::<Result<Vec<Arr<U,NO>>,_>>()
-        }).reduce(|| Ok(vec![Arr::new();NO]), |acc,g| {
-            acc.and_then(|acc| g.and_then(|g| acc.par_iter().zip(g.par_iter()).map(|(acc,g)| {
-                acc.par_iter().zip(g.par_iter()).map(|(&acc,&g)| acc + g).collect::<Vec<U>>().try_into()
-            }).collect::<Result<Vec<Arr<U,NO>>,_>>()))
-        })?.try_into().map_err(|e| TrainingError::from(e))?)
+        Ok(o.par_iter().zip(loss.par_iter()).map(|(o,l)| o.par_iter().map(|&o| {
+            l.par_iter().map(|&l| o * l).collect::<Vec<U>>()
+        }).collect::<Vec<Vec<U>>>()).reduce(|| vec![vec![U::default();NO];NI], |acc,g| {
+            acc.par_iter().zip(g.par_iter()).map(|(acc,g)| {
+                acc.par_iter().zip(g.par_iter()).map(|(&acc,&g)| acc + g).collect::<Vec<U>>()
+            }).collect::<Vec<Vec<U>>>()
+        }).par_iter().cloned().map(|v| {
+            v.try_into()
+        }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.try_into().map_err(|e| TrainingError::from(e))?)
     }
 }
 /// cublas context

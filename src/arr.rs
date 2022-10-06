@@ -190,18 +190,14 @@ impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2
         if v.len() != N1 {
             Err(SizeMismatchError(v.len(),N1))
         } else {
-            if v.len() != N1 {
-                Err(SizeMismatchError(v.len(), N1))
-            } else {
-                let mut buffer = Vec::with_capacity(N1 * N2);
+            let mut buffer = Vec::with_capacity(N1 * N2);
 
-                for v in v.into_iter() {
-                    buffer.extend_from_slice(&v);
-                }
-                Ok(Arr2 {
-                    arr: buffer.into_boxed_slice()
-                })
+            for v in v.into_iter() {
+                buffer.extend_from_slice(&v);
             }
+            Ok(Arr2 {
+                arr: buffer.into_boxed_slice()
+            })
         }
     }
 }

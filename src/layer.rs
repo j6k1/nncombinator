@@ -10,7 +10,7 @@ use crate::persistence::*;
 use crate::{Cons, Nil, Stack};
 use crate::activation::{Activation, BatchActivation};
 use crate::cuda::mem::CachedTensor;
-use crate::error::{ConfigReadError, CudaError, DeviceError, EvaluateError, PersistenceError, TrainingError};
+use crate::error::{ConfigReadError, CudaError, DeviceError, EvaluateError, PersistenceError, TrainingError, UnsupportedOperationError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
@@ -1729,7 +1729,9 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,A
             s.map::<_,Result<(),TrainingError>>(|o| {
                 match o {
                     DiffInput::Diff(_, _) => {
-                        unimplemented!()
+                        return Err(TrainingError::UnsupportedOperationError(UnsupportedOperationError(
+                            String::from("Learning from difference information is not supported.")
+                        )));
                     },
                     DiffInput::NotDiff(o) => {
                         let g = self.device.backward_weight_gradient(&o,&loss);
@@ -1777,7 +1779,9 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,C
             s.map::<_,Result<(),TrainingError>>(|o| {
                 match o {
                     DiffInput::Diff(_, _) => {
-                        unimplemented!()
+                        return Err(TrainingError::UnsupportedOperationError(UnsupportedOperationError(
+                            String::from("Learning from difference information is not supported.")
+                        )));
                     },
                     DiffInput::NotDiff(o) => {
                         let g = self.device.backward_weight_gradient(&o,&loss);

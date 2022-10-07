@@ -25,6 +25,7 @@ use nncombinator::activation::{ReLu, Sigmoid, SoftMax};
 use nncombinator::arr::{Arr, DiffArr};
 use nncombinator::cuda::mem::{Alloctype, MemoryPool};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
+use nncombinator::error::{TrainingError, UnsupportedOperationError};
 use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass};
 use nncombinator::optimizer::{MomentumSGD};
@@ -811,6 +812,110 @@ fn test_weather_by_forward_diff() {
 
     println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
+}
+#[test]
+fn test_diff_learn_error() {
+    let mut rnd = prelude::thread_rng();
+    let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
+
+    let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
+
+    let device = DeviceCpu::new().unwrap();
+
+    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_> = InputLayer::new();
+
+    let rnd = rnd_base.clone();
+
+    let mut net = net.add_layer(|l| {
+        let rnd = rnd.clone();
+        DiffLinearLayer::<_,_,_,DeviceCpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+    }).add_layer(|l| {
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer_train(|l| {
+        LinearOutputLayer::new(l,&device)
+    });
+
+    let input = Arr::new();
+
+    let s = net.forward_diff(DiffInput::NotDiff(input)).unwrap();
+
+    let mut optimizer = MomentumSGD::with_params(0.0001,0.9,0.0);
+    let lossf = CrossEntropy::new();
+
+    let mut expected = Arr::new();
+
+    expected[0] = 1.;
+
+    let o = net.ask_diff_input(&s);
+    let d = DiffArr::new();
+
+    match net.train(expected, DiffInput::Diff(d,o), &mut optimizer, &lossf) {
+        Err(TrainingError::UnsupportedOperationError(e)) => {
+            assert_eq!(e,UnsupportedOperationError(
+                String::from("Learning from difference information is not supported.")
+            ));
+        },
+        _ => assert!(false)
+    }
+}
+#[test]
+fn test_diff_learn_error_for_gpu() {
+    let mut rnd = prelude::thread_rng();
+    let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
+
+    let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
+
+    let memory_pool = &SHARED_MEMORY_POOL.clone();
+
+    let device = DeviceGpu::new(memory_pool).unwrap();
+
+    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_> = InputLayer::new();
+
+    let rnd = rnd_base.clone();
+
+    let mut net = net.add_layer(|l| {
+        let rnd = rnd.clone();
+        DiffLinearLayer::<_,_,_,DeviceGpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer_train(|l| {
+        LinearOutputLayer::new(l,&device)
+    });
+
+    let input = Arr::new();
+
+    let s = net.forward_diff(DiffInput::NotDiff(input)).unwrap();
+
+    let mut optimizer = MomentumSGD::with_params(0.0001,0.9,0.0);
+    let lossf = CrossEntropy::new();
+
+    let mut expected = Arr::new();
+
+    expected[0] = 1.;
+
+    let o = net.ask_diff_input(&s);
+    let d = DiffArr::new();
+
+    match net.train(expected, DiffInput::Diff(d,o), &mut optimizer, &lossf) {
+        Err(TrainingError::UnsupportedOperationError(e)) => {
+            assert_eq!(e,UnsupportedOperationError(
+                String::from("Learning from difference information is not supported.")
+            ));
+        },
+        _ => assert!(false)
+    }
 }
 #[test]
 fn test_weather_batch_train() {

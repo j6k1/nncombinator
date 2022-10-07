@@ -38,7 +38,7 @@ pub trait ForwardAll {
     /// Output from this layer of the neural network
     type Output: Debug;
     /// Forward propagation
-    /// #Arguments
+    /// # Arguments
     /// * `input` - input
     ///
     /// # Errors
@@ -53,7 +53,7 @@ pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {
     type LossInput: Debug;
 
     /// Back propagation of errors
-    /// #Arguments
+    /// # Arguments
     /// * `input` - loss
     /// * `stack` - Stack to store calculation results at upper layers
     /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
@@ -87,7 +87,7 @@ pub trait Loss<U>: BackwardAll<U> where U: UnitValue<U> {
 /// Characteristics defining the internal implementation of the error back propagation method in neural networks
 pub trait Backward<U,I,O> where U: UnitValue<U> {
     /// Back propagation of errors
-    /// #Arguments
+    /// # Arguments
     /// * `input` - loss
     fn backward(&mut self, input:I) -> O;
 }
@@ -151,7 +151,7 @@ pub trait BatchForwardBase: ForwardAll {
 /// Trait defining the implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForward: BatchForwardBase {
     /// Forward propagation
-    /// #Arguments
+    /// # Arguments
     /// * `input` - input
     ///
     /// # Errors
@@ -165,7 +165,7 @@ pub trait BatchBackward<U>: BatchPreTrainBase<U> where U: UnitValue<U> {
     /// Losses during neural network training for batch execution
     type BatchLossInput: Debug;
     /// Back propagation of errors
-    /// #Arguments
+    /// # Arguments
     /// * `input` - loss
     /// * `stack` - Stack to store calculation results at upper layers
     /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
@@ -206,7 +206,7 @@ pub trait BatchPreTrainBase<U>: BatchForwardBase + PreTrain<U> where U: UnitValu
 /// the error back propagation process of a neural network through batch processing.
 pub trait BatchPreTrain<U>: BatchPreTrainBase<U> + BatchForwardBase + BatchForward + where U: UnitValue<U> {
     /// Perform forward propagation required to perform error back propagation
-    /// #Arguments
+    /// # Arguments
     /// * `input` - input
     ///
     /// # Errors
@@ -218,7 +218,7 @@ pub trait BatchPreTrain<U>: BatchPreTrainBase<U> + BatchForwardBase + BatchForwa
 /// Trait that defines the implementation of neural network training by batch processing.
 pub trait BatchTrain<U,D>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + PreTrain<U> where U: UnitValue<U>, D: Device<U> {
     /// Train neural networks.
-    /// #Arguments
+    /// # Arguments
     /// * `expected` - expected value
     /// * `input` - loss
     /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights

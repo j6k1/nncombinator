@@ -79,7 +79,7 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for Mse<U> where U: Clone + Copy + Uni
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 
-        let mut actual_ptr = CudaPtr::new(N).unwrap();
+        let mut actual_ptr = CudaPtr::new(actual.len() * N).unwrap();
         actual_ptr.memcpy(actual.as_raw_slice().as_ptr(), actual.len() * N).unwrap();
 
         let mut args = LinearBatchMseArgs::new(expected_ptr, actual_ptr, N, expected.len());
@@ -127,7 +127,7 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropy<U> where U: Clone + C
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 
-        let mut actual_ptr = CudaPtr::new(N).unwrap();
+        let mut actual_ptr = CudaPtr::new(actual.len() * N).unwrap();
         actual_ptr.memcpy(actual.as_raw_slice().as_ptr(), actual.len() * N).unwrap();
 
         let mut args = LinearBatchCrossEntropyArgs::new(expected_ptr, actual_ptr, N, expected.len());
@@ -175,7 +175,7 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropyMulticlass<U> where U:
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 
-        let mut actual_ptr = CudaPtr::new(N).unwrap();
+        let mut actual_ptr = CudaPtr::new(actual.len() * N).unwrap();
         actual_ptr.memcpy(actual.as_raw_slice().as_ptr(), actual.len() * N).unwrap();
 
         let mut args = LinearBatchCrossEntropyMulticlassArgs::new(expected_ptr, actual_ptr, N, expected.len());

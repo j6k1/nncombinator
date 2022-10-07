@@ -81,11 +81,11 @@ impl<T> LossLinearBatchByCanonicalLinkArgs<T> where T: AsMutKernelPtr {
     /// * `actual` - Actual Value
     /// * `out_len` - Number of scalar values in output
     /// * `batch_len` - batch count
-    pub fn new(expected:T,actual:T,out_len:usize,batch_len:usize) -> LossLinearBatchByCanonicalLinkArgs<T> {
+    pub fn new(expected:T,actual:T,units_len:usize,batch_len:usize) -> LossLinearBatchByCanonicalLinkArgs<T> {
         LossLinearBatchByCanonicalLinkArgs {
             expected: expected,
             actual: actual,
-            units_len: out_len,
+            units_len: units_len,
             batch_len: batch_len
         }
     }

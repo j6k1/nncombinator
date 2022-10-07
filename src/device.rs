@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
 use libc::{c_uint};
 use rcublas::Context;
-use rcublas_sys::{cublasDgemv_v2, cublasOperation_t, cublasStatus_t, cublasSgemv_v2, cublasHandle_t, cublasSgemm_v2, cublasDgemm_v2};
+use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasStatus_t, cublasSgemm_v2, cublasHandle_t, cublasSgemv_v2, cublasDgemv_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
 use crate::arr::{Arr, Arr2, VecArr};
@@ -93,7 +93,7 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn backward_linear(&self, units:&T, input:&Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError>;
-    /// Forward propagation calculation in batch
+    /// Calculate the gradient of the weights
     /// # Arguments
     /// * `o` - Input values from upper layers
     /// * `loss` - loss
@@ -127,7 +127,7 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     /// * [`TrainingError`]
     fn batch_forward_linear(&self,input:&VecArr<U,Arr<U,NI>>,bias:&Arr<U,NO>,units:&T)
                                                                     -> Result<VecArr<U,Arr<U,NO>>,TrainingError>;
-    /// Forward propagation calculation in batch
+    /// Calculate the gradient of the weights in batch
     /// # Arguments
     /// * `o` - Input values from upper layers
     /// * `loss` - loss
@@ -403,7 +403,7 @@ impl Device<f32> for DeviceGpu<f32> {
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 
-        let mut actual_ptr = CudaPtr::new(N).unwrap();
+        let mut actual_ptr = CudaPtr::new(actual.len() * N).unwrap();
         actual_ptr.memcpy(actual.as_raw_slice().as_ptr(), actual.len() * N).unwrap();
 
         let mut args = LossLinearBatchByCanonicalLinkArgs::new(expected_ptr, actual_ptr, N, expected.len());
@@ -436,7 +436,6 @@ impl Device<f32> for DeviceGpu<f32> {
 impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f32,NI,NO>>,NI,NO> for DeviceGpu<f32> {
     fn forward_linear(&self, bias: &Arr<f32,NO>, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &Arr<f32,NI>)
                                                      -> Result<Arr<f32, NO>, EvaluateError> {
-
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
 
@@ -525,7 +524,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasSgemm_v2",
                     status as i32 as u64
                 )));
             }
@@ -533,7 +532,6 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     }
 
     fn backward_weight_gradient(&self, o: &Arr<f32, NI>, loss: &Arr<f32, NO>) -> Result<Arr2<f32, NI,NO>, TrainingError> {
-
         let mut o_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
@@ -577,7 +575,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasSgemm_v2",
                     status as i32 as u64
                 )));
             }
@@ -585,7 +583,6 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     }
 
     fn batch_forward_linear(&self, input: &VecArr<f32, Arr<f32, NI>>, bias: &Arr<f32, NO>, units: &CachedTensor<f32, Arr2<f32, NI, NO>>) -> Result<VecArr<f32, Arr<f32, NO>>, TrainingError> {
-
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
 
@@ -628,7 +625,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasSgemm_v2",
                     status as i32 as u64
                 )));
             }
@@ -677,7 +674,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasSgemm_v2",
                     status as i32 as u64
                 )));
             }
@@ -687,7 +684,6 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     fn backward_batch_weight_gradient(&self, o: &VecArr<f32, Arr<f32, NI>>, loss: &VecArr<f32, Arr<f32, NO>>)
                                       -> Result<Arr2<f32, NI, NO>, TrainingError> {
         let n = o.len();
-
 
         let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO * loss.len(),&self.memory_pool)?;
@@ -732,7 +728,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasSgemm_v2",
                     status as i32 as u64
                 )));
             }
@@ -805,7 +801,6 @@ impl Device<f64> for DeviceGpu<f64> {
 impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f64,NI,NO>>,NI,NO> for DeviceGpu<f64> {
     fn forward_linear(&self, bias: &Arr<f64,NO>, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &Arr<f64,NI>)
                                                      -> Result<Arr<f64, NO>, EvaluateError> {
-
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
 
@@ -844,7 +839,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             },
             status => {
                 return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasDgemv_v2",
                     status as i32 as u64
                 )));
             }
@@ -894,7 +889,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasDgemm_v2",
                     status as i32 as u64
                 )));
             }
@@ -902,7 +897,6 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
     }
 
     fn backward_weight_gradient(&self, o: &Arr<f64, NI>, loss: &Arr<f64, NO>) -> Result<Arr2<f64,NI,NO>, TrainingError> {
-
         let mut o_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
@@ -946,7 +940,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasDgemm_v2",
                     status as i32 as u64
                 )));
             }
@@ -996,7 +990,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasDgemm_v2",
                     status as i32 as u64
                 )));
             }
@@ -1045,7 +1039,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasDgemm_v2",
                     status as i32 as u64
                 )));
             }
@@ -1099,7 +1093,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
+                    "Unable to get cuBLAS cublasDgemm_v2",
                     status as i32 as u64
                 )));
             }

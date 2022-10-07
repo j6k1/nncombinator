@@ -1728,12 +1728,8 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,A
 
             s.map::<_,Result<(),TrainingError>>(|o| {
                 match o {
-                    DiffInput::Diff(_, o) => {
-                        for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
-                            for (w,l) in u.iter_mut().zip(loss.iter()) {
-                                optimizer.update(*l * *o, w);
-                            }
-                        }
+                    DiffInput::Diff(_, _) => {
+                        unimplemented!()
                     },
                     DiffInput::NotDiff(o) => {
                         let g = self.device.backward_weight_gradient(&o,&loss);
@@ -1780,12 +1776,8 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,C
 
             s.map::<_,Result<(),TrainingError>>(|o| {
                 match o {
-                    DiffInput::Diff(_, o) => {
-                        for (mut u,o) in self.units.scoped_mut().iter_mut().zip(o.iter()) {
-                            for (w,l) in u.iter_mut().zip(loss.iter()) {
-                                optimizer.update(*l * *o, w);
-                            }
-                        }
+                    DiffInput::Diff(_, _) => {
+                        unimplemented!()
                     },
                     DiffInput::NotDiff(o) => {
                         let g = self.device.backward_weight_gradient(&o,&loss);

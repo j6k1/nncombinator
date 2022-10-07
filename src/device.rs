@@ -408,7 +408,7 @@ impl Device<f32> for DeviceGpu<f32> {
 
         let mut args = LossLinearBatchByCanonicalLinkArgs::new(expected_ptr, actual_ptr, N, expected.len());
 
-        let mut kernel = LossLinearBatchByCanonicalLink::<CudaPtr<f32>>::new();
+        let mut kernel = LossLinearBatchByCanonicalLink::<f32>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
                              y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
@@ -424,7 +424,7 @@ impl Device<f32> for DeviceGpu<f32> {
 
         let mut args = ReduceLinearBatchArgs::new(loss_ptr,output_ptr,N,loss.len());
 
-        let mut kernel = ReduceLinearBatch::<CudaPtr<f32>>::new();
+        let mut kernel = ReduceLinearBatch::<f32>::new();
 
         kernel.launch(dim3 { x: N as c_uint,
                                      y: 1, z: 1},
@@ -774,7 +774,7 @@ impl Device<f64> for DeviceGpu<f64> {
 
         let mut args = LossLinearBatchByCanonicalLinkArgs::new(expected_ptr, actual_ptr, N, expected.len());
 
-        let mut kernel = LossLinearBatchByCanonicalLink::<CudaPtr<f64>>::new();
+        let mut kernel = LossLinearBatchByCanonicalLink::<f64>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
                                      y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
@@ -790,7 +790,7 @@ impl Device<f64> for DeviceGpu<f64> {
 
         let mut args = ReduceLinearBatchArgs::new(loss_ptr,output_ptr,N,loss.len());
 
-        let mut kernel = ReduceLinearBatch::<CudaPtr<f64>>::new();
+        let mut kernel = ReduceLinearBatch::<f64>::new();
 
         kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1},
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<f64>()).unwrap();

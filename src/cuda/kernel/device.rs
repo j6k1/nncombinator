@@ -12,9 +12,9 @@ extern "C" {
 }
 /// Defines the list that is passed to the cuda kernel function as arguments for the convolution calculation.
 pub struct ReduceLinearBatchArgs<T> where T: AsMutKernelPtr {
-    input: T,
+    input: CudaPtr<T>,
     /// output
-    pub output: T,
+    pub output: CudaPtr<T>,
     units_len: usize,
     batch_len: usize,
 }
@@ -26,7 +26,7 @@ impl<T> ReduceLinearBatchArgs<T> where T: AsMutKernelPtr {
     /// * `output` - output
     /// * `out_len` - Number of scalar values in output
     /// * `batch_len` - batch_count
-    pub fn new(input:T,output:T,out_len:usize,batch_len:usize) -> ReduceLinearBatchArgs<T> {
+    pub fn new(input:CudaPtr<T>,output:CudaPtr<T>,out_len:usize,batch_len:usize) -> ReduceLinearBatchArgs<T> {
         ReduceLinearBatchArgs {
             input: input,
             output: output,
@@ -57,19 +57,19 @@ impl<T> ReduceLinearBatch<T> where T: AsMutKernelPtr {
         }
     }
 }
-impl Kernel for ReduceLinearBatch<CudaPtr<f32>> {
+impl Kernel for ReduceLinearBatch<f32> {
     const FUNC_PTR: *const c_void = reduce_linear_batch_float as *const c_void;
-    type Args = ReduceLinearBatchArgs<CudaPtr<f32>>;
+    type Args = ReduceLinearBatchArgs<f32>;
 }
-impl Kernel for ReduceLinearBatch<CudaPtr<f64>> {
+impl Kernel for ReduceLinearBatch<f64> {
     const FUNC_PTR: *const c_void = reduce_linear_batch_double as *const c_void;
-    type Args = ReduceLinearBatchArgs<CudaPtr<f64>>;
+    type Args = ReduceLinearBatchArgs<f64>;
 }
 /// Defines the list that is passed to the cuda kernel function as the argument for the calculation of applying canonical link.
 pub struct LossLinearBatchByCanonicalLinkArgs<T> where T: AsMutKernelPtr {
-    expected: T,
+    expected: CudaPtr<T>,
     /// Actual Value
-    pub actual: T,
+    pub actual: CudaPtr<T>,
     units_len: usize,
     batch_len: usize,
 }
@@ -81,7 +81,7 @@ impl<T> LossLinearBatchByCanonicalLinkArgs<T> where T: AsMutKernelPtr {
     /// * `actual` - Actual Value
     /// * `out_len` - Number of scalar values in output
     /// * `batch_len` - batch count
-    pub fn new(expected:T,actual:T,units_len:usize,batch_len:usize) -> LossLinearBatchByCanonicalLinkArgs<T> {
+    pub fn new(expected:CudaPtr<T>,actual:CudaPtr<T>,units_len:usize,batch_len:usize) -> LossLinearBatchByCanonicalLinkArgs<T> {
         LossLinearBatchByCanonicalLinkArgs {
             expected: expected,
             actual: actual,
@@ -111,11 +111,11 @@ impl<T> LossLinearBatchByCanonicalLink<T> where T: AsMutKernelPtr {
         }
     }
 }
-impl Kernel for LossLinearBatchByCanonicalLink<CudaPtr<f32>> {
+impl Kernel for LossLinearBatchByCanonicalLink<f32> {
     const FUNC_PTR: *const c_void = loss_linear_batch_by_canonical_link_float as *const c_void;
-    type Args = LossLinearBatchByCanonicalLinkArgs<CudaPtr<f32>>;
+    type Args = LossLinearBatchByCanonicalLinkArgs<f32>;
 }
-impl Kernel for LossLinearBatchByCanonicalLink<CudaPtr<f64>> {
+impl Kernel for LossLinearBatchByCanonicalLink<f64> {
     const FUNC_PTR: *const c_void = loss_linear_batch_by_canonical_link_double as *const c_void;
-    type Args = LossLinearBatchByCanonicalLinkArgs<CudaPtr<f64>>;
+    type Args = LossLinearBatchByCanonicalLinkArgs<f64>;
 }

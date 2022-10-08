@@ -13,9 +13,10 @@ extern "C" {
 }
 /// Defines the list passed to the cuda kernel function as the argument of mse.
 pub struct LinearBatchMseArgs<T> where T: AsMutKernelPtr {
-    expected: CudaPtr<T>,
-    /// Actual Value
+    /// actual value
     pub actual: CudaPtr<T>,
+    /// expected value
+    expected: CudaPtr<T>,
     out_len: usize,
     batch_len: usize,
 }
@@ -27,10 +28,10 @@ impl<T> LinearBatchMseArgs<T> where T: AsMutKernelPtr {
     /// * `actual` - Actual Value
     /// * `out_len` - Number of scalar values in output
     /// * `batch_len` - batch count
-    pub fn new(r:CudaPtr<T>,t:CudaPtr<T>,out_len:usize,batch_len:usize) -> LinearBatchMseArgs<T> {
+    pub fn new(t:CudaPtr<T>,r:CudaPtr<T>,out_len:usize,batch_len:usize) -> LinearBatchMseArgs<T> {
         LinearBatchMseArgs {
-            expected: r,
-            actual: t,
+            actual: r,
+            expected: t,
             out_len: out_len,
             batch_len: batch_len
         }
@@ -39,8 +40,8 @@ impl<T> LinearBatchMseArgs<T> where T: AsMutKernelPtr {
 impl<T> KernelArgs for LinearBatchMseArgs<T> where T: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
         vec![
-            &mut self.expected,
             &mut self.actual,
+            &mut self.expected,
             &mut self.out_len,
             &mut self.batch_len
         ]
@@ -67,9 +68,10 @@ impl Kernel for LinearBatchMse<f64> {
 }
 /// Defines the list passed to the cuda kernel function as the argument of cross entropy.
 pub struct LinearBatchCrossEntropyArgs<T> where T: AsMutKernelPtr {
-    expected: CudaPtr<T>,
-    /// Actual Value
+    /// actual value
     pub actual: CudaPtr<T>,
+    /// expected value
+    expected: CudaPtr<T>,
     out_len: usize,
     batch_len: usize,
 }
@@ -81,10 +83,10 @@ impl<T> LinearBatchCrossEntropyArgs<T> where T: AsMutKernelPtr {
     /// * `actual` - Actual Value
     /// * `out_len` - Number of scalar values in output
     /// * `batch_len` - batch count
-    pub fn new(r:CudaPtr<T>,t:CudaPtr<T>,out_len:usize,batch_len:usize) -> LinearBatchCrossEntropyArgs<T> {
+    pub fn new(t:CudaPtr<T>,r:CudaPtr<T>,out_len:usize,batch_len:usize) -> LinearBatchCrossEntropyArgs<T> {
         LinearBatchCrossEntropyArgs {
-            expected: r,
-            actual: t,
+            actual: r,
+            expected: t,
             out_len: out_len,
             batch_len: batch_len
         }
@@ -93,8 +95,8 @@ impl<T> LinearBatchCrossEntropyArgs<T> where T: AsMutKernelPtr {
 impl<T> KernelArgs for LinearBatchCrossEntropyArgs<T> where T: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
         vec![
-            &mut self.expected,
             &mut self.actual,
+            &mut self.expected,
             &mut self.out_len,
             &mut self.batch_len
         ]
@@ -121,9 +123,10 @@ impl Kernel for LinearBatchCrossEntropy<f64> {
 }
 /// Defines the list passed to the cuda kernel function as the argument of croos entropy multiclass
 pub struct LinearBatchCrossEntropyMulticlassArgs<T> where T: AsMutKernelPtr {
-    expected: CudaPtr<T>,
-    /// Actual Value
+    /// actual value
     pub actual: CudaPtr<T>,
+    /// expected value
+    expected: CudaPtr<T>,
     out_len: usize,
     batch_len: usize,
 }
@@ -134,10 +137,10 @@ impl<T> LinearBatchCrossEntropyMulticlassArgs<T> where T: AsMutKernelPtr {
     /// * `actual` - Actual Value
     /// * `out_len` - Number of scalar values in output
     /// * `batch_len` - batch count
-    pub fn new(r:CudaPtr<T>,t:CudaPtr<T>,out_len:usize,batch_len:usize) -> LinearBatchCrossEntropyMulticlassArgs<T> {
+    pub fn new(t:CudaPtr<T>,r:CudaPtr<T>,out_len:usize,batch_len:usize) -> LinearBatchCrossEntropyMulticlassArgs<T> {
         LinearBatchCrossEntropyMulticlassArgs {
-            expected: r,
-            actual: t,
+            actual: r,
+            expected: t,
             out_len: out_len,
             batch_len: batch_len
         }
@@ -146,8 +149,8 @@ impl<T> LinearBatchCrossEntropyMulticlassArgs<T> where T: AsMutKernelPtr {
 impl<T> KernelArgs for LinearBatchCrossEntropyMulticlassArgs<T> where T: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
         vec![
-            &mut self.expected,
             &mut self.actual,
+            &mut self.expected,
             &mut self.out_len,
             &mut self.batch_len
         ]

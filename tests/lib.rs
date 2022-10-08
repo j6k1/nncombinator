@@ -80,7 +80,7 @@ fn test_mnist() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::with_params(0.001,0.9,0.0);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 

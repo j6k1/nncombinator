@@ -479,7 +479,6 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
           ReLuBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
 
     fn batch_apply(&self, _: &DeviceGpu<U>, input: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
-
         let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
         input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
 

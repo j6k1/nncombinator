@@ -287,7 +287,7 @@ template<typename T>
 
 __device__ void loss_linear_batch_by_canonical_link(const T *expected, T *actual, const int nlen, const int batch_size) {
     const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
-    const size_t index = blockDim.x * blockDim.x + threadIdx.x;
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;

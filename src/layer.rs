@@ -1260,7 +1260,7 @@ impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,C,P
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        self.device.batch_forward_linear(&input,&self.bias,&self.units,)
+        self.device.batch_forward_linear(&self.bias,&self.units,&input)
     }
 }
 impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for LinearLayer<U,C,P,D,I,NI,NO>
@@ -1283,7 +1283,7 @@ impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let r = self.parent.batch_pre_train(input)?;
 
-        let u = r.map(|input| self.device.batch_forward_linear(input,&self.bias,&self.units))?;
+        let u = r.map(|input| self.device.batch_forward_linear(&self.bias,&self.units,input))?;
 
         Ok(Cons(r,u))
     }
@@ -1309,7 +1309,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr
                 }
 
                 s.map(|o| {
-                    self.device.backward_batch_weight_gradient(&o, &loss).map(|g| {
+                    self.device.batch_backward_weight_gradient(&o, &loss).map(|g| {
                         for (mut u, g) in self.units.iter_mut().zip(g.iter()) {
                             for (w, &g) in u.iter_mut().zip(g.iter()) {
                                 optimizer.update(g, w);
@@ -1320,7 +1320,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr
             }
         }
 
-        let loss = self.device.backward_linear_batch(&self.units,&loss)?;
+        let loss = self.device.batch_backward_linear(&self.units, &loss)?;
 
         let (s,loss) = self.parent.batch_loss(loss,lossf,s)?;
 
@@ -1349,7 +1349,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Cac
                 }
 
                 s.map(|o| {
-                    self.device.backward_batch_weight_gradient(&o, &loss).map(|g| {
+                    self.device.batch_backward_weight_gradient(&o, &loss).map(|g| {
                         for (mut u, g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
                             for (w, &g) in u.iter_mut().zip(g.iter()) {
                                 optimizer.update(g, w);
@@ -1360,7 +1360,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Cac
             }
         }
 
-        let loss = self.device.backward_linear_batch(&self.units,&loss)?;
+        let loss = self.device.batch_backward_linear(&self.units, &loss)?;
 
         let (s,loss) = self.parent.batch_loss(loss,lossf,s)?;
 

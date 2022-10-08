@@ -1730,7 +1730,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,A
                 match o {
                     DiffInput::Diff(_, _) => {
                         return Err(TrainingError::UnsupportedOperationError(UnsupportedOperationError(
-                            String::from("Learning from difference information is not supported.")
+                            String::from("Training from difference information is not supported.")
                         )));
                     },
                     DiffInput::NotDiff(o) => {
@@ -1780,7 +1780,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,C
                 match o {
                     DiffInput::Diff(_, _) => {
                         return Err(TrainingError::UnsupportedOperationError(UnsupportedOperationError(
-                            String::from("Learning from difference information is not supported.")
+                            String::from("Training from difference information is not supported.")
                         )));
                     },
                     DiffInput::NotDiff(o) => {

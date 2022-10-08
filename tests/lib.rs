@@ -876,7 +876,7 @@ fn test_diff_learn_error() {
     match net.train(expected, DiffInput::Diff(d,o), &mut optimizer, &lossf) {
         Err(TrainingError::UnsupportedOperationError(e)) => {
             assert_eq!(e,UnsupportedOperationError(
-                String::from("Learning from difference information is not supported.")
+                String::from("Training from difference information is not supported.")
             ));
         },
         _ => assert!(false)
@@ -929,7 +929,7 @@ fn test_diff_learn_error_for_gpu() {
     match net.train(expected, DiffInput::Diff(d,o), &mut optimizer, &lossf) {
         Err(TrainingError::UnsupportedOperationError(e)) => {
             assert_eq!(e,UnsupportedOperationError(
-                String::from("Learning from difference information is not supported.")
+                String::from("Training from difference information is not supported.")
             ));
         },
         _ => assert!(false)

@@ -1,7 +1,7 @@
 //! Computational processes used in the implementation of neural networks
 
 use std::marker::PhantomData;
-use std::mem;
+use std::{mem};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
@@ -411,8 +411,7 @@ impl Device<f32> for DeviceGpu<f32> {
 
         let mut kernel = LossLinearBatchByCanonicalLink::<f32>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                             y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
                       dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
         Ok(args.actual.read_to_vec()?.into())
@@ -427,8 +426,7 @@ impl Device<f32> for DeviceGpu<f32> {
 
         let mut kernel = ReduceLinearBatch::<f32>::new();
 
-        kernel.launch(dim3 { x: N as c_uint,
-                                     y: 1, z: 1},
+        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1},
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<f32>()).unwrap();
 
         Ok(args.output.read_to_vec()?.try_into()?)
@@ -585,11 +583,15 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
 
     fn batch_forward_linear(&self,bias:&Arr<f32,NO>,units:&CachedTensor<f32,Arr2<f32,NI,NO>>,input:&VecArr<f32,Arr<f32,NI>>)
                             -> Result<VecArr<f32,Arr<f32,NO>>,TrainingError> {
-        let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
+        let mut input_ptr = CudaMemoryPoolPtr::new(NI * input.len() ,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
 
-        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
-        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+        let bias_inv:VecArr<f32,Arr<f32,NO>> = bias.par_iter().map(|&b| {
+            rayon::iter::repeat(b).take(input.len()).collect::<Vec<f32>>()
+        }).collect::<Vec<Vec<f32>>>().into_iter().flatten().collect::<Vec<f32>>().into();
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI * input.len())?;
+        output_ptr.memcpy(bias_inv.as_raw_slice().as_ptr(),NO * input.len())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(1.0f32)?;
@@ -645,14 +647,14 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
 
         match unsafe {
             cublasSgemm_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
                            cublasOperation_t::CUBLAS_OP_N,
-                           input.len() as ::libc::c_int,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NI as libc::c_int,
+                           input.len() as ::libc::c_int,
                            NO as ::libc::c_int,
                            alpha.as_ptr(),
                            units.as_ptr(),
-                           NO as libc::c_int,
+                           NI as libc::c_int,
                            input_ptr.as_ptr(),
                            NO as libc::c_int,
                            beta.as_ptr(),
@@ -688,11 +690,11 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         let n = o.len();
 
         let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;
-        let mut loss_ptr = CudaMemoryPoolPtr::new(NO * loss.len(),&self.memory_pool)?;
+        let mut loss_ptr = CudaMemoryPoolPtr::new(NO * n,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
 
         o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI * n)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * loss.len())?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * n)?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(0.0f32)?;
@@ -771,15 +773,14 @@ impl Device<f64> for DeviceGpu<f64> {
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 
-        let mut actual_ptr = CudaPtr::new(N).unwrap();
+        let mut actual_ptr = CudaPtr::new(actual.len() * N).unwrap();
         actual_ptr.memcpy(actual.as_raw_slice().as_ptr(), actual.len() * N).unwrap();
 
         let mut args = LossLinearBatchByCanonicalLinkArgs::new(expected_ptr, actual_ptr, N, expected.len());
 
         let mut kernel = LossLinearBatchByCanonicalLink::<f64>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
                       dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
         Ok(args.actual.read_to_vec()?.into())
@@ -951,11 +952,15 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
 
     fn batch_forward_linear(&self,bias:&Arr<f64,NO>,units:&CachedTensor<f64,Arr2<f64,NI,NO>>,input:&VecArr<f64,Arr<f64,NI>>)
                             -> Result<VecArr<f64,Arr<f64,NO>>,TrainingError> {
-        let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
+        let mut input_ptr = CudaMemoryPoolPtr::new(NI * input.len() ,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
 
-        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
-        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+        let bias_inv:VecArr<f64,Arr<f64,NO>> = bias.par_iter().map(|&b| {
+            rayon::iter::repeat(b).take(input.len()).collect::<Vec<f64>>()
+        }).collect::<Vec<Vec<f64>>>().into_iter().flatten().collect::<Vec<f64>>().into();
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI * input.len())?;
+        output_ptr.memcpy(bias_inv.as_raw_slice().as_ptr(),NO * input.len())?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(1.0f64)?;
@@ -993,7 +998,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             },
             status => {
                 return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasDgemm_v2",
+                    "Unable to get cuBLAS cublasSgemm_v2",
                     status as i32 as u64
                 )));
             }
@@ -1011,14 +1016,14 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
 
         match unsafe {
             cublasDgemm_v2(*self.cublas.id_c(),
-                           cublasOperation_t::CUBLAS_OP_T,
                            cublasOperation_t::CUBLAS_OP_N,
-                           input.len() as ::libc::c_int,
+                           cublasOperation_t::CUBLAS_OP_N,
                            NI as libc::c_int,
+                           input.len() as ::libc::c_int,
                            NO as ::libc::c_int,
                            alpha.as_ptr(),
                            units.as_ptr(),
-                           NO as libc::c_int,
+                           NI as libc::c_int,
                            input_ptr.as_ptr(),
                            NO as libc::c_int,
                            beta.as_ptr(),
@@ -1054,11 +1059,11 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         let n = o.len();
 
         let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;
-        let mut loss_ptr = CudaMemoryPoolPtr::new(NO * loss.len(),&self.memory_pool)?;
+        let mut loss_ptr = CudaMemoryPoolPtr::new(NO * n,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
 
         o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI * n)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * loss.len())?;
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * n)?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(0.0f64)?;

@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
 use libc::c_void;
+use rcudnn::Error;
 use rcudnn::utils::DataType;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t};
 use crate::cuda::mem::MemoryPool;
@@ -222,6 +223,18 @@ pub trait Memory<T: Default + Debug>: AsMutVoidPtr {
     /// * [`rcudnn::Error`]
     ///
     fn memcpy(&mut self, p:*const T,len:usize) -> Result<usize,rcudnn::Error>;
+    /// Repeatedly copy the contents of memory
+    /// # Arguments
+    /// * `p` - Pointer to source memory
+    /// * `len` - Number of elements of the value to be copied
+    /// * `count` - Number of times to copy repeatedly
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`rcudnn::Error`]
+    ///
+    fn memcpy_repeat(&mut self, p:*const T,len:usize,count:usize) -> Result<usize,rcudnn::Error>;
     /// Read memory as Vec
     ///
     /// # Errors
@@ -255,6 +268,19 @@ pub trait MemoryAsync<T: Default + Debug>: AsMutVoidPtr {
     /// * [`rcudnn::Error`]
     ///
     fn memcpy_async(&mut self, p:*const T,len:usize,stream:cudaStream_t) -> Result<usize,rcudnn::Error>;
+    /// Repeatedly copy the contents of memory
+    /// # Arguments
+    /// * `p` - Pointer to source memory
+    /// * `len` - Number of elements of the value to be copied
+    /// * `count` - Number of times to copy repeatedly
+    /// * `stream` - cuda stream
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`rcudnn::Error`]
+    fn memcpy_async_repeat(&mut self, p:*const T,len:usize,count:usize,stream:cudaStream_t) -> Result<usize,rcudnn::Error>;
+    ///
     /// Read memory as Vec
     /// # Arguments
     /// * `stream` - cuda stream
@@ -307,6 +333,18 @@ impl<T: Default + Debug> Memory<T> for CudaPtr<T> {
                          len,
                          cudaMemcpyKind::cudaMemcpyHostToDevice)?;
         Ok(len)
+    }
+
+    fn memcpy_repeat(&mut self, p: *const T, len: usize, count: usize) -> Result<usize, Error> {
+        for i in 0..count {
+            unsafe {
+                ffi::memcpy(self.ptr.add(i * len),
+                            p,
+                            len,
+                            cudaMemcpyKind::cudaMemcpyHostToDevice)?;
+            }
+        }
+        Ok(len * count)
     }
 
     fn read_to_vec(&mut self) -> Result<Vec<T>,rcudnn::Error> {
@@ -399,6 +437,18 @@ impl<T: Default + Debug> Memory<T> for CudaHostPtr<T> {
         Ok(len)
     }
 
+    fn memcpy_repeat(&mut self, p: *const T, len: usize, count: usize) -> Result<usize, Error> {
+        for i in 0..count {
+            unsafe {
+                ffi::memcpy(self.ptr.add(i * len),
+                            p,
+                            len,
+                            cudaMemcpyKind::cudaMemcpyHostToDevice)?;
+            }
+        }
+        Ok(len * count)
+    }
+
     fn read_to_vec(&mut self) -> Result<Vec<T>,rcudnn::Error> {
         let mut r = Vec::with_capacity(self.size);
         r.resize_with(self.size,Default::default);
@@ -428,6 +478,19 @@ impl<T: Default + Debug> MemoryAsync<T> for CudaHostPtr<T> {
                                len,
                                cudaMemcpyKind::cudaMemcpyHostToDevice,stream)?;
         Ok(len)
+    }
+
+    fn memcpy_async_repeat(&mut self, p: *const T, len: usize, count: usize, stream: cudaStream_t) -> Result<usize, Error> {
+        for i in 0..count {
+            unsafe {
+                ffi::memcpy_async(self.ptr.add(i * len),
+                            p,
+                            len,
+                                  cudaMemcpyKind::cudaMemcpyHostToDevice,stream)?;
+            }
+        }
+        Ok(len * count)
+
     }
 
     fn read_to_vec_async(&mut self, stream: cudaStream_t) -> Result<Vec<T>,rcudnn::Error> {
@@ -531,6 +594,18 @@ impl<T: Default + Debug> Memory<T> for CudaMemoryPoolPtr<T> {
                     len,
                     cudaMemcpyKind::cudaMemcpyHostToDevice)?;
         Ok(len)
+    }
+
+    fn memcpy_repeat(&mut self, p: *const T, len: usize, count: usize) -> Result<usize, Error> {
+        for i in 0..count {
+            unsafe {
+                ffi::memcpy(self.ptr.add(i * len),
+                            p,
+                            len,
+                            cudaMemcpyKind::cudaMemcpyHostToDevice)?;
+            }
+        }
+        Ok(len * count)
     }
 
     fn read_to_vec(&mut self) -> Result<Vec<T>,rcudnn::Error> {

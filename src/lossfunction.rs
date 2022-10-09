@@ -5,7 +5,7 @@ use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::{Arr, VecArr};
-use crate::cuda::{AsMutKernelPtr, CudaPtr, Kernel, Memory};
+use crate::cuda::{CudaPtr, DataTypeInfo, Kernel, Memory};
 use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs};
 use crate::device::{Device, DeviceCpu, DeviceGpu};
 use crate::error::{CudaError, TrainingError};
@@ -71,7 +71,7 @@ impl<U> LossFunction<U> for Mse<U> where U: Clone + Copy + UnitValue<U> {
     }
 }
 impl<U> BatchLossFunction<U,DeviceCpu<U>> for Mse<U> where U: Clone + Copy + UnitValue<U> {}
-impl<U> BatchLossFunction<U,DeviceGpu<U>> for Mse<U> where U: Clone + Copy + UnitValue<U> + AsMutKernelPtr,
+impl<U> BatchLossFunction<U,DeviceGpu<U>> for Mse<U> where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
                                                               DeviceGpu<U>:  Device<U>,
                                                               CudaPtr<U>: TryFrom<U,Error=CudaError>,
                                                               LinearBatchMse<U>: Kernel<Args=LinearBatchMseArgs<U>> {
@@ -119,7 +119,7 @@ impl<U> LossFunction<U> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U>
     }
 }
 impl<U> BatchLossFunction<U,DeviceCpu<U>> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U> {}
-impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U> + AsMutKernelPtr,
+impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
                                                                     DeviceGpu<U>:  Device<U>,
                                                                     CudaPtr<U>: TryFrom<U,Error=CudaError>,
                                                                     LinearBatchCrossEntropy<U>: Kernel<Args=LinearBatchCrossEntropyArgs<U>> {
@@ -167,7 +167,7 @@ impl<U> LossFunction<U> for CrossEntropyMulticlass<U> where U: Clone + Copy + Un
     }
 }
 impl<U> BatchLossFunction<U,DeviceCpu<U>> for CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {}
-impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> + AsMutKernelPtr,
+impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
                                                                               DeviceGpu<U>:  Device<U>,
                                                                               CudaPtr<U>: TryFrom<U,Error=CudaError>,
                                                                               LinearBatchCrossEntropyMulticlass<U>: Kernel<Args=LinearBatchCrossEntropyMulticlassArgs<U>> {

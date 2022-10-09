@@ -90,9 +90,9 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
     size_t batch_index = blockIdx.x;
 
     if (tid < units_len && batch_index < batch_len) {
-        unsigned int i = batch_index * units_len + tid;
-        unsigned int end_block = (batch_index + 1) * units_len;
-        unsigned int distance = blockDim.x;
+        size_t i = batch_index * units_len + tid;
+        size_t end_block = (batch_index + 1) * units_len;
+        size_t distance = blockDim.x;
 
         sum_sdata[tid] = 0;
         alpha_sdata[tid] = 0.0/0.0;
@@ -102,6 +102,7 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],input_output[i]);
             i += distance;
         }
+
         __syncthreads();
 
         if (tid < 512) {
@@ -136,14 +137,14 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
 
         if (tid > 0 && tid < 32) {
             sum_sdata[0] += sum_sdata[tid];
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[0]);
+            alpha_sdata[0] = _fmax(alpha_sdata[tid],alpha_sdata[0]);
         }
         __syncthreads();
 
         T sum = sum_sdata[0];
         T alpha = alpha_sdata[0];
 
-        for (size_t i = batch_index == 0 ? tid : batch_index * units_len + tid; i < end_block; i+=distance) {
+        for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
             T number = _exp(input_output[i] - alpha);
             T x = number / sum;
 
@@ -272,6 +273,7 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
         if (tid < 32) {
             sdata[tid] += sdata[tid + 32];
         }
+
         __syncthreads();
 
         if (tid > 0 && tid < 32) {

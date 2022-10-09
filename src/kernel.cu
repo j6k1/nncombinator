@@ -42,9 +42,13 @@ __device__ void relu_forward(T *input_output, const size_t units_len, const size
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        if (input_output[i] < 0.0) {
-            input_output[i] = 0.0;
+        T x = 0.0;
+
+        if (input_output[i] > 0.0 || isnan(input_output[i])) {
+            x = 1.0;
         }
+
+        input_output[i] = input_output[i] * x;
     }
 }
 template<typename T>
@@ -90,16 +94,52 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
     size_t batch_index = blockIdx.x;
 
     if (tid < units_len && batch_index < batch_len) {
-        size_t i = batch_index * units_len + tid;
         size_t end_block = (batch_index + 1) * units_len;
         size_t distance = blockDim.x;
 
         sum_sdata[tid] = 0;
         alpha_sdata[tid] = 0.0/0.0;
 
-        while (i < end_block) {
-            sum_sdata[tid] += input_output[i];
+        for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],input_output[i]);
+        }
+
+        __syncthreads();
+
+        if (tid < 512) {
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 512]);
+        }
+        __syncthreads();
+
+        if (tid < 256) {
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 256]);
+        }
+        __syncthreads();
+
+        if (tid < 128) {
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 128]);
+        }
+        __syncthreads();
+
+        if (tid < 64) {
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 64]);
+        }
+        __syncthreads();
+
+        if (tid < 32) {
+            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 32]);
+        }
+        __syncthreads();
+
+        if (tid > 0 && tid < 32) {
+            alpha_sdata[0] = _fmax(alpha_sdata[tid],alpha_sdata[0]);
+        }
+        __syncthreads();
+
+        T alpha = alpha_sdata[0];
+
+        for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
+            sum_sdata[tid] += _exp(input_output[i] - alpha);
             i += distance;
         }
 
@@ -107,42 +147,35 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
 
         if (tid < 512) {
             sum_sdata[tid] += sum_sdata[tid + 512];
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 512]);
         }
         __syncthreads();
 
         if (tid < 256) {
             sum_sdata[tid] += sum_sdata[tid + 256];
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 256]);
         }
         __syncthreads();
 
         if (tid < 128) {
             sum_sdata[tid] += sum_sdata[tid + 128];
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 128]);
         }
         __syncthreads();
 
         if (tid < 64) {
             sum_sdata[tid] += sum_sdata[tid + 64];
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 64]);
         }
         __syncthreads();
 
         if (tid < 32) {
             sum_sdata[tid] += sum_sdata[tid + 32];
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 32]);
         }
         __syncthreads();
 
         if (tid > 0 && tid < 32) {
             sum_sdata[0] += sum_sdata[tid];
-            alpha_sdata[0] = _fmax(alpha_sdata[tid],alpha_sdata[0]);
         }
         __syncthreads();
 
         T sum = sum_sdata[0];
-        T alpha = alpha_sdata[0];
 
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
             T number = _exp(input_output[i] - alpha);
@@ -176,9 +209,13 @@ __device__ void relu_backward(T *u, T *loss, const size_t units_len, const size_
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        if (!(u[i] > 0.0)) {
-            loss[i] = 0.0;
+        T x = 0.0;
+
+        if (u[i] > 0.0) {
+            x = 1.0;
         }
+
+        loss[i] = x * loss[i];
     }
 }
 template<typename T>

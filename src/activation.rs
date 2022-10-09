@@ -975,7 +975,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
 
         let mut kernel = SoftMaxForward::<U>::new();
 
-        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1 },
+        kernel.launch(dim3 { x: input.len() as c_uint, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 1024 * mem::size_of::<U>() * 2)?;
 
@@ -993,9 +993,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
 
         let mut kernel = SoftMaxBackward::<U>::new();
 
-        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
+        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
+                      dim3 { x: 32, y: 32, z: 1 },
+                      &mut args, 0).unwrap();
 
         Ok(args.loss.read_to_vec()?.into())
     }

@@ -702,7 +702,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         match unsafe {
             cublasSgemm_v2(*self.cublas.id_c(),
                            cublasOperation_t::CUBLAS_OP_N,
-                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_T,
                            NO as ::libc::c_int,
                            NI as libc::c_int,
                            n as ::libc::c_int,
@@ -710,7 +710,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
                            loss_ptr.as_ptr(),
                            NO as libc::c_int,
                            o_ptr.as_ptr(),
-                           n as libc::c_int,
+                           NI as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
                            NO as ::libc::c_int
@@ -1071,7 +1071,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         match unsafe {
             cublasDgemm_v2(*self.cublas.id_c(),
                            cublasOperation_t::CUBLAS_OP_N,
-                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_T,
                            NO as ::libc::c_int,
                            NI as libc::c_int,
                            n as ::libc::c_int,
@@ -1079,7 +1079,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
                            loss_ptr.as_ptr(),
                            NO as libc::c_int,
                            o_ptr.as_ptr(),
-                           n as libc::c_int,
+                           NI as libc::c_int,
                            beta.as_ptr(),
                            output_ptr.as_mut_ptr(),
                            NO as ::libc::c_int

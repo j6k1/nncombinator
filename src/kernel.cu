@@ -1,5 +1,4 @@
 #include<cmath>
-#include<stdio.h>
 
 __device__ float _exp(float x) {
     return __expf(x);

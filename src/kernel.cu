@@ -1,5 +1,6 @@
 #include<cmath>
 #include<stdio.h>
+
 __device__ float _exp(float x) {
     return __expf(x);
 }
@@ -83,36 +84,29 @@ __device__ void tanh_forward(T *input_output, const size_t units_len, const size
 template<typename T>
 
 __device__ void softmax_forward(T *input_output, const size_t units_len, const size_t batch_len) {
-    extern __shared__ char smem[];    
+    extern __shared__ char smem[];
+    T *sdata = reinterpret_cast<T*>(smem);
+
+    T *alpha_sdata = &sdata[0];
+
+    T *sum_sdata = &sdata[BLOCK_SHARED];
 
     size_t tid = threadIdx.x;
     size_t batch_index = blockIdx.x;
 
     if (tid < units_len && batch_index < batch_len) {
-        T *sdata = reinterpret_cast<T*>(smem);
-
-        T *alpha_sdata = &sdata[0];
-        T *sum_sdata = &sdata[BLOCK_SHARED];
-
-        size_t end_block = (batch_index + 1) * units_len;
-
-        __syncthreads();
-        printf("units_len = %lu, batch_index = %lu, end_block = %lu\n",units_len,batch_index,end_block);
-        __syncthreads();
-        
+        size_t end_block = batch_index * units_len + units_len;
         size_t distance = blockDim.x;
 
         sum_sdata[tid] = 0;
         alpha_sdata[tid] = 0.0/0.0;
 
-        __syncthreads();
-        
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],input_output[i]);
         }
 
         __syncthreads();
-    
+
         if (tid < 512) {
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 512]);
         }
@@ -142,12 +136,14 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
             alpha_sdata[0] = _fmax(alpha_sdata[tid],alpha_sdata[0]);
         }
         __syncthreads();
-        T alpha = alpha_sdata[0];
-        /*
-        for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
-            sum_sdata[tid] += _exp(input_output[i] - alpha);
-        }
 
+        T alpha = alpha_sdata[0];
+
+        T scale = 1e7;
+
+        for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
+            sum_sdata[tid] += _exp(input_output[i] - alpha) * scale;
+        }
         __syncthreads();
 
         if (tid < 512) {
@@ -175,56 +171,46 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
         }
         __syncthreads();
 
-        if (tid > 0 && tid < 32) {
-            sum_sdata[0] += sum_sdata[tid];
+        if (tid < 32) {
+            sum_sdata[tid] += sum_sdata[tid + 32];
         }
         __syncthreads();
 
-        T sum = sum_sdata[0];
-        */
-        T sum = 0.0;
-
-        if (tid == 0) {
-            /*
-            for (size_t i = batch_index * units_len; i < end_block; i+=distance) {
-                for (size_t j = 0; j < distance && i + j < end_block; j++) {
-                    sum_sdata[j] += _exp(input_output[i+j] - alpha);
-                }
-            }
-
-            for (size_t stride = distance >> 1; stride > 0; stride = stride >> 1) {
-                for (size_t i = 0; i < stride; i++) {
-                    sum_sdata[i] += sum_sdata[i+stride];
-                }
-            }
-
-            sum = sum_sdata[0];
-            */
-                        
-            for (size_t i = batch_index * units_len; i < end_block; i++) {
-                sum += _exp(input_output[i] - alpha);
-            }
+        if (tid < 16) {
+            sum_sdata[tid] += sum_sdata[tid + 16];
         }
         __syncthreads();
 
-        printf("2 units_len = %lu, batch_index = %lu, end_block = %lu\n",units_len,batch_index,end_block);
-        if (tid == 0) {
-            for (size_t i = batch_index * units_len; i < end_block; i++) {
-                T number = _exp(input_output[i] - alpha);
-                T x = number / sum;
-
-                input_output[i] = x;
-            }
+        if (tid < 8) {
+            sum_sdata[tid] += sum_sdata[tid + 8];
         }
-        printf("distance = %lu, units_len = %lu, batch_index = %lu, tid = % lu\n",distance, batch_len, units_len, batch_index, tid);
-        /*        
+        __syncthreads();
+
+
+        if (tid < 4) {
+            sum_sdata[tid] += sum_sdata[tid + 4];
+        }
+        __syncthreads();
+
+
+        if (tid < 2) {
+            sum_sdata[tid] += sum_sdata[tid + 2];
+        }
+        __syncthreads();
+
+        if (tid < 1) {
+            sum_sdata[tid] += sum_sdata[tid + 1];
+        }
+        __syncthreads();
+        
+        T sum = sum_sdata[0] / scale;
+
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
             T number = _exp(input_output[i] - alpha);
             T x = number / sum;
 
             input_output[i] = x;
         }
-        */
     }
 }
 template<typename T>

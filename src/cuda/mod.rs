@@ -147,67 +147,67 @@ impl private::AsKernelPtrBase for i32 {
 }
 impl private::AsMutKernelPtrBase for i32 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
-        self as *mut i32 as *mut *mut i32 as *mut libc::c_void
+       self as *mut i32 as *mut libc::c_void
     }
 }
 impl private::AsKernelPtrBase for u32 {
     fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const u32 as *const *const u32 as *mut libc::c_void
+        self as *const u32 as *const libc::c_void
     }
 }
 impl private::AsMutKernelPtrBase for u32 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
-        self as *mut u32 as *mut *mut u32 as *mut libc::c_void
+       self as *mut u32 as *mut libc::c_void
     }
 }
 impl private::AsKernelPtrBase for i64 {
     fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const i64 as *const *const i64 as *mut libc::c_void
+        self as *const i64 as *const libc::c_void
     }
 }
 impl private::AsMutKernelPtrBase for i64 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
-        self as *mut i64 as *mut *mut i64 as *mut libc::c_void
+       self as *mut i64 as *mut libc::c_void
     }
 }
 impl private::AsKernelPtrBase for u64 {
     fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const u64 as *const *const u64 as *mut libc::c_void
+        self as *const u64 as *const libc::c_void
     }
 }
 impl private::AsMutKernelPtrBase for u64 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
-        self as *mut u64 as *mut *mut u64 as *mut libc::c_void
+       self as *mut u64 as *mut libc::c_void
     }
 }
 impl private::AsKernelPtrBase for usize {
     fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const usize as *const *const usize as *mut libc::c_void
+        self as *const usize as *const libc::c_void
     }
 }
 impl private::AsMutKernelPtrBase for usize {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
-       self as *mut usize as *mut *mut usize as *mut libc::c_void
+       self as *mut usize as *mut libc::c_void
     }
 }
 impl private::AsKernelPtrBase for f32 {
     fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const f32 as *const *const f32 as *mut libc::c_void
+        self as *const f32 as *const libc::c_void
     }
 }
 impl private::AsMutKernelPtrBase for f32 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
-        self as *mut f32 as *mut *mut f32 as *mut libc::c_void
+        self as *mut f32 as *mut libc::c_void
     }
 }
 impl private::AsKernelPtrBase for f64 {
     fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const f64 as *const *const f64 as *mut libc::c_void
+        self as *const f64 as *const libc::c_void
     }
 }
 impl private::AsMutKernelPtrBase for f64 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
-        self as *mut f64 as *mut *mut f64 as *mut libc::c_void
+        self as *mut f64 as *mut libc::c_void
     }
 }
 /// Trait defining cuda's synchronous memory operations

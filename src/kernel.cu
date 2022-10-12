@@ -42,9 +42,13 @@ __device__ void relu_forward(T *input_output, const size_t units_len, const size
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        if (input_output[i] < 0.0) {
-            input_output[i] = 0.0;
+        T x = 0.0;
+
+        if (input_output[i] > 0.0 || isnan(input_output[i])) {
+            x = 1.0;
         }
+
+        input_output[i] = input_output[i] * x;
     }
 }
 template<typename T>
@@ -78,7 +82,7 @@ __device__ void tanh_forward(T *input_output, const size_t units_len, const size
 }
 template<typename T>
 
-__device__ void softmax_forward(T *input_output, const size_t units_len, const size_t batch_len, const T zero) {
+__device__ void softmax_forward(T *input_output, const size_t units_len, const size_t batch_len) {
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
@@ -90,60 +94,117 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
     size_t batch_index = blockIdx.x;
 
     if (tid < units_len && batch_index < batch_len) {
-        unsigned int i = batch_index * units_len + tid;
-        unsigned int end_block = (batch_index + 1) * units_len;
-        unsigned int distance = blockDim.x;
+        size_t end_block = batch_index * units_len + units_len;
+        size_t distance = blockDim.x;
 
-        sum_sdata[tid] = zero;
-        alpha_sdata[tid] = zero;
+        sum_sdata[tid] = 0;
+        alpha_sdata[tid] = 0.0/0.0;
 
-        while (i < end_block) {
-            sum_sdata[tid] += input_output[i];
+        for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],input_output[i]);
-            i += distance;
         }
+
         __syncthreads();
 
         if (tid < 512) {
-            sum_sdata[tid] += sum_sdata[tid + 512];
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 512]);
         }
         __syncthreads();
 
         if (tid < 256) {
-            sum_sdata[tid] += sum_sdata[tid + 256];
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 256]);
         }
         __syncthreads();
 
         if (tid < 128) {
-            sum_sdata[tid] += sum_sdata[tid + 128];
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 128]);
         }
         __syncthreads();
 
         if (tid < 64) {
-            sum_sdata[tid] += sum_sdata[tid + 64];
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 64]);
         }
         __syncthreads();
 
         if (tid < 32) {
-            sum_sdata[tid] += sum_sdata[tid + 32];
             alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 32]);
         }
         __syncthreads();
 
         if (tid > 0 && tid < 32) {
-            sum_sdata[0] += sum_sdata[tid];
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[0]);
+            alpha_sdata[0] = _fmax(alpha_sdata[tid],alpha_sdata[0]);
         }
         __syncthreads();
 
-        T sum = sum_sdata[0];
         T alpha = alpha_sdata[0];
 
-        for (size_t i = batch_index == 0 ? tid : batch_index * units_len + tid; i < end_block; i+=distance) {
+        T scale = 1e7;
+
+        for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
+            sum_sdata[tid] += _exp(input_output[i] - alpha) * scale;
+        }
+        __syncthreads();
+
+        if (tid < 512) {
+            sum_sdata[tid] += sum_sdata[tid + 512];
+        }
+        __syncthreads();
+
+        if (tid < 256) {
+            sum_sdata[tid] += sum_sdata[tid + 256];
+        }
+        __syncthreads();
+
+        if (tid < 128) {
+            sum_sdata[tid] += sum_sdata[tid + 128];
+        }
+        __syncthreads();
+
+        if (tid < 64) {
+            sum_sdata[tid] += sum_sdata[tid + 64];
+        }
+        __syncthreads();
+
+        if (tid < 32) {
+            sum_sdata[tid] += sum_sdata[tid + 32];
+        }
+        __syncthreads();
+
+        if (tid < 32) {
+            sum_sdata[tid] += sum_sdata[tid + 32];
+        }
+        __syncthreads();
+
+        if (tid < 16) {
+            sum_sdata[tid] += sum_sdata[tid + 16];
+        }
+        __syncthreads();
+
+        if (tid < 8) {
+            sum_sdata[tid] += sum_sdata[tid + 8];
+        }
+        __syncthreads();
+
+
+        if (tid < 4) {
+            sum_sdata[tid] += sum_sdata[tid + 4];
+        }
+        __syncthreads();
+
+
+        if (tid < 2) {
+            sum_sdata[tid] += sum_sdata[tid + 2];
+        }
+        __syncthreads();
+
+        if (tid < 1) {
+            sum_sdata[tid] += sum_sdata[tid + 1];
+        }
+        __syncthreads();
+        
+        T sum = sum_sdata[0] / scale;
+
+        for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
             T number = _exp(input_output[i] - alpha);
             T x = number / sum;
 
@@ -175,9 +236,13 @@ __device__ void relu_backward(T *u, T *loss, const size_t units_len, const size_
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        if (u[i] <= 0.0) {
-            loss[i] = 0.0;
+        T x = 0.0;
+
+        if (u[i] > 0.0) {
+            x = 1.0;
         }
+
+        loss[i] = x * loss[i];
     }
 }
 template<typename T>
@@ -272,6 +337,7 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
         if (tid < 32) {
             sdata[tid] += sdata[tid + 32];
         }
+
         __syncthreads();
 
         if (tid > 0 && tid < 32) {
@@ -287,7 +353,7 @@ template<typename T>
 
 __device__ void loss_linear_batch_by_canonical_link(const T *expected, T *actual, const int nlen, const int batch_size) {
     const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
-    const size_t index = blockDim.x * blockDim.x + threadIdx.x;
+    const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
@@ -296,35 +362,35 @@ __device__ void loss_linear_batch_by_canonical_link(const T *expected, T *actual
 }
 template<typename T>
 
-__device__ void loss_linear_batch_mse_derive(const T *r, T *t, const int nlen, const int batch_size) {
+__device__ void loss_linear_batch_mse_derive(const T *t, T *r, const int nlen, const int batch_size) {
     const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
     const size_t index = blockDim.x * blockDim.x + threadIdx.x;
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        t[i] = r[i] - t[i];
+        r[i] = r[i] - t[i];
     }
 }
 template<typename T>
 
-__device__ void loss_linear_batch_cross_entropy_derive(const T *r, T *t, const int nlen, const int batch_size) {
+__device__ void loss_linear_batch_cross_entropy_derive(const T *t, T *r, const int nlen, const int batch_size) {
     const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
     const size_t index = blockDim.x * blockDim.x + threadIdx.x;
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        t[i] = -(r[i] / (t[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i]);
+        r[i] = -(r[i] / (t[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i]);
     }
 }
 template<typename T>
 
-__device__ void loss_linear_batch_cross_entropy_multiclass_derive(const T *r, T *t, const int nlen, const int batch_size) {
+__device__ void loss_linear_batch_cross_entropy_multiclass_derive(const T *t, T *r, const int nlen, const int batch_size) {
     const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
     const size_t index = blockDim.x * blockDim.x + threadIdx.x;
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        t[i] = -t[i] / r[i];
+        r[i] = -t[i] / r[i];
     }
 }
 extern "C" {
@@ -345,7 +411,7 @@ extern "C" {
     }
 
 	__global__ void softmax_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
-        softmax_forward(input_output,units_len,batch_len,0.0F);
+        softmax_forward(input_output,units_len,batch_len);
     }
 
 	__global__ void sigmoid_backward_float(float *u, float *loss, const size_t units_len, const size_t batch_len) {
@@ -384,7 +450,7 @@ extern "C" {
     }
 
 	__global__ void softmax_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
-        softmax_forward(input_output,units_len,batch_len,0.0);
+        softmax_forward(input_output,units_len,batch_len);
     }
 
 	__global__ void sigmoid_backward_double(double *u, double *loss, const size_t units_len, const size_t batch_len) {
@@ -423,27 +489,27 @@ extern "C" {
         loss_linear_batch_by_canonical_link(expected,actual,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_mse_derive_float(const float *r, float *t, const int nlen, const int batch_size) {
-        loss_linear_batch_mse_derive(r,t,nlen,batch_size);
+    __global__ void loss_linear_batch_mse_derive_float(const float *t, float *r, const int nlen, const int batch_size) {
+        loss_linear_batch_mse_derive(t,r,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_mse_derive_double(const double *r, double *t, const int nlen, const int batch_size) {
-        loss_linear_batch_mse_derive(r,t,nlen,batch_size);
+    __global__ void loss_linear_batch_mse_derive_double(const double *t, double *r, const int nlen, const int batch_size) {
+        loss_linear_batch_mse_derive(t,r,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_cross_entropy_derive_float(const float *r, float *t, const int nlen, const int batch_size) {
-        loss_linear_batch_cross_entropy_derive(r,t,nlen,batch_size);
+    __global__ void loss_linear_batch_cross_entropy_derive_float(const float *t, float *r, const int nlen, const int batch_size) {
+        loss_linear_batch_cross_entropy_derive(t,r,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_cross_entropy_derive_double(const double *r, double *t, const int nlen, const int batch_size) {
-        loss_linear_batch_cross_entropy_derive(r,t,nlen,batch_size);
+    __global__ void loss_linear_batch_cross_entropy_derive_double(const double *t, double *r, const int nlen, const int batch_size) {
+        loss_linear_batch_cross_entropy_derive(t,r,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_cross_entropy_multiclass_derive_float(const float *r, float *t, const int nlen, const int batch_size) {
-        loss_linear_batch_cross_entropy_multiclass_derive(r,t,nlen,batch_size);
+    __global__ void loss_linear_batch_cross_entropy_multiclass_derive_float(const float *t, float *r, const int nlen, const int batch_size) {
+        loss_linear_batch_cross_entropy_multiclass_derive(t,r,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_cross_entropy_multiclass_derive_double(const double *r, double *t, const int nlen, const int batch_size) {
-        loss_linear_batch_cross_entropy_multiclass_derive(r,t,nlen,batch_size);
+    __global__ void loss_linear_batch_cross_entropy_multiclass_derive_double(const double *t, double *r, const int nlen, const int batch_size) {
+        loss_linear_batch_cross_entropy_multiclass_derive(t,r,nlen,batch_size);
     }
 }

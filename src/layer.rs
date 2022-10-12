@@ -10,7 +10,7 @@ use crate::persistence::*;
 use crate::{Cons, Nil, Stack};
 use crate::activation::{Activation, BatchActivation};
 use crate::cuda::mem::CachedTensor;
-use crate::error::{ConfigReadError, CudaError, DeviceError, EvaluateError, PersistenceError, TrainingError};
+use crate::error::{ConfigReadError, CudaError, DeviceError, EvaluateError, PersistenceError, TrainingError, UnsupportedOperationError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
@@ -38,7 +38,7 @@ pub trait ForwardAll {
     /// Output from this layer of the neural network
     type Output: Debug;
     /// Forward propagation
-    /// #Arguments
+    /// # Arguments
     /// * `input` - input
     ///
     /// # Errors
@@ -53,7 +53,7 @@ pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {
     type LossInput: Debug;
 
     /// Back propagation of errors
-    /// #Arguments
+    /// # Arguments
     /// * `input` - loss
     /// * `stack` - Stack to store calculation results at upper layers
     /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
@@ -87,7 +87,7 @@ pub trait Loss<U>: BackwardAll<U> where U: UnitValue<U> {
 /// Characteristics defining the internal implementation of the error back propagation method in neural networks
 pub trait Backward<U,I,O> where U: UnitValue<U> {
     /// Back propagation of errors
-    /// #Arguments
+    /// # Arguments
     /// * `input` - loss
     fn backward(&mut self, input:I) -> O;
 }
@@ -151,7 +151,7 @@ pub trait BatchForwardBase: ForwardAll {
 /// Trait defining the implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForward: BatchForwardBase {
     /// Forward propagation
-    /// #Arguments
+    /// # Arguments
     /// * `input` - input
     ///
     /// # Errors
@@ -165,7 +165,7 @@ pub trait BatchBackward<U>: BatchPreTrainBase<U> where U: UnitValue<U> {
     /// Losses during neural network training for batch execution
     type BatchLossInput: Debug;
     /// Back propagation of errors
-    /// #Arguments
+    /// # Arguments
     /// * `input` - loss
     /// * `stack` - Stack to store calculation results at upper layers
     /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
@@ -206,7 +206,7 @@ pub trait BatchPreTrainBase<U>: BatchForwardBase + PreTrain<U> where U: UnitValu
 /// the error back propagation process of a neural network through batch processing.
 pub trait BatchPreTrain<U>: BatchPreTrainBase<U> + BatchForwardBase + BatchForward + where U: UnitValue<U> {
     /// Perform forward propagation required to perform error back propagation
-    /// #Arguments
+    /// # Arguments
     /// * `input` - input
     ///
     /// # Errors
@@ -218,7 +218,7 @@ pub trait BatchPreTrain<U>: BatchPreTrainBase<U> + BatchForwardBase + BatchForwa
 /// Trait that defines the implementation of neural network training by batch processing.
 pub trait BatchTrain<U,D>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + PreTrain<U> where U: UnitValue<U>, D: Device<U> {
     /// Train neural networks.
-    /// #Arguments
+    /// # Arguments
     /// * `expected` - expected value
     /// * `input` - loss
     /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
@@ -1154,27 +1154,27 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Arr2<
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
         let (s,_) = stack.pop();
 
-        let loss= self.backward(&input)?;
-
-        let (s,loss) = self.parent.loss(loss,lossf,s)?;
+        let loss = input;
 
         {
-            let loss = input;
-
-            for l in loss.iter() {
-                for w in self.bias.iter_mut() {
-                    optimizer.update(*l, w);
-                }
+            for (w,&g) in self.bias.iter_mut().zip(loss.iter()) {
+                optimizer.update(g, w);
             }
 
             s.map(|o| {
-                for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
-                    for (w,l) in u.iter_mut().zip(loss.iter()) {
-                        optimizer.update(*l * *o, w);
+                self.device.backward_weight_gradient(o,&loss).map(|g| {
+                    for (mut u,g) in self.units.iter_mut().zip(g.iter()) {
+                        for (w,&g) in u.iter_mut().zip(g.iter()) {
+                            optimizer.update(g, w);
+                        }
                     }
-                }
-            });
+                })
+            })?;
         }
+
+        let loss= self.backward(&loss)?;
+
+        let (s,loss) = self.parent.loss(loss,lossf,s)?;
 
         self.parent.backward_all(loss, s, optimizer, lossf)
     }
@@ -1189,27 +1189,27 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Cache
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
         let (s,_) = stack.pop();
 
-        let loss= self.backward(&input)?;
-
-        let (s,loss) = self.parent.loss(loss,lossf,s)?;
+        let loss = input;
 
         {
-            let loss = input;
-
-            for l in loss.iter() {
-                for w in self.bias.iter_mut() {
-                    optimizer.update(*l, w);
-                }
+            for (w,&g) in self.bias.iter_mut().zip(loss.iter()) {
+                optimizer.update(g, w);
             }
 
             s.map(|o| {
-                for (mut u,o) in self.units.scoped_mut().iter_mut().zip(o.iter()) {
-                    for (w,l) in u.iter_mut().zip(loss.iter()) {
-                        optimizer.update(*l * *o, w);
+                self.device.backward_weight_gradient(o,&loss).map(|g| {
+                    for (mut u,g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
+                        for (w,&g) in u.iter_mut().zip(g.iter()) {
+                            optimizer.update(g, w);
+                        }
                     }
-                }
-            });
+                })
+            })?;
         }
+
+        let loss= self.backward(&loss)?;
+
+        let (s,loss) = self.parent.loss(loss,lossf,s)?;
 
         self.parent.backward_all(loss, s, optimizer, lossf)
     }
@@ -1260,7 +1260,7 @@ impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,C,P
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        self.device.batch_forward_linear(&input,&self.bias,&self.units,)
+        self.device.batch_forward_linear(&self.bias,&self.units,&input)
     }
 }
 impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchPreTrainBase<U> for LinearLayer<U,C,P,D,I,NI,NO>
@@ -1283,7 +1283,7 @@ impl<U,C,P,D,I,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let r = self.parent.batch_pre_train(input)?;
 
-        let u = r.map(|input| self.device.batch_forward_linear(input,&self.bias,&self.units))?;
+        let u = r.map(|input| self.device.batch_forward_linear(&self.bias,&self.units,input))?;
 
         Ok(Cons(r,u))
     }
@@ -1300,31 +1300,29 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr
     fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
         let (s, _) = stack.pop();
 
-        let loss = self.device.backward_linear_batch(&self.units,&input)?;
-
-        let (s,loss) = self.parent.batch_loss(loss,lossf,s)?;
+        let loss = input;
 
         {
-            let loss = input;
-
-            let loss = self.device.batch_linear_reduce(&loss)?;
-
             {
-                for (w,&l) in self.bias.iter_mut().zip(loss.iter()) {
+                for (w,&l) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
                     optimizer.update(l, w);
                 }
 
                 s.map(|o| {
-                    self.device.batch_linear_reduce(&o).map(|o| {
-                        for (mut u, o) in self.units.iter_mut().zip(o.iter()) {
-                            for (w, &l) in u.iter_mut().zip(loss.iter()) {
-                                optimizer.update(l * *o, w);
+                    self.device.batch_backward_weight_gradient(&o, &loss).map(|g| {
+                        for (mut u, g) in self.units.iter_mut().zip(g.iter()) {
+                            for (w, &g) in u.iter_mut().zip(g.iter()) {
+                                optimizer.update(g, w);
                             }
                         }
                     })
                 })?;
             }
         }
+
+        let loss = self.device.batch_backward_linear(&self.units, &loss)?;
+
+        let (s,loss) = self.parent.batch_loss(loss,lossf,s)?;
 
         self.parent.batch_backward(loss, s, optimizer, lossf)
     }
@@ -1342,31 +1340,29 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Cac
     fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
         let (s, _) = stack.pop();
 
-        let loss = self.device.backward_linear_batch(&self.units,&input)?;
-
-        let (s,loss) = self.parent.batch_loss(loss,lossf,s)?;
+        let loss = input;
 
         {
-            let loss = input;
-
-            let loss = self.device.batch_linear_reduce(&loss)?;
-
             {
-                for (w,&l) in self.bias.iter_mut().zip(loss.iter()) {
+                for (w,&l) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
                     optimizer.update(l, w);
                 }
 
                 s.map(|o| {
-                    self.device.batch_linear_reduce(&o).map(|o| {
-                        for (mut u, o) in self.units.scoped_mut().iter_mut().zip(o.iter()) {
-                            for (w, &l) in u.iter_mut().zip(loss.iter()) {
-                                optimizer.update(l * *o, w);
+                    self.device.batch_backward_weight_gradient(&o, &loss).map(|g| {
+                        for (mut u, g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
+                            for (w, &g) in u.iter_mut().zip(g.iter()) {
+                                optimizer.update(g, w);
                             }
                         }
                     })
                 })?;
             }
         }
+
+        let loss = self.device.batch_backward_linear(&self.units, &loss)?;
+
+        let (s,loss) = self.parent.batch_loss(loss,lossf,s)?;
 
         self.parent.batch_backward(loss, s, optimizer, lossf)
     }
@@ -1716,48 +1712,47 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,A
     where P: BackwardAll<U,LossInput=Arr<U,NI>> +
              ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync,
+          Self: ForwardAll + PreTrain<U,OutStack=Cons<<P as PreTrain<U>>::OutStack,Arr<U,NO>>> {
     type LossInput = Arr<U,NO>;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
         let (s,_) = stack.pop();
 
-        let loss= self.backward(&input)?;
-
-        let (s,loss) = self.parent.loss(loss,lossf,s)?;
+        let loss = input;
 
         {
-            let loss = input;
-
-            for l in loss.iter() {
-                for w in self.bias.iter_mut() {
-                    optimizer.update(*l, w);
-                }
+            for (w,&g) in self.bias.iter_mut().zip(loss.iter()) {
+                optimizer.update(g, w);
             }
 
-            s.map::<_,Result<(),EvaluateError>>(|o| {
+            s.map::<_,Result<(),TrainingError>>(|o| {
                 match o {
-                    DiffInput::Diff(_, o) => {
-                        for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
-                            for (w,l) in u.iter_mut().zip(loss.iter()) {
-                                optimizer.update(*l * *o, w);
-                            }
-                        }
+                    DiffInput::Diff(_, _) => {
+                        return Err(TrainingError::UnsupportedOperationError(UnsupportedOperationError(
+                            String::from("Training from difference information is not supported.")
+                        )));
                     },
-                    DiffInput::NotDiff(input) => {
-                        let o = self.device.forward_linear(&self.bias, &self.units, input)?;
+                    DiffInput::NotDiff(o) => {
+                        let g = self.device.backward_weight_gradient(&o,&loss);
 
-                        for (mut u,o) in self.units.iter_mut().zip(o.iter()) {
-                            for (w,l) in u.iter_mut().zip(loss.iter()) {
-                                optimizer.update(*l * *o, w);
+                        g.map(|g| {
+                            for (mut u,g) in self.units.iter_mut().zip(g.iter()) {
+                                for (w,&g) in u.iter_mut().zip(g.iter()) {
+                                    optimizer.update(g, w);
+                                }
                             }
-                        }
+                        })?;
                     }
                 }
 
                 Ok(())
             })?;
         }
+
+        let loss= self.backward(&loss)?;
+
+        let (s,loss) = self.parent.loss(loss,lossf,s)?;
 
         self.parent.backward_all(loss, s, optimizer, lossf)
     }
@@ -1774,42 +1769,40 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,C
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
         let (s,_) = stack.pop();
 
-        let loss= self.backward(&input)?;
-
-        let (s,loss) = self.parent.loss(loss,lossf,s)?;
+        let loss = input;
 
         {
-            let loss = input;
-
-            for l in loss.iter() {
-                for w in self.bias.iter_mut() {
-                    optimizer.update(*l, w);
-                }
+            for (w,&g) in self.bias.iter_mut().zip(loss.iter()) {
+                optimizer.update(g, w);
             }
 
-            s.map::<_,Result<(),EvaluateError>>(|o| {
+            s.map::<_,Result<(),TrainingError>>(|o| {
                 match o {
-                    DiffInput::Diff(_, o) => {
-                        for (mut u,o) in self.units.scoped_mut().iter_mut().zip(o.iter()) {
-                            for (w,l) in u.iter_mut().zip(loss.iter()) {
-                                optimizer.update(*l * *o, w);
-                            }
-                        }
+                    DiffInput::Diff(_, _) => {
+                        return Err(TrainingError::UnsupportedOperationError(UnsupportedOperationError(
+                            String::from("Training from difference information is not supported.")
+                        )));
                     },
-                    DiffInput::NotDiff(input) => {
-                        let o = self.device.forward_linear(&self.bias, &self.units, input)?;
+                    DiffInput::NotDiff(o) => {
+                        let g = self.device.backward_weight_gradient(&o,&loss);
 
-                        for (mut u,o) in self.units.scoped_mut().iter_mut().zip(o.iter()) {
-                            for (w,l) in u.iter_mut().zip(loss.iter()) {
-                                optimizer.update(*l * *o, w);
+                        g.map(|g| {
+                            for (mut u,g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
+                                for (w,&g) in u.iter_mut().zip(g.iter()) {
+                                    optimizer.update(g, w);
+                                }
                             }
-                        }
+                        })?;
                     }
                 }
 
                 Ok(())
             })?;
         }
+
+        let loss= self.backward(&loss)?;
+
+        let (s,loss) = self.parent.loss(loss,lossf,s)?;
 
         self.parent.backward_all(loss, s, optimizer, lossf)
     }

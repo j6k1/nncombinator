@@ -32,7 +32,9 @@ pub enum TrainingError {
     /// Error in cuda runtime
     CudaRuntimeError(CudaRuntimeError),
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
-    InvalidStateError(InvalidStateError)
+    InvalidStateError(InvalidStateError),
+    /// Error that occurs when calling a function that is not supported by the specification
+    UnsupportedOperationError(UnsupportedOperationError)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -47,7 +49,8 @@ impl fmt::Display for TrainingError {
             TrainingError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})",e),
             TrainingError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
             TrainingError::CudaRuntimeError(e) => write!(f,"{}",e),
-            TrainingError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e)
+            TrainingError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e),
+            TrainingError::UnsupportedOperationError(e) => write!(f,"unsupported operation. ({})",e),
         }
     }
 }
@@ -64,7 +67,8 @@ impl error::Error for TrainingError {
             TrainingError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
             TrainingError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
             TrainingError::CudaRuntimeError(_) => "An error occurred while running the Cuda kernel.",
-            TrainingError::InvalidStateError(_) => "Invalid state."
+            TrainingError::InvalidStateError(_) => "Invalid state.",
+            TrainingError::UnsupportedOperationError(_) => "unsupported operation."
         }
     }
 
@@ -80,7 +84,8 @@ impl error::Error for TrainingError {
             TrainingError::CublasError(e) => Some(e),
             TrainingError::CudnnError(e) => Some(e),
             TrainingError::CudaRuntimeError(_) => None,
-            TrainingError::InvalidStateError(e) => Some(e)
+            TrainingError::InvalidStateError(e) => Some(e),
+            TrainingError::UnsupportedOperationError(e) => Some(e)
         }
     }
 }
@@ -153,6 +158,11 @@ impl From<CudaRuntimeError> for TrainingError {
 impl From<InvalidStateError> for TrainingError {
     fn from(err: InvalidStateError) -> TrainingError {
         TrainingError::InvalidStateError(err)
+    }
+}
+impl From<UnsupportedOperationError> for TrainingError {
+    fn from(err: UnsupportedOperationError) -> TrainingError {
+        TrainingError::UnsupportedOperationError(err)
     }
 }
 impl From<io::Error> for ConfigReadError {
@@ -236,7 +246,7 @@ pub enum EvaluateError {
     /// Errors caused by generating fixed-length arrays from different size Vecs
     SizeMismatchError(SizeMismatchError),
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
-    InvalidStateError(InvalidStateError)
+    InvalidStateError(InvalidStateError),
 }
 impl fmt::Display for EvaluateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -443,13 +453,38 @@ impl fmt::Display for InvalidStateError {
 impl error::Error for InvalidStateError {
     fn description(&self) -> &str {
         match self {
-            InvalidStateError(_) => "Invalid state,"
+            InvalidStateError(_) => "Invalid state."
         }
     }
 
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             InvalidStateError(_) => None,
+        }
+    }
+}
+/// Error that occurs when calling a function that is not supported by the specification
+#[derive(Debug,PartialEq,Eq)]
+pub struct UnsupportedOperationError(pub String);
+impl fmt::Display for UnsupportedOperationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            UnsupportedOperationError(s) => {
+                write!(f,"{}",s)
+            }
+        }
+    }
+}
+impl error::Error for UnsupportedOperationError {
+    fn description(&self) -> &str {
+        match self {
+            UnsupportedOperationError(_) => "unsupported operation."
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            UnsupportedOperationError(_) => None,
         }
     }
 }

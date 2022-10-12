@@ -598,19 +598,19 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
 
         match unsafe {
             cublasSgemm_v2(*self.cublas.id_c(),
-                                        cublasOperation_t::CUBLAS_OP_N,
-                                        cublasOperation_t::CUBLAS_OP_N,
-                                        NO as ::libc::c_int,
-                                        input.len() as libc::c_int,
-                                        NI as ::libc::c_int,
-                                        alpha.as_ptr(),
-                                        units.as_ptr(),
-                                        NO as libc::c_int,
-                                        input_ptr.as_ptr(),
-                                        NI as libc::c_int,
-                                        beta.as_ptr(),
-                                        output_ptr.as_mut_ptr(),
-                                        NO as ::libc::c_int
+                            cublasOperation_t::CUBLAS_OP_N,
+                            cublasOperation_t::CUBLAS_OP_N,
+                            NO as ::libc::c_int,
+                            input.len() as libc::c_int,
+                            NI as ::libc::c_int,
+                            alpha.as_ptr(),
+                            units.as_ptr(),
+                            NO as libc::c_int,
+                            input_ptr.as_ptr(),
+                            NI as libc::c_int,
+                            beta.as_ptr(),
+                            output_ptr.as_mut_ptr(),
+                            NO as ::libc::c_int
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {

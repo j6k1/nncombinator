@@ -171,6 +171,12 @@ impl MemoryPool {
                     current.value.allocated = true;
                     current.value.size = size;
 
+                    if self.map.contains_key(&(p as *const c_void)) {
+                        return Err(CudaError::LogicError(String::from(
+                            "Attempted to allocate an area that was already allocated.")
+                        ));
+                    }
+
                     self.map.insert(p, Rc::clone(&c));
 
                     if remaining > 0 {
@@ -180,8 +186,8 @@ impl MemoryPool {
                             allocated: false
                         });
 
-                        prev_key = unsafe { Some(p.add(size)) };
                         self.prev_map.insert(p, Rc::clone(&c));
+                        prev_key = unsafe { Some(p.add(size)) };
                     } else {
                         n = None;
                     }
@@ -189,6 +195,12 @@ impl MemoryPool {
                     found = true;
 
                     break;
+                }
+
+                if current.value.size == 0 {
+                    return Err(CudaError::LogicError(String::from(
+                        "A node with a memory size of zero was detected within the memory allocation process.")
+                    ));
                 }
 
                 unsafe { p = p.add(current.value.size); }

@@ -154,6 +154,12 @@ impl MemoryPool {
     pub fn allocate<T>(&mut self,size:usize) -> Result<*mut T,CudaError> {
         let size = size * size_of::<T>();
 
+        if size == 0 {
+            return Err(CudaError::InvalidConfigurationError(String::from(
+                "The specified memory size is 0."
+            )));
+        }
+
         let mut p = self.pool;
         let mut prev_key = None;
 
@@ -169,6 +175,7 @@ impl MemoryPool {
                     let remaining = current.value.size - size;
 
                     current.value.allocated = true;
+
                     current.value.size = size;
 
                     if self.map.contains_key(&(p as *const c_void)) {
@@ -214,9 +221,8 @@ impl MemoryPool {
                 let current = Rc::clone(&n);
 
                 n.deref().borrow_mut().next().map(|n| {
-                    n.borrow_mut().value.prev_key = prev_key;
-
                     if let Some(p) = prev_key {
+                        n.borrow_mut().value.prev_key = Some(p);
                         self.prev_map.insert(p, current);
                     }
                 });

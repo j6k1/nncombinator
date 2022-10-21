@@ -343,7 +343,9 @@ pub enum CudaError {
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidState(String),
     /// There is a problem with the implementation logic of the program
-    LogicError(String)
+    LogicError(String),
+    /// Error that occurs when a specified argument or other setting value is invalid.
+    InvalidConfigurationError(String),
 }
 impl fmt::Display for CudaError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -352,7 +354,8 @@ impl fmt::Display for CudaError {
             CudaError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
             CudaError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})", e),
             CudaError::InvalidState(s) => write!(f, "{}", s),
-            CudaError::LogicError(s) => write!(f,"{}",s)
+            CudaError::LogicError(s) => write!(f,"{}",s),
+            CudaError::InvalidConfigurationError(s) => write!(f,"{}",s),
         }
     }
 }
@@ -363,7 +366,8 @@ impl error::Error for CudaError {
             CudaError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
             CudaError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
             CudaError::InvalidState(_) => "Invalid state.s",
-            CudaError::LogicError(_) => "Logic error."
+            CudaError::LogicError(_) => "Logic error.",
+            CudaError::InvalidConfigurationError(_) => "Invalid configuration.",
         }
     }
 
@@ -374,6 +378,7 @@ impl error::Error for CudaError {
             CudaError::CublasError(e) => Some(e),
             CudaError::InvalidState(_) => None,
             CudaError::LogicError(_) => None,
+            CudaError::InvalidConfigurationError(_) => None,
         }
     }
 }

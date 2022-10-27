@@ -97,8 +97,8 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
     ///
     /// This function may return the following errors
     /// * [`ConfigReadError`]
-    pub fn new (file:&str) -> Result<TextFilePersistence<U>,ConfigReadError> {
-        if Path::new(file).exists() {
+    pub fn new<P: AsRef<Path>>(file:P) -> Result<TextFilePersistence<U>,ConfigReadError> {
+        if file.as_ref().exists() {
             Ok(TextFilePersistence {
                 reader:Some(BufReader::new(OpenOptions::new().read(true).create(false).open(file)?)),
                 line: None,
@@ -270,8 +270,8 @@ impl<U> BinFilePersistence<U> {
     ///
     /// This function may return the following errors
     /// * [`ConfigReadError`]
-    pub fn new (file:&str) -> Result<BinFilePersistence<U>, ConfigReadError> {
-        if Path::new(file).exists() {
+    pub fn new<P: AsRef<Path>>(file:P) -> Result<BinFilePersistence<U>, ConfigReadError> {
+        if file.as_ref().exists() {
             Ok(BinFilePersistence {
                 reader:Some(BufReader::new(OpenOptions::new().read(true).create(false).open(file)?)),
                 data:Vec::new()

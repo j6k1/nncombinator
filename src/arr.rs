@@ -603,6 +603,12 @@ pub struct VecArr<U,T> {
     len:usize,
     t:PhantomData<T>
 }
+impl<U,T> VecArr<U,T> where U: Default + Clone + Copy + Send {
+    /// get the number of element
+    pub fn len(&self) -> usize {
+        self.len
+    }
+}
 impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
     /// Create a VecArr instance of the specified size
     /// # Arguments
@@ -627,11 +633,6 @@ impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send 
     /// Obtaining a mutable iterator
     pub fn iter_mut(&mut self) -> VecArrIterMut<U,N> {
         VecArrIterMut(&mut *self.arr)
-    }
-
-    /// get the number of element
-    pub fn len(&self) -> usize {
-        self.len
     }
 }
 impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {

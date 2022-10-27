@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
 use libc::{c_uint};
+use num_traits::FromPrimitive;
 use rcublas::Context;
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasStatus_t, cublasSgemm_v2, cublasHandle_t, cublasSgemv_v2, cublasDgemv_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -60,14 +61,23 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
     /// * `expected` - expected value
     /// * `actual` - actual value
     /// * `lossf` - loss function
-    fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&VecArr<U,Arr<U,N>>,actual:&VecArr<U,Arr<U,N>>,lossf:&L) -> U {
-        actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
+    fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&VecArr<U,Arr<U,N>>,actual:&VecArr<U,Arr<U,N>>,lossf:&L)
+        -> Result<U,TrainingError> where f64: From<U> + FromPrimitive, f64: FromPrimitive {
+        let n = f64::from_usize(exptected.len()).ok_or(TrainingError::TypeCastError(
+            String::from("An error occurred when casting the batch size data type to f64.")
+        ))?;
+
+        let loss = actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
             a.par_iter().cloned()
                 .zip(e.par_iter().cloned())
                 .reduce(|| (U::default(),U::default()), |(sum,d),(a,e)| {
                     (sum + lossf.apply(a,e),d)
                 })
-        }).map(|(sum,_)| sum).reduce(|| U::default(), |sum,l| sum + l)
+        }).map(|(sum,_)| sum).reduce(|| U::default(), |sum,l| sum + l);
+
+        U::from_f64(f64::from(loss) / n).ok_or(TrainingError::TypeCastError(
+            String::from("An error occurred in the type conversion of the total loss.")
+        ))
     }
 }
 /// Trait that defines the implementation of various calculation processes in the linear layer

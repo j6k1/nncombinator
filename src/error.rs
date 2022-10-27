@@ -34,7 +34,9 @@ pub enum TrainingError {
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidStateError(InvalidStateError),
     /// Error that occurs when calling a function that is not supported by the specification
-    UnsupportedOperationError(UnsupportedOperationError)
+    UnsupportedOperationError(UnsupportedOperationError),
+    /// Error raised when cast of primitive type fails
+    TypeCastError(String)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -51,6 +53,7 @@ impl fmt::Display for TrainingError {
             TrainingError::CudaRuntimeError(e) => write!(f,"{}",e),
             TrainingError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e),
             TrainingError::UnsupportedOperationError(e) => write!(f,"unsupported operation. ({})",e),
+            TrainingError::TypeCastError(s) => write!(f,"{}",s),
         }
     }
 }
@@ -68,7 +71,8 @@ impl error::Error for TrainingError {
             TrainingError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
             TrainingError::CudaRuntimeError(_) => "An error occurred while running the Cuda kernel.",
             TrainingError::InvalidStateError(_) => "Invalid state.",
-            TrainingError::UnsupportedOperationError(_) => "unsupported operation."
+            TrainingError::UnsupportedOperationError(_) => "unsupported operation.",
+            TrainingError::TypeCastError(_) => "Typecast failed.",
         }
     }
 
@@ -85,7 +89,8 @@ impl error::Error for TrainingError {
             TrainingError::CudnnError(e) => Some(e),
             TrainingError::CudaRuntimeError(_) => None,
             TrainingError::InvalidStateError(e) => Some(e),
-            TrainingError::UnsupportedOperationError(e) => Some(e)
+            TrainingError::UnsupportedOperationError(e) => Some(e),
+            TrainingError::TypeCastError(_) => None,
         }
     }
 }

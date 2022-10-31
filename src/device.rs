@@ -50,7 +50,7 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
-                                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError>;
+                                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError> where f64: From<U>;
 
     /// convolutional calculation
     /// # Arguments
@@ -194,10 +194,16 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
     }
 
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
-                                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError> {
+                                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError> where f64: From<U> {
+        let n = f64::from_usize(expected.len()).ok_or(TrainingError::TypeCastError(
+            String::from("An error occurred when casting the batch size data type to f64.")
+        ))?;
+
         Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
             a.par_iter().zip(e.par_iter())
-                .map(|(&a,&e)| a - e).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
+                .map(|(&a,&e)| U::from_f64(f64::from(a - e) / n).ok_or(TrainingError::TypeCastError(
+                    String::from("An error occurred when casting the batch size data type to U.")
+                ))).collect::<Result<Vec<U>,_>>()?.try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 
@@ -410,7 +416,8 @@ impl Device<f32> for DeviceGpu<f32> {
         })
     }
 
-    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f32, Arr<f32, N>>, actual: &VecArr<f32, Arr<f32, N>>) -> Result<VecArr<f32, Arr<f32, N>>, TrainingError> {
+    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f32, Arr<f32, N>>, actual: &VecArr<f32, Arr<f32, N>>)
+        -> Result<VecArr<f32, Arr<f32, N>>, TrainingError> {
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 
@@ -779,7 +786,8 @@ impl Device<f64> for DeviceGpu<f64> {
         })
     }
 
-    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f64, Arr<f64, N>>, actual: &VecArr<f64, Arr<f64, N>>) -> Result<VecArr<f64, Arr<f64, N>>, TrainingError> {
+    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f64, Arr<f64, N>>, actual: &VecArr<f64, Arr<f64, N>>)
+        -> Result<VecArr<f64, Arr<f64, N>>, TrainingError> {
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 

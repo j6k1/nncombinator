@@ -53,7 +53,7 @@ __device__ void relu_forward(T *input_output, const size_t units_len, const size
 }
 template<typename T>
 
-__device__ void swish_forwaxd(T *input_output, const size_t units_len, const size_t batch_len) {
+__device__ void swish_forward(T *input_output, const size_t units_len, const size_t batch_len) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -401,8 +401,8 @@ extern "C" {
         relu_forward(input_output,units_len,batch_len);
     }
 
-	__global__ void swish_forwaxd_float(float *input_output, const size_t units_len, const size_t batch_len) {
-        swish_forwaxd(input_output,units_len,batch_len);
+	__global__ void swish_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
+        swish_forward(input_output,units_len,batch_len);
     }
 
 	__global__ void tanh_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
@@ -440,8 +440,8 @@ extern "C" {
         relu_forward(input_output,units_len,batch_len);
     }
 
-	__global__ void swish_forwaxd_double(double *input_output, const size_t units_len, const size_t batch_len) {
-        swish_forwaxd(input_output,units_len,batch_len);
+	__global__ void swish_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
+        swish_forward(input_output,units_len,batch_len);
     }
 
 	__global__ void tanh_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {

@@ -560,7 +560,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,Device
         let mut r = Arr::new();
 
         for (r,i) in r.iter_mut().zip(input.clone()) {
-            *r = *r * (U::one() / (U::one() + (-i).exp()))
+            *r = i * (U::one() / (U::one() + (-i).exp()))
         }
 
         Ok(r)
@@ -570,7 +570,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,Device
         let mut r = Arr::new();
 
         for ((r,u),o) in r.iter_mut().zip(u.clone()).zip(o.clone()) {
-            *r = u + U::one() + U::one() / (U::one() + (-o).exp()) * (U::one() - u)
+            *r = u + U::one() / (U::one() + (-o).exp()) * (U::one() - u)
         }
 
         for (r,l) in r.iter_mut().zip(loss.clone()) {

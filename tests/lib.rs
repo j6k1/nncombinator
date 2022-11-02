@@ -2817,7 +2817,7 @@ fn test_mnist_sigmoid_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -2827,54 +2827,52 @@ fn test_mnist_sigmoid_and_mse() {
 
     let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 
-        for _ in 0..5 {
-            teachers.shuffle(&mut rng);
+        teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(50) {
-                count += 1;
+        for teachers in teachers.chunks(50) {
+            count += 1;
 
-                let batch_data = teachers.iter().map(|(n, path)| {
-                    let b = BufReader::new(File::open(path).unwrap()).bytes();
+            let batch_data = teachers.iter().map(|(n, path)| {
+                let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-                    let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+                let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
 
-                    let n = *n;
+                let n = *n;
 
-                    let mut input = Arr::<f32, 784>::new();
+                let mut input = Arr::<f32, 784>::new();
 
-                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                        *it = *p;
-                    }
-
-                    let mut expected = Arr::new();
-
-                    expected[0] = if n % 2 == 0 {
-                        1.0
-                    } else {
-                        0.0
-                    };
-
-                    (expected, input)
-                }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
-                    acc.0.push(e);
-                    acc.1.push(i);
-                    acc
-                });
-
-                let lossf = Mse::new();
-
-                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
-                total_loss += loss;
-
-                let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-                if count >= 100 {
-                    break;
+                for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                    *it = *p;
                 }
+
+                let mut expected = Arr::new();
+
+                expected[0] = if n % 2 == 0 {
+                    1.0
+                } else {
+                    0.0
+                };
+
+                (expected, input)
+            }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                acc.0.push(e);
+                acc.1.push(i);
+                acc
+            });
+
+            let lossf = Mse::new();
+
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            total_loss += loss;
+
+            let _ = net.batch_forward(batch_data.1.into()).unwrap();
+
+            if count >= 100 {
+                break;
             }
         }
         println!("total_loss = {}", total_loss);
@@ -2970,7 +2968,7 @@ fn test_mnist_sigmoid_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -2980,54 +2978,52 @@ fn test_mnist_sigmoid_and_mse_for_gpu() {
 
     let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 
-        for _ in 0..5 {
-            teachers.shuffle(&mut rng);
+        teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(50) {
-                count += 1;
+        for teachers in teachers.chunks(50) {
+            count += 1;
 
-                let batch_data = teachers.iter().map(|(n, path)| {
-                    let b = BufReader::new(File::open(path).unwrap()).bytes();
+            let batch_data = teachers.iter().map(|(n, path)| {
+                let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-                    let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+                let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
 
-                    let n = *n;
+                let n = *n;
 
-                    let mut input = Arr::<f32, 784>::new();
+                let mut input = Arr::<f32, 784>::new();
 
-                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                        *it = *p;
-                    }
-
-                    let mut expected = Arr::new();
-
-                    expected[0] = if n % 2 == 0 {
-                        1.0
-                    } else {
-                        0.0
-                    };
-
-                    (expected, input)
-                }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
-                    acc.0.push(e);
-                    acc.1.push(i);
-                    acc
-                });
-
-                let lossf = Mse::new();
-
-                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
-                total_loss += loss;
-
-                let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-                if count >= 100 {
-                    break;
+                for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                    *it = *p;
                 }
+
+                let mut expected = Arr::new();
+
+                expected[0] = if n % 2 == 0 {
+                    1.0
+                } else {
+                    0.0
+                };
+
+                (expected, input)
+            }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                acc.0.push(e);
+                acc.1.push(i);
+                acc
+            });
+
+            let lossf = Mse::new();
+
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            total_loss += loss;
+
+            let _ = net.batch_forward(batch_data.1.into()).unwrap();
+
+            if count >= 100 {
+                break;
             }
         }
         println!("total_loss = {}", total_loss);
@@ -3073,7 +3069,7 @@ fn test_mnist_sigmoid_and_mse_for_gpu() {
 
     println!("correct_answers = {}",correct_answers);
 
-    debug_assert!(correct_answers > 40)
+    debug_assert!(correct_answers >= 40)
 }
 #[test]
 fn test_mnist_tanh_and_relu_and_mse() {
@@ -3121,7 +3117,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -3131,54 +3127,52 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 
-        for _ in 0..5 {
-            teachers.shuffle(&mut rng);
+        teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(50) {
-                count += 1;
+        for teachers in teachers.chunks(50) {
+            count += 1;
 
-                let batch_data = teachers.iter().map(|(n, path)| {
-                    let b = BufReader::new(File::open(path).unwrap()).bytes();
+            let batch_data = teachers.iter().map(|(n, path)| {
+                let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-                    let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+                let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
 
-                    let n = *n;
+                let n = *n;
 
-                    let mut input = Arr::<f32, 784>::new();
+                let mut input = Arr::<f32, 784>::new();
 
-                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                        *it = *p;
-                    }
-
-                    let mut expected = Arr::new();
-
-                    expected[0] = if n % 2 == 0 {
-                        1.0
-                    } else {
-                        -1.0
-                    };
-
-                    (expected, input)
-                }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
-                    acc.0.push(e);
-                    acc.1.push(i);
-                    acc
-                });
-
-                let lossf = Mse::new();
-
-                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
-                total_loss += loss;
-
-                let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-                if count >= 100 {
-                    break;
+                for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                    *it = *p;
                 }
+
+                let mut expected = Arr::new();
+
+                expected[0] = if n % 2 == 0 {
+                    1.0
+                } else {
+                    -1.0
+                };
+
+                (expected, input)
+            }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                acc.0.push(e);
+                acc.1.push(i);
+                acc
+            });
+
+            let lossf = Mse::new();
+
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            total_loss += loss;
+
+            let _ = net.batch_forward(batch_data.1.into()).unwrap();
+
+            if count >= 100 {
+                break;
             }
         }
         println!("total_loss = {}", total_loss);
@@ -3224,7 +3218,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     println!("correct_answers = {}",correct_answers);
 
-    debug_assert!(correct_answers >= 40)
+    debug_assert!(correct_answers >= 45)
 }
 #[test]
 fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
@@ -3274,7 +3268,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -3284,54 +3278,52 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 
-        for _ in 0..5 {
-            teachers.shuffle(&mut rng);
+        teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(50) {
-                count += 1;
+        for teachers in teachers.chunks(50) {
+            count += 1;
 
-                let batch_data = teachers.iter().map(|(n, path)| {
-                    let b = BufReader::new(File::open(path).unwrap()).bytes();
+            let batch_data = teachers.iter().map(|(n, path)| {
+                let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-                    let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+                let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
 
-                    let n = *n;
+                let n = *n;
 
-                    let mut input = Arr::<f32, 784>::new();
+                let mut input = Arr::<f32, 784>::new();
 
-                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                        *it = *p;
-                    }
-
-                    let mut expected = Arr::new();
-
-                    expected[0] = if n % 2 == 0 {
-                        1.0
-                    } else {
-                        -1.0
-                    };
-
-                    (expected, input)
-                }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
-                    acc.0.push(e);
-                    acc.1.push(i);
-                    acc
-                });
-
-                let lossf = Mse::new();
-
-                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
-                total_loss += loss;
-
-                let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-                if count >= 100 {
-                    break;
+                for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                    *it = *p;
                 }
+
+                let mut expected = Arr::new();
+
+                expected[0] = if n % 2 == 0 {
+                    1.0
+                } else {
+                    -1.0
+                };
+
+                (expected, input)
+            }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                acc.0.push(e);
+                acc.1.push(i);
+                acc
+            });
+
+            let lossf = Mse::new();
+
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            total_loss += loss;
+
+            let _ = net.batch_forward(batch_data.1.into()).unwrap();
+
+            if count >= 100 {
+                break;
             }
         }
         println!("total_loss = {}", total_loss);
@@ -3377,7 +3369,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     println!("correct_answers = {}",correct_answers);
 
-    debug_assert!(correct_answers > 40)
+    debug_assert!(correct_answers >= 45)
 }
 #[test]
 fn test_mnist_tanh_and_swish_and_mse() {
@@ -3425,7 +3417,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -3435,54 +3427,52 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 
-        for _ in 0..5 {
-            teachers.shuffle(&mut rng);
+        teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(50) {
-                count += 1;
+        for teachers in teachers.chunks(50) {
+            count += 1;
 
-                let batch_data = teachers.iter().map(|(n, path)| {
-                    let b = BufReader::new(File::open(path).unwrap()).bytes();
+            let batch_data = teachers.iter().map(|(n, path)| {
+                let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-                    let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+                let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
 
-                    let n = *n;
+                let n = *n;
 
-                    let mut input = Arr::<f32, 784>::new();
+                let mut input = Arr::<f32, 784>::new();
 
-                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                        *it = *p;
-                    }
-
-                    let mut expected = Arr::new();
-
-                    expected[0] = if n % 2 == 0 {
-                        1.0
-                    } else {
-                        -1.0
-                    };
-
-                    (expected, input)
-                }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
-                    acc.0.push(e);
-                    acc.1.push(i);
-                    acc
-                });
-
-                let lossf = Mse::new();
-
-                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
-                total_loss += loss;
-
-                let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-                if count >= 100 {
-                    break;
+                for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                    *it = *p;
                 }
+
+                let mut expected = Arr::new();
+
+                expected[0] = if n % 2 == 0 {
+                    1.0
+                } else {
+                    -1.0
+                };
+
+                (expected, input)
+            }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                acc.0.push(e);
+                acc.1.push(i);
+                acc
+            });
+
+            let lossf = Mse::new();
+
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            total_loss += loss;
+
+            let _ = net.batch_forward(batch_data.1.into()).unwrap();
+
+            if count >= 100 {
+                break;
             }
         }
         println!("total_loss = {}", total_loss);
@@ -3528,7 +3518,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     println!("correct_answers = {}",correct_answers);
 
-    debug_assert!(correct_answers >= 40)
+    debug_assert!(correct_answers >= 45)
 }
 #[test]
 fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
@@ -3578,7 +3568,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -3588,54 +3578,52 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 
-        for _ in 0..5 {
-            teachers.shuffle(&mut rng);
+        teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(50) {
-                count += 1;
+        for teachers in teachers.chunks(50) {
+            count += 1;
 
-                let batch_data = teachers.iter().map(|(n, path)| {
-                    let b = BufReader::new(File::open(path).unwrap()).bytes();
+            let batch_data = teachers.iter().map(|(n, path)| {
+                let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-                    let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+                let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
 
-                    let n = *n;
+                let n = *n;
 
-                    let mut input = Arr::<f32, 784>::new();
+                let mut input = Arr::<f32, 784>::new();
 
-                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                        *it = *p;
-                    }
-
-                    let mut expected = Arr::new();
-
-                    expected[0] = if n % 2 == 0 {
-                        1.0
-                    } else {
-                        -1.0
-                    };
-
-                    (expected, input)
-                }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
-                    acc.0.push(e);
-                    acc.1.push(i);
-                    acc
-                });
-
-                let lossf = Mse::new();
-
-                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
-                total_loss += loss;
-
-                let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-                if count >= 100 {
-                    break;
+                for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                    *it = *p;
                 }
+
+                let mut expected = Arr::new();
+
+                expected[0] = if n % 2 == 0 {
+                    1.0
+                } else {
+                    -1.0
+                };
+
+                (expected, input)
+            }).fold((Vec::<Arr<f32, 1>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                acc.0.push(e);
+                acc.1.push(i);
+                acc
+            });
+
+            let lossf = Mse::new();
+
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            total_loss += loss;
+
+            let _ = net.batch_forward(batch_data.1.into()).unwrap();
+
+            if count >= 100 {
+                break;
             }
         }
         println!("total_loss = {}", total_loss);
@@ -3681,5 +3669,5 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     println!("correct_answers = {}",correct_answers);
 
-    debug_assert!(correct_answers > 40)
+    debug_assert!(correct_answers >= 45)
 }

@@ -1310,15 +1310,19 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr
 
         {
             {
-                for (w,&l) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
-                    optimizer.update(l, w);
+                let n = U::from_usize(loss.len()).ok_or(TrainingError::TypeCastError(
+                    String::from("An error occurred when casting the batch size data type to U.")
+                ))?;
+
+                for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
+                    optimizer.update(g / n, w);
                 }
 
                 s.map(|o| {
                     self.device.batch_backward_weight_gradient(&o, &loss).map(|g| {
                         for (mut u, g) in self.units.iter_mut().zip(g.iter()) {
                             for (w, &g) in u.iter_mut().zip(g.iter()) {
-                                optimizer.update(g, w);
+                                optimizer.update(g / n, w);
                             }
                         }
                     })
@@ -1350,15 +1354,19 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Cac
 
         {
             {
-                for (w,&l) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
-                    optimizer.update(l, w);
+                let n = U::from_usize(loss.len()).ok_or(TrainingError::TypeCastError(
+                    String::from("An error occurred when casting the batch size data type to U.")
+                ))?;
+
+                for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
+                    optimizer.update(g / n, w);
                 }
 
                 s.map(|o| {
                     self.device.batch_backward_weight_gradient(&o, &loss).map(|g| {
                         for (mut u, g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
                             for (w, &g) in u.iter_mut().zip(g.iter()) {
-                                optimizer.update(g, w);
+                                optimizer.update(g / n, w);
                             }
                         }
                     })

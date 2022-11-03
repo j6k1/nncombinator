@@ -3,7 +3,6 @@
 use std::marker::PhantomData;
 use cuda_runtime_sys::dim3;
 use libc::c_uint;
-use num_traits::FromPrimitive;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::{Arr, VecArr};
 use crate::cuda::{CudaPtr, DataTypeInfo, Kernel, Memory};
@@ -36,18 +35,12 @@ pub trait BatchLossFunction<U,D>: LossFunction<U> + Send + Sync + 'static
     /// * `expected` - expected value
     /// * `actual` - actual value
     fn batch_linear_derive<const N: usize>(&self,_: &D,expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
-                                           -> Result<VecArr<U,Arr<U, N>>, TrainingError> where f64: From<U> {
-        let n = f64::from_usize(expected.len()).ok_or(TrainingError::TypeCastError(
-            String::from("An error occurred when casting the batch size data type to f64.")
-        ))?;
-
+                                           -> Result<VecArr<U,Arr<U, N>>, TrainingError> {
         Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
             a.par_iter()
                 .zip(e.par_iter())
-                .map(|(&a,&e)| U::from_f64(f64::from(self.derive(a,e)) / n).ok_or(TrainingError::TypeCastError(
-                    String::from("An error occurred when casting the batch size data type to U.")
-                )))
-                .collect::<Result<Vec<U>,_>>()?
+                .map(|(&a,&e)| self.derive(a,e))
+                .collect::<Vec<U>>()
                 .try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }

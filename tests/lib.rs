@@ -2817,7 +2817,7 @@ fn test_mnist_sigmoid_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -2968,7 +2968,7 @@ fn test_mnist_sigmoid_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -3117,7 +3117,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -3218,7 +3218,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     println!("correct_answers = {}",correct_answers);
 
-    debug_assert!(correct_answers >= 45)
+    debug_assert!(correct_answers >= 40)
 }
 #[test]
 fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
@@ -3268,7 +3268,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -3369,7 +3369,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     println!("correct_answers = {}",correct_answers);
 
-    debug_assert!(correct_answers >= 45)
+    debug_assert!(correct_answers >= 40)
 }
 #[test]
 fn test_mnist_tanh_and_swish_and_mse() {
@@ -3417,7 +3417,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -3518,7 +3518,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     println!("correct_answers = {}",correct_answers);
 
-    debug_assert!(correct_answers >= 45)
+    debug_assert!(correct_answers >= 40)
 }
 #[test]
 fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
@@ -3568,7 +3568,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.0001);
 
     let mut rng = rand::thread_rng();
 
@@ -3669,5 +3669,5 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     println!("correct_answers = {}",correct_answers);
 
-    debug_assert!(correct_answers >= 45)
+    debug_assert!(correct_answers >= 40)
 }

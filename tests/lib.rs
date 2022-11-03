@@ -561,7 +561,7 @@ fn test_weather() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::with_params(0.0001,0.9,0.0);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -719,7 +719,7 @@ fn test_weather_by_forward_diff() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::with_params(0.0001,0.9,0.0);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -2817,7 +2817,7 @@ fn test_mnist_sigmoid_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -2968,7 +2968,7 @@ fn test_mnist_sigmoid_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3117,7 +3117,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3268,7 +3268,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3417,7 +3417,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3568,7 +3568,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 

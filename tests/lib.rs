@@ -40,8 +40,8 @@ fn test_mnist() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/64f32).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(10f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/100f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(100f32).sqrt()).unwrap();
 
     let device = DeviceCpu::new().unwrap();
 
@@ -51,17 +51,17 @@ fn test_mnist() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,{ 28*28 },64>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,DeviceCpu<f32>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,64,10>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,10,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -80,7 +80,7 @@ fn test_mnist() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.01);
 
     let mut rng = rand::thread_rng();
 
@@ -90,7 +90,7 @@ fn test_mnist() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..2 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -189,8 +189,8 @@ fn test_mnist_for_gpu() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/64f32).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(10f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/100f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(100f32).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
@@ -202,17 +202,17 @@ fn test_mnist_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,{ 28*28 },64>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f32>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,64,10>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,10,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -231,7 +231,7 @@ fn test_mnist_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.01);
 
     let mut rng = rand::thread_rng();
 
@@ -241,7 +241,7 @@ fn test_mnist_for_gpu() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..2 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -340,8 +340,8 @@ fn test_mnist_for_gpu_double() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f64>::new(0.0, (2f64/(28f64*28f64)).sqrt()).unwrap();
-    let n2 = Normal::<f64>::new(0.0, (2f64/64f64).sqrt()).unwrap();
-    let n3 = Normal::<f64>::new(0.0, 1f64/(10f64).sqrt()).unwrap();
+    let n2 = Normal::<f64>::new(0.0, (2f64/100f64).sqrt()).unwrap();
+    let n3 = Normal::<f64>::new(0.0, 1f64/(100f64).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
@@ -353,17 +353,17 @@ fn test_mnist_for_gpu_double() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,{ 28*28 },64>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f64>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,64,10>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f64>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,10,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f64>,_,100,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -382,7 +382,7 @@ fn test_mnist_for_gpu_double() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.01);
 
     let mut rng = rand::thread_rng();
 
@@ -392,7 +392,7 @@ fn test_mnist_for_gpu_double() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..2 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -431,10 +431,6 @@ fn test_mnist_for_gpu_double() {
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-            if count >= 100 {
-                break;
-            }
         }
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f64 / count as f64);
@@ -2769,8 +2765,8 @@ fn test_mnist_sigmoid_and_mse() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/(200f32)).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(64f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/(64f32)).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(10f32).sqrt()).unwrap();
 
     let device = DeviceCpu::new().unwrap();
 

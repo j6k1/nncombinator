@@ -40,8 +40,8 @@ fn test_mnist() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/(200f32)).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(64f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/64f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(10f32).sqrt()).unwrap();
 
     let device = DeviceCpu::new().unwrap();
 
@@ -51,17 +51,17 @@ fn test_mnist() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,{ 28*28 },200>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,DeviceCpu<f32>,_,{ 28*28 },64>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,200,64>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,DeviceCpu<f32>,_,64,10>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,64,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayer::<_,_,_,DeviceCpu<f32>,_,10,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -88,53 +88,47 @@ fn test_mnist() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
-        for _ in 0..5 {
-            teachers.shuffle(&mut rng);
+        teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(50) {
-                count += 1;
+        for teachers in teachers.chunks(100) {
+            count += 1;
 
-                let batch_data = teachers.iter().map(|(n, path)| {
-                    let b = BufReader::new(File::open(path).unwrap()).bytes();
+            let batch_data = teachers.iter().map(|(n, path)| {
+                let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-                    let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+                let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
 
-                    let n = *n;
+                let n = *n;
 
-                    let mut input = Arr::<f32, 784>::new();
+                let mut input = Arr::<f32, 784>::new();
 
-                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                        *it = *p;
-                    }
-
-                    let mut expected = Arr::new();
-
-                    expected[n as usize] = 1.0;
-
-                    (expected, input)
-                }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
-                    acc.0.push(e);
-                    acc.1.push(i);
-                    acc
-                });
-
-                let lossf = CrossEntropyMulticlass::new();
-
-                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
-                total_loss += loss;
-
-                let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-                if count >= 100 {
-                    break;
+                for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                    *it = *p;
                 }
-            }
+
+                let mut expected = Arr::new();
+
+                expected[n as usize] = 1.0;
+
+                (expected, input)
+            }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                acc.0.push(e);
+                acc.1.push(i);
+                acc
+            });
+
+            let lossf = CrossEntropyMulticlass::new();
+
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            total_loss += loss;
+
+            let _ = net.batch_forward(batch_data.1.into()).unwrap();
         }
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f32 / count as f32);
@@ -154,6 +148,8 @@ fn test_mnist() {
     }
 
     tests.shuffle(&mut rng);
+
+    let count = tests.len();
 
     for (n, path) in tests.iter().take(100) {
         let b = BufReader::new(File::open(path).unwrap()).bytes();
@@ -183,7 +179,7 @@ fn test_mnist() {
         }
     }
 
-    println!("correct_answers = {}",correct_answers);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
     debug_assert!(correct_answers > 10)
 }
@@ -193,8 +189,8 @@ fn test_mnist_for_gpu() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/(200f32)).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(64f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/64f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(10f32).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
@@ -206,17 +202,17 @@ fn test_mnist_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,{ 28*28 },200>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f32>,_,{ 28*28 },64>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,200,64>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f32>,_,64,10>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,64,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f32>,_,10,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -243,53 +239,47 @@ fn test_mnist_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
-        for _ in 0..5 {
-            teachers.shuffle(&mut rng);
+        teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(50) {
-                count += 1;
+        for teachers in teachers.chunks(100) {
+            count += 1;
 
-                let batch_data = teachers.iter().map(|(n, path)| {
-                    let b = BufReader::new(File::open(path).unwrap()).bytes();
+            let batch_data = teachers.iter().map(|(n, path)| {
+                let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-                    let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
+                let pixels = b.map(|b| b.unwrap() as f32 / 255.).take(784).collect::<Vec<f32>>();
 
-                    let n = *n;
+                let n = *n;
 
-                    let mut input = Arr::<f32, 784>::new();
+                let mut input = Arr::<f32, 784>::new();
 
-                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                        *it = *p;
-                    }
-
-                    let mut expected = Arr::new();
-
-                    expected[n as usize] = 1.0;
-
-                    (expected, input)
-                }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
-                    acc.0.push(e);
-                    acc.1.push(i);
-                    acc
-                });
-
-                let lossf = CrossEntropyMulticlass::new();
-
-                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
-                total_loss += loss;
-
-                let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-                if count >= 100 {
-                    break;
+                for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                    *it = *p;
                 }
-            }
+
+                let mut expected = Arr::new();
+
+                expected[n as usize] = 1.0;
+
+                (expected, input)
+            }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+                acc.0.push(e);
+                acc.1.push(i);
+                acc
+            });
+
+            let lossf = CrossEntropyMulticlass::new();
+
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            total_loss += loss;
+
+            let _ = net.batch_forward(batch_data.1.into()).unwrap();
         }
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f32 / count as f32);
@@ -309,6 +299,8 @@ fn test_mnist_for_gpu() {
     }
 
     tests.shuffle(&mut rng);
+
+    let count = tests.len().min(100);
 
     for (n, path) in tests.iter().take(100) {
         let b = BufReader::new(File::open(path).unwrap()).bytes();
@@ -338,7 +330,7 @@ fn test_mnist_for_gpu() {
         }
     }
 
-    println!("correct_answers = {}",correct_answers);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
     debug_assert!(correct_answers > 10)
 }
@@ -348,8 +340,8 @@ fn test_mnist_for_gpu_double() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f64>::new(0.0, (2f64/(28f64*28f64)).sqrt()).unwrap();
-    let n2 = Normal::<f64>::new(0.0, (2f64/(200f64)).sqrt()).unwrap();
-    let n3 = Normal::<f64>::new(0.0, 1f64/(64f64).sqrt()).unwrap();
+    let n2 = Normal::<f64>::new(0.0, (2f64/64f64).sqrt()).unwrap();
+    let n3 = Normal::<f64>::new(0.0, 1f64/(10f64).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
@@ -361,17 +353,17 @@ fn test_mnist_for_gpu_double() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,{ 28*28 },200>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f64>,_,{ 28*28 },64>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,200,64>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f64>,_,64,10>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,64,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayer::<_,_,_,DeviceGpu<f64>,_,10,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -398,52 +390,50 @@ fn test_mnist_for_gpu_double() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
-        for _ in 0..5 {
-            teachers.shuffle(&mut rng);
+        teachers.shuffle(&mut rng);
 
-            for teachers in teachers.chunks(50) {
-                count += 1;
+        for teachers in teachers.chunks(100) {
+            count += 1;
 
-                let batch_data = teachers.iter().map(|(n, path)| {
-                    let b = BufReader::new(File::open(path).unwrap()).bytes();
+            let batch_data = teachers.iter().map(|(n, path)| {
+                let b = BufReader::new(File::open(path).unwrap()).bytes();
 
-                    let pixels = b.map(|b| b.unwrap() as f64 / 255.).take(784).collect::<Vec<f64>>();
+                let pixels = b.map(|b| b.unwrap() as f64 / 255.).take(784).collect::<Vec<f64>>();
 
-                    let n = *n;
+                let n = *n;
 
-                    let mut input = Arr::<f64, 784>::new();
+                let mut input = Arr::<f64, 784>::new();
 
-                    for (it, p) in input.iter_mut().zip(pixels.iter()) {
-                        *it = *p;
-                    }
-
-                    let mut expected = Arr::new();
-
-                    expected[n as usize] = 1.0;
-
-                    (expected, input)
-                }).fold((Vec::<Arr<f64, 10>>::new(), Vec::<Arr<f64, 784>>::new(), ), |mut acc, (e, i)| {
-                    acc.0.push(e);
-                    acc.1.push(i);
-                    acc
-                });
-
-                let lossf = CrossEntropyMulticlass::new();
-
-                let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
-                total_loss += loss;
-
-                let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-                if count >= 100 {
-                    break;
+                for (it, p) in input.iter_mut().zip(pixels.iter()) {
+                    *it = *p;
                 }
+
+                let mut expected = Arr::new();
+
+                expected[n as usize] = 1.0;
+
+                (expected, input)
+            }).fold((Vec::<Arr<f64, 10>>::new(), Vec::<Arr<f64, 784>>::new(), ), |mut acc, (e, i)| {
+                acc.0.push(e);
+                acc.1.push(i);
+                acc
+            });
+
+            let lossf = CrossEntropyMulticlass::new();
+
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            total_loss += loss;
+
+            let _ = net.batch_forward(batch_data.1.into()).unwrap();
+
+            if count >= 100 {
+                break;
             }
         }
         println!("total_loss = {}", total_loss);
@@ -464,6 +454,8 @@ fn test_mnist_for_gpu_double() {
     }
 
     tests.shuffle(&mut rng);
+
+    let count = tests.len().min(100);
 
     for (n, path) in tests.iter().take(100) {
         let b = BufReader::new(File::open(path).unwrap()).bytes();
@@ -493,7 +485,7 @@ fn test_mnist_for_gpu_double() {
         }
     }
 
-    println!("correct_answers = {}",correct_answers);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
     debug_assert!(correct_answers > 10)
 }

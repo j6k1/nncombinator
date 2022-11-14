@@ -149,7 +149,7 @@ fn test_mnist() {
 
     tests.shuffle(&mut rng);
 
-    let count = tests.len();
+    let count = tests.len().min(100);
 
     for (n, path) in tests.iter().take(100) {
         let b = BufReader::new(File::open(path).unwrap()).bytes();

@@ -28,7 +28,7 @@ use nncombinator::device::{DeviceCpu, DeviceGpu};
 use nncombinator::error::{TrainingError, UnsupportedOperationError};
 use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
-use nncombinator::optimizer::{MomentumSGD};
+use nncombinator::optimizer::{MomentumSGD,SGD};
 
 lazy_static! {
     static ref SHARED_MEMORY_POOL:Arc<Mutex<MemoryPool>> = Arc::new(Mutex::new(MemoryPool::new(Alloctype::Device).unwrap()));
@@ -80,7 +80,7 @@ fn test_mnist() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.01);
+    let mut optimizer = SGD::new(0.01);
 
     let mut rng = rand::thread_rng();
 
@@ -231,7 +231,7 @@ fn test_mnist_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.01);
+    let mut optimizer = SGD::new(0.01);
 
     let mut rng = rand::thread_rng();
 
@@ -241,7 +241,7 @@ fn test_mnist_for_gpu() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -382,7 +382,7 @@ fn test_mnist_for_gpu_double() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.01);
+    let mut optimizer = SGD::new(0.01);
 
     let mut rng = rand::thread_rng();
 
@@ -392,7 +392,7 @@ fn test_mnist_for_gpu_double() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..2 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 

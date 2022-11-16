@@ -3311,8 +3311,6 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();
 
-    let count = tests.iter().len().min(100);
-
     for n in 0..10 {
         for entry in fs::read_dir(Path::new("mnist")
             .join("mnist_png")
@@ -3323,8 +3321,10 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             tests.push((n, path));
         }
     }
-
+     
     tests.shuffle(&mut rng);
+
+    let count = tests.iter().len().min(100);
 
     for (n, path) in tests.iter().take(100) {
         let img = image::io::Reader::open(path).unwrap().decode().unwrap();
@@ -3353,7 +3353,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.)
 }
 #[test]
-fn test_mnist_tanh_and_swish_and_crossentropy() {
+fn test_mnist_tanh_and_swish_and_mse() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
@@ -3445,7 +3445,7 @@ fn test_mnist_tanh_and_swish_and_crossentropy() {
                 acc
             });
 
-            let lossf = CrossEntropy::new();
+            let lossf = Mse::new();
 
             let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
             total_loss += loss;
@@ -3457,8 +3457,6 @@ fn test_mnist_tanh_and_swish_and_crossentropy() {
     }
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();
-
-    let count = tests.iter().len().min(100);
 
     for n in 0..10 {
         for entry in fs::read_dir(Path::new("mnist")
@@ -3472,6 +3470,8 @@ fn test_mnist_tanh_and_swish_and_crossentropy() {
     }
 
     tests.shuffle(&mut rng);
+
+    let count = tests.iter().len().min(100);
 
     for (n, path) in tests.iter().take(100) {
         let img = image::io::Reader::open(path).unwrap().decode().unwrap();
@@ -3499,7 +3499,7 @@ fn test_mnist_tanh_and_swish_and_crossentropy() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.)
 }
 #[test]
-fn test_mnist_tanh_and_swish_and_crossentropy_for_gpu() {
+fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
@@ -3593,7 +3593,7 @@ fn test_mnist_tanh_and_swish_and_crossentropy_for_gpu() {
                 acc
             });
 
-            let lossf = CrossEntropy::new();
+            let lossf = Mse::new();
 
             let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
             total_loss += loss;

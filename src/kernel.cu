@@ -257,7 +257,7 @@ __device__ void swish_backward(const T *o, const T *u, T *loss, const size_t uni
         T x = o[i];
         x = x + 1.0 / (1.0 + _exp(-u[i])) * (1.0 - x);
 
-        loss[i] = x;
+        loss[i] = x * loss[i];
     }
 }
 template<typename T>

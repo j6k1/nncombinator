@@ -2757,10 +2757,11 @@ fn test_weather_by_forward_diff_for_gpu_double() {
     }
 
     println!("rate = {}",correct_answers as f64 / tests.len() as f64 * 100.);
+
     debug_assert!(correct_answers as f64 / tests.len() as f64 * 100. >= 73.);
 }
 #[test]
-fn test_mnist_sigmoid_and_mse() {
+fn test_mnist_sigmoid_and_crossentropy() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
@@ -2805,7 +2806,7 @@ fn test_mnist_sigmoid_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -2813,7 +2814,7 @@ fn test_mnist_sigmoid_and_mse() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
     for _ in 0..3 {
         let mut total_loss = 0.;
@@ -2852,16 +2853,12 @@ fn test_mnist_sigmoid_and_mse() {
                 acc
             });
 
-            let lossf = Mse::new();
+            let lossf = CrossEntropy::new();
 
             let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-            if count >= 100 {
-                break;
-            }
         }
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f32 / count as f32);
@@ -2881,6 +2878,8 @@ fn test_mnist_sigmoid_and_mse() {
     }
 
     tests.shuffle(&mut rng);
+
+    let count = tests.iter().len().min(100);
 
     for (n, path) in tests.iter().take(100) {
         let img = image::io::Reader::open(path).unwrap().decode().unwrap();
@@ -2904,12 +2903,12 @@ fn test_mnist_sigmoid_and_mse() {
         }
     }
 
-    println!("correct_answers = {}",correct_answers);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers >= 40)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.)
 }
 #[test]
-fn test_mnist_sigmoid_and_mse_for_gpu() {
+fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
@@ -2956,7 +2955,7 @@ fn test_mnist_sigmoid_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -2964,7 +2963,7 @@ fn test_mnist_sigmoid_and_mse_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
     for _ in 0..3 {
         let mut total_loss = 0.;
@@ -3003,16 +3002,12 @@ fn test_mnist_sigmoid_and_mse_for_gpu() {
                 acc
             });
 
-            let lossf = Mse::new();
+            let lossf = CrossEntropy::new();
 
             let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-            if count >= 100 {
-                break;
-            }
         }
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f32 / count as f32);
@@ -3032,6 +3027,8 @@ fn test_mnist_sigmoid_and_mse_for_gpu() {
     }
 
     tests.shuffle(&mut rng);
+
+    let count = tests.iter().len().min(100);
 
     for (n, path) in tests.iter().take(100) {
         let img = image::io::Reader::open(path).unwrap().decode().unwrap();
@@ -3055,9 +3052,9 @@ fn test_mnist_sigmoid_and_mse_for_gpu() {
         }
     }
 
-    println!("correct_answers = {}",correct_answers);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers >= 40)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.)
 }
 #[test]
 fn test_mnist_tanh_and_relu_and_mse() {
@@ -3105,7 +3102,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3113,7 +3110,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
     for _ in 0..3 {
         let mut total_loss = 0.;
@@ -3158,10 +3155,6 @@ fn test_mnist_tanh_and_relu_and_mse() {
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-            if count >= 100 {
-                break;
-            }
         }
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f32 / count as f32);
@@ -3181,6 +3174,8 @@ fn test_mnist_tanh_and_relu_and_mse() {
     }
 
     tests.shuffle(&mut rng);
+
+    let count = tests.iter().len().min(100);
 
     for (n, path) in tests.iter().take(100) {
         let img = image::io::Reader::open(path).unwrap().decode().unwrap();
@@ -3204,9 +3199,9 @@ fn test_mnist_tanh_and_relu_and_mse() {
         }
     }
 
-    println!("correct_answers = {}",correct_answers);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers >= 40)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.)
 }
 #[test]
 fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
@@ -3256,7 +3251,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3264,7 +3259,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
     for _ in 0..3 {
         let mut total_loss = 0.;
@@ -3309,16 +3304,14 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-            if count >= 100 {
-                break;
-            }
         }
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f32 / count as f32);
     }
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();
+
+    let count = tests.iter().len().min(100);
 
     for n in 0..10 {
         for entry in fs::read_dir(Path::new("mnist")
@@ -3355,12 +3348,12 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
         }
     }
 
-    println!("correct_answers = {}",correct_answers);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers >= 40)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.)
 }
 #[test]
-fn test_mnist_tanh_and_swish_and_mse() {
+fn test_mnist_tanh_and_swish_and_crossentropy() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
@@ -3405,7 +3398,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3413,7 +3406,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
     for _ in 0..3 {
         let mut total_loss = 0.;
@@ -3452,22 +3445,20 @@ fn test_mnist_tanh_and_swish_and_mse() {
                 acc
             });
 
-            let lossf = Mse::new();
+            let lossf = CrossEntropy::new();
 
             let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-            if count >= 100 {
-                break;
-            }
         }
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f32 / count as f32);
     }
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();
+
+    let count = tests.iter().len().min(100);
 
     for n in 0..10 {
         for entry in fs::read_dir(Path::new("mnist")
@@ -3503,12 +3494,12 @@ fn test_mnist_tanh_and_swish_and_mse() {
         }
     }
 
-    println!("correct_answers = {}",correct_answers);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers >= 40)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.)
 }
 #[test]
-fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
+fn test_mnist_tanh_and_swish_and_crossentropy_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
@@ -3555,7 +3546,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.0001);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3563,7 +3554,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(10000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
     for _ in 0..3 {
         let mut total_loss = 0.;
@@ -3602,16 +3593,12 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
                 acc
             });
 
-            let lossf = Mse::new();
+            let lossf = CrossEntropy::new();
 
             let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-            if count >= 100 {
-                break;
-            }
         }
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f32 / count as f32);
@@ -3631,6 +3618,8 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
     }
 
     tests.shuffle(&mut rng);
+
+    let count = tests.iter().len().min(100);
 
     for (n, path) in tests.iter().take(100) {
         let img = image::io::Reader::open(path).unwrap().decode().unwrap();
@@ -3654,7 +3643,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
         }
     }
 
-    println!("correct_answers = {}",correct_answers);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers >= 40)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.);
 }

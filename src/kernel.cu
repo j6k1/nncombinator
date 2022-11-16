@@ -221,8 +221,8 @@ __device__ void sigmoid_backward(const T *o, const T *u, T *loss, const size_t u
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        T x = u[i];
-        x = (1.0 - x) * x;
+        T x = o[i];
+        x = x * (1.0 - x);
 
         loss[i] = x * loss[i];
     }
@@ -254,8 +254,8 @@ __device__ void swish_backward(const T *o, const T *u, T *loss, const size_t uni
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        T x = u[i];
-        x = x + 1.0 / (1.0 + _exp(-o[i])) * (1.0 - x);
+        T x = o[i];
+        x = x + 1.0 / (1.0 + _exp(-u[i])) * (1.0 - x);
 
         loss[i] = x;
     }
@@ -269,7 +269,7 @@ __device__ void tanh_backward(const T *o, const T *u, T *loss, const size_t unit
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        T x = u[i];
+        T x = o[i];
         x = 1.0 - x * x;
 
         loss[i] = x * loss[i];

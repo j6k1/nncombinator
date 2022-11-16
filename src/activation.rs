@@ -229,11 +229,11 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,Devi
         Ok(r)
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceCpu<U>, o: &I, loss: &I, _: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,u) in r.iter_mut().zip(u.clone()) {
-            *r = (U::one() - u) * u;
+        for (r,o) in r.iter_mut().zip(o.clone()) {
+            *r = o * (U::one() - o);
         }
 
         for (r,l) in r.iter_mut().zip(loss.clone()) {
@@ -570,7 +570,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,Device
         let mut r = Arr::new();
 
         for ((r,u),o) in r.iter_mut().zip(u.clone()).zip(o.clone()) {
-            *r = u + U::one() / (U::one() + (-o).exp()) * (U::one() - u)
+            *r = o + U::one() / (U::one() + (-u).exp()) * (U::one() - o)
         }
 
         for (r,l) in r.iter_mut().zip(loss.clone()) {
@@ -730,11 +730,11 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceC
         Ok(r)
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &I, loss: &I, u: &I) -> Result<Arr<U,N>, TrainingError> {
+    fn derive(&self, _: &DeviceCpu<U>, o: &I, loss: &I, _: &I) -> Result<Arr<U,N>, TrainingError> {
         let mut r = Arr::new();
 
-        for (r,u) in r.iter_mut().zip(u.clone()) {
-            *r = U::one() - u * u;
+        for (r,o) in r.iter_mut().zip(o.clone()) {
+            *r = U::one() - o * o;
         }
 
         for (r,l) in r.iter_mut().zip(loss.clone()) {

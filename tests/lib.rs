@@ -382,7 +382,7 @@ fn test_mnist_for_gpu_double() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.001);
+    let mut optimizer = MomentumSGD::new(0.01);
 
     let mut rng = rand::thread_rng();
 

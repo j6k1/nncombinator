@@ -138,10 +138,8 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
 
         T alpha = alpha_sdata[0];
 
-        T scale = 1e7;
-
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
-            sum_sdata[tid] += _exp(input_output[i] - alpha) * scale;
+            sum_sdata[tid] += _exp(input_output[i] - alpha);
         }
         __syncthreads();
 
@@ -202,7 +200,7 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
         }
         __syncthreads();
         
-        T sum = sum_sdata[0] / scale;
+        T sum = sum_sdata[0];
 
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
             T number = _exp(input_output[i] - alpha);

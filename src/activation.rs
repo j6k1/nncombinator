@@ -835,9 +835,8 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,Devi
         let alpha = input.clone().reduce(|| U::initial_max_value(), |m,v| {
             v.max(&m)
         });
-        let sum = input.clone()
-                                            .map(|x| (x - alpha).exp())
-                                            .reduce(|| U::default(), |acc,x| {
+        let sum = input.clone().map(|x| (x - alpha).exp()).reduce(|| U::default(),
+            |acc,x| {
             acc + x
         });
         Ok(input.clone().map(|i| {

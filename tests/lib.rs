@@ -90,7 +90,7 @@ fn test_mnist() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..3 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -241,7 +241,7 @@ fn test_mnist_for_gpu() {
 
     let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..3 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -392,7 +392,7 @@ fn test_mnist_for_gpu_double() {
 
     let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..3 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -2816,13 +2816,13 @@ fn test_mnist_sigmoid_and_crossentropy() {
 
     let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..3 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(300) {
+        for teachers in teachers.chunks(120) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -2965,13 +2965,13 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
 
     let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..3 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(300) {
+        for teachers in teachers.chunks(120) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -3112,13 +3112,13 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..3 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(300) {
+        for teachers in teachers.chunks(120) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -3261,13 +3261,13 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..3 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(300) {
+        for teachers in teachers.chunks(120) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -3408,13 +3408,13 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..3 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(300) {
+        for teachers in teachers.chunks(120) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -3556,13 +3556,13 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..3 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(300) {
+        for teachers in teachers.chunks(120) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {

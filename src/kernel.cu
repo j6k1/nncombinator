@@ -276,16 +276,88 @@ __device__ void tanh_backward(const T *o, const T *u, T *loss, const size_t unit
 template<typename T>
 
 __device__ void softmax_backward(const T *o, const T *u, T *loss, const size_t units_len, const size_t batch_len) {
-    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
-    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+    extern __shared__ char smem[];
+    T *sum_sdata = reinterpret_cast<T*>(smem);
 
-    if (index < units_len && batch_index < batch_len) {
-        size_t i = batch_index == 0 ? index : batch_index * units_len + index;
+    size_t tid = threadIdx.x;
+    size_t batch_index = blockIdx.x;
 
-        T x = u[i];
-        x = x * (1.0 - x);
+    if (tid < units_len && batch_index < batch_len) {
+        size_t end_block = batch_index * units_len + units_len;
+        size_t distance = blockDim.x;
 
-        loss[i] = loss[i] * x;
+        T scale = 1e7;
+
+        sum_sdata[tid] = 0;
+
+        for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
+            sum_sdata[tid] += (loss[i] * -o[i]) * scale;
+        }
+
+        __syncthreads();
+
+        if (tid < 512) {
+            sum_sdata[tid] += sum_sdata[tid + 512];
+        }
+        __syncthreads();
+
+        if (tid < 256) {
+            sum_sdata[tid] += sum_sdata[tid + 256];
+        }
+        __syncthreads();
+
+        if (tid < 128) {
+            sum_sdata[tid] += sum_sdata[tid + 128];
+        }
+        __syncthreads();
+
+        if (tid < 64) {
+            sum_sdata[tid] += sum_sdata[tid + 64];
+        }
+        __syncthreads();
+
+        if (tid < 32) {
+            sum_sdata[tid] += sum_sdata[tid + 32];
+        }
+        __syncthreads();
+
+        if (tid < 32) {
+            sum_sdata[tid] += sum_sdata[tid + 32];
+        }
+        __syncthreads();
+
+        if (tid < 16) {
+            sum_sdata[tid] += sum_sdata[tid + 16];
+        }
+        __syncthreads();
+
+        if (tid < 8) {
+            sum_sdata[tid] += sum_sdata[tid + 8];
+        }
+        __syncthreads();
+
+        if (tid < 4) {
+            sum_sdata[tid] += sum_sdata[tid + 4];
+        }
+        __syncthreads();
+
+        if (tid < 2) {
+            sum_sdata[tid] += sum_sdata[tid + 2];
+        }
+        __syncthreads();
+
+        if (tid < 1) {
+            sum_sdata[tid] += sum_sdata[tid + 1];
+        }
+        __syncthreads();
+
+        T sum = sum_sdata[0] / scale;
+
+        for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
+            T yk = o[i];
+            T l = loss[i];
+            loss[i] = sum * yk + l * (yk * yk + (yk * (1.0 - yk)));
+        }
     }
 }
 template<typename T>

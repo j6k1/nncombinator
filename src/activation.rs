@@ -846,7 +846,17 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,Devi
     }
 
     fn derive(&self, _: &DeviceCpu<U>, o: &I, loss: &I, _: &I) -> Result<Arr<U,N>, TrainingError> {
-        Ok(loss.clone().zip(o.clone()).map(|(l,o)| o * (U::one() - o) * l).collect::<Vec<U>>().try_into()?)
+        let scale = U::from_f64(1e7).expect("Error in type conversion from f64.");
+
+        let sum = loss.clone().zip(o.clone()).map(|(l,o)| {
+            (l * -o) * scale
+        }).reduce(|| U::default(), |acc,x| {
+            acc + x
+        }) / scale;
+
+        Ok(loss.clone().zip(o.clone()).map(|(l,o)| {
+           sum * o + l * (o * o + (o * (U::one() - o)))
+        }).collect::<Vec<U>>().try_into()?)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -891,7 +901,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U
 
         kernel.launch(dim3 { x: 1, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
+                      &mut args, 1024 * mem::size_of::<U>())?;
 
         Ok(args.loss.read_to_vec()?.try_into()?)
     }
@@ -952,9 +962,9 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
 
         let mut kernel = SoftMaxBackward::<U>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(dim3 { x: loss.len() as c_uint, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
+                      &mut args, 1024 * mem::size_of::<U>())?;
 
         Ok(args.loss.read_to_vec()?.into())
     }

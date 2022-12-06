@@ -11,6 +11,7 @@ use crate::{Cons, Nil, Stack};
 use crate::activation::{Activation, BatchActivation};
 use crate::cuda::mem::CachedTensor;
 use crate::error::{ConfigReadError, CudaError, DeviceError, EvaluateError, PersistenceError, TrainingError, UnsupportedOperationError};
+use crate::error::SizeMismatchError;
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
@@ -829,11 +830,16 @@ impl<U,P,D,I,const N:usize> BatchTrain<U,D> for LinearOutputLayer<U,P,D,I,Arr<U,
              BatchBackward<U> + BatchLoss<U,BatchLossInput=VecArr<U,Arr<U,N>>>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync,
+          f64: From<U> {
     fn batch_train<OP: Optimizer<U>,L: BatchLossFunction<U,D>>(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, optimizer:&mut OP, lossf:&L) -> Result<U, TrainingError> {
+        if expected.len() != input.len() {
+            return Err(TrainingError::from(SizeMismatchError(expected.len(),input.len())));
+        }
+
         let stack = self.batch_pre_train(input)?;
 
-        let total_loss = stack.map(|l| self.device.batch_loss_linear_total(&expected,l,lossf));
+        let total_loss = stack.map(|l| self.device.batch_loss_linear_total(&expected,l,lossf))?;
 
         let (stack,loss) = if self.parent.is_canonical_link(lossf) {
             let loss = stack.map(|actual| {
@@ -1304,15 +1310,19 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr
 
         {
             {
-                for (w,&l) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
-                    optimizer.update(l, w);
+                let n = U::from_usize(loss.len()).ok_or(TrainingError::TypeCastError(
+                    String::from("An error occurred when casting the batch size data type to U.")
+                ))?;
+
+                for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
+                    optimizer.update(g / n, w);
                 }
 
                 s.map(|o| {
                     self.device.batch_backward_weight_gradient(&o, &loss).map(|g| {
                         for (mut u, g) in self.units.iter_mut().zip(g.iter()) {
                             for (w, &g) in u.iter_mut().zip(g.iter()) {
-                                optimizer.update(g, w);
+                                optimizer.update(g / n, w);
                             }
                         }
                     })
@@ -1344,15 +1354,19 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Cac
 
         {
             {
-                for (w,&l) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
-                    optimizer.update(l, w);
+                let n = U::from_usize(loss.len()).ok_or(TrainingError::TypeCastError(
+                    String::from("An error occurred when casting the batch size data type to U.")
+                ))?;
+
+                for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
+                    optimizer.update(g / n, w);
                 }
 
                 s.map(|o| {
                     self.device.batch_backward_weight_gradient(&o, &loss).map(|g| {
                         for (mut u, g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
                             for (w, &g) in u.iter_mut().zip(g.iter()) {
-                                optimizer.update(g, w);
+                                optimizer.update(g / n, w);
                             }
                         }
                     })

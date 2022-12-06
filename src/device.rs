@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
 use libc::{c_uint};
+use num_traits::FromPrimitive;
 use rcublas::Context;
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasStatus_t, cublasSgemm_v2, cublasHandle_t, cublasSgemv_v2, cublasDgemv_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -49,7 +50,7 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
-                                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError>;
+                                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError> where f64: From<U>;
 
     /// convolutional calculation
     /// # Arguments
@@ -60,14 +61,23 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
     /// * `expected` - expected value
     /// * `actual` - actual value
     /// * `lossf` - loss function
-    fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&VecArr<U,Arr<U,N>>,actual:&VecArr<U,Arr<U,N>>,lossf:&L) -> U {
-        actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
+    fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&VecArr<U,Arr<U,N>>,actual:&VecArr<U,Arr<U,N>>,lossf:&L)
+        -> Result<U,TrainingError> where f64: From<U> + FromPrimitive, f64: FromPrimitive {
+        let n = f64::from_usize(exptected.len()).ok_or(TrainingError::TypeCastError(
+            String::from("An error occurred when casting the batch size data type to f64.")
+        ))?;
+
+        let loss = actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
             a.par_iter().cloned()
                 .zip(e.par_iter().cloned())
                 .reduce(|| (U::default(),U::default()), |(sum,d),(a,e)| {
                     (sum + lossf.apply(a,e),d)
                 })
-        }).map(|(sum,_)| sum).reduce(|| U::default(), |sum,l| sum + l)
+        }).map(|(sum,_)| sum).reduce(|| U::default(), |sum,l| sum + l);
+
+        U::from_f64(f64::from(loss) / n).ok_or(TrainingError::TypeCastError(
+            String::from("An error occurred in the type conversion of the total loss.")
+        ))
     }
 }
 /// Trait that defines the implementation of various calculation processes in the linear layer
@@ -184,7 +194,7 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
     }
 
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
-                                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError> {
+                                                               -> Result<VecArr<U,Arr<U, N>>, TrainingError> where f64: From<U> {
         Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
             a.par_iter().zip(e.par_iter())
                 .map(|(&a,&e)| a - e).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
@@ -400,7 +410,8 @@ impl Device<f32> for DeviceGpu<f32> {
         })
     }
 
-    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f32, Arr<f32, N>>, actual: &VecArr<f32, Arr<f32, N>>) -> Result<VecArr<f32, Arr<f32, N>>, TrainingError> {
+    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f32, Arr<f32, N>>, actual: &VecArr<f32, Arr<f32, N>>)
+        -> Result<VecArr<f32, Arr<f32, N>>, TrainingError> {
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 
@@ -769,7 +780,8 @@ impl Device<f64> for DeviceGpu<f64> {
         })
     }
 
-    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f64, Arr<f64, N>>, actual: &VecArr<f64, Arr<f64, N>>) -> Result<VecArr<f64, Arr<f64, N>>, TrainingError> {
+    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<f64, Arr<f64, N>>, actual: &VecArr<f64, Arr<f64, N>>)
+        -> Result<VecArr<f64, Arr<f64, N>>, TrainingError> {
         let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
         expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
 

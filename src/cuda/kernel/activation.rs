@@ -10,21 +10,21 @@ extern "C" {
     fn swish_forward_float(input_output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn tanh_forward_float(input_output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn softmax_forward_float(input_output: *mut f32, len: size_t, batch_len: size_t) -> c_void;
-    fn sigmoid_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
-    fn relu_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
-    fn swish_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
-    fn tanh_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
-    fn softmax_backward_float(u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
+    fn sigmoid_backward_float(o: *const f32, u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
+    fn relu_backward_float(o: *const f32, u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
+    fn swish_backward_float(o: *const f32, u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
+    fn tanh_backward_float(o: *const f32, u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
+    fn softmax_backward_float(o: *const f32, u: *const f32, loss: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
     fn sigmoid_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn relu_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn swish_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn tanh_forward_double(input_output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn softmax_forward_double(input_output: *mut f64, len: size_t, batch_len: size_t) -> c_void;
-    fn sigmoid_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
-    fn relu_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
-    fn swish_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
-    fn tanh_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
-    fn softmax_backward_double(u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn sigmoid_backward_double(o: *const f64, u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn relu_backward_double(o: *const f64, u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn swish_backward_double(o: *const f64, u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn tanh_backward_double(o: *const f64, u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn softmax_backward_double(o: *const f64, u: *const f64, loss: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
 }
 /// Defines the list of passed to the cuda kernel function for the arguments of the activation function.
 pub struct ActivationForwardArgs<T> where T: DataTypeInfo {
@@ -59,6 +59,7 @@ impl<T> KernelArgs for ActivationForwardArgs<T> where T: DataTypeInfo {
 }
 /// Create an instance of an object representing the argument list during error back propagation of the activation function.
 pub struct ActivationBackwardArgs<T> where T: DataTypeInfo {
+    o: CudaPtr<T>,
     u: CudaPtr<T>,
     /// loss value
     pub loss: CudaPtr<T>,
@@ -73,8 +74,9 @@ impl<T> ActivationBackwardArgs<T> where T: DataTypeInfo {
     /// * `loss` - loss value
     /// * `units_len` - count of inputs and outputs of linear layer weights
     /// * `batch_len` - batch count
-    pub fn new(u:CudaPtr<T>,loss: CudaPtr<T>,units_len:usize,batch_len:usize) -> ActivationBackwardArgs<T> {
+    pub fn new(o:CudaPtr<T>,u:CudaPtr<T>,loss: CudaPtr<T>,units_len:usize,batch_len:usize) -> ActivationBackwardArgs<T> {
         ActivationBackwardArgs {
+            o: o,
             u: u,
             loss: loss,
             units_len: units_len,
@@ -85,6 +87,7 @@ impl<T> ActivationBackwardArgs<T> where T: DataTypeInfo {
 impl<T> KernelArgs for ActivationBackwardArgs<T> where T: DataTypeInfo {
     fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
         vec![
+            &mut self.o,
             &mut self.u,
             &mut self.loss,
             &mut self.units_len,

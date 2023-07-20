@@ -19,6 +19,7 @@ pub mod lossfunction;
 pub mod activation;
 pub mod cuda;
 pub mod device;
+pub mod computational_graph;
 pub mod layer;
 pub mod persistence;
 

@@ -4,11 +4,21 @@ use crate::arr::{Arr, VecArr};
 use crate::error::{SizeMismatchError, TrainingError};
 use crate::ope::UnitValue;
 
+/// Trait that defines a computational graph for calculating forward and back propagation of a neural network
 pub trait GraphNode<FI,FO,BI,BO> {
+    /// Forward propagation calculation
+    /// # Arguments
+    /// * `v` - forward input value.
+    ///
     fn forward(v:FI) -> FO;
 
+    /// Back propagation calculation
+    /// # Arguments
+    /// * `d` - backward input value.
+    ///
     fn backward(d:BI) -> BO;
 }
+/// Implementation of additive nodes
 pub struct AddNode<U> where U: UnitValue<U> {
     u:PhantomData<U>
 }
@@ -28,6 +38,7 @@ impl<U> GraphNode<(U,U),U,U,(U,U)> for AddNode<U> where U: UnitValue<U> {
         (d,d)
     }
 }
+/// Multiplication node implementation
 pub struct MulNode<U> where U: UnitValue<U> {
     u:PhantomData<U>
 }
@@ -47,6 +58,7 @@ impl<U> GraphNode<(U,U),U,(U,U,U),(U,U)> for MulNode<U> where U: UnitValue<U> {
         (r * d, l * d)
     }
 }
+/// Branch node implementation
 pub struct BranchNode<U> where U: UnitValue<U> {
     u:PhantomData<U>
 }
@@ -66,6 +78,7 @@ impl<U> GraphNode<U,(U,U),(U,U),U> for BranchNode<U> where U: UnitValue<U> {
         d1 + d2
     }
 }
+/// Aggregate node implementation
 pub struct SumNode<U> where U: UnitValue<U> {
     u:PhantomData<U>
 }
@@ -97,6 +110,7 @@ impl<U,const N:usize> GraphNode<VecArr<U,Arr<U,N>>,Result<Arr<U,N>,SizeMismatchE
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
+/// Broadcast node implementation
 pub struct BroadcastNode<U> where U: UnitValue<U> {
     u:PhantomData<U>
 }
@@ -122,6 +136,7 @@ impl<U,const N:usize> GraphNode<(Arr<U,N>,usize),VecArr<U,Arr<U,N>>,VecArr<U,Arr
         }).try_into()
     }
 }
+/// Implementation of reciprocal nodes
 pub struct ReciprocalNode<U> where U: UnitValue<U> {
     u:PhantomData<U>
 }
@@ -141,6 +156,7 @@ impl<U> GraphNode<U,U,U,U> for ReciprocalNode<U> where U: UnitValue<U> {
         -(U::one() / (d * d))
     }
 }
+/// Square root node implementation
 pub struct SqrtNode<U> where U: UnitValue<U> {
     u:PhantomData<U>
 }
@@ -160,6 +176,7 @@ impl<U> GraphNode<U,U,U,U> for SqrtNode<U> where U: UnitValue<U> {
         U::one() / ((U::one() + U::one()) * d.sqrt())
     }
 }
+/// Squared node implementation
 pub struct SquareNode<U> where U: UnitValue<U> {
     u:PhantomData<U>
 }
@@ -179,6 +196,7 @@ impl<U> GraphNode<U,U,(U,U),U> for SquareNode<U> where U: UnitValue<U> {
         (U::one() + U::one()) * i * d
     }
 }
+/// Implementation of negative additive nodes
 pub struct SubNode<U> where U: UnitValue<U> {
     u:PhantomData<U>
 }

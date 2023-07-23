@@ -158,9 +158,7 @@ pub trait DeviceBatchNorm<U,T,const N:usize>
           for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
           for<'data> ArrView<'data,U,N>: Arithmetic<&'data ArrView<'data,U,N>,Arr<U,N>>,
           for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> + Arithmetic<U,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> + Arithmetic<U,VecArr<U,Arr<U,N>>>,
-          EvaluateError: From<SizeMismatchError>,
-          TrainingError: From<SizeMismatchError> {
+          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> + Arithmetic<U,VecArr<U,Arr<U,N>>> {
     fn forward_batch_norm(&self, input: &Arr<U,N>, scale: &Arr<U,N>, bias: &Arr<U,N>,
                           estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<Arr<U,N>,EvaluateError>;
     fn batch_forward_batch_norm(&self, input: &VecArr<U,Arr<U,N>>, scale: &Arr<U,N> , bias: &Arr<U,N>,
@@ -1150,9 +1148,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
           for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
           for<'data> ArrView<'data,U,N>: Arithmetic<&'data ArrView<'data,U,N>,Arr<U,N>>,
           for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> + Arithmetic<U,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> + Arithmetic<U,VecArr<U,Arr<U,N>>>,
-          EvaluateError: From<SizeMismatchError>,
-          TrainingError: From<SizeMismatchError> {
+          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> + Arithmetic<U,VecArr<U,Arr<U,N>>> {
     fn forward_batch_norm(&self, input: &Arr<U, N>, scale: &Arr<U, N>, bias: &Arr<U, N>,
                           estimated_mean: &Arr<U, N>, estimated_variance: &Arr<U, N>) -> Result<Arr<U, N>,EvaluateError> {
         let eps = U::from_f64(1e-6).ok_or(EvaluateError::TypeCastError(String::from(

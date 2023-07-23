@@ -239,3 +239,12 @@ impl IsNaN for f32 {
 }
 impl UnitValue<f64> for f64 {}
 impl UnitValue<f32> for f32 {}
+pub trait Sum {
+    type Output;
+
+    fn sum(&self) -> Self::Output;
+}
+pub trait Arithmetic<Rhs = Self,O = Self>: Add<Rhs,Output = O> + Sub<Rhs,Output = O> +
+                                           Mul<Rhs,Output = O> + Div<Rhs,Output = O> + Neg<Output = O> {}
+impl<T,Rhs,O> Arithmetic<Rhs,O> for T where T: Add<Rhs,Output = O> + Sub<Rhs,Output = O> +
+                                               Mul<Rhs,Output = O> + Div<Rhs,Output = O> + Neg<Output = O> {}

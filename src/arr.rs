@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Add, Deref, DerefMut, Div, Index, IndexMut, Mul, Neg, Sub};
 use std;
-use rayon::iter::plumbing;
+use rayon::iter::{FromParallelIterator, plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::error::{IndexOutBoundError, SizeMismatchError};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
@@ -1218,5 +1218,67 @@ impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for VecArr<T,Arr<T,N
             t:PhantomData::<Arr<T,N>>,
             len: self.len
         }
+    }
+}
+#[derive(Clone)]
+pub struct Broadcast<T>(pub T) where T: Clone;
+impl<'a,T,R> Mul<&'a R> for Broadcast<T>
+    where T: Default + Clone + Send + Mul<<R as IntoParallelRefIterator<'a>>::Item>,
+          <T as Mul<<R as IntoParallelRefIterator<'a>>::Item>>::Output: Send,
+          R: IntoParallelRefIterator<'a> + From<Vec<T>> + Send,
+          <R as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator,
+          &'a <R as IntoParallelRefIterator<'a>>::Item: Mul<Output = T> + From<T>,
+          Vec<T>: FromParallelIterator<<T as Mul<<R as IntoParallelRefIterator<'a>>::Item>>::Output> {
+    type Output = R;
+
+    fn mul(self, rhs: &'a R) -> Self::Output {
+        rayon::iter::repeat(self.0).zip(rhs.par_iter()).map(|(l,r)| {
+            <T as Into<T>>::into(l) * r
+        }).collect::<Vec<T>>().into()
+    }
+}
+impl<'a,T,R> Add<&'a R> for Broadcast<T>
+    where T: Default + Clone + Send + Add<<R as IntoParallelRefIterator<'a>>::Item>,
+          <T as Add<<R as IntoParallelRefIterator<'a>>::Item>>::Output: Send,
+          R: IntoParallelRefIterator<'a> + From<Vec<T>> + Send,
+          <R as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator,
+          &'a <R as IntoParallelRefIterator<'a>>::Item: Add<Output = T> + From<T>,
+          Vec<T>: FromParallelIterator<<T as Add<<R as IntoParallelRefIterator<'a>>::Item>>::Output> {
+    type Output = R;
+
+    fn add(self, rhs: &'a R) -> Self::Output {
+        rayon::iter::repeat(self.0).zip(rhs.par_iter()).map(|(l,r)| {
+            <T as Into<T>>::into(l) + r
+        }).collect::<Vec<T>>().into()
+    }
+}
+impl<'a,T,R> Sub<&'a R> for Broadcast<T>
+    where T: Default + Clone + Send + Sub<<R as IntoParallelRefIterator<'a>>::Item>,
+          <T as Sub<<R as IntoParallelRefIterator<'a>>::Item>>::Output: Send,
+          R: IntoParallelRefIterator<'a> + From<Vec<T>> + Send,
+          <R as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator,
+          &'a <R as IntoParallelRefIterator<'a>>::Item: Sub<Output = T> + From<T>,
+          Vec<T>: FromParallelIterator<<T as Sub<<R as IntoParallelRefIterator<'a>>::Item>>::Output> {
+    type Output = R;
+
+    fn sub(self, rhs: &'a R) -> Self::Output {
+        rayon::iter::repeat(self.0).zip(rhs.par_iter()).map(|(l,r)| {
+            <T as Into<T>>::into(l) - r
+        }).collect::<Vec<T>>().into()
+    }
+}
+impl<'a,T,R> Div<&'a R> for Broadcast<T>
+    where T: Default + Clone + Send + Div<<R as IntoParallelRefIterator<'a>>::Item>,
+          <T as Div<<R as IntoParallelRefIterator<'a>>::Item>>::Output: Send,
+          R: IntoParallelRefIterator<'a> + From<Vec<T>> + Send,
+          <R as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator,
+          &'a <R as IntoParallelRefIterator<'a>>::Item: Div<Output = T> + From<T>,
+          Vec<T>: FromParallelIterator<<T as Div<<R as IntoParallelRefIterator<'a>>::Item>>::Output> {
+    type Output = R;
+
+    fn div(self, rhs: &'a R) -> Self::Output {
+        rayon::iter::repeat(self.0).zip(rhs.par_iter()).map(|(l,r)| {
+            <T as Into<T>>::into(l) / r
+        }).collect::<Vec<T>>().into()
     }
 }

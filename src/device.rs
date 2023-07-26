@@ -156,18 +156,12 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
 /// Features defining the implementation of the various computational processes in the batch normalization layer
 pub trait DeviceBatchNorm<U,T,const N:usize>
     where U: UnitValue<U>,
-          for<'a> Broadcast<Arr<U,N>>: Mul<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>>,
-          for<'a> ArrView<'a,U,N>: From<Arr<U,N>>,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>> + Default + Add<ArrView<'a,U,N>>,
+          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
+                            Arithmetic<U,Arr<U,N>> + Default + Add<ArrView<'a,U,N>>,
           for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'a> <Arr<U,N> as Add<ArrView<'a,U,N>>>::Output: Send,
-          for<'data> ArrView<'data,U,N>: Arithmetic<&'data ArrView<'data,U,N>,Arr<U,N>>,
-          for<'data> &'data ArrView<'data,U,N>: From<Arr<U,N>>,
           for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>> +
                                          Arithmetic<U,VecArr<U,Arr<U,N>>>,
           for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>> +
                                                 Arithmetic<U,VecArr<U,Arr<U,N>>> {
     fn forward_batch_norm(&self, input: &Arr<U,N>, scale: &Arr<U,N>, bias: &Arr<U,N>,
                           estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<Arr<U,N>,EvaluateError>;
@@ -1154,18 +1148,12 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
 }
 impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
     where U: UnitValue<U>,
-          for<'a> Broadcast<Arr<U,N>>: Mul<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>>,
-          for<'a> ArrView<'a,U,N>: From<Arr<U,N>>,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>> + Default + Add<ArrView<'a,U,N>>,
+          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
+                            Arithmetic<U,Arr<U,N>> + Default + Add<ArrView<'a,U,N>>,
           for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'a> <Arr<U,N> as Add<ArrView<'a,U,N>>>::Output: Send,
-          for<'data> ArrView<'data,U,N>: Arithmetic<&'data ArrView<'data,U,N>,Arr<U,N>>,
-          for<'data> &'data ArrView<'data,U,N>: From<Arr<U,N>>,
           for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>> +
                                          Arithmetic<U,VecArr<U,Arr<U,N>>>,
           for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>> +
                                                 Arithmetic<U,VecArr<U,Arr<U,N>>> {
     fn forward_batch_norm(&self, input: &Arr<U, N>, scale: &Arr<U, N>, bias: &Arr<U, N>,
                           estimated_mean: &Arr<U, N>, estimated_variance: &Arr<U, N>) -> Result<Arr<U, N>,EvaluateError> {

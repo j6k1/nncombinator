@@ -1,5 +1,5 @@
 use std::ops::{Add, Div, Mul, Sub};
-use rayon::prelude::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, IntoParallelIterator};
+use rayon::prelude::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator};
 use crate::arr::{Arr, VecArr};
 
 #[derive(Clone)]

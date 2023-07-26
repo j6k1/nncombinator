@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 use std::{mem};
+use std::ops::{Add, Mul};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
@@ -12,6 +13,7 @@ use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasStatus_t, cublasSgemm
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
 use crate::arr::{Arr, Arr2, ArrView, VecArr};
+use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SquareNode, SumNode};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Kernel, Memory};
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
@@ -154,11 +156,19 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
 /// Features defining the implementation of the various computational processes in the batch normalization layer
 pub trait DeviceBatchNorm<U,T,const N:usize>
     where U: UnitValue<U>,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
+          for<'a> Broadcast<Arr<U,N>>: Mul<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>>,
+          for<'a> ArrView<'a,U,N>: From<Arr<U,N>>,
+          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>> + Default + Add<ArrView<'a,U,N>>,
           for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
+          for<'a> <Arr<U,N> as Add<ArrView<'a,U,N>>>::Output: Send,
           for<'data> ArrView<'data,U,N>: Arithmetic<&'data ArrView<'data,U,N>,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> + Arithmetic<U,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> + Arithmetic<U,VecArr<U,Arr<U,N>>> {
+          for<'data> &'data ArrView<'data,U,N>: From<Arr<U,N>>,
+          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
+                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>> +
+                                         Arithmetic<U,VecArr<U,Arr<U,N>>>,
+          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
+                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>> +
+                                                Arithmetic<U,VecArr<U,Arr<U,N>>> {
     fn forward_batch_norm(&self, input: &Arr<U,N>, scale: &Arr<U,N>, bias: &Arr<U,N>,
                           estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<Arr<U,N>,EvaluateError>;
     fn batch_forward_batch_norm(&self, input: &VecArr<U,Arr<U,N>>, scale: &Arr<U,N> , bias: &Arr<U,N>,
@@ -1144,11 +1154,19 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
 }
 impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
     where U: UnitValue<U>,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
+          for<'a> Broadcast<Arr<U,N>>: Mul<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>>,
+          for<'a> ArrView<'a,U,N>: From<Arr<U,N>>,
+          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>> + Default + Add<ArrView<'a,U,N>>,
           for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
+          for<'a> <Arr<U,N> as Add<ArrView<'a,U,N>>>::Output: Send,
           for<'data> ArrView<'data,U,N>: Arithmetic<&'data ArrView<'data,U,N>,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> + Arithmetic<U,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> + Arithmetic<U,VecArr<U,Arr<U,N>>> {
+          for<'data> &'data ArrView<'data,U,N>: From<Arr<U,N>>,
+          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
+                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>> +
+                                         Arithmetic<U,VecArr<U,Arr<U,N>>>,
+          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
+                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>> +
+                                                Arithmetic<U,VecArr<U,Arr<U,N>>> {
     fn forward_batch_norm(&self, input: &Arr<U, N>, scale: &Arr<U, N>, bias: &Arr<U, N>,
                           estimated_mean: &Arr<U, N>, estimated_variance: &Arr<U, N>) -> Result<Arr<U, N>,EvaluateError> {
         let eps = U::from_f64(1e-6).ok_or(EvaluateError::TypeCastError(String::from(
@@ -1172,15 +1190,16 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
             "Error in type conversion from usize."
         )))?;
 
-        Ok(input.par_iter().map(|input| input.par_iter()
-            .zip(scale.par_iter())
-            .zip(bias.par_iter())
-            .zip(estimated_mean.par_iter())
-            .zip(estimated_variance.par_iter())
-            .map(|((((&i,&scale),&bias),&mean),&variance)| {
-                scale * (i - mean) / (variance + eps) + bias
-            }).collect::<Vec<U>>().try_into()
-        ).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
+        Ok(input.par_iter().map(|input| {
+            input.par_iter()
+                .zip(scale.par_iter())
+                .zip(bias.par_iter())
+                .zip(estimated_mean.par_iter())
+                .zip(estimated_variance.par_iter())
+                .map(|((((&i,&scale),&bias),&mean),&variance)| {
+                    scale * (i - mean) / (variance + eps) + bias
+                }).collect::<Vec<U>>().try_into()
+            }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 
     fn batch_forward_batch_norm_train(&self, input: &VecArr<U, Arr<U, N>>,
@@ -1195,32 +1214,26 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
 
         let n = input.len();
 
-        let mean = SumNode::new().forward(input).par_iter().map(|&i| {
+        let mean:Arr<U,N> = SumNode::new().forward(input).par_iter().map(|&i| {
             U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
                 "Error in type conversion from usize."
             ))).map(|n| i / n)
         }).collect::<Result<Vec<U>,_>>()?.try_into()?;
 
-        let variance:VecArr<U,Arr<U,N>> = input.par_iter()
-                               .zip(BroadcastNode::new().forward((&mean,n)).par_iter())
-                               .map(|(i,m)| {
-                                    i.par_iter().zip(m.par_iter()).map(|(&i,&m)| {
-                                        SquareNode::new().forward(i - m)
+        let variance:VecArr<U,Arr<U,N>> = (input - Broadcast::<Arr<U,N>>(mean.clone()))
+                               .par_iter()
+                               .map(|i| {
+                                    i.par_iter().map(|&i| {
+                                        SquareNode::new().forward(i)
                                     }).collect::<Vec<U>>().try_into()
                                 }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into();
         let variance = variance.sum();
 
         let inv_variance = variance.par_iter().map(|&v| U::one() / (v + eps)).collect::<Vec<U>>().try_into()?;
 
-        let o:VecArr<U,Arr<U,N>> = input.par_iter()
-                     .zip(BroadcastNode::new().forward((&mean,n)).par_iter())
-                     .map(|(i,m)| {
-                         i - &m
-                     }).zip(BroadcastNode::new().forward((&variance.par_iter().map(|&v| {
-                         U::one() / (v + eps)
-                     }).collect::<Vec<U>>().try_into()?,n)).par_iter()).map(|(m,v)| {
-                        ArrView::from(&m) * &v
-                     }).collect::<Vec<Arr<U,N>>>().into();
+        let o:VecArr<U,Arr<U,N>> = Broadcast(<Vec<U> as TryInto<Arr<U,N>>>::try_into(variance.par_iter().map(|&v| {
+            U::one() / (v + eps)
+        }).collect::<Vec<U>>())?) * &(input - Broadcast(mean.clone()));
 
         let running_mean = running_mean.par_iter().zip(mean.par_iter()).map(|(&rm,&m)| {
             rm * momentum + m * (U::one() - momentum)

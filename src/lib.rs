@@ -13,6 +13,7 @@ pub mod error;
 pub mod ope;
 pub mod mem;
 pub mod arr;
+pub mod collection;
 pub mod list;
 pub mod optimizer;
 pub mod lossfunction;

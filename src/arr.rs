@@ -107,7 +107,7 @@ impl<T,const N:usize> Div<T> for Arr<T,N> where T: Div<T> + Div<Output=T> + Clon
     }
 }
 impl<T,const N:usize> Add<&Arr<T,N>> for &Arr<T,N>
-    where T: Add<T> + Add<Output=T> + Clone + Copy + Default + Send,
+    where T: Add<Output=T> + Clone + Copy + Default + Send,
           for<'data> Box<[T]>: IntoParallelRefIterator<'data>,
           for<'data> <Box<[T]> as IntoParallelRefIterator<'data>>::Iter: IndexedParallelIterator<Item = T> {
     type Output = Arr<T,N>;
@@ -118,7 +118,7 @@ impl<T,const N:usize> Add<&Arr<T,N>> for &Arr<T,N>
     }
 }
 impl<T,const N:usize> Sub<&Arr<T,N>> for &Arr<T,N>
-    where T: Sub<T> + Sub<Output=T> + Clone + Copy + Default + Send,
+    where T: Sub<Output=T> + Clone + Copy + Default + Send,
           for<'data> Box<[T]>: IntoParallelRefIterator<'data>,
           for<'data> <Box<[T]> as IntoParallelRefIterator<'data>>::Iter: IndexedParallelIterator<Item = T> {
     type Output = Arr<T,N>;
@@ -129,7 +129,7 @@ impl<T,const N:usize> Sub<&Arr<T,N>> for &Arr<T,N>
     }
 }
 impl<T,const N:usize> Mul<&Arr<T,N>> for &Arr<T,N>
-    where T: Mul<T> + Mul<Output=T> + Clone + Copy + Default + Send,
+    where T: Mul<Output=T> + Clone + Copy + Default + Send,
           for<'data> Box<[T]>: IntoParallelRefIterator<'data>,
           for<'data> <Box<[T]> as IntoParallelRefIterator<'data>>::Iter: IndexedParallelIterator<Item = T> {
     type Output = Arr<T,N>;
@@ -140,7 +140,7 @@ impl<T,const N:usize> Mul<&Arr<T,N>> for &Arr<T,N>
     }
 }
 impl<T,const N:usize> Div<&Arr<T,N>> for &Arr<T,N>
-    where T: Div<T> + Div<Output=T> + Clone + Copy + Default + Send,
+    where T: Div<Output=T> + Clone + Copy + Default + Send,
           for<'data> Box<[T]>: IntoParallelRefIterator<'data>,
           for<'data> <Box<[T]> as IntoParallelRefIterator<'data>>::Iter: IndexedParallelIterator<Item = T> {
     type Output = Arr<T,N>;
@@ -419,7 +419,7 @@ impl<'a,T,const N:usize> From<&'a Arr<T,N>> for ArrView<'a,T,N> where T: Default
     }
 }
 impl<'a,'b: 'a,T,const N:usize> Add<&'b ArrView<'b,T,N>> for &'a ArrView<'a,T,N>
-    where T: Add<T> + Add<Output=T> + Clone + Copy + Default + Send,
+    where T: Add<Output=T> + Clone + Copy + Default + Send,
           &'a [T]:IntoParallelIterator,
           <&'a [T] as IntoParallelIterator>::Iter: IndexedParallelIterator<Item = T> {
     type Output = Arr<T,N>;
@@ -430,7 +430,7 @@ impl<'a,'b: 'a,T,const N:usize> Add<&'b ArrView<'b,T,N>> for &'a ArrView<'a,T,N>
     }
 }
 impl<'a,'b: 'a,T,const N:usize> Sub<&'b ArrView<'b,T,N>> for &'a ArrView<'a,T,N>
-    where T: Sub<T> + Sub<Output=T> + Clone + Copy + Default + Send,
+    where T: Sub<Output=T> + Clone + Copy + Default + Send,
           &'a [T]:IntoParallelIterator,
           <&'a [T] as IntoParallelIterator>::Iter: IndexedParallelIterator<Item = T> {
     type Output = Arr<T,N>;
@@ -441,7 +441,7 @@ impl<'a,'b: 'a,T,const N:usize> Sub<&'b ArrView<'b,T,N>> for &'a ArrView<'a,T,N>
     }
 }
 impl<'a,'b: 'a,T,const N:usize> Mul<&'b ArrView<'b,T,N>> for &'a ArrView<'a,T,N>
-    where T: Mul<T> + Mul<Output=T> + Clone + Copy + Default + Send,
+    where T: Mul<Output=T> + Clone + Copy + Default + Send,
           &'a [T]:IntoParallelIterator,
           <&'a [T] as IntoParallelIterator>::Iter: IndexedParallelIterator<Item = T> {
 
@@ -453,7 +453,7 @@ impl<'a,'b: 'a,T,const N:usize> Mul<&'b ArrView<'b,T,N>> for &'a ArrView<'a,T,N>
     }
 }
 impl<'a,'b: 'a,T,const N:usize> Div<&'b ArrView<'b,T,N>> for &'a ArrView<'a,T,N>
-    where T: Div<T> + Div<Output=T> + Clone + Copy + Default + Send,
+    where T: Div<Output=T> + Clone + Copy + Default + Send,
           &'a [T]:IntoParallelIterator,
           <&'a [T] as IntoParallelIterator>::Iter: IndexedParallelIterator<Item = T> {
     type Output = Arr<T,N>;
@@ -464,7 +464,7 @@ impl<'a,'b: 'a,T,const N:usize> Div<&'b ArrView<'b,T,N>> for &'a ArrView<'a,T,N>
     }
 }
 impl<'a,T,const N:usize> Neg for &'a ArrView<'a,T,N>
-    where T: Neg + Neg<Output = T> + Clone + Copy + Default + Send,
+    where T: Neg<Output = T> + Clone + Copy + Default + Send,
           &'a [T]:IntoParallelIterator<Item = T>,
           <&'a [T] as IntoParallelIterator>::Iter: IndexedParallelIterator<Item = T> {
     type Output = Arr<T,N>;
@@ -822,7 +822,7 @@ impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for VecArr<T,Arr<T,N>> where T: Def
     }
 }
 impl<'a,'b: 'a,U,T> Add<&'b VecArr<U,T>> for &'a VecArr<U,T>
-    where T: Add<T> + Add<Output=T> + Send,
+    where T: Add<Output=T> + Send,
           U: Send + Sync + 'static + Default + Clone,
           VecArr<U,T>: IntoParallelRefIterator<'a,Item = T> + 'a + From<Vec<T>>,
           <VecArr<U,T> as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator<Item = T>,
@@ -834,7 +834,7 @@ impl<'a,'b: 'a,U,T> Add<&'b VecArr<U,T>> for &'a VecArr<U,T>
     }
 }
 impl<'a,'b: 'a,U,T> Sub<&'b VecArr<U,T>> for &'a VecArr<U,T>
-    where T: Sub<T> + Sub<Output=T> + Send,
+    where T: Sub<Output=T> + Send,
           U: Send + Sync + 'static + Default + Clone,
           VecArr<U,T>: IntoParallelRefIterator<'a,Item = T> + 'a + From<Vec<T>>,
           <VecArr<U,T> as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator<Item = T>,
@@ -847,7 +847,7 @@ impl<'a,'b: 'a,U,T> Sub<&'b VecArr<U,T>> for &'a VecArr<U,T>
     }
 }
 impl<'a,'b: 'a,U,T> Mul<&'b VecArr<U,T>> for &'a VecArr<U,T>
-    where T: Mul<T> + Mul<Output=T> + Send,
+    where T: Mul<Output=T> + Send,
           U: Send + Sync + 'static + Default + Clone,
           VecArr<U,T>: IntoParallelRefIterator<'a,Item = T> + 'a + From<Vec<T>>,
           <VecArr<U,T> as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator<Item = T>,
@@ -859,7 +859,7 @@ impl<'a,'b: 'a,U,T> Mul<&'b VecArr<U,T>> for &'a VecArr<U,T>
     }
 }
 impl<'a,'b: 'a,U,T> Div<&'b VecArr<U,T>> for &'a VecArr<U,T>
-    where T: Div<T> + Div<Output=T> + Send,
+    where T: Div<Output=T> + Send,
           U: Send + Sync + 'static + Default + Clone,
           VecArr<U,T>: IntoParallelRefIterator<'a,Item = T> + 'a + From<Vec<T>>,
           <VecArr<U,T> as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator<Item = T>,
@@ -871,7 +871,7 @@ impl<'a,'b: 'a,U,T> Div<&'b VecArr<U,T>> for &'a VecArr<U,T>
     }
 }
 impl<'a,U,T> Neg for &'a VecArr<U,T>
-    where T: Neg + Neg<Output=T> + Send,
+    where T: Neg<Output=T> + Send,
           U: Send + Sync + 'static + Default + Clone,
           VecArr<U,T>: IntoParallelRefIterator<'a,Item = T> + 'a + From<Vec<T>>,
           <VecArr<U,T> as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator<Item = T>,

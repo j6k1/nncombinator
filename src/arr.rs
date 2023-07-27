@@ -821,6 +821,54 @@ impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for VecArr<T,Arr<T,N>> where T: Def
         &mut self.arr
     }
 }
+impl<'a,U,T> Add<U> for &'a VecArr<U,T>
+    where T: Add<U,Output=T> + Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          VecArr<U,T>: IntoParallelRefIterator<'a,Item = T> + 'a + From<Vec<T>>,
+          <VecArr<U,T> as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator<Item = T>,
+          Vec<T>: FromIterator<T> {
+    type Output = VecArr<U,T>;
+
+    fn add(self, rhs: U) -> Self::Output {
+        self.par_iter().map(|l| l + rhs).collect::<Vec<T>>().into()
+    }
+}
+impl<'a,U,T> Sub<U> for &'a VecArr<U,T>
+    where T: Sub<U,Output=T> + Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          VecArr<U,T>: IntoParallelRefIterator<'a,Item = T> + 'a + From<Vec<T>>,
+          <VecArr<U,T> as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator<Item = T>,
+          Vec<T>: FromIterator<T> {
+    type Output = VecArr<U,T>;
+
+    fn sub(self, rhs: U) -> Self::Output {
+        self.par_iter().map(|l| l - rhs).collect::<Vec<T>>().into()
+    }
+}
+impl<'a,U,T> Mul<U> for &'a VecArr<U,T>
+    where T: Mul<U,Output=T> + Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          VecArr<U,T>: IntoParallelRefIterator<'a,Item = T> + 'a + From<Vec<T>>,
+          <VecArr<U,T> as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator<Item = T>,
+          Vec<T>: FromIterator<T> {
+    type Output = VecArr<U,T>;
+
+    fn mul(self, rhs: U) -> Self::Output {
+        self.par_iter().map(|l| l * rhs).collect::<Vec<T>>().into()
+    }
+}
+impl<'a,U,T> Div<U> for &'a VecArr<U,T>
+    where T: Div<U,Output=T> + Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          VecArr<U,T>: IntoParallelRefIterator<'a,Item = T> + 'a + From<Vec<T>>,
+          <VecArr<U,T> as IntoParallelRefIterator<'a>>::Iter: IndexedParallelIterator<Item = T>,
+          Vec<T>: FromIterator<T> {
+    type Output = VecArr<U,T>;
+
+    fn div(self, rhs: U) -> Self::Output {
+        self.par_iter().map(|l| l / rhs).collect::<Vec<T>>().into()
+    }
+}
 impl<'a,'b: 'a,U,T> Add<&'b VecArr<U,T>> for &'a VecArr<U,T>
     where T: Add<Output=T> + Send,
           U: Send + Sync + 'static + Default + Clone,

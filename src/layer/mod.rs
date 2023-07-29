@@ -16,6 +16,8 @@ use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
 
+pub mod batch_norm;
+
 /// Differential input
 #[derive(Debug)]
 pub enum DiffInput<T,U,const NI:usize,const NO:usize>
@@ -37,7 +39,7 @@ pub trait ForwardAll {
     /// Input to this layer of the neural network
     type Input: Debug;
     /// Output from this layer of the neural network
-    type Output: Debug;
+    type Output: Debug + Send + Sync + 'static;
     /// Forward propagation
     /// # Arguments
     /// * `input` - input
@@ -380,7 +382,7 @@ pub struct ActivationLayer<U,P,A,I,PI,D> where P: ForwardAll<Input=I,Output=PI> 
                                                U: UnitValue<U>,
                                                D: Device<U>,
                                                A: Activation<U,PI,PI,D>,
-                                               PI: Debug,
+                                               PI: Debug + Send + Sync + 'static,
                                                I: Debug + Send + Sync {
     parent:P,
     f:A,
@@ -394,7 +396,7 @@ impl<U,P,A,I,PI,D> ActivationLayer<U,P,A,I,PI,D>
           U: UnitValue<U>,
           D: Device<U>,
           A: Activation<U,PI,PI,D>,
-          PI: Debug,
+          PI: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     /// Create and return an instance of ActivationLayer
     /// # Arguments
@@ -417,7 +419,7 @@ impl<U,P,A,I,PI,D> Persistence<U,TextFilePersistence<U>,Specialized> for Activat
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U>,
           A: Activation<U,PI,PI,D>,
-          PI: Debug,
+          PI: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)
@@ -434,7 +436,7 @@ impl<T,U,P,A,I,PI,D> Persistence<U,T,Linear> for ActivationLayer<U,P,A,I,PI,D>
           U: UnitValue<U>,
           D: Device<U>,
           A: Activation<U,PI,PI,D>,
-          PI: Debug,
+          PI: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)
@@ -449,7 +451,7 @@ impl<U,P,A,I,PI,D> ForwardAll for ActivationLayer<U,P,A,I,PI,D>
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: Activation<U,PI,PI,D>,
-          PI: Debug,
+          PI: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     type Input = I;
     type Output = PI;
@@ -464,7 +466,7 @@ impl<U,P,A,I,PI,D> Forward<PI,Result<PI,EvaluateError>> for ActivationLayer<U,P,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: Activation<U,PI,PI,D>,
-          PI: Debug,
+          PI: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     fn forward(&self, input: &PI) -> Result<PI,EvaluateError> {
         self.f.apply(&self.device, input)
@@ -626,7 +628,7 @@ pub struct LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     u:PhantomData<U>,
     i:PhantomData<I>,
@@ -638,7 +640,7 @@ impl<U,P,D,I,IO> LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     /// Create and return an instance of LinearOutputLayer
     /// # Arguments
@@ -659,7 +661,7 @@ impl<U,P,D,I,IO> Persistence<U,TextFilePersistence<U>,Specialized> for LinearOut
              PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
@@ -676,7 +678,7 @@ impl<T,U,P,D,I,IO> Persistence<U,T,Linear> for LinearOutputLayer<U,P,D,I,IO>
              PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
@@ -691,7 +693,7 @@ impl<U,P,D,I,IO> ForwardAll for LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     type Input = I;
     type Output = IO;
@@ -703,7 +705,7 @@ impl<U,P,D,I,IO> PreTrain<U> for LinearOutputLayer<U,P,D,I,IO>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     type OutStack = P::OutStack;
 
@@ -770,7 +772,7 @@ impl<U,P,D,I,IO> BatchForwardBase for LinearOutputLayer<U,P,D,I,IO>
              BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,IO>>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     type BatchInput = VecArr<U,I>;
     type BatchOutput = VecArr<U,IO>;
@@ -780,7 +782,7 @@ impl<U,P,D,I,IO> BatchForward for LinearOutputLayer<U,P,D,I,IO>
              BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,IO>> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         self.parent.batch_forward(input)
@@ -792,7 +794,7 @@ impl<U,P,D,I,IO> BatchPreTrainBase<U> for LinearOutputLayer<U,P,D,I,IO>
              BatchPreTrainBase<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     type BatchOutStack = P::BatchOutStack;
 }
@@ -802,7 +804,7 @@ impl<U,P,D,I,IO> BatchPreTrain<U> for LinearOutputLayer<U,P,D,I,IO>
              BatchPreTrainBase<U> + BatchPreTrain<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         self.parent.batch_pre_train(input)
@@ -815,7 +817,7 @@ impl<U,P,D,I,IO> BatchBackward<U> for LinearOutputLayer<U,P,D,I,IO>
              BatchBackward<U> + BatchLoss<U,BatchLossInput=VecArr<U,IO>>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
-          IO: Debug,
+          IO: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     type BatchLossInput = VecArr<U,IO>;
 

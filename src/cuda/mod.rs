@@ -1,6 +1,7 @@
 //! Function to wrap and handle cuda kernel
 
-use std::fmt::Debug;
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
 use libc::c_void;
@@ -304,6 +305,7 @@ pub trait MemoryAsync<T: Default + Debug>: AsMutVoidPtr {
     fn read_to_vec_with_size_async(&mut self,stream: cudaStream_t,size:usize) -> Result<Vec<T>,rcudnn::Error>;
 }
 /// Wrapper to handle cuda device memory
+#[derive(Debug)]
 pub struct CudaPtr<T> {
     ptr:*mut T,
     size:usize,
@@ -405,6 +407,7 @@ impl<T> AsMutPtr<T> for CudaPtr<T> {
     }
 }
 /// Wrapper to handle cuda host memory
+#[derive(Debug)]
 pub struct CudaHostPtr<T> {
     ptr:*mut T,
     size:usize,
@@ -670,6 +673,11 @@ impl<T> AsPtr<T> for CudaMemoryPoolPtr<T> {
 impl<T> AsMutPtr<T> for CudaMemoryPoolPtr<T> {
     fn as_mut_ptr(&mut self) -> *mut T {
         self.ptr
+    }
+}
+impl<T> Debug for CudaMemoryPoolPtr<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f,"CudaMemoryPoolPtr {{ ptr: {:?}, size {:?} }}",self.ptr,self.size)
     }
 }
 impl TryFrom<f32> for CudaPtr<f32> {

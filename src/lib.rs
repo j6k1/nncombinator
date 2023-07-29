@@ -33,6 +33,10 @@ pub trait Stack {
 
     /// Returns a tuple of the top item in the stack and the rest of the stack
     fn pop(self) -> (Self::Remaining, Self::Head);
+    /// Returns Cons with items pushed to the stack
+    /// # Arguments
+    /// * `head` - Items to be added
+    fn push<H>(self,head:H) -> Cons<Self,H> where Self: Sized;
     /// Returns the result of applying the callback function to the top element of the stack
     /// # Arguments
     /// * `f` - Applicable callbacks
@@ -40,6 +44,10 @@ pub trait Stack {
     /// Returns the result of applying the callback to a stack that does not contain the top element of the stack
     /// * `f` - Applicable callbacks
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O;
+    /// Returns the result of taking ownership of the first element of the stack and applying the callback function.
+    /// # Arguments
+    /// * `f` - Applicable callbacks
+    fn take_map<F: FnOnce(Self::Head) -> (Self::Head,O),O>(self,f:F) -> (Self,O) where Self: Sized;
 }
 /// Stack containing elements
 #[derive(Debug,Clone)]
@@ -57,10 +65,21 @@ impl<R,T> Stack for Cons<R,T> where R: Stack {
         }
     }
 
+    fn push<H>(self,head:H) -> Cons<Self, H> where Self: Sized {
+        Cons(self,head)
+    }
+
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
         f(&self.1)
     }
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O { f(&self.0) }
+    fn take_map<F: FnOnce(Self::Head) -> (Self::Head, O), O>(self, f: F) -> (Self, O) where Self: Sized {
+        let (s,h) = self.pop();
+
+        let (h,r) = f(h);
+
+        (Cons(s,h),r)
+    }
 }
 /// Empty stack, containing no elements
 #[derive(Debug,Clone)]
@@ -73,11 +92,20 @@ impl Stack for Nil {
         (Nil,())
     }
 
+    fn push<H>(self, head: H) -> Cons<Self, H> where Self: Sized {
+        Cons(Nil,head)
+    }
+
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
         f(&())
     }
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O, O>(&self, f: F) -> O {
         f(&Nil)
+    }
+    fn take_map<F: FnOnce(Self::Head) -> (Self::Head, O), O>(self, f: F) -> (Self, O) where Self: Sized {
+        let (_,r) = f(());
+
+        (Nil,r)
     }
 }
 #[cfg(test)]

@@ -2,7 +2,6 @@
 
 use std::marker::PhantomData;
 use std::{mem};
-use std::ops::{Add};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
@@ -12,7 +11,7 @@ use rcublas::Context;
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasStatus_t, cublasSgemm_v2, cublasHandle_t, cublasSgemv_v2, cublasDgemv_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
-use crate::arr::{Arr, Arr2, ArrView, VecArr};
+use crate::arr::{Arr, Arr2, VecArr};
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SquareNode, SumNode};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Kernel, Memory};
@@ -154,28 +153,21 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
                                       -> Result<Arr2<U, NI, NO>, TrainingError>;
 }
 /// Features defining the implementation of the various computational processes in the batch normalization layer
-pub trait DeviceBatchNorm<U,T,const N:usize>
-    where U: UnitValue<U>,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>> + Default + Add<ArrView<'a,U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>> {
-    fn forward_batch_norm(&self, input: &Arr<U,N>, scale: &Arr<U,N>, bias: &Arr<U,N>,
-                          estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<Arr<U,N>,EvaluateError>;
-    fn batch_forward_batch_norm(&self, input: &VecArr<U,Arr<U,N>>, scale: &Arr<U,N> , bias: &Arr<U,N>,
-                                estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<VecArr<U,Arr<U,N>>,EvaluateError>;
-    fn batch_forward_batch_norm_train(&self, input: &VecArr<U,Arr<U,N>>, scale: &Arr<U,N>, bias: &Arr<U,N>,
-                                      running_mean: &Arr<U,N>, running_variance: &Arr<U,N>, momentum: U)
+pub trait DeviceBatchNorm<U,T,C,const N:usize>
+    where U: UnitValue<U> {
+    fn forward_batch_norm(&self, input: &Arr<U,N>, scale: &C, bias: &C,
+                          estimated_mean: &C, estimated_variance: &C) -> Result<Arr<U,N>,EvaluateError>;
+    fn forward_batch_norm_train(&self, input: &Arr<U,N>, scale: &C, bias: &C,
+                          estimated_mean: &C, estimated_variance: &C) -> Result<(Arr<U,N>,T,T),EvaluateError>;
+    fn batch_forward_batch_norm(&self, input: &VecArr<U,Arr<U,N>>, scale: &C , bias: &C,
+                                estimated_mean: &C, estimated_variance: &C) -> Result<VecArr<U,Arr<U,N>>,EvaluateError>;
+    fn batch_forward_batch_norm_train(&self, input: &VecArr<U,Arr<U,N>>, scale: &C, bias: &C,
+                                      running_mean: &C, running_variance: &C, momentum: U)
         -> Result<(VecArr<U,Arr<U,N>>,Arr<U,N>,Arr<U,N>,T,T),TrainingError>;
-    fn backward_batch_norm(&self, loss:&Arr<U,N>, input: &Arr<U,N>, scale: &Arr<U,N>,
+    fn backward_batch_norm(&self, loss:&Arr<U,N>, input: &Arr<U,N>, scale: &C,
                            saved_mean: &T, saved_inv_variance: &T) -> Result<(Arr<U, N>,Arr<U,N>,Arr<U,N>), TrainingError>;
     fn batch_backward_batch_norm(&self, loss:&VecArr<U,Arr<U,N>>, input: &VecArr<U,Arr<U,N>>,
-                                 scale: &Arr<U,N>, saved_mean: &T, saved_inv_variance: &T) -> Result<(VecArr<U,Arr<U, N>>,Arr<U,N>,Arr<U,N>), TrainingError>;
+                                 scale: &C, saved_mean: &T, saved_inv_variance: &T) -> Result<(VecArr<U,Arr<U, N>>,Arr<U,N>,Arr<U,N>), TrainingError>;
 }
 /// Implementation of Device to be computed by CPU
 pub struct DeviceCpu<U> where U: UnitValue<U> {
@@ -1148,10 +1140,10 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         }
     }
 }
-impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
+impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
     where U: UnitValue<U>,
           for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>> + Default + Add<ArrView<'a,U,N>>,
+                            Arithmetic<U,Arr<U,N>>,
           for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
           for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
                                          Arithmetic<U,VecArr<U,Arr<U,N>>> +
@@ -1173,6 +1165,28 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
              .map(|((((&i,&scale),&bias),&mean),&variance)| {
                  scale * (i - mean) / (variance + eps) + bias
              }).collect::<Vec<U>>().try_into()?)
+    }
+
+    fn forward_batch_norm_train(&self, input: &Arr<U, N>,
+                                scale: &Arr<U, N>,
+                                bias: &Arr<U, N>,
+                                estimated_mean: &Arr<U, N>,
+                                estimated_variance: &Arr<U, N>) -> Result<(Arr<U,N>,Arr<U,N>,Arr<U,N>),EvaluateError> {
+        let eps = U::from_f64(1e-6).ok_or(EvaluateError::TypeCastError(String::from(
+            "Error in type conversion from usize."
+        )))?;
+
+        Ok((input.par_iter()
+            .zip(scale.par_iter())
+            .zip(bias.par_iter())
+            .zip(estimated_mean.par_iter())
+            .zip(estimated_variance.par_iter())
+            .map(|((((&i,&scale),&bias),&mean),&variance)| {
+                scale * (i - mean) / (variance + eps) + bias
+            }).collect::<Vec<U>>().try_into()?,
+            estimated_mean.clone(),
+            estimated_variance.par_iter().map(|&v| U::one() / (v + eps)).collect::<Vec<U>>().try_into()?
+        ))
     }
 
     fn batch_forward_batch_norm(&self, input: &VecArr<U, Arr<U, N>>, scale: &Arr<U, N>, bias: &Arr<U, N>,
@@ -1198,7 +1212,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
                                       scale: &Arr<U, N>, bias: &Arr<U, N>,
                                       running_mean: &Arr<U, N>, running_variance: &Arr<U, N>,
                                       momentum: U)
-        -> Result<(VecArr<U, Arr<U, N>>, Arr<U,N>, Arr<U, N>, Arr<U, N>, Arr<U, N>), TrainingError> {
+        -> Result<(VecArr<U,Arr<U,N>>,Arr<U,N>,Arr<U,N>,Arr<U,N>,Arr<U,N>), TrainingError> {
 
         let eps = U::from_f64(1e-6).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from usize."
@@ -1242,6 +1256,33 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
         Ok((o,mean,inv_variance,running_mean,running_variance))
     }
 
+    fn backward_batch_norm(&self, loss: &Arr<U, N>, input: &Arr<U, N>,
+                           scale: &Arr<U, N>, saved_mean: &Arr<U, N>, saved_inv_variance: &Arr<U, N>)
+                           -> Result<(Arr<U, N>, Arr<U, N>, Arr<U, N>), TrainingError> {
+        let b = loss.clone();
+
+        let x = input - saved_mean;
+
+        let s = &x * saved_inv_variance * loss;
+
+        let dx1 = scale * loss;
+        let dx2 = &dx1 * saved_inv_variance;
+        let dx3 = &x * &dx1;
+        let dx4 = &(-(saved_inv_variance * saved_inv_variance)) * &dx3;
+        let dx5 = &dx4 / &(saved_inv_variance * U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
+            "Error in type conversion from f64.")
+        ))?);
+        let dx6 = &x * &dx5 * U::from_usize(2).ok_or(TrainingError::TypeCastError(String::from(
+            "Error in type conversion from usize."
+        )))?;
+        let dx7 = &dx2 + &dx6;
+        let dx8 = dx7.clone();
+        let dx9 = -dx7;
+        let dx = &dx8 + &dx9;
+
+        Ok((dx,s,b))
+    }
+
     fn batch_backward_batch_norm(&self, loss: &VecArr<U, Arr<U, N>>,
                                  input: &VecArr<U,Arr<U,N>>,
                                  scale: &Arr<U, N>,
@@ -1278,33 +1319,6 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
             "Error in type conversion from usize."
         )))?;
         let dx = &dx9 + &dx12;
-
-        Ok((dx,s,b))
-    }
-
-    fn backward_batch_norm(&self, loss: &Arr<U, N>, input: &Arr<U, N>,
-                           scale: &Arr<U, N>, saved_mean: &Arr<U, N>, saved_inv_variance: &Arr<U, N>)
-        -> Result<(Arr<U, N>, Arr<U, N>, Arr<U, N>), TrainingError> {
-        let b = loss.clone();
-
-        let x = input - saved_mean;
-
-        let s = &x * saved_inv_variance * loss;
-
-        let dx1 = scale * loss;
-        let dx2 = &dx1 * saved_inv_variance;
-        let dx3 = &x * &dx1;
-        let dx4 = &(-(saved_inv_variance * saved_inv_variance)) * &dx3;
-        let dx5 = &dx4 / &(saved_inv_variance * U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
-            "Error in type conversion from f64.")
-        ))?);
-        let dx6 = &x * &dx5 * U::from_usize(2).ok_or(TrainingError::TypeCastError(String::from(
-            "Error in type conversion from usize."
-        )))?;
-        let dx7 = &dx2 + &dx6;
-        let dx8 = dx7.clone();
-        let dx9 = -dx7;
-        let dx = &dx8 + &dx9;
 
         Ok((dx,s,b))
     }

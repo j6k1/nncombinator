@@ -97,7 +97,7 @@ pub trait Backward<U,I,O> where U: UnitValue<U> {
 /// Trait that defines the process of forward propagation performed prior to the process of error back propagation.
 pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     /// Type of object to keep the results of forward propagation needed to perform error back propagation.
-    type OutStack: Stack<Head=Self::Output> + Debug + Sized + Send + Sync + 'static;
+    type OutStack: Stack<Head=Self::Output> + Debug + Sized;
     /// Perform forward propagation required to perform error back propagation
     /// # Arguments
     /// * `input` - input

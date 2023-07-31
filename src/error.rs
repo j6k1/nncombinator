@@ -537,3 +537,37 @@ impl CudaRuntimeError {
         }
     }
 }
+/// Error when layer instantiation fails
+#[derive(Debug)]
+pub enum LayerInstantiationError {
+    CudaError(CudaError)
+}
+impl fmt::Display for LayerInstantiationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            LayerInstantiationError::CudaError(e) => {
+                write!(f,"An unexpected error occurred during layer instantiation ({})",e)
+            }
+        }
+    }
+}
+impl error::Error for LayerInstantiationError {
+    fn description(&self) -> &str {
+        match self {
+            LayerInstantiationError::CudaError(_) => {
+                "An unexpected error occurred during layer instantiation (An error occurred in the process of cudas)."
+            }
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            LayerInstantiationError::CudaError(ref e) => Some(e),
+        }
+    }
+}
+impl From<CudaError> for LayerInstantiationError {
+    fn from(err: CudaError) -> LayerInstantiationError {
+        LayerInstantiationError::CudaError(err)
+    }
+}

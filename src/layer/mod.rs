@@ -10,13 +10,13 @@ use crate::persistence::*;
 use crate::{Cons, Nil, Stack};
 use crate::activation::{Activation, BatchActivation};
 use crate::cuda::mem::CachedTensor;
-use crate::error::{ConfigReadError, CudaError, DeviceError, EvaluateError, PersistenceError, TrainingError, UnsupportedOperationError};
+use crate::error::{ConfigReadError, CudaError, DeviceError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, UnsupportedOperationError};
 use crate::error::SizeMismatchError;
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 use crate::optimizer::*;
 
-pub mod batch_norm;
+pub mod batchnormalization;
 
 /// Differential input
 #[derive(Debug)]
@@ -1400,6 +1400,79 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,CachedT
           I: Debug + Send + Sync,
           DeviceGpu<U>: Device<U>,
           Self: Loss<U> + BatchBackward<U> {
+}
+pub trait LinearLayerInstantiation<U,C,P,D,I,const NI:usize,const NO:usize>
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> +
+             PreTrain<U> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug + Send + Sync,
+          D: Device<U> {
+    fn instantiation(parent:P,device:&D,ui: impl FnMut() -> U, bi: impl FnMut() -> U)
+        -> Result<LinearLayer<U,C,P,D,I,NI,NO>,LayerInstantiationError>;
+}
+impl<U,P,I,const NI:usize,const NO:usize> LinearLayerInstantiation<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+    for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> +
+             PreTrain<U> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug + Send + Sync {
+    fn instantiation(parent: P, device:&DeviceCpu<U>,ui: impl FnMut() -> U, bi: impl FnMut() -> U)
+        -> Result<LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>,LayerInstantiationError> {
+        Ok(LinearLayer::<_,_,_,DeviceCpu<U>,_,NI,NO>::new(parent,device,ui,bi))
+    }
+}
+impl<U,P,I,const NI:usize,const NO:usize> LinearLayerInstantiation<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
+    for LinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> +
+             PreTrain<U> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug + Send + Sync,
+          DeviceGpu<U>: Device<U> {
+    fn instantiation(parent: P, device:&DeviceGpu<U>, ui: impl FnMut() -> U, bi: impl FnMut() -> U)
+        -> Result<LinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>,LayerInstantiationError> {
+        Ok(LinearLayer::<_,_,_,DeviceGpu<U>,_,NI,NO>::new(parent,device,ui,bi)?)
+    }
+}
+pub struct LinearLayerBuilder<U,C,P,D,I,const NI:usize,const NO:usize>
+    where U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug + Send + Sync,
+          D: Device<U> {
+    u:PhantomData<U>,
+    c:PhantomData<C>,
+    p:PhantomData<P>,
+    d:PhantomData<D>,
+    i:PhantomData<I>,
+    ni:PhantomData<[();NI]>,
+    no:PhantomData<[();NO]>
+}
+impl<U,C,P,D,I> LinearLayerBuilder<U,C,P,D,I,0,0>
+    where U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug + Send + Sync,
+          D: Device<U> {
+    pub fn new<const N1:usize,const N2:usize>() -> LinearLayerBuilder<U,C,P,D,I,N1,N2> {
+        LinearLayerBuilder {
+            u:PhantomData::<U>,
+            c:PhantomData::<C>,
+            p:PhantomData::<P>,
+            d:PhantomData::<D>,
+            i:PhantomData::<I>,
+            ni:PhantomData::<[();N1]>,
+            no:PhantomData::<[();N2]>
+        }
+    }
+}
+impl<U,C,P,D,I,const NI:usize,const NO:usize> LinearLayerBuilder<U,C,P,D,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> +
+             PreTrain<U> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug + Send + Sync,
+          D: Device<U> {
+    pub fn build(&self,parent: P, device:&D, ui: impl FnMut() -> U, bi: impl FnMut() -> U)
+                 -> Result<LinearLayer<U,C,P,D,I,NI,NO>,LayerInstantiationError>
+        where LinearLayer<U,C,P,D,I,NI,NO>: LinearLayerInstantiation<U,C,P,D,I,NI,NO> {
+
+        LinearLayer::instantiation(parent,device,ui,bi)
+    }
 }
 /// Implementation of differentially applicable linear layers
 pub struct DiffLinearLayer<U,C,P,D,I,const NI:usize,const NO:usize>

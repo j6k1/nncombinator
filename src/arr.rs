@@ -117,6 +117,33 @@ impl<T,const N:usize> Add<&Arr<T,N>> for &Arr<T,N>
             .collect::<Vec<T>>().try_into().expect("An error occurred in the add of Arrand Arr.")
     }
 }
+impl<T,const N:usize> Add<&Arr<T,N>> for Arr<T,N>
+    where T: Add<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Add<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn add(self, rhs: &Arr<T, N>) -> Self::Output {
+        &self + rhs
+    }
+}
+impl<T,const N:usize> Add<Arr<T,N>> for &Arr<T,N>
+    where T: Add<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Add<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn add(self, rhs: Arr<T, N>) -> Self::Output {
+        self + &rhs
+    }
+}
+impl<T,const N:usize> Add<Arr<T,N>> for Arr<T,N>
+    where T: Add<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Add<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn add(self, rhs: Arr<T, N>) -> Self::Output {
+        &self + &rhs
+    }
+}
 impl<T,const N:usize> Sub<&Arr<T,N>> for &Arr<T,N>
     where T: Sub<Output=T> + Clone + Copy + Default + Send,
           for<'data> Box<[T]>: IntoParallelRefIterator<'data>,
@@ -126,6 +153,33 @@ impl<T,const N:usize> Sub<&Arr<T,N>> for &Arr<T,N>
     fn sub(self, rhs: &Arr<T,N>) -> Self::Output {
         self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l - r)
             .collect::<Vec<T>>().try_into().expect("An error occurred in the add of Arr and Arr.")
+    }
+}
+impl<T,const N:usize> Sub<&Arr<T,N>> for Arr<T,N>
+    where T: Sub<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Sub<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn sub(self, rhs: &Arr<T, N>) -> Self::Output {
+        &self - rhs
+    }
+}
+impl<T,const N:usize> Sub<Arr<T,N>> for &Arr<T,N>
+    where T: Sub<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Sub<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn sub(self, rhs: Arr<T, N>) -> Self::Output {
+        self - &rhs
+    }
+}
+impl<T,const N:usize> Sub<Arr<T,N>> for Arr<T,N>
+    where T: Sub<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Sub<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn sub(self, rhs: Arr<T, N>) -> Self::Output {
+        &self - &rhs
     }
 }
 impl<T,const N:usize> Mul<&Arr<T,N>> for &Arr<T,N>
@@ -139,6 +193,33 @@ impl<T,const N:usize> Mul<&Arr<T,N>> for &Arr<T,N>
             .collect::<Vec<T>>().try_into().expect("An error occurred when multiplying Arr by Arr.")
     }
 }
+impl<T,const N:usize> Mul<&Arr<T,N>> for Arr<T,N>
+    where T: Mul<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Mul<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn mul(self, rhs: &Arr<T, N>) -> Self::Output {
+        &self * rhs
+    }
+}
+impl<T,const N:usize> Mul<Arr<T,N>> for &Arr<T,N>
+    where T: Mul<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Mul<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn mul(self, rhs: Arr<T, N>) -> Self::Output {
+        self * &rhs
+    }
+}
+impl<T,const N:usize> Mul<Arr<T,N>> for Arr<T,N>
+    where T: Mul<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Mul<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn mul(self, rhs: Arr<T, N>) -> Self::Output {
+        &self * &rhs
+    }
+}
 impl<T,const N:usize> Div<&Arr<T,N>> for &Arr<T,N>
     where T: Div<Output=T> + Clone + Copy + Default + Send,
           for<'data> Box<[T]>: IntoParallelRefIterator<'data>,
@@ -148,6 +229,33 @@ impl<T,const N:usize> Div<&Arr<T,N>> for &Arr<T,N>
     fn div(self, rhs: &Arr<T,N>) -> Self::Output {
         self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l / r)
             .collect::<Vec<T>>().try_into().expect("An error occurred in the division of Arr and Arr.")
+    }
+}
+impl<T,const N:usize> Div<&Arr<T,N>> for Arr<T,N>
+    where T: Div<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Div<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn div(self, rhs: &Arr<T, N>) -> Self::Output {
+        &self / rhs
+    }
+}
+impl<T,const N:usize> Div<Arr<T,N>> for &Arr<T,N>
+    where T: Div<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Div<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn div(self, rhs: Arr<T, N>) -> Self::Output {
+        self / &rhs
+    }
+}
+impl<T,const N:usize> Div<Arr<T,N>> for Arr<T,N>
+    where T: Div<Output=T> + Clone + Copy + Default + Send,
+          for<'a> &'a Arr<T,N>: Div<&'a Arr<T,N>,Output = Arr<T,N>> {
+    type Output = Arr<T,N>;
+
+    fn div(self, rhs: Arr<T, N>) -> Self::Output {
+        &self / &rhs
     }
 }
 impl<T,const N:usize> Neg for &Arr<T,N>
@@ -886,6 +994,36 @@ impl<'a,'b: 'a,U,T> Add<&'b VecArr<U,T>> for &'a VecArr<U,T>
         self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l + r).collect::<Vec<T>>().into()
     }
 }
+impl<U,T> Add<&VecArr<U,T>> for VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Add<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn add(self, rhs: &VecArr<U,T>) -> Self::Output {
+        &self + rhs
+    }
+}
+impl<U,T> Add<VecArr<U,T>> for &VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Add<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn add(self, rhs: VecArr<U,T>) -> Self::Output {
+        self + &rhs
+    }
+}
+impl<U,T> Add<VecArr<U,T>> for VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Add<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn add(self, rhs: VecArr<U,T>) -> Self::Output {
+        &self + &rhs
+    }
+}
 impl<'a,'b: 'a,U,T> Sub<&'b VecArr<U,T>> for &'a VecArr<U,T>
     where T: Send,
           U: Send + Sync + 'static + Default + Clone + Copy,
@@ -897,6 +1035,36 @@ impl<'a,'b: 'a,U,T> Sub<&'b VecArr<U,T>> for &'a VecArr<U,T>
 
     fn sub(self, rhs: &'b VecArr<U,T>) -> Self::Output {
         self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l - r).collect::<Vec<T>>().into()
+    }
+}
+impl<U,T> Sub<&VecArr<U,T>> for VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Sub<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn sub(self, rhs: &VecArr<U,T>) -> Self::Output {
+        &self - rhs
+    }
+}
+impl<U,T> Sub<VecArr<U,T>> for &VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Sub<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn sub(self, rhs: VecArr<U,T>) -> Self::Output {
+        self - &rhs
+    }
+}
+impl<U,T> Sub<VecArr<U,T>> for VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Sub<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn sub(self, rhs: VecArr<U,T>) -> Self::Output {
+        &self - &rhs
     }
 }
 impl<'a,'b: 'a,U,T> Mul<&'b VecArr<U,T>> for &'a VecArr<U,T>
@@ -912,6 +1080,36 @@ impl<'a,'b: 'a,U,T> Mul<&'b VecArr<U,T>> for &'a VecArr<U,T>
         self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l * r).collect::<Vec<T>>().into()
     }
 }
+impl<U,T> Mul<&VecArr<U,T>> for VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Mul<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn mul(self, rhs: &VecArr<U,T>) -> Self::Output {
+        &self * rhs
+    }
+}
+impl<U,T> Mul<VecArr<U,T>> for &VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Mul<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn mul(self, rhs: VecArr<U,T>) -> Self::Output {
+        self * &rhs
+    }
+}
+impl<U,T> Mul<VecArr<U,T>> for VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Mul<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn mul(self, rhs: VecArr<U,T>) -> Self::Output {
+        &self * &rhs
+    }
+}
 impl<'a,'b: 'a,U,T> Div<&'b VecArr<U,T>> for &'a VecArr<U,T>
     where T: Send,
           U: Send + Sync + 'static + Default + Clone + Copy,
@@ -923,6 +1121,36 @@ impl<'a,'b: 'a,U,T> Div<&'b VecArr<U,T>> for &'a VecArr<U,T>
 
     fn div(self, rhs: &'b VecArr<U,T>) -> Self::Output {
         self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l / r).collect::<Vec<T>>().into()
+    }
+}
+impl<U,T> Div<&VecArr<U,T>> for VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Div<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn div(self, rhs: &VecArr<U,T>) -> Self::Output {
+        &self / rhs
+    }
+}
+impl<U,T> Div<VecArr<U,T>> for &VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Div<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn div(self, rhs: VecArr<U,T>) -> Self::Output {
+        self / &rhs
+    }
+}
+impl<U,T> Div<VecArr<U,T>> for VecArr<U,T>
+    where T: Send,
+          U: Send + Sync + 'static + Default + Clone + Copy,
+          for<'a> &'a VecArr<U,T>: Div<&'a VecArr<U,T>,Output = VecArr<U,T>> {
+    type Output = VecArr<U,T>;
+
+    fn div(self, rhs: VecArr<U,T>) -> Self::Output {
+        &self / &rhs
     }
 }
 impl<'a,U,T> Neg for &'a VecArr<U,T>
@@ -940,14 +1168,15 @@ impl<'a,U,T> Neg for &'a VecArr<U,T>
 }
 impl<U,const N:usize> Sum for VecArr<U,Arr<U,N>>
     where U: Add<Output=U> + Clone + Copy + Default + Send + Sync,
-          for<'data> Arr<U,N>: From<ArrView<'data,U,N>> + Add<&'data Arr<U,N>,Output = Arr<U,N>>,
+          for<'data> Arr<U,N>: From<ArrView<'data,U,N>>,
+          for<'data> &'data Arr<U,N>: Add<&'data Arr<U,N>,Output = Arr<U,N>>,
           for<'data> VecArr<U,Arr<U,N>>: IntoParallelRefIterator<'data, Item = ArrView<'data,U,N>> {
     type Output = Arr<U,N>;
 
     fn sum(&self) -> Self::Output {
-        self.par_iter().fold(|| Arr::new(), |acc,r| {
-            acc + &r.into()
-        }).reduce(|| Arr::new(), |acc,r| acc + &r)
+        self.par_iter().fold(|| Arr::new(), |acc:Arr<U,N>,r| {
+            &acc + &r.into()
+        }).reduce(|| Arr::new(), |acc,r| &acc + &r)
     }
 }
 /// VecArr's Immutable Iterator

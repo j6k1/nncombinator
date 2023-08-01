@@ -92,9 +92,9 @@ impl<U> SumNode<U> where U: Default + Clone + Copy + Send + Sync {
 }
 impl<U,const N:usize> GraphNode<&VecArr<U,Arr<U,N>>,Arr<U,N>,(&Arr<U,N>,usize),VecArr<U,Arr<U,N>>>
     for SumNode<U> where U: Add + Add<Output = U> + Default + Clone + Copy + Send + Sync,
-                         for<'data> Arr<U,N>: From<ArrView<'data,U,N>> + Add<&'data Arr<U,N>,Output = Arr<U,N>>,
+                         for<'data> Arr<U,N>: From<ArrView<'data,U,N>>,
+                         for<'data> &'data Arr<U,N>: Add<&'data Arr<U,N>,Output = Arr<U,N>>,
                          for<'data> VecArr<U,Arr<U,N>>: IntoParallelRefIterator<'data, Item = ArrView<'data,U,N>> {
-
     fn forward(&self,v: &VecArr<U, Arr<U, N>>) -> Arr<U, N> {
         v.sum()
     }

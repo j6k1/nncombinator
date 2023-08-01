@@ -1251,7 +1251,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             rv * momentum + v * (U::one() - momentum)
         }).collect::<Vec<U>>().try_into()?;
 
-        let o = o * &BroadcastNode::new().forward((scale,n)) + Broadcast(bias.clone());
+        let o = &(&o * &BroadcastNode::new().forward((scale,n))) + Broadcast(bias.clone());
 
         Ok((o,mean,inv_variance,running_mean,running_variance))
     }
@@ -1263,12 +1263,12 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
 
         let x = input - saved_mean;
 
-        let s = &x * saved_inv_variance * loss;
+        let s = &(&x * saved_inv_variance) * loss;
 
         let dx1 = scale * loss;
         let dx2 = &dx1 * saved_inv_variance;
         let dx3 = &x * &dx1;
-        let dx4 = &(-(saved_inv_variance * saved_inv_variance)) * &dx3;
+        let dx4 = &dx3 - &(saved_inv_variance * saved_inv_variance);
         let dx5 = &dx4 / &(saved_inv_variance * U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from f64.")
         ))?);
@@ -1277,7 +1277,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         )))?;
         let dx7 = &dx2 + &dx6;
         let dx8 = dx7.clone();
-        let dx9 = -dx7;
+        let dx9 = -&dx7;
         let dx = &dx8 + &dx9;
 
         Ok((dx,s,b))

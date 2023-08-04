@@ -1,11 +1,10 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use crate::arr::{Arr, VecArr};
+use crate::arr::{Arr, ArrView, VecArr};
 use crate::{Cons, Stack};
-use crate::collection::Broadcast;
 use crate::device::{Device, DeviceBatchNorm, DeviceCpu};
-use crate::error::{ConfigReadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
+use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
 use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain};
 use crate::lossfunction::LossFunction;
 use crate::ope::{Arithmetic, UnitValue};
@@ -26,15 +25,6 @@ pub struct BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,const N:usize>
           D: Device<U>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -54,15 +44,6 @@ impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -136,15 +117,6 @@ impl<U,P,I,PI,BI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
              PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -211,15 +183,6 @@ impl<T,U,P,I,PI,BI,const N:usize> Persistence<U,T,Linear>
              PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -274,15 +237,6 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> Forward<Arr<U,N>,Result<Arr<U,N>,EvaluateE
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -297,15 +251,6 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> ForwardAll for BatchNormalizationLayer<U,C
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -322,15 +267,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
+          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -363,15 +300,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> Backward<U,(&Arr<U,N>,&Arr<U,N>,&S,&S),Res
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
+          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -388,15 +317,7 @@ impl<U,P,I,PI,BI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
+          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -425,15 +346,6 @@ impl<U,P,I,PI,BI,const N:usize> AskDiffInput<U> for BatchNormalizationLayer<U,Ar
              PreTrain<U,OutStack = <<<Self as PreTrain<U>>::OutStack as Stack>::Remaining as Stack>::Remaining> + Loss<U> + AskDiffInput<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -449,15 +361,7 @@ impl<U,P,I,PI,BI,const N:usize> Loss<U> for BatchNormalizationLayer<U,Arr<U,N>,P
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
+          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -470,15 +374,6 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchForwardBase for BatchNormalizationLay
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -494,15 +389,6 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchForward for BatchNormalizationLayer<U
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -522,15 +408,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizatio
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
+          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -546,15 +424,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLay
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
+          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -587,15 +457,7 @@ impl<U,P,I,PI,BI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
              BatchBackward<U> + BatchLoss<U,BatchLossInput=BI>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
+          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -633,15 +495,7 @@ impl<U,P,I,PI,BI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Arr<U
              BatchBackward<U> + BatchLoss<U,BatchLossInput=BI>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
+          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,

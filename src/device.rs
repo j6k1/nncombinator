@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 use std::{mem};
+use std::ops::Mul;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
@@ -11,17 +12,17 @@ use rcublas::Context;
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasStatus_t, cublasSgemm_v2, cublasHandle_t, cublasSgemv_v2, cublasDgemv_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
-use crate::arr::{Arr, Arr2, VecArr};
+use crate::arr::{Arr, Arr2, ArrView, VecArr};
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SquareNode, SumNode};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Kernel, Memory};
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::cuda::mem::{CachedTensor, MemoryPool};
-use crate::error::{DeviceError, EvaluateError, SizeMismatchError, TrainingError};
+use crate::error::{DeviceError, EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
 use crate::mem::{AsRawSlice};
 use crate::UnitValue;
-use crate::ope::{Arithmetic, Sum};
+use crate::ope::{Sum};
 
 /// Trait that defines devices responsible for various computational processes of neural networks
 pub trait Device<U>: Clone where U: UnitValue<U> {
@@ -1142,15 +1143,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
 }
 impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
     where U: UnitValue<U>,
-          for<'a> Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> +
-                            Arithmetic<U,Arr<U,N>>,
-          for<'a> &'a Arr<U,N>: Arithmetic<&'a Arr<U,N>,Arr<U,N>> + TryFrom<Vec<U>,Error = SizeMismatchError> + Arithmetic<U,Arr<U,N>>,
-          for<'data> VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>, VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                         Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>>,
-          for<'data> &'data VecArr<U,Arr<U,N>>: Arithmetic<&'data VecArr<U,Arr<U,N>>,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<U,VecArr<U,Arr<U,N>>> +
-                                                Arithmetic<Broadcast<Arr<U,N>>,VecArr<U,Arr<U,N>>> {
+          for<'a,'b> ArrView<'a,U,N>: Mul<ArrView<'b,U,N>,Output = Arr<U,N>> {
     fn forward_batch_norm(&self, input: &Arr<U, N>, scale: &Arr<U, N>, bias: &Arr<U, N>,
                           estimated_mean: &Arr<U, N>, estimated_variance: &Arr<U, N>) -> Result<Arr<U, N>,EvaluateError> {
         let eps = U::from_f64(1e-6).ok_or(EvaluateError::TypeCastError(String::from(
@@ -1241,7 +1234,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
 
         let o:VecArr<U,Arr<U,N>> = Broadcast(<Vec<U> as TryInto<Arr<U,N>>>::try_into(variance.par_iter().map(|&v| {
             U::one() / (v + eps)
-        }).collect::<Vec<U>>())?) * &(input - Broadcast(mean.clone()));
+        }).collect::<Vec<U>>())?) * (input - Broadcast(mean.clone()));
 
         let running_mean = running_mean.par_iter().zip(mean.par_iter()).map(|(&rm,&m)| {
             rm * momentum + m * (U::one() - momentum)
@@ -1251,7 +1244,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             rv * momentum + v * (U::one() - momentum)
         }).collect::<Vec<U>>().try_into()?;
 
-        let o = &(&o * &BroadcastNode::new().forward((scale,n))) + Broadcast(bias.clone());
+        let o = (o * BroadcastNode::new().forward((scale,n))) + Broadcast(bias.clone());
 
         Ok((o,mean,inv_variance,running_mean,running_variance))
     }
@@ -1263,22 +1256,22 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
 
         let x = input - saved_mean;
 
-        let s = &(&x * saved_inv_variance) * loss;
+        let s = (&x * saved_inv_variance) * loss;
 
         let dx1 = scale * loss;
         let dx2 = &dx1 * saved_inv_variance;
-        let dx3 = &x * &dx1;
-        let dx4 = &dx3 - &(saved_inv_variance * saved_inv_variance);
-        let dx5 = &dx4 / &(saved_inv_variance * U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
+        let dx3 = &x * dx1;
+        let dx4 = dx3 - (saved_inv_variance * saved_inv_variance);
+        let dx5 = dx4 / (saved_inv_variance * U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from f64.")
         ))?);
-        let dx6 = &x * &dx5 * U::from_usize(2).ok_or(TrainingError::TypeCastError(String::from(
+        let dx6 = &x * dx5 * U::from_usize(2).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from usize."
         )))?;
-        let dx7 = &dx2 + &dx6;
+        let dx7 = dx2 + dx6;
         let dx8 = dx7.clone();
-        let dx9 = -&dx7;
-        let dx = &dx8 + &dx9;
+        let dx9 = -dx7;
+        let dx = dx8 + dx9;
 
         Ok((dx,s,b))
     }
@@ -1299,26 +1292,26 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         let s = BroadcastNode::new().backward(&(&x2 * &iv * loss));
 
         let dx1 = Broadcast(scale.clone()) * loss;
-        let dx2 = &dx1 * &iv;
-        let dx3 = BroadcastNode::new().backward(&(&x2 * &dx1));
-        let dx4 = &(-(saved_inv_variance * saved_inv_variance)) * &dx3;
-        let dx5 = &dx4 / &(saved_inv_variance * U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
+        let dx2 = &dx1 * iv;
+        let dx3 = BroadcastNode::new().backward(&(&x2 * dx1));
+        let dx4 = (-(saved_inv_variance * saved_inv_variance)) * dx3;
+        let dx5 = dx4 / (saved_inv_variance * U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from f64.")
         ))?);
-        let dx6 = SumNode::new().backward((&(dx5 / U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
+        let dx6 = SumNode::new().backward((&((dx5 / U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from usize."
-        )))?),n));
-        let dx7 = &x2 * &dx6 * U::from_usize(2).ok_or(TrainingError::TypeCastError(String::from(
+        )))?)),n));
+        let dx7 = x2 * dx6 * U::from_usize(2).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from usize."
         )))?;
-        let dx8 = &dx2 + &dx7;
+        let dx8 = dx2 + dx7;
         let dx9 = dx8.clone();
         let dx10 = -dx8;
         let dx11 = BroadcastNode::new().backward(&dx10);
         let dx12 = SumNode::new().backward((&dx11,n)) / U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from usize."
         )))?;
-        let dx = &dx9 + &dx12;
+        let dx = dx9 + dx12;
 
         Ok((dx,s,b))
     }

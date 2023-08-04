@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use num_traits::FromPrimitive;
-use rayon::prelude::{ParallelIterator, IntoParallelIterator, IntoParallelRefIterator};
-use crate::arr::{Arr, ArrView, VecArr};
+use rayon::prelude::{ParallelIterator, IntoParallelIterator};
+use crate::arr::{Arr, VecArr};
 use crate::ope::{One, Sqrt, Sum};
 
 /// Trait that defines a computational graph for calculating forward and back propagation of a neural network
@@ -91,10 +91,8 @@ impl<U> SumNode<U> where U: Default + Clone + Copy + Send + Sync {
     }
 }
 impl<U,const N:usize> GraphNode<&VecArr<U,Arr<U,N>>,Arr<U,N>,(&Arr<U,N>,usize),VecArr<U,Arr<U,N>>>
-    for SumNode<U> where U: Add + Add<Output = U> + Default + Clone + Copy + Send + Sync,
-                         for<'data> Arr<U,N>: From<ArrView<'data,U,N>>,
-                         for<'data> &'data Arr<U,N>: Add<&'data Arr<U,N>,Output = Arr<U,N>>,
-                         for<'data> VecArr<U,Arr<U,N>>: IntoParallelRefIterator<'data, Item = ArrView<'data,U,N>> {
+    for SumNode<U> where U: Add + Add<Output = U> + Default + Clone + Copy + Send + Sync + 'static,
+                         for<'a> &'a Arr<U,N>: Add<&'a Arr<U,N>,Output = Arr<U,N>> {
     fn forward(&self,v: &VecArr<U, Arr<U, N>>) -> Arr<U, N> {
         v.sum()
     }
@@ -117,8 +115,7 @@ impl<U> BroadcastNode<U> where U: Default + Clone + Send {
     }
 }
 impl<U,const N:usize> GraphNode<(&Arr<U,N>,usize),VecArr<U,Arr<U,N>>,&VecArr<U,Arr<U,N>>,Arr<U,N>>
-    for BroadcastNode<U> where U: Add + Add<Output = U> + Default + Clone + Copy + Send + Sync,
-                               VecArr<U,Arr<U,N>>: Sum<Output = Arr<U,N>> {
+    for BroadcastNode<U> where U: Add + Add<Output = U> + Default + Clone + Copy + Send + Sync + 'static {
     fn forward(&self,(v,n): (&Arr<U, N>,usize)) -> VecArr<U, Arr<U, N>> {
         (0..n).into_par_iter().map(|_| v.clone()).collect::<Vec<_>>().into()
     }

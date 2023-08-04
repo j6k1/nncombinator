@@ -2,7 +2,6 @@
 
 use std::marker::PhantomData;
 use std::{mem};
-use std::ops::Mul;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
@@ -12,7 +11,7 @@ use rcublas::Context;
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasStatus_t, cublasSgemm_v2, cublasHandle_t, cublasSgemv_v2, cublasDgemv_v2};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
-use crate::arr::{Arr, Arr2, ArrView, VecArr};
+use crate::arr::{Arr, Arr2, VecArr};
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SquareNode, SumNode};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Kernel, Memory};
@@ -1142,8 +1141,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
     }
 }
 impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
-    where U: UnitValue<U>,
-          for<'a,'b> ArrView<'a,U,N>: Mul<ArrView<'b,U,N>,Output = Arr<U,N>> {
+    where U: UnitValue<U> {
     fn forward_batch_norm(&self, input: &Arr<U, N>, scale: &Arr<U, N>, bias: &Arr<U, N>,
                           estimated_mean: &Arr<U, N>, estimated_variance: &Arr<U, N>) -> Result<Arr<U, N>,EvaluateError> {
         let eps = U::from_f64(1e-6).ok_or(EvaluateError::TypeCastError(String::from(

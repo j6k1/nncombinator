@@ -1,13 +1,13 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use crate::arr::{Arr, ArrView, VecArr};
+use crate::arr::{Arr, VecArr};
 use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchNorm, DeviceCpu};
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
 use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain};
 use crate::lossfunction::LossFunction;
-use crate::ope::{Arithmetic, UnitValue};
+use crate::ope::{UnitValue};
 use crate::optimizer::Optimizer;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, UnitOrMarker};
 
@@ -267,7 +267,6 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -300,7 +299,6 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> Backward<U,(&Arr<U,N>,&Arr<U,N>,&S,&S),Res
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -317,7 +315,6 @@ impl<U,P,I,PI,BI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -361,7 +358,6 @@ impl<U,P,I,PI,BI,const N:usize> Loss<U> for BatchNormalizationLayer<U,Arr<U,N>,P
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -408,7 +404,6 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizatio
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -424,7 +419,6 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLay
           D: Device<U> + DeviceBatchNorm<U,S,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
-          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -457,7 +451,6 @@ impl<U,P,I,PI,BI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
              BatchBackward<U> + BatchLoss<U,BatchLossInput=BI>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
@@ -495,7 +488,6 @@ impl<U,P,I,PI,BI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Arr<U
              BatchBackward<U> + BatchLoss<U,BatchLossInput=BI>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          for<'a,'b> ArrView<'a,U,N>: Arithmetic<ArrView<'b,U,N>,Arr<U,N>>,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,

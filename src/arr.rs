@@ -1261,12 +1261,12 @@ impl<U,const N:usize> Neg for VecArr<U,Arr<U,N>>
 }
 impl<U,const N:usize> Sum for VecArr<U,Arr<U,N>>
     where U: Add<Output=U> + Clone + Copy + Default + Send + Sync + 'static,
-          for<'a> &'a Arr<U,N>: Add<&'a Arr<U,N>,Output = Arr<U,N>> {
+          for<'a> ArrView<'a,U,N>: Add<ArrView<'a,U,N>,Output = Arr<U,N>> {
     type Output = Arr<U,N>;
 
     fn sum(&self) -> Self::Output {
         self.par_iter().fold(|| Arr::new(), |acc:Arr<U,N>,r| {
-            &acc + &r.into()
+            ArrView::from(&acc) + r
         }).reduce(|| Arr::new(), |acc,r| &acc + &r)
     }
 }

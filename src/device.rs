@@ -13,7 +13,7 @@ use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelI
 use rcublas::api::PointerMode;
 use crate::arr::{Arr, Arr2, VecArr};
 use crate::collection::Broadcast;
-use crate::computational_graph::{BroadcastNode, GraphNode, SquareNode, SumNode};
+use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
 use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Kernel, Memory};
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::cuda::mem::{CachedTensor, MemoryPool};
@@ -1154,7 +1154,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
              .zip(estimated_mean.par_iter())
              .zip(estimated_variance.par_iter())
              .map(|((((&i,&scale),&bias),&mean),&variance)| {
-                 scale * (i - mean) / (variance + eps) + bias
+                 scale * ((i - mean) / (variance + eps)) + bias
              }).collect::<Vec<U>>().try_into()?)
     }
 
@@ -1173,10 +1173,10 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             .zip(estimated_mean.par_iter())
             .zip(estimated_variance.par_iter())
             .map(|((((&i,&scale),&bias),&mean),&variance)| {
-                scale * (i - mean) / (variance + eps) + bias
+                scale * ((i - mean) / SqrtNode::new().forward(variance + eps)) + bias
             }).collect::<Vec<U>>().try_into()?,
             estimated_mean.clone(),
-            estimated_variance.par_iter().map(|&v| U::one() / (v + eps)).collect::<Vec<U>>().try_into()?
+            estimated_variance.par_iter().map(|&v| U::one() / SqrtNode::new().forward(v + eps)).collect::<Vec<U>>().try_into()?
         ))
     }
 
@@ -1194,7 +1194,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
                 .zip(estimated_mean.par_iter())
                 .zip(estimated_variance.par_iter())
                 .map(|((((&i,&scale),&bias),&mean),&variance)| {
-                    scale * (i - mean) / (variance + eps) + bias
+                    scale * (i - mean) / SqrtNode::new().forward(variance + eps) + bias
                 }).collect::<Vec<U>>().try_into()
             }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
@@ -1210,12 +1210,11 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         )))?;
 
         let n = input.len();
+        let un = U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
+            "Error in type conversion from usize."
+        )))?;
 
-        let mean:Arr<U,N> = SumNode::new().forward(input).par_iter().map(|&i| {
-            U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
-                "Error in type conversion from usize."
-            ))).map(|n| i / n)
-        }).collect::<Result<Vec<U>,_>>()?.try_into()?;
+        let mean:Arr<U,N> = SumNode::new().forward(input) / un;
 
         let variance:VecArr<U,Arr<U,N>> = (input - Broadcast::<Arr<U,N>>(mean.clone()))
                                .par_iter()
@@ -1224,25 +1223,16 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
                                         SquareNode::new().forward(i)
                                     }).collect::<Vec<U>>().try_into()
                                 }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into();
-        let variance = variance.sum() / U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
-            "Error in type conversion from usize."
-        )))?;
+        let variance = variance.sum() / un;
 
-        let inv_variance = variance.par_iter().map(|&v| U::one() / (v + eps)).collect::<Vec<U>>().try_into()?;
+        let inv_variance:Arr<U,N> = variance.par_iter().map(|&v| U::one() / SqrtNode::new().forward(v + eps)).collect::<Vec<U>>().try_into()?;
 
-        let o:VecArr<U,Arr<U,N>> = Broadcast(<Vec<U> as TryInto<Arr<U,N>>>::try_into(variance.par_iter().map(|&v| {
-            U::one() / (v + eps)
-        }).collect::<Vec<U>>())?) * (input - Broadcast(mean.clone()));
+        let o:VecArr<U,Arr<U,N>> = Broadcast(inv_variance.clone()) * (input - Broadcast(mean.clone()));
 
-        let running_mean = running_mean.par_iter().zip(mean.par_iter()).map(|(&rm,&m)| {
-            rm * momentum + m * (U::one() - momentum)
-        }).collect::<Vec<U>>().try_into()?;
+        let running_mean = running_mean * momentum + &mean * (U::one() - momentum);
+        let running_variance = running_variance * momentum + variance * (U::one() - momentum);
 
-        let running_variance = running_variance.par_iter().zip(variance.par_iter()).map(|(&rv,&v)| {
-            rv * momentum + v * (U::one() - momentum)
-        }).collect::<Vec<U>>().try_into()?;
-
-        let o = (o * BroadcastNode::new().forward((scale,n))) + Broadcast(bias.clone());
+        let o = (BroadcastNode::new().forward((scale,n)) * o) + Broadcast(bias.clone());
 
         Ok((o,mean,inv_variance,running_mean,running_variance))
     }
@@ -1259,16 +1249,16 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         let dx1 = scale * loss;
         let dx2 = &dx1 * saved_inv_variance;
         let dx3 = &x * dx1;
-        let dx4 = dx3 - (saved_inv_variance * saved_inv_variance);
-        let dx5 = dx4 / (saved_inv_variance * U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
+        let dx4 =  -(saved_inv_variance * saved_inv_variance) * dx3;
+        let dx5 = dx4 * (saved_inv_variance / U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from f64.")
         ))?);
         let dx6 = &x * dx5 * U::from_usize(2).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from usize."
         )))?;
         let dx7 = dx2 + dx6;
-        let dx8 = dx7.clone();
-        let dx9 = -dx7;
+        let dx8 = &dx7;
+        let dx9 = -&dx7;
         let dx = dx8 + dx9;
 
         Ok((dx,s,b))
@@ -1281,6 +1271,10 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         -> Result<(VecArr<U, Arr<U, N>>, Arr<U, N>, Arr<U, N>), TrainingError> {
         let n = input.len();
 
+        let un = U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
+            "Error in type conversion from usize."
+        )))?;
+
         let b = BroadcastNode::new().backward(loss);
 
         let x = BroadcastNode::new().forward((saved_mean,n));
@@ -1292,23 +1286,20 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         let dx1 = Broadcast(scale.clone()) * loss;
         let dx2 = &dx1 * iv;
         let dx3 = BroadcastNode::new().backward(&(&x2 * dx1));
-        let dx4 = (-(saved_inv_variance * saved_inv_variance)) * dx3;
-        let dx5 = dx4 / (saved_inv_variance * U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
+        let dx4 = -(saved_inv_variance * saved_inv_variance) * dx3;
+        let dx5 = dx4 * (saved_inv_variance / U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from f64.")
         ))?);
-        let dx6 = SumNode::new().backward((&((dx5 / U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
-            "Error in type conversion from usize."
-        )))?)),n));
+        let dx6 = SumNode::new().backward((&(dx5 / un),n));
         let dx7 = x2 * dx6 * U::from_usize(2).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from usize."
         )))?;
         let dx8 = dx2 + dx7;
-        let dx9 = dx8.clone();
-        let dx10 = -dx8;
+        let dx9 = &dx8;
+        let dx10 = -&dx8;
         let dx11 = BroadcastNode::new().backward(&dx10);
-        let dx12 = SumNode::new().backward((&dx11,n)) / U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
-            "Error in type conversion from usize."
-        )))?;
+        let dx12 = SumNode::new().backward((&dx11,n)) / un;
+
         let dx = dx9 + dx12;
 
         Ok((dx,s,b))

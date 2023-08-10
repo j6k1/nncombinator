@@ -108,7 +108,7 @@ impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U
     /// γ = 1, β = 0
     /// y = γx + β
     pub fn new(parent:P,device:&DeviceCpu<U>) -> BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N> {
-        Self::with_momentum(parent,device,U::from_f64(0.99).expect("An error occurred in floating point type conversion."))
+        Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."))
     }
 }
 impl<U,P,I,PI,BI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized>
@@ -324,14 +324,26 @@ impl<U,P,I,PI,BI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
         -> Result<(), TrainingError> {
 
-        let (s,x) = stack.pop();
+        let (s,_) = stack.pop();
         let (s,(m,iv)) = s.pop();
 
         let loss = input;
-        let (loss,scale,bias) = self.backward((&loss.into(),&x.into(),&m,&iv))?;
 
-        self.scale = scale;
-        self.bias = bias;
+        let (s,r) = s.take_map(|input| {
+            let x = input.into();
+            let r = self.backward((&loss.into(),&x,&m,&iv));
+            (x.into(),r)
+        });
+
+        let (loss,scale,bias) = r?;
+
+        for (w,&g) in self.scale.iter_mut().zip(scale.iter()) {
+            optimizer.update(g,w)
+        }
+
+        for (w,&g) in self.bias.iter_mut().zip(bias.iter()) {
+            optimizer.update(g,w)
+        }
 
         let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
 
@@ -460,7 +472,7 @@ impl<U,P,I,PI,BI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
     fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
         let loss = input.into();
 
-        let (s, input) = stack.pop();
+        let (s, _) = stack.pop();
 
         let (s,MeanAndVariance {
             running_mean,
@@ -469,12 +481,24 @@ impl<U,P,I,PI,BI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
             saved_inv_variance
         }) = s.pop();
 
-        let (loss,scale,bias) = self.device.batch_backward_batch_norm(&loss,&input.into(),&self.scale,&saved_mean,&saved_inv_variance)?;
+        let (s,r) = s.take_map(|input| {
+            let x = input.into();
+            let r = self.device.batch_backward_batch_norm(&loss,&x,&self.scale,&saved_mean,&saved_inv_variance);
+            (x.into(),r)
+        });
+
+        let (loss,scale,bias) = r?;
 
         let (s,loss) = self.parent.batch_loss(loss.into(),lossf,s)?;
 
-        self.scale = scale;
-        self.bias = bias;
+        for (w,&g) in self.scale.iter_mut().zip(scale.iter()) {
+            optimizer.update(g,w)
+        }
+
+        for (w,&g) in self.bias.iter_mut().zip(bias.iter()) {
+            optimizer.update(g,w)
+        }
+
         self.running_mean = running_mean;
         self.running_variance = running_variance;
 

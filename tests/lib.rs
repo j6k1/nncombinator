@@ -5,6 +5,7 @@ extern crate rand_xorshift;
 extern crate statrs;
 extern crate csv;
 extern crate lazy_static;
+extern crate mnist;
 
 mod batchnormalization;
 

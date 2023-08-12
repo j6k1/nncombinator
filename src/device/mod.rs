@@ -13,6 +13,8 @@ use rcublas::Context;
 use rcublas_sys::{cublasHandle_t};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
+use rcudnn::Cudnn;
+use rcudnn_sys::cudnnHandle_t;
 use crate::arr::{Arr, VecArr};
 use crate::cuda::{CudaPtr, Kernel, Memory};
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
@@ -197,10 +199,42 @@ impl Clone for CublasContext {
         }
     }
 }
+/// cudnn context
+pub struct CudnnContext {
+    raw:Rc<Cudnn>
+}
+impl CudnnContext {
+    /// Create an instance of CudnnContext
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`rcudnn::Error`]
+    pub fn new() -> Result<CudnnContext, rcudnn::Error> {
+        let cudnn = Cudnn::new()?;
+
+        Ok(CudnnContext {
+            raw: Rc::new(cudnn)
+        })
+    }
+
+    /// Returns a reference to the raw handle (pointer) of the cudnn context
+    pub fn id_c(&self) -> &cudnnHandle_t {
+        self.raw.id_c()
+    }
+}
+impl Clone for CudnnContext {
+    fn clone(&self) -> Self {
+        CudnnContext {
+            raw: Rc::clone(&self.raw)
+        }
+    }
+}
 /// Implementation of Device to be computed by GPU
 pub struct DeviceGpu<U> {
     u:PhantomData<U>,
     cublas:CublasContext,
+    cudnn:CudnnContext,
     /// Memory pool for cuda memory allocation
     pub memory_pool:Arc<Mutex<MemoryPool>>
 }
@@ -215,10 +249,12 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
     /// * [`DeviceError`]
     pub fn new(memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<DeviceGpu<U>,DeviceError> {
         let context = CublasContext::new(PointerMode::Device)?;
+        let cudnn = CudnnContext::new()?;
 
         Ok(DeviceGpu {
             u:PhantomData::<U>,
             cublas:context,
+            cudnn:cudnn,
             memory_pool:Arc::clone(memory_pool)
         })
     }
@@ -226,6 +262,11 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
     /// Returns the CublasContext owned by itself
     pub fn cublas(&self) -> &CublasContext {
         &self.cublas
+    }
+
+    /// Returns the CudnnContext owned by itself
+    pub fn cudnn(&self) -> &CudnnContext {
+        &self.cudnn
     }
 }
 pub trait DeviceMemoryPool {
@@ -368,6 +409,7 @@ impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
         DeviceGpu {
             u:PhantomData::<U>,
             cublas:self.cublas.clone(),
+            cudnn:self.cudnn.clone(),
             memory_pool:Arc::clone(&self.memory_pool)
         }
     }

@@ -13,7 +13,7 @@ use nncombinator::activation::{ReLu, SoftMax};
 use nncombinator::arr::Arr;
 use nncombinator::device::DeviceCpu;
 use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, BatchForward, BatchTrain, ForwardAll, InputLayer, LinearLayerBuilder, LinearOutputLayer};
-use nncombinator::layer::batchnormalization::BatchNormalizationLayer;
+use nncombinator::layer::batchnormalization::{BatchNormalizationLayerBuilder};
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::optimizer::{MomentumSGD};
 
@@ -36,35 +36,35 @@ fn test_mnist_batch_norm() {
         let rnd = rnd.clone();
         LinearLayerBuilder::new::<{ 28*28 },300>().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayer::new(l,&device)
+        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
     //}).add_layer(|l| {
     //    ActivationLayer::new(l,ReLu::new(&device),&device)
     //}).add_layer(|l| {
     //    let rnd = rnd.clone();
     //    LinearLayerBuilder::new::<300,300>().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     //}).add_layer(|l| {
-    //    BatchNormalizationLayer::new(l,&device)
+    //    BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
     //}).add_layer(|l| {
     //    ActivationLayer::new(l,ReLu::new(&device),&device)
     //}).add_layer(|l| {
     //    let rnd = rnd.clone();
     //    LinearLayerBuilder::new::<300,300>().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     //}).add_layer(|l| {
-    //    BatchNormalizationLayer::new(l,&device)
+    //    BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::new::<300,300>().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayer::new(l,&device)
+        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::new::<300,300>().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayer::new(l,&device)
+        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
@@ -225,35 +225,35 @@ fn test_fashion_mnist_batch_norm() {
         let rnd = rnd.clone();
         LinearLayerBuilder::new::<{ 28*28 },300>().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayer::new(l,&device)
+        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::new::<300,300>().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayer::new(l,&device)
+        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::new::<300,300>().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayer::new(l,&device)
+        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::new::<300,300>().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayer::new(l,&device)
+        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::new::<300,300>().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayer::new(l,&device)
+        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {

@@ -21,6 +21,48 @@ pub struct MeanAndVariance<U,T,const N:usize> where U: UnitValue<U> {
     pub saved_mean:T,
     pub saved_inv_variance:T
 }
+pub trait BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,BI,S,const N:usize>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          S: Debug + Sized + 'static,
+          Arr<U,N>: From<PI>,
+          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
+          VecArr<U,Arr<U,N>>: From<BI>,
+          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+    /// Create and return an instance with the specified scale, bias, and momentum.
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    /// * `scale` - γ
+    /// * `bias` - β
+    /// * `momentum`- Learning rate when updating running_mean and running_variance
+    ///
+    /// y = γx + β
+    fn with_params(parent:P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
+        -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError>;
+
+    /// Create and return an instance with the momentum.
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    /// * `momentum`- Learning rate when updating running_mean and running_variance
+    ///
+    /// γ = 1, β = 0
+    /// y = γx + β
+    fn with_momentum(parent:P,device:&D,momentum:U)
+        -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError>;
+
+    /// Create and return an instance.
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    ///
+    /// γ = 1, β = 0
+    /// y = γx + β
+    fn new(parent:P,device:&D) -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError>;
+}
 ///  BatchNormalization Layer Implementation
 pub struct BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
@@ -43,7 +85,8 @@ pub struct BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,const N:usize>
     bi:PhantomData<BI>,
     s:PhantomData<S>
 }
-impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N>
+impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayerInstantiation<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N>
+    for BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -51,16 +94,7 @@ impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           VecArr<U,Arr<U,N>>: From<BI>,
           BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
-    /// Create and return an instance with the specified scale, bias, and momentum.
-    /// # Arguments
-    /// * `parent` - upper layer
-    /// * `device` - Device object used for neural network computation
-    /// * `scale` - γ
-    /// * `bias` - β
-    /// * `momentum`- Learning rate when updating running_mean and running_variance
-    ///
-    /// y = γx + β
-    pub fn with_params(parent:P,device:&DeviceCpu<U>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
+    fn with_params(parent:P,device:&DeviceCpu<U>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
                        -> Result<BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N>,LayerInstantiationError> {
 
         let running_mean = Arr::new();
@@ -84,15 +118,7 @@ impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U
         })
     }
 
-    /// Create and return an instance with the momentum.
-    /// # Arguments
-    /// * `parent` - upper layer
-    /// * `device` - Device object used for neural network computation
-    /// * `momentum`- Learning rate when updating running_mean and running_variance
-    ///
-    /// γ = 1, β = 0
-    /// y = γx + β
-    pub fn with_momentum(parent:P,device:&DeviceCpu<U>,momentum:U)
+    fn with_momentum(parent:P,device:&DeviceCpu<U>,momentum:U)
                          -> Result<BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N>,LayerInstantiationError> {
         let mut scale = Arr::new();
 
@@ -103,18 +129,12 @@ impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U
         Self::with_params(parent,device,scale,Arr::new(),momentum)
     }
 
-    /// Create and return an instance.
-    /// # Arguments
-    /// * `parent` - upper layer
-    /// * `device` - Device object used for neural network computation
-    ///
-    /// γ = 1, β = 0
-    /// y = γx + β
-    pub fn new(parent:P,device:&DeviceCpu<U>) -> Result<BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N>,LayerInstantiationError> {
+    fn new(parent:P,device:&DeviceCpu<U>) -> Result<BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N>,LayerInstantiationError> {
         Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."))
     }
 }
-impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>
+impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayerInstantiation<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>
+    for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -123,17 +143,8 @@ impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N
           VecArr<U,Arr<U,N>>: From<BI>,
           BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           DeviceGpu<U>: Device<U> {
-    /// Create and return an instance with the specified scale, bias, and momentum.
-    /// # Arguments
-    /// * `parent` - upper layer
-    /// * `device` - Device object used for neural network computation
-    /// * `scale` - γ
-    /// * `bias` - β
-    /// * `momentum`- Learning rate when updating running_mean and running_variance
-    ///
-    /// y = γx + β
-    pub fn with_params(parent:P,device:&DeviceGpu<U>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
-                       -> Result<BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>,LayerInstantiationError> {
+    fn with_params(parent:P,device:&DeviceGpu<U>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
+        -> Result<BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>,LayerInstantiationError> {
         let running_mean = Arr::new();
         let mut running_variance = Arr::new();
 
@@ -155,15 +166,7 @@ impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N
         })
     }
 
-    /// Create and return an instance with the momentum.
-    /// # Arguments
-    /// * `parent` - upper layer
-    /// * `device` - Device object used for neural network computation
-    /// * `momentum`- Learning rate when updating running_mean and running_variance
-    ///
-    /// γ = 1, β = 0
-    /// y = γx + β
-    pub fn with_momentum(parent:P,device:&DeviceGpu<U>,momentum:U)
+    fn with_momentum(parent:P,device:&DeviceGpu<U>,momentum:U)
                          -> Result<BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>,LayerInstantiationError> {
         let mut scale = Arr::new();
 
@@ -174,14 +177,7 @@ impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N
         Self::with_params(parent,device,scale,Arr::new(),momentum)
     }
 
-    /// Create and return an instance.
-    /// # Arguments
-    /// * `parent` - upper layer
-    /// * `device` - Device object used for neural network computation
-    ///
-    /// γ = 1, β = 0
-    /// y = γx + β
-    pub fn new(parent:P,device:&DeviceGpu<U>)
+    fn new(parent:P,device:&DeviceGpu<U>)
         -> Result<BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>,LayerInstantiationError> {
         Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."))
     }
@@ -832,4 +828,74 @@ impl<U,P,I,PI,BI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Cache
           VecArr<U,Arr<U,N>>: From<BI>,
           BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> {
+}
+pub struct BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,const N:usize>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          S: Debug + Sized + 'static,
+          Arr<U,N>: From<PI>,
+          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
+          VecArr<U,Arr<U,N>>: From<BI>,
+          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+    u:PhantomData<U>,
+    c:PhantomData<C>,
+    p:PhantomData<P>,
+    d:PhantomData<D>,
+    i:PhantomData<I>,
+    pi:PhantomData<PI>,
+    bi:PhantomData<BI>,
+    s:PhantomData<S>,
+    n:PhantomData<[();N]>
+}
+impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          S: Debug + Sized + 'static,
+          Arr<U,N>: From<PI>,
+          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
+          VecArr<U,Arr<U,N>>: From<BI>,
+          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+    pub fn new() -> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,N> {
+        BatchNormalizationLayerBuilder {
+            u:PhantomData::<U>,
+            c:PhantomData::<C>,
+            p:PhantomData::<P>,
+            d:PhantomData::<D>,
+            i:PhantomData::<I>,
+            pi:PhantomData::<PI>,
+            bi:PhantomData::<BI>,
+            s:PhantomData::<S>,
+            n:PhantomData::<[();N]>
+        }
+    }
+}
+impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          S: Debug + Sized + 'static,
+          Arr<U,N>: From<PI>,
+          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
+          VecArr<U,Arr<U,N>>: From<BI>,
+          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+          BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N> : BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,BI,S,N> {
+    pub fn build_with_params(&self,parent: P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
+        -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError> {
+        Ok(BatchNormalizationLayer::with_params(parent,device,scale,bias,momentum)?)
+    }
+
+    pub fn build_with_momentum(&self,parent:P,device:&D,momentum:U)
+                             -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError> {
+        Ok(BatchNormalizationLayer::with_momentum(parent,device,momentum)?)
+    }
+
+    pub fn build(&self,parent: P,device:&D)
+        -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError> {
+        Ok(BatchNormalizationLayer::new(parent,device)?)
+    }
 }

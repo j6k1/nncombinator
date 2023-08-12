@@ -300,7 +300,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.into())
+        Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
     fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
@@ -322,7 +322,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigm
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.into())
+        Ok(args.loss.read_to_vec()?.try_into()?)
     }
 }
 /// ReLu Implementation
@@ -463,7 +463,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.into())
+        Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
     fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
@@ -485,7 +485,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.into())
+        Ok(args.loss.read_to_vec()?.try_into()?)
     }
 }
 /// Swish Implementation
@@ -615,7 +615,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.into())
+        Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
     fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
@@ -637,7 +637,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swis
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.into())
+        Ok(args.loss.read_to_vec()?.try_into()?)
     }
 }
 /// Tanh Implementation
@@ -767,7 +767,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.into())
+        Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
     fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
@@ -789,7 +789,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.into())
+        Ok(args.loss.read_to_vec()?.try_into()?)
     }
 }
 /// SoftMax Implementation
@@ -945,7 +945,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 1024 * mem::size_of::<U>() * 2)?;
 
-        Ok(args.input_output.read_to_vec()?.into())
+        Ok(args.input_output.read_to_vec()?.try_into()?)
     }
 
     fn batch_derive(&self, _: &DeviceGpu<U>, o: &VecArr<U,Arr<U,N>>, loss: &VecArr<U,Arr<U,N>>, u: &VecArr<U,Arr<U,N>>) -> Result<VecArr<U, Arr<U, N>>, TrainingError> {
@@ -966,6 +966,6 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Soft
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 1024 * mem::size_of::<U>())?;
 
-        Ok(args.loss.read_to_vec()?.into())
+        Ok(args.loss.read_to_vec()?.try_into()?)
     }
 }

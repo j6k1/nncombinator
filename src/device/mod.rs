@@ -323,7 +323,7 @@ impl Device<f32> for DeviceGpu<f32> {
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
                       dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
-        Ok(args.actual.read_to_vec()?.into())
+        Ok(args.actual.read_to_vec()?.try_into()?)
     }
 
     fn batch_linear_reduce<const N: usize>(&self, loss: &VecArr<f32, Arr<f32, N>>) -> Result<Arr<f32, N>, TrainingError> {
@@ -386,7 +386,7 @@ impl Device<f64> for DeviceGpu<f64> {
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
                       dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
-        Ok(args.actual.read_to_vec()?.into())
+        Ok(args.actual.read_to_vec()?.try_into()?)
     }
 
     fn batch_linear_reduce<const N: usize>(&self, loss: &VecArr<f64, Arr<f64, N>>) -> Result<Arr<f64, N>, TrainingError> {

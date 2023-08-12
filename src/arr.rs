@@ -1013,14 +1013,20 @@ impl<'data,U,const N:usize> From<Vec<ArrView<'data,U,N>>> for VecArr<U,Arr<U,N>>
         }
     }
 }
-impl<U,const N:usize> From<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
-    fn from(items: Vec<U>) -> Self {
-        let len = items.len() / N;
+impl<U,const N:usize> TryFrom<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
+    type Error = SizeMismatchError;
 
-        VecArr {
-            arr:items.into_boxed_slice(),
-            len:len,
-            t:PhantomData::<Arr<U,N>>
+    fn try_from(items: Vec<U>) -> Result<Self,SizeMismatchError> {
+        if items.len() % N != 0 {
+            Err(SizeMismatchError(items.len(),N))
+        } else {
+            let len = items.len() / N;
+
+            Ok(VecArr {
+                arr: items.into_boxed_slice(),
+                len: len,
+                t: PhantomData::<Arr<U, N>>
+            })
         }
     }
 }

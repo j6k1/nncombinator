@@ -1,15 +1,22 @@
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
+use rcudnn::{API, TensorDescriptor};
+use rcudnn::utils::DataType;
+use rcudnn_sys::cudnnBatchNormMode_t::CUDNN_BATCHNORM_SPATIAL;
+use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
 
 use crate::arr::{Arr, VecArr};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
-use crate::device::DeviceCpu;
+use crate::cuda::{AsMutVoidPtr, AsPtr, AsVoidPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
+use crate::cuda::mem::CachedTensor;
+use crate::device::{DeviceCpu, DeviceGpu};
 use crate::error::{EvaluateError, TrainingError};
+use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
 
 /// Features defining the implementation of the various computational processes in the batch normalization layer
-pub trait DeviceBatchNorm<U,T,C,const N:usize>
+pub trait DeviceBatchNorm<U,C,T,const N:usize>
     where U: UnitValue<U> {
     fn forward_batch_norm(&self, input: &Arr<U,N>, scale: &C, bias: &C,
                           estimated_mean: &C, estimated_variance: &C) -> Result<Arr<U,N>,EvaluateError>;
@@ -188,5 +195,383 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         let dx = dx9 + dx12;
 
         Ok((dx,s,b))
+    }
+}
+impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32>,N> for DeviceGpu<f32> {
+    fn forward_batch_norm(&self, input: &Arr<f32,N>, scale: &CachedTensor<f32,Arr<f32,N>>, bias: &CachedTensor<f32,Arr<f32,N>>,
+                          estimated_mean: &CachedTensor<f32,Arr<f32,N>>, estimated_variance: &CachedTensor<f32,Arr<f32,N>>)
+        -> Result<Arr<f32,N>,EvaluateError> {
+        let len = input.len() as i32;
+
+        let mut input_ptr = CudaMemoryPoolPtr::new(len as usize,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(len as usize,&self.memory_pool)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize)?;
+
+        let bn_scale_bias_mean_var_desc = API::create_tensor_descriptor()?;
+        let xd = TensorDescriptor::new(&[1,1,1,len],&[len,len,len,1],DataType::Float)?;
+
+        unsafe {
+            cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL);
+        }
+
+        let alpha = 1.;
+        let beta = 0.;
+        let eps = 1e-6;
+
+        unsafe {
+            match cudnnBatchNormalizationForwardInference(
+                *self.cudnn.id_c(),
+                CUDNN_BATCHNORM_SPATIAL,
+                alpha.as_void_ptr(),
+                beta.as_void_ptr(),
+                *xd.id_c(),
+                input_ptr.as_void_ptr(),
+                *xd.id_c(),
+                output_ptr.as_mut_void_ptr(),
+                bn_scale_bias_mean_var_desc,
+                scale.as_void_ptr(),
+                bias.as_void_ptr(),
+                estimated_mean.as_void_ptr(),
+                estimated_variance.as_void_ptr(),
+                eps as f64) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => {
+                    return Ok(output_ptr.read_to_vec()?.try_into()?);
+                },
+                cudnnStatus_t::CUDNN_STATUS_NOT_SUPPORTED => {
+                    return Err(EvaluateError::CudnnError(rcudnn::Error::NotSupported("The function does not support the provided configuration.")));
+                },
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the CdnBatchNormalizationForwardInference is invalid.")));
+                },
+                status => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
+        }
+    }
+
+    fn forward_batch_norm_train(&self, input: &Arr<f32,N>,
+                                scale: &CachedTensor<f32,Arr<f32,N>>,
+                                bias: &CachedTensor<f32,Arr<f32,N>>,
+                                estimated_mean: &CachedTensor<f32,Arr<f32,N>>,
+                                estimated_variance: &CachedTensor<f32,Arr<f32,N>>) -> Result<(Arr<f32,N>,CudaPtr<f32>,CudaPtr<f32>),EvaluateError> {
+        let len = input.len() as i32;
+
+        let mut input_ptr = CudaMemoryPoolPtr::new(len as usize,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::new(len as usize,&self.memory_pool)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize)?;
+
+        let bn_scale_bias_mean_var_desc = API::create_tensor_descriptor()?;
+        let xd = TensorDescriptor::new(&[1,1,1,len],&[len,len,len,1],DataType::Float)?;
+
+        unsafe {
+            cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL);
+        }
+
+        let alpha = 1.;
+        let beta = 0.;
+        let eps = 1e-6;
+
+        let mut mean = CudaPtr::new(len as usize)?;
+        let mut inv_variance = CudaPtr::new(len as usize)?;
+
+        mean.memcpy(estimated_mean.as_ptr(),len as usize)?;
+        inv_variance.memcpy(estimated_variance.iter().map(|v| 1. / SqrtNode::new().forward(v + eps)).collect::<Vec<f32>>().as_ptr(),len as usize)?;
+
+        unsafe {
+            match cudnnBatchNormalizationForwardInference(
+                *self.cudnn.id_c(),
+                CUDNN_BATCHNORM_SPATIAL,
+                alpha.as_void_ptr(),
+                beta.as_void_ptr(),
+                *xd.id_c(),
+                input_ptr.as_void_ptr(),
+                *xd.id_c(),
+                output_ptr.as_mut_void_ptr(),
+                bn_scale_bias_mean_var_desc,
+                scale.as_void_ptr(),
+                bias.as_void_ptr(),
+                estimated_mean.as_void_ptr(),
+                estimated_variance.as_void_ptr(),
+                eps as f64) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => {
+                    return Ok((output_ptr.read_to_vec()?.try_into()?,mean,inv_variance));
+                },
+                cudnnStatus_t::CUDNN_STATUS_NOT_SUPPORTED => {
+                    return Err(EvaluateError::CudnnError(rcudnn::Error::NotSupported("The function does not support the provided configuration.")));
+                },
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the CdnBatchNormalizationForwardInference is invalid.")));
+                },
+                status => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
+        }
+    }
+
+    fn batch_forward_batch_norm(&self, input: &VecArr<f32,Arr<f32,N>>, scale: &CachedTensor<f32,Arr<f32,N>>, bias: &CachedTensor<f32,Arr<f32,N>>,
+                                estimated_mean: &CachedTensor<f32,Arr<f32,N>>, estimated_variance: &CachedTensor<f32,Arr<f32,N>>)
+        -> Result<VecArr<f32,Arr<f32,N>>, EvaluateError> {
+        let len = input.len() as i32;
+
+        let mut input_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize * N,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize * N,&self.memory_pool)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize * N)?;
+
+        let bn_scale_bias_mean_var_desc = API::create_tensor_descriptor()?;
+        let xd = TensorDescriptor::new(&[1,1,len,N as i32],
+                                           &[len * N as i32,len * N as i32,N as i32,1],
+                                           DataType::Float)?;
+
+        unsafe {
+            cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL);
+        }
+
+        let alpha = 1.;
+        let beta = 0.;
+        let eps = 1e-6;
+
+        unsafe {
+            match cudnnBatchNormalizationForwardInference(
+                *self.cudnn.id_c(),
+                CUDNN_BATCHNORM_SPATIAL,
+                alpha.as_void_ptr(),
+                beta.as_void_ptr(),
+                *xd.id_c(),
+                input_ptr.as_void_ptr(),
+                *xd.id_c(),
+                output_ptr.as_mut_void_ptr(),
+                bn_scale_bias_mean_var_desc,
+                scale.as_void_ptr(),
+                bias.as_void_ptr(),
+                estimated_mean.as_void_ptr(),
+                estimated_variance.as_void_ptr(),
+                eps as f64) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => {
+                    return Ok(output_ptr.read_to_vec()?.try_into()?);
+                },
+                cudnnStatus_t::CUDNN_STATUS_NOT_SUPPORTED => {
+                    return Err(EvaluateError::CudnnError(rcudnn::Error::NotSupported("The function does not support the provided configuration.")));
+                },
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the CdnBatchNormalizationForwardInference is invalid.")));
+                },
+                status => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
+        }
+    }
+
+    fn batch_forward_batch_norm_train(&self, input: &VecArr<f32,Arr<f32,N>>,
+                                      scale: &CachedTensor<f32,Arr<f32,N>>, bias: &CachedTensor<f32,Arr<f32,N>>,
+                                      _: &CachedTensor<f32,Arr<f32,N>>, _: &CachedTensor<f32,Arr<f32,N>>,
+                                      momentum: f32)
+                                      -> Result<(VecArr<f32,Arr<f32,N>>,CudaPtr<f32>,CudaPtr<f32>,Arr<f32,N>,Arr<f32,N>), TrainingError> {
+        let len = input.len() as i32;
+
+        let mut input_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize * N,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize * N,&self.memory_pool)?;
+
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize * N)?;
+
+        let bn_scale_bias_mean_var_desc = API::create_tensor_descriptor()?;
+        let xd = TensorDescriptor::new(&[1,1,len,N as i32],
+                                           &[len * N as i32,len * N as i32,N as i32,1],
+                                           DataType::Float)?;
+
+        unsafe {
+            cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL);
+        }
+
+        let alpha = 1.;
+        let beta = 0.;
+        let eps = 1e-6;
+
+        let mut running_mean = CudaPtr::new(len as usize)?;
+        let mut running_variance = CudaPtr::new(len as usize)?;
+
+        let mut mean = CudaPtr::new(len as usize)?;
+        let mut inv_variance = CudaPtr::new(len as usize)?;
+
+        unsafe {
+            match cudnnBatchNormalizationForwardTraining(
+                *self.cudnn.id_c(),
+                CUDNN_BATCHNORM_SPATIAL,
+                alpha.as_void_ptr(),
+                beta.as_void_ptr(),
+                *xd.id_c(),
+                input_ptr.as_void_ptr(),
+                *xd.id_c(),
+                output_ptr.as_mut_void_ptr(),
+                bn_scale_bias_mean_var_desc,
+                scale.as_void_ptr(),
+                bias.as_void_ptr(),
+                momentum as f64,
+                running_mean.as_mut_void_ptr(),
+                running_variance.as_mut_void_ptr(),
+                eps as f64,
+                mean.as_mut_void_ptr(),
+                inv_variance.as_mut_void_ptr()) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => {
+                    return Ok((output_ptr.read_to_vec()?.try_into()?,
+                               mean,
+                               inv_variance,
+                               running_mean.read_to_vec()?.try_into()?,
+                               running_variance.read_to_vec()?.try_into()?));
+                },
+                cudnnStatus_t::CUDNN_STATUS_NOT_SUPPORTED => {
+                    return Err(TrainingError::CudnnError(rcudnn::Error::NotSupported("The function does not support the provided configuration.")));
+                },
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the CdnBatchNormalizationForwardInference is invalid.")));
+                },
+                status => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
+        }
+    }
+
+    fn backward_batch_norm(&self, loss: &Arr<f32,N>, input: &Arr<f32,N>,
+                           scale: &CachedTensor<f32,Arr<f32,N>>, saved_mean: &CudaPtr<f32>, saved_inv_variance: &CudaPtr<f32>)
+                           -> Result<(Arr<f32,N>, Arr<f32,N>, Arr<f32,N>), TrainingError> {
+        let len = input.len() as i32;
+
+        let mut loss_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize,&self.memory_pool)?;
+        let mut input_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize,&self.memory_pool)?;
+
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),len as usize)?;
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize)?;
+
+        let be_scale_bias_diff_desc = API::create_tensor_descriptor()?;
+        let xd = TensorDescriptor::new(&[1,1,1,len],&[len,len,len,1],DataType::Float)?;
+
+        unsafe {
+            cudnnDeriveBNTensorDescriptor(be_scale_bias_diff_desc, *xd.id_c(), CUDNN_BATCHNORM_SPATIAL);
+        }
+
+        let eps = 1e-6;
+
+        let mut result_scale= CudaPtr::new(len as usize)?;
+        let mut result_bias = CudaPtr::new(len as usize)?;
+
+        unsafe {
+            match cudnnBatchNormalizationBackward(
+                *self.cudnn.id_c(),
+                CUDNN_BATCHNORM_SPATIAL,
+                (1.).as_void_ptr(),
+                (0.).as_void_ptr(),
+                (1.).as_void_ptr(),
+                (1.).as_void_ptr(),
+                *xd.id_c(),
+                input_ptr.as_void_ptr(),
+                *xd.id_c(),
+                loss_ptr.as_void_ptr(),
+                *xd.id_c(),
+                output_ptr.as_mut_void_ptr(),
+                be_scale_bias_diff_desc,
+                scale.as_void_ptr(),
+                result_scale.as_mut_void_ptr(),
+                result_bias.as_mut_void_ptr(),
+                eps as f64,
+                saved_mean.as_void_ptr(),
+                saved_inv_variance.as_void_ptr()) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => {
+                    return Ok((output_ptr.read_to_vec()?.try_into()?,result_scale.read_to_vec()?.try_into()?,result_bias.read_to_vec()?.try_into()?));
+                },
+                cudnnStatus_t::CUDNN_STATUS_NOT_SUPPORTED => {
+                    return Err(TrainingError::CudnnError(rcudnn::Error::NotSupported("The function does not support the provided configuration.")));
+                },
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the CdnBatchNormalizationForwardInference is invalid.")));
+                },
+                status => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
+        }
+    }
+
+    fn batch_backward_batch_norm(&self, loss: &VecArr<f32,Arr<f32,N>>,
+                                 input: &VecArr<f32,Arr<f32,N>>,
+                                 scale: &CachedTensor<f32,Arr<f32,N>>,
+                                 saved_mean: &CudaPtr<f32>, saved_inv_variance: &CudaPtr<f32>)
+                                 -> Result<(VecArr<f32,Arr<f32,N>>, Arr<f32,N>, Arr<f32,N>), TrainingError> {
+        let len = input.len() as i32;
+
+        let mut loss_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize * N,&self.memory_pool)?;
+        let mut input_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize * N,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize * N,&self.memory_pool)?;
+
+        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),len as usize * N)?;
+        input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize * N)?;
+
+        let be_scale_bias_diff_desc = API::create_tensor_descriptor()?;
+        let xd = TensorDescriptor::new(&[1,1,len,N as i32],
+                                           &[len * N as i32, len * N as i32, N as i32,1],
+                                           DataType::Float)?;
+
+        unsafe {
+            cudnnDeriveBNTensorDescriptor(be_scale_bias_diff_desc, *xd.id_c(), CUDNN_BATCHNORM_SPATIAL);
+        }
+
+        let eps = 1e-6;
+
+        let mut result_scale= CudaPtr::new(len as usize)?;
+        let mut result_bias = CudaPtr::new(len as usize)?;
+
+        unsafe {
+            match cudnnBatchNormalizationBackward(
+                *self.cudnn.id_c(),
+                CUDNN_BATCHNORM_SPATIAL,
+                (1.).as_void_ptr(),
+                (0.).as_void_ptr(),
+                (1.).as_void_ptr(),
+                (1.).as_void_ptr(),
+                *xd.id_c(),
+                input_ptr.as_void_ptr(),
+                *xd.id_c(),
+                loss_ptr.as_void_ptr(),
+                *xd.id_c(),
+                output_ptr.as_mut_void_ptr(),
+                be_scale_bias_diff_desc,
+                scale.as_void_ptr(),
+                result_scale.as_mut_void_ptr(),
+                result_bias.as_mut_void_ptr(),
+                eps as f64,
+                saved_mean.as_void_ptr(),
+                saved_inv_variance.as_void_ptr()) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => {
+                    return Ok((output_ptr.read_to_vec()?.try_into()?,result_scale.read_to_vec()?.try_into()?,result_bias.read_to_vec()?.try_into()?));
+                },
+                cudnnStatus_t::CUDNN_STATUS_NOT_SUPPORTED => {
+                    return Err(TrainingError::CudnnError(rcudnn::Error::NotSupported("The function does not support the provided configuration.")));
+                },
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the CdnBatchNormalizationForwardInference is invalid.")));
+                },
+                status => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
+        }
     }
 }

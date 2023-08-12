@@ -309,7 +309,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
 
         let bias_inv:VecArr<f32,Arr<f32,NO>> = bias.par_iter().map(|&b| {
             rayon::iter::repeat(b).take(input.len()).collect::<Vec<f32>>()
-        }).collect::<Vec<Vec<f32>>>().into_iter().flatten().collect::<Vec<f32>>().into();
+        }).collect::<Vec<Vec<f32>>>().into_iter().flatten().collect::<Vec<f32>>().try_into()?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI * input.len())?;
         output_ptr.memcpy(bias_inv.as_raw_slice().as_ptr(),NO * input.len())?;
@@ -335,7 +335,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                Ok(output_ptr.read_to_vec()?.into())
+                Ok(output_ptr.read_to_vec()?.try_into()?)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
@@ -384,7 +384,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                Ok(output_ptr.read_to_vec()?.into())
+                Ok(output_ptr.read_to_vec()?.try_into()?)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
@@ -616,7 +616,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
 
         let bias_inv:VecArr<f64,Arr<f64,NO>> = bias.par_iter().map(|&b| {
             rayon::iter::repeat(b).take(input.len()).collect::<Vec<f64>>()
-        }).collect::<Vec<Vec<f64>>>().into_iter().flatten().collect::<Vec<f64>>().into();
+        }).collect::<Vec<Vec<f64>>>().into_iter().flatten().collect::<Vec<f64>>().try_into()?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI * input.len())?;
         output_ptr.memcpy(bias_inv.as_raw_slice().as_ptr(),NO * input.len())?;
@@ -642,7 +642,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                Ok(output_ptr.read_to_vec()?.into())
+                Ok(output_ptr.read_to_vec()?.try_into()?)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
@@ -691,7 +691,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                Ok(output_ptr.read_to_vec()?.into())
+                Ok(output_ptr.read_to_vec()?.try_into()?)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));

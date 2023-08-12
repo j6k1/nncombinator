@@ -90,7 +90,7 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for Mse<U> where U: Clone + Copy + Uni
                                      y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
                       dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
-        Ok(args.actual.read_to_vec()?.into())
+        Ok(args.actual.read_to_vec()?.try_into()?)
     }
 }
 /// CrossEntropy implementation
@@ -138,7 +138,7 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropy<U> where U: Clone + C
                                      y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
                       dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
-        Ok(args.actual.read_to_vec()?.into())
+        Ok(args.actual.read_to_vec()?.try_into()?)
     }
 }
 /// CrossEntropyMulticlass implementation
@@ -186,6 +186,6 @@ impl<U> BatchLossFunction<U,DeviceGpu<U>> for CrossEntropyMulticlass<U> where U:
                                      y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
                       dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
 
-        Ok(args.actual.read_to_vec()?.into())
+        Ok(args.actual.read_to_vec()?.try_into()?)
     }
 }

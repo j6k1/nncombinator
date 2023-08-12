@@ -235,7 +235,7 @@ impl<T,U,P,I,PI,BI,const N:usize> Persistence<U,T,Linear>
 impl<U,C,P,D,I,PI,BI,S,const N:usize> Forward<Arr<U,N>,Result<Arr<U,N>,EvaluateError>> for BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,S,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
           Arr<U,N>: From<PI>,
@@ -249,7 +249,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> Forward<Arr<U,N>,Result<Arr<U,N>,EvaluateE
 impl<U,C,P,D,I,PI,BI,S,const N:usize> ForwardAll for BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,S,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
           Arr<U,N>: From<PI>,
@@ -265,7 +265,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> ForwardAll for BatchNormalizationLayer<U,C
 impl<U,C,P,D,I,PI,BI,S,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,S,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
           Arr<U,N>: From<PI>,
@@ -297,7 +297,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> Backward<U,(&Arr<U,N>,&Arr<U,N>,&S,&S),Res
 
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,S,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
           Arr<U,N>: From<PI>,
@@ -380,7 +380,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchForwardBase for BatchNormalizationLay
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,S,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
           Arr<U,N>: From<PI>,
@@ -395,7 +395,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchForward for BatchNormalizationLayer<U
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,S,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
           Arr<U,N>: From<PI>,
@@ -414,7 +414,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizatio
              BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward +
              BatchPreTrainBase<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,S,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
           Arr<U,N>: From<PI>,
@@ -429,7 +429,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLay
              BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,S,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + Send + Sync + 'static,
           Arr<U,N>: From<PI>,

@@ -7,7 +7,8 @@ extern crate csv;
 extern crate lazy_static;
 extern crate mnist;
 
-mod batchnormalization;
+pub mod batchnormalization;
+pub mod common;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -17,25 +18,20 @@ use std::io::{BufRead, BufReader};
 use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 use csv::Reader;
-use lazy_static::lazy_static;
 use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLu, Sigmoid, SoftMax, Swish, Tanh};
 use nncombinator::arr::{Arr, DiffArr};
-use nncombinator::cuda::mem::{Alloctype, MemoryPool};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
 use nncombinator::error::{TrainingError, UnsupportedOperationError};
 use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{MomentumSGD,SGD};
 
-lazy_static! {
-    static ref SHARED_MEMORY_POOL:Arc<Mutex<MemoryPool>> = Arc::new(Mutex::new(MemoryPool::new(Alloctype::Device).unwrap()));
-}
+use crate::common::SHARED_MEMORY_POOL;
 
 #[test]
 fn test_mnist() {

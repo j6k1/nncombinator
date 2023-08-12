@@ -4,6 +4,7 @@ use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use mnist::{Mnist, MnistBuilder};
+use rayon::prelude::{ParallelIterator, IndexedParallelIterator};
 use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;

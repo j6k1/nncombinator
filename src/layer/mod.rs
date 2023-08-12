@@ -6,6 +6,7 @@ use std::ops::{Index};
 use std::str::FromStr;
 use crate::arr::*;
 use crate::device::*;
+use crate::device::linear::*;
 use crate::persistence::*;
 use crate::{Cons, Nil, Stack};
 use crate::activation::{Activation, BatchActivation};

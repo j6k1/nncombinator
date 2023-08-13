@@ -3,7 +3,7 @@
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex};
-use cuda_runtime_sys::dim3;
+use cuda_runtime_sys::{cudaHostAllocDefault, dim3};
 use libc::c_void;
 use rcudnn::Error;
 use rcudnn::utils::DataType;
@@ -694,6 +694,24 @@ impl TryFrom<f64> for CudaPtr<f64> {
 
     fn try_from(value: f64) -> Result<Self, Self::Error> {
         let mut ptr:CudaPtr<f64> = CudaPtr::new(1)?;
+        ptr.memcpy(&value as *const f64,1)?;
+        Ok(ptr)
+    }
+}
+impl TryFrom<f32> for CudaHostPtr<f32> {
+    type Error = CudaError;
+
+    fn try_from(value: f32) -> Result<Self, Self::Error> {
+        let mut ptr:CudaHostPtr<f32> = CudaHostPtr::new(1,cudaHostAllocDefault)?;
+        ptr.memcpy(&value as *const f32,1)?;
+        Ok(ptr)
+    }
+}
+impl TryFrom<f64> for CudaHostPtr<f64> {
+    type Error = CudaError;
+
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        let mut ptr:CudaHostPtr<f64> = CudaHostPtr::new(1,cudaHostAllocDefault)?;
         ptr.memcpy(&value as *const f64,1)?;
         Ok(ptr)
     }

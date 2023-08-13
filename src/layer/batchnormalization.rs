@@ -26,11 +26,7 @@ pub trait BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,BI,S,const N:usize>
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
-          S: Debug + Sized + 'static,
-          Arr<U,N>: From<PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          S: Debug + Sized + 'static {
     /// Create and return an instance with the specified scale, bias, and momentum.
     /// # Arguments
     /// * `parent` - upper layer
@@ -69,11 +65,7 @@ pub struct BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,const N:usize>
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
-          S: Debug + Sized + 'static,
-          Arr<U,N>: From<PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          S: Debug + Sized + 'static {
     parent:P,
     device:D,
     scale: C,
@@ -90,10 +82,7 @@ impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayerInstantiation<U,Arr<U,N>,
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          Arr<U,N>: From<PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          Arr<U,N>: From<PI> {
     fn with_params(parent:P,device:&DeviceCpu<U>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
                        -> Result<BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N>,LayerInstantiationError> {
 
@@ -138,10 +127,6 @@ impl<U,P,I,PI,BI,const N:usize> BatchNormalizationLayerInstantiation<U,CachedTen
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          Arr<U,N>: From<PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           DeviceGpu<U>: Device<U> {
     fn with_params(parent:P,device:&DeviceGpu<U>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
         -> Result<BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>,LayerInstantiationError> {
@@ -834,11 +819,7 @@ pub struct BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,const N:usize>
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
-          S: Debug + Sized + 'static,
-          Arr<U,N>: From<PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          S: Debug + Sized + 'static {
     u:PhantomData<U>,
     c:PhantomData<C>,
     p:PhantomData<P>,
@@ -854,12 +835,28 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,P
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
-          S: Debug + Sized + 'static,
-          Arr<U,N>: From<PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          S: Debug + Sized + 'static {
     pub fn new() -> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,N> {
+        BatchNormalizationLayerBuilder {
+            u:PhantomData::<U>,
+            c:PhantomData::<C>,
+            p:PhantomData::<P>,
+            d:PhantomData::<D>,
+            i:PhantomData::<I>,
+            pi:PhantomData::<PI>,
+            bi:PhantomData::<BI>,
+            s:PhantomData::<S>,
+            n:PhantomData::<[();N]>
+        }
+    }
+}
+impl<U,C,P,D,I,PI,BI,S> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,0>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          S: Debug + Sized + 'static {
+    pub fn with_size<const N:usize>() -> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,N> {
         BatchNormalizationLayerBuilder {
             u:PhantomData::<U>,
             c:PhantomData::<C>,
@@ -879,10 +876,6 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,P
           D: Device<U>,
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static,
-          Arr<U,N>: From<PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N> : BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,BI,S,N> {
     pub fn build_with_params(&self,parent: P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
         -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError> {

@@ -8,7 +8,7 @@ use crate::arr::{Arr, VecArr};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
-use crate::cuda::{AsMutVoidPtr, AsPtr, AsVoidPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
+use crate::cuda::{AsMutVoidPtr, AsPtr, AsVoidPtr, CudaHostPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
 use crate::cuda::mem::CachedTensor;
 use crate::device::{DeviceCpu, DeviceGpu};
 use crate::error::{EvaluateError, TrainingError};
@@ -203,8 +203,8 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
         -> Result<Arr<f32,N>,EvaluateError> {
         let len = input.len() as i32;
 
-        let mut input_ptr = CudaMemoryPoolPtr::new(len as usize,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(len as usize,&self.memory_pool)?;
+        let mut input_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize)?;
 
@@ -212,11 +212,22 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
         let xd = TensorDescriptor::new(&[1,1,1,len],&[len,len,len,1],DataType::Float)?;
 
         unsafe {
-            cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL);
+            match cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => (),
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the vs is invalid.")));
+                },
+                status => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
         }
 
-        let alpha = 1.;
-        let beta = 0.;
+        let alpha = CudaHostPtr::<f32>::try_from(1f32)?;
+        let beta = CudaHostPtr::<f32>::try_from(0f32)?;
+
         let eps = 1e-6;
 
         unsafe {
@@ -269,18 +280,29 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
         let xd = TensorDescriptor::new(&[1,1,1,len],&[len,len,len,1],DataType::Float)?;
 
         unsafe {
-            cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL);
+            match cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => (),
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the vs is invalid.")));
+                },
+                status => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
         }
 
-        let alpha = 1.;
-        let beta = 0.;
+        let alpha = CudaHostPtr::<f32>::try_from(1f32)?;
+        let beta = CudaHostPtr::<f32>::try_from(0f32)?;
+
         let eps = 1e-6;
 
-        let mut mean = CudaPtr::new(len as usize)?;
-        let mut inv_variance = CudaPtr::new(len as usize)?;
+        let mut mean = CudaPtr::<f32>::new(N)?;
+        let mut inv_variance = CudaPtr::<f32>::new(N)?;
 
-        mean.memcpy(estimated_mean.as_ptr(),len as usize)?;
-        inv_variance.memcpy(estimated_variance.iter().map(|v| 1. / SqrtNode::new().forward(v + eps)).collect::<Vec<f32>>().as_ptr(),len as usize)?;
+        mean.memcpy(estimated_mean.as_ptr(),N)?;
+        inv_variance.memcpy(estimated_variance.iter().map(|v| 1. / SqrtNode::new().forward(v + eps)).collect::<Vec<f32>>().as_ptr(),N)?;
 
         unsafe {
             match cudnnBatchNormalizationForwardInference(
@@ -332,11 +354,22 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
                                            DataType::Float)?;
 
         unsafe {
-            cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL);
+            match cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => (),
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the vs is invalid.")));
+                },
+                status => {
+                    return Err(EvaluateError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
         }
 
-        let alpha = 1.;
-        let beta = 0.;
+        let alpha = CudaHostPtr::<f32>::try_from(1f32)?;
+        let beta = CudaHostPtr::<f32>::try_from(0f32)?;
+
         let eps = 1e-6;
 
         unsafe {
@@ -375,7 +408,7 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
 
     fn batch_forward_batch_norm_train(&self, input: &VecArr<f32,Arr<f32,N>>,
                                       scale: &CachedTensor<f32,Arr<f32,N>>, bias: &CachedTensor<f32,Arr<f32,N>>,
-                                      _: &CachedTensor<f32,Arr<f32,N>>, _: &CachedTensor<f32,Arr<f32,N>>,
+                                      running_mean: &CachedTensor<f32,Arr<f32,N>>, running_variance: &CachedTensor<f32,Arr<f32,N>>,
                                       momentum: f32)
                                       -> Result<(VecArr<f32,Arr<f32,N>>,CudaPtr<f32>,CudaPtr<f32>,Arr<f32,N>,Arr<f32,N>), TrainingError> {
         let len = input.len() as i32;
@@ -391,18 +424,32 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
                                            DataType::Float)?;
 
         unsafe {
-            cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL);
+            match cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => (),
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the vs is invalid.")));
+                },
+                status => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
         }
 
-        let alpha = 1.;
-        let beta = 0.;
+        let alpha = CudaHostPtr::<f32>::try_from(1f32)?;
+        let beta = CudaHostPtr::<f32>::try_from(0f32)?;
+
         let eps = 1e-6;
 
-        let mut running_mean = CudaPtr::new(len as usize)?;
-        let mut running_variance = CudaPtr::new(len as usize)?;
+        let mut running_mean_ptr = CudaPtr::<f32>::new(N)?;
+        let mut running_variance_ptr = CudaPtr::<f32>::new(N)?;
 
-        let mut mean = CudaPtr::new(len as usize)?;
-        let mut inv_variance = CudaPtr::new(len as usize)?;
+        running_mean_ptr.memcpy(running_mean.as_raw_slice().as_ptr(),N)?;
+        running_variance_ptr.memcpy(running_variance.as_raw_slice().as_ptr(),N)?;
+
+        let mut mean = CudaPtr::<f32>::new(N)?;
+        let mut inv_variance = CudaPtr::<f32>::new(N)?;
 
         unsafe {
             match cudnnBatchNormalizationForwardTraining(
@@ -417,9 +464,9 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
                 bn_scale_bias_mean_var_desc,
                 scale.as_void_ptr(),
                 bias.as_void_ptr(),
-                momentum as f64,
-                running_mean.as_mut_void_ptr(),
-                running_variance.as_mut_void_ptr(),
+                1. - momentum as f64,
+                running_mean_ptr.as_mut_void_ptr(),
+                running_variance_ptr.as_mut_void_ptr(),
                 eps as f64,
                 mean.as_mut_void_ptr(),
                 inv_variance.as_mut_void_ptr()) {
@@ -427,8 +474,8 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
                     return Ok((output_ptr.read_to_vec()?.try_into()?,
                                mean,
                                inv_variance,
-                               running_mean.read_to_vec()?.try_into()?,
-                               running_variance.read_to_vec()?.try_into()?));
+                               running_mean_ptr.read_to_vec()?.try_into()?,
+                               running_variance_ptr.read_to_vec()?.try_into()?));
                 },
                 cudnnStatus_t::CUDNN_STATUS_NOT_SUPPORTED => {
                     return Err(TrainingError::CudnnError(rcudnn::Error::NotSupported("The function does not support the provided configuration.")));
@@ -457,33 +504,46 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),len as usize)?;
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize)?;
 
-        let be_scale_bias_diff_desc = API::create_tensor_descriptor()?;
+        let bn_scale_bias_diff_desc = API::create_tensor_descriptor()?;
         let xd = TensorDescriptor::new(&[1,1,1,len],&[len,len,len,1],DataType::Float)?;
 
         unsafe {
-            cudnnDeriveBNTensorDescriptor(be_scale_bias_diff_desc, *xd.id_c(), CUDNN_BATCHNORM_SPATIAL);
+            match cudnnDeriveBNTensorDescriptor(bn_scale_bias_diff_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => (),
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the vs is invalid.")));
+                },
+                status => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
         }
 
         let eps = 1e-6;
 
-        let mut result_scale= CudaPtr::new(len as usize)?;
-        let mut result_bias = CudaPtr::new(len as usize)?;
+        let alpha = CudaHostPtr::<f32>::try_from(1f32)?;
+        let beta = CudaHostPtr::<f32>::try_from(0f32)?;
+
+        let mut result_scale= CudaPtr::<f32>::new(N)?;
+        let mut result_bias = CudaPtr::<f32>::new(N)?;
 
         unsafe {
             match cudnnBatchNormalizationBackward(
                 *self.cudnn.id_c(),
                 CUDNN_BATCHNORM_SPATIAL,
-                (1.).as_void_ptr(),
-                (0.).as_void_ptr(),
-                (1.).as_void_ptr(),
-                (1.).as_void_ptr(),
+                alpha.as_void_ptr(),
+                beta.as_void_ptr(),
+                alpha.as_void_ptr(),
+                beta.as_void_ptr(),
                 *xd.id_c(),
                 input_ptr.as_void_ptr(),
                 *xd.id_c(),
                 loss_ptr.as_void_ptr(),
                 *xd.id_c(),
                 output_ptr.as_mut_void_ptr(),
-                be_scale_bias_diff_desc,
+                bn_scale_bias_diff_desc,
                 scale.as_void_ptr(),
                 result_scale.as_mut_void_ptr(),
                 result_bias.as_mut_void_ptr(),
@@ -533,17 +593,20 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
 
         let eps = 1e-6;
 
-        let mut result_scale= CudaPtr::new(len as usize)?;
-        let mut result_bias = CudaPtr::new(len as usize)?;
+        let alpha = CudaHostPtr::<f32>::try_from(1f32)?;
+        let beta = CudaHostPtr::<f32>::try_from(0f32)?;
+
+        let mut result_scale= CudaPtr::<f32>::new(N)?;
+        let mut result_bias = CudaPtr::<f32>::new(N)?;
 
         unsafe {
             match cudnnBatchNormalizationBackward(
                 *self.cudnn.id_c(),
                 CUDNN_BATCHNORM_SPATIAL,
-                (1.).as_void_ptr(),
-                (0.).as_void_ptr(),
-                (1.).as_void_ptr(),
-                (1.).as_void_ptr(),
+                alpha.as_void_ptr(),
+                beta.as_void_ptr(),
+                alpha.as_void_ptr(),
+                beta.as_void_ptr(),
                 *xd.id_c(),
                 input_ptr.as_void_ptr(),
                 *xd.id_c(),

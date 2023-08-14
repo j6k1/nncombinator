@@ -372,7 +372,7 @@ fn test_fashion_mnist_batch_norm() {
 
     println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers as f32 / count as f32 * 100. > 75.)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
 }
 #[test]
 fn test_mnist_batch_norm_double() {
@@ -728,7 +728,7 @@ fn test_fashion_mnist_batch_norm_double() {
 
     println!("correct_answers = {},{}%",correct_answers,correct_answers as f64 / count as f64 * 100.);
 
-    debug_assert!(correct_answers as f64 / count as f64 * 100. > 75.)
+    debug_assert!(correct_answers as f64 / count as f64 * 100. > 80.)
 }
 #[test]
 fn test_mnist_batch_norm_for_gpu() {
@@ -1088,7 +1088,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
 
     println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers as f32 / count as f32 * 100. > 75.)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
 }
 #[test]
 fn test_mnist_batch_norm_for_gpu_double() {
@@ -1448,5 +1448,5 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
 
     println!("correct_answers = {},{}%",correct_answers,correct_answers as f64 / count as f64 * 100.);
 
-    debug_assert!(correct_answers as f64 / count as f64 * 100. > 75.)
+    debug_assert!(correct_answers as f64 / count as f64 * 100. > 80.)
 }

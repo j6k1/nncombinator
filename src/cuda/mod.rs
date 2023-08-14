@@ -7,24 +7,30 @@ use cuda_runtime_sys::{cudaHostAllocDefault, dim3};
 use libc::c_void;
 use rcudnn::Error;
 use rcudnn::utils::DataType;
-use rcudnn_sys::{cudaMemcpyKind, cudaStream_t};
+use rcudnn_sys::{cudaMemcpyKind, cudaStream_t, cudnnDataType_t};
 use crate::cuda::mem::MemoryPool;
 use crate::error::{CudaError, CudaRuntimeError};
 
 pub mod ffi;
 pub mod mem;
 pub mod kernel;
+pub mod cudnn;
 
 /// Trait to associate a type with a cudnn type
 pub trait DataTypeInfo {
     /// get cudnn data type
     fn cudnn_data_type() -> DataType;
+    /// get cudnn raw data type
+    fn cudnn_raw_data_type() -> cudnnDataType_t;
     /// get size
     fn size() -> usize;
 }
 impl DataTypeInfo for f32 {
     fn cudnn_data_type() -> DataType {
         DataType::Float
+    }
+    fn cudnn_raw_data_type() -> cudnnDataType_t {
+        cudnnDataType_t::CUDNN_DATA_FLOAT
     }
     fn size() -> usize {
         4_usize
@@ -33,6 +39,9 @@ impl DataTypeInfo for f32 {
 impl DataTypeInfo for f64 {
     fn cudnn_data_type() -> DataType {
         DataType::Double
+    }
+    fn cudnn_raw_data_type() -> cudnnDataType_t {
+        cudnnDataType_t::CUDNN_DATA_DOUBLE
     }
     fn size() -> usize {
         8_usize

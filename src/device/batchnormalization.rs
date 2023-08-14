@@ -1,6 +1,5 @@
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
-use rcudnn::{API, TensorDescriptor};
-use rcudnn::utils::DataType;
+use rcudnn::{API};
 use rcudnn_sys::cudnnBatchNormMode_t::CUDNN_BATCHNORM_SPATIAL;
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
 
@@ -9,6 +8,7 @@ use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
 use crate::cuda::{AsMutVoidPtr, AsPtr, AsVoidPtr, CudaHostPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
+use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
 use crate::cuda::mem::CachedTensor;
 use crate::device::{DeviceCpu, DeviceGpu};
 use crate::error::{EvaluateError, TrainingError};
@@ -209,7 +209,7 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize)?;
 
         let bn_scale_bias_mean_var_desc = API::create_tensor_descriptor()?;
-        let xd = TensorDescriptor::new(&[1,1,1,len],&[len,len,len,1],DataType::Float)?;
+        let xd = CudnnTensor4dDescriptor::<f32>::new(1,len as usize,1,1)?;
 
         unsafe {
             match cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL) {
@@ -271,13 +271,13 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
                                 estimated_variance: &CachedTensor<f32,Arr<f32,N>>) -> Result<(Arr<f32,N>,CudaPtr<f32>,CudaPtr<f32>),EvaluateError> {
         let len = input.len() as i32;
 
-        let mut input_ptr = CudaMemoryPoolPtr::new(len as usize,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(len as usize,&self.memory_pool)?;
+        let mut input_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize,&self.memory_pool)?;
+        let mut output_ptr = CudaMemoryPoolPtr::<f32>::new(len as usize,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize)?;
 
         let bn_scale_bias_mean_var_desc = API::create_tensor_descriptor()?;
-        let xd = TensorDescriptor::new(&[1,1,1,len],&[len,len,len,1],DataType::Float)?;
+        let xd = CudnnTensor4dDescriptor::<f32>::new(1,len as usize,1,1)?;
 
         unsafe {
             match cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL) {
@@ -349,9 +349,7 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize * N)?;
 
         let bn_scale_bias_mean_var_desc = API::create_tensor_descriptor()?;
-        let xd = TensorDescriptor::new(&[1,1,len,N as i32],
-                                           &[len * N as i32,len * N as i32,N as i32,1],
-                                           DataType::Float)?;
+        let xd = CudnnTensor4dDescriptor::<f32>::new(len as usize,N,1,1)?;
 
         unsafe {
             match cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL) {
@@ -419,9 +417,7 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize * N)?;
 
         let bn_scale_bias_mean_var_desc = API::create_tensor_descriptor()?;
-        let xd = TensorDescriptor::new(&[1,1,len,N as i32],
-                                           &[len * N as i32,len * N as i32,N as i32,1],
-                                           DataType::Float)?;
+        let xd = CudnnTensor4dDescriptor::<f32>::new(len as usize,N,1,1)?;
 
         unsafe {
             match cudnnDeriveBNTensorDescriptor(bn_scale_bias_mean_var_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL) {
@@ -505,7 +501,7 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize)?;
 
         let bn_scale_bias_diff_desc = API::create_tensor_descriptor()?;
-        let xd = TensorDescriptor::new(&[1,1,1,len],&[len,len,len,1],DataType::Float)?;
+        let xd = CudnnTensor4dDescriptor::<f32>::new(1,len as usize,1,1)?;
 
         unsafe {
             match cudnnDeriveBNTensorDescriptor(bn_scale_bias_diff_desc,*xd.id_c(),CUDNN_BATCHNORM_SPATIAL) {
@@ -583,12 +579,20 @@ impl<const N:usize> DeviceBatchNorm<f32,CachedTensor<f32,Arr<f32,N>>,CudaPtr<f32
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),len as usize * N)?;
 
         let be_scale_bias_diff_desc = API::create_tensor_descriptor()?;
-        let xd = TensorDescriptor::new(&[1,1,len,N as i32],
-                                           &[len * N as i32, len * N as i32, N as i32,1],
-                                           DataType::Float)?;
+        let xd = CudnnTensor4dDescriptor::<f32>::new(len as usize,N,1,1)?;
 
         unsafe {
-            cudnnDeriveBNTensorDescriptor(be_scale_bias_diff_desc, *xd.id_c(), CUDNN_BATCHNORM_SPATIAL);
+            match cudnnDeriveBNTensorDescriptor(be_scale_bias_diff_desc, *xd.id_c(), CUDNN_BATCHNORM_SPATIAL) {
+                cudnnStatus_t::CUDNN_STATUS_SUCCESS => (),
+                cudnnStatus_t::CUDNN_STATUS_BAD_PARAM => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::BadParam("The parameter passed to the vs is invalid.")));
+                },
+                status => {
+                    return Err(TrainingError::CudnnError(
+                        rcudnn::Error::Unknown("Unable to create the CUDA cuDNN context/resources.", status as i32 as u64)));
+                }
+            }
         }
 
         let eps = 1e-6;

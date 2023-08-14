@@ -46,7 +46,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             .zip(estimated_mean.par_iter())
             .zip(estimated_variance.par_iter())
             .map(|((((&i,&scale),&bias),&mean),&variance)| {
-                scale * ((i - mean) / (variance + eps)) + bias
+                scale * ((i - mean) / SqrtNode::new().forward(variance + eps)) + bias
             }).collect::<Vec<U>>().try_into()?)
     }
 

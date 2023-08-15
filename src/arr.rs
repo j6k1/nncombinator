@@ -440,7 +440,7 @@ impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: D
 impl<T,const N1:usize, const N2:usize, const N3:usize> Index<(usize,usize,usize)> for Arr3<T,N1,N2,N3> where T: Default {
     type Output = T;
 
-    fn index(&self, (y,x,z): (usize, usize, usize)) -> &Self::Output {
+    fn index(&self, (z,y,x): (usize, usize, usize)) -> &Self::Output {
         if z >= N1 {
             panic!("index out of bounds: the len is {} but the index is {}",N1,z);
         } else if y >= N2 {
@@ -500,7 +500,7 @@ impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> Index<(us
     where T: Default {
     type Output = T;
 
-    fn index(&self, (i,y,x,z): (usize, usize, usize, usize)) -> &Self::Output {
+    fn index(&self, (i,z,y,x): (usize, usize, usize, usize)) -> &Self::Output {
         if i >= N1 {
             panic!("index out of bounds: the len is {} but the index is {}",N1,i);
         } else if z >= N2 {
@@ -515,7 +515,7 @@ impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> Index<(us
 }
 impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> IndexMut<(usize,usize,usize,usize)> for Arr4<T,N1,N2,N3,N4>
     where T: Default {
-    fn index_mut(&mut self, (i,y,x,z): (usize, usize, usize, usize)) -> &mut Self::Output {
+    fn index_mut(&mut self, (i,z,y,x): (usize, usize, usize, usize)) -> &mut Self::Output {
         if i >= N1 {
             panic!("index out of bounds: the len is {} but the index is {}",N1,i);
         } else if z >= N2 {
@@ -531,7 +531,7 @@ impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> IndexMut<
 /// Implementation of an immutable view of a fixed-length 1D array
 #[derive(Debug,Eq,PartialEq)]
 pub struct ArrView<'a,T,const N:usize> {
-    arr:&'a [T]
+    pub(crate) arr:&'a [T]
 }
 impl<'a,T,const N:usize> Clone for ArrView<'a,T,N> where T: Default + Clone + Send {
     fn clone(&self) -> Self {
@@ -690,7 +690,7 @@ impl<'a,T,const N:usize> Neg for ArrView<'a,T,N>
 /// Implementation of an mutable view of a fixed-length 1D array
 #[derive(Debug,Eq,PartialEq)]
 pub struct ArrViewMut<'a,T,const N:usize> {
-    arr:&'a mut [T]
+    pub(crate) arr:&'a mut [T]
 }
 impl<'a,T,const N:usize> Deref for ArrViewMut<'a,T,N> {
     type Target = [T];

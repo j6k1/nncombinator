@@ -554,6 +554,17 @@ impl<'a,T,const N:usize> From<&'a Arr<T,N>> for ArrView<'a,T,N> where T: Default
         }
     }
 }
+impl<'a,T,const N:usize> TryFrom<&'a [T]> for ArrView<'a,T,N> where T: Default + Clone + Send {
+    type Error = SizeMismatchError;
+
+    fn try_from(arr: &'a [T]) -> Result<Self, Self::Error> {
+        if arr.len() != N {
+            Err(SizeMismatchError(arr.len(),N))
+        } else {
+            Ok(ArrView { arr: arr })
+        }
+    }
+}
 impl<'a,T,const N:usize> Add<T> for &'a ArrView<'a,T,N>
     where T: Add<Output=T> + Clone + Copy + Default + Send {
     type Output = Arr<T,N>;
@@ -708,6 +719,25 @@ impl<'a,T,const N:usize> AsRawSlice<T> for ArrView<'a,T,N> where T: Default + Cl
         &self.arr
     }
 }
+impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
+    type Error = SizeMismatchError;
+
+    fn try_from(arr: &'a mut [T]) -> Result<Self, Self::Error> {
+        if arr.len() != N {
+            Err(SizeMismatchError(arr.len(),N))
+        } else {
+            Ok(ArrViewMut { arr: arr })
+        }
+    }
+}
+/// Implementation of a immutable view of a fixed-length 2D array
+#[derive(Debug,Eq,PartialEq)]
+pub struct Arr2View<'a,T,const N:usize>(&'a [T]);
+impl<'a,T,const N:usize> Arr2View<'a,T,N> {
+    pub fn iter(&'a self) -> Arr2Iter<'a,T,N> {
+        Arr2Iter(&self.0)
+    }
+}
 /// Implementation of an immutable iterator for fixed-length 2D arrays
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr2Iter<'a,T,const N:usize>(&'a [T]);
@@ -740,6 +770,14 @@ impl<'a,T,const N:usize> AsRawSlice<T> for Arr2Iter<'a,T,N> {
         &self.0
     }
 }
+/// Implementation of a mutable view of a fixed-length 2D array
+#[derive(Debug,Eq,PartialEq)]
+pub struct Arr2ViewMut<'a,T,const N:usize>(&'a mut [T]);
+impl<'a,T,const N:usize> Arr2ViewMut<'a,T,N> {
+    pub fn iter_mut(&'a mut self) -> Arr2IterMut<'a,T,N> {
+        Arr2IterMut(&mut self.0)
+    }
+}
 /// Implementation of an mutable iterator for fixed-length 2D arrays
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr2IterMut<'a,T,const N:usize>(&'a mut [T]);
@@ -768,6 +806,15 @@ impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N> {
         }
     }
 }
+/// Implementation of a immutable view of a fixed-length 3D array
+#[derive(Debug,Eq,PartialEq)]
+pub struct Arr3View<'a,T,const N1:usize,const N2:usize>(&'a [T]);
+impl<'a,T,const N1:usize,const N2:usize> Arr3View<'a,T,N1,N2> {
+    pub fn iter(&'a self) -> Arr3Iter<'a,T,N1,N2> {
+        Arr3Iter(&self.0)
+    }
+}
+
 /// Implementation of an immutable iterator for fixed-length 3D arrays
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr3Iter<'a,T,const N1:usize,const N2:usize>(&'a [T]);
@@ -779,7 +826,7 @@ impl<'a,T,const N1:usize,const N2:usize> Arr3Iter<'a,T,N1,N2> {
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3Iter<'a,T,N1,N2> {
-    type Item = Arr2Iter<'a,T,N2>;
+    type Item = Arr2View<'a,T,N2>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let slice = std::mem::replace(&mut self.0, &mut []);
@@ -790,8 +837,16 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3Iter<'a,T,N1,N2> {
 
             self.0 = r;
 
-            Some(Arr2Iter(l))
+            Some(Arr2View(l))
         }
+    }
+}
+/// Implementation of a mutable view of a fixed-length 3D array
+#[derive(Debug,Eq,PartialEq)]
+pub struct Arr3ViewMut<'a,T,const N1:usize,const N2:usize>(&'a mut [T]);
+impl<'a,T,const N1:usize,const N2:usize> Arr3ViewMut<'a,T,N1,N2> {
+    pub fn iter_mut(&'a mut self) -> Arr3IterMut<'a,T,N1,N2> {
+        Arr3IterMut(&mut self.0)
     }
 }
 /// Implementation of an mutable iterator for fixed-length 3D arrays
@@ -805,7 +860,7 @@ impl<'a,T,const N1:usize,const N2:usize> Arr3IterMut<'a,T,N1,N2> {
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3IterMut<'a,T,N1,N2> {
-    type Item = Arr2IterMut<'a,T,N2>;
+    type Item = Arr2ViewMut<'a,T,N2>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let slice = std::mem::replace(&mut self.0, &mut []);
@@ -816,7 +871,7 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3IterMut<'a,T,N1,N2> {
 
             self.0 = r;
 
-            Some(Arr2IterMut(l))
+            Some(Arr2ViewMut(l))
         }
     }
 }
@@ -831,7 +886,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr4Iter<'a,T,N1,N2,N3> 
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4Iter<'a,T,N1,N2,N3> {
-    type Item = Arr3Iter<'a,T,N2,N3>;
+    type Item = Arr3View<'a,T,N2,N3>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let slice = std::mem::replace(&mut self.0, &mut []);
@@ -842,7 +897,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4Iter<'a
 
             self.0 = r;
 
-            Some(Arr3Iter(l))
+            Some(Arr3View(l))
         }
     }
 }
@@ -857,7 +912,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr4IterMut<'a,T,N1,N2,N
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4IterMut<'a,T,N1,N2,N3> {
-    type Item = Arr3IterMut<'a,T,N2,N3>;
+    type Item = Arr3ViewMut<'a,T,N2,N3>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let slice = std::mem::replace(&mut self.0, &mut []);
@@ -868,7 +923,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4IterMut
 
             self.0 = r;
 
-            Some(Arr3IterMut(l))
+            Some(Arr3ViewMut(l))
         }
     }
 }

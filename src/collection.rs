@@ -382,6 +382,15 @@ pub struct Image<T,const H:usize,const W:usize> where T: Default + Clone + Send 
     arr:Box<[T]>,
 }
 impl<T,const H:usize,const W:usize> Image<T,H,W> where T: Default + Clone + Send {
+    /// Create an instance of Image
+    pub fn new() -> Image<T,H,W> {
+        let mut arr = Vec::with_capacity(H * W);
+        arr.resize_with(H * W,Default::default);
+
+        Image {
+            arr:arr.into_boxed_slice()
+        }
+    }
     /// Obtaining a immutable iterator
     pub fn iter<'a>(&'a self) -> ImageView<'a,T,H,W> {
         ImageView{ arr: &*self.arr }

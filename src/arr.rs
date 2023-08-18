@@ -732,10 +732,17 @@ impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: De
 }
 /// Implementation of a immutable view of a fixed-length 2D array
 #[derive(Debug,Eq,PartialEq)]
-pub struct Arr2View<'a,T,const N:usize>(&'a [T]);
-impl<'a,T,const N:usize> Arr2View<'a,T,N> {
-    pub fn iter(&'a self) -> Arr2Iter<'a,T,N> {
-        Arr2Iter(&self.0)
+pub struct Arr2View<'a,T,const N1:usize,const N2:usize> {
+    arr:&'a [T]
+}
+impl<'a,T,const N1:usize,const N2:usize> Arr2View<'a,T,N1,N2> {
+    pub fn iter(&'a self) -> Arr2Iter<'a,T,N2> {
+        Arr2Iter(&self.arr)
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2View<'a,T,N1,N2> {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
     }
 }
 /// Implementation of an immutable iterator for fixed-length 2D arrays
@@ -772,10 +779,12 @@ impl<'a,T,const N:usize> AsRawSlice<T> for Arr2Iter<'a,T,N> {
 }
 /// Implementation of a mutable view of a fixed-length 2D array
 #[derive(Debug,Eq,PartialEq)]
-pub struct Arr2ViewMut<'a,T,const N:usize>(&'a mut [T]);
-impl<'a,T,const N:usize> Arr2ViewMut<'a,T,N> {
-    pub fn iter_mut(&'a mut self) -> Arr2IterMut<'a,T,N> {
-        Arr2IterMut(&mut self.0)
+pub struct Arr2ViewMut<'a,T,const N1:usize,const N2:usize> {
+    arr: &'a mut [T]
+}
+impl<'a,T,const N1:usize,const N2:usize> Arr2ViewMut<'a,T,N1,N2> {
+    pub fn iter_mut(&'a mut self) -> Arr2IterMut<'a,T,N2> {
+        Arr2IterMut(&mut self.arr)
     }
 }
 /// Implementation of an mutable iterator for fixed-length 2D arrays
@@ -808,10 +817,17 @@ impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N> {
 }
 /// Implementation of a immutable view of a fixed-length 3D array
 #[derive(Debug,Eq,PartialEq)]
-pub struct Arr3View<'a,T,const N1:usize,const N2:usize>(&'a [T]);
-impl<'a,T,const N1:usize,const N2:usize> Arr3View<'a,T,N1,N2> {
+pub struct Arr3View<'a,T,const N1:usize,const N2:usize,const N3:usize> {
+    arr: &'a [T]
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3View<'a,T,N1,N2,N3> {
     pub fn iter(&'a self) -> Arr3Iter<'a,T,N1,N2> {
-        Arr3Iter(&self.0)
+        Arr3Iter(&self.arr)
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3View<'a,T,N1,N2,N3> {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
     }
 }
 
@@ -826,7 +842,7 @@ impl<'a,T,const N1:usize,const N2:usize> Arr3Iter<'a,T,N1,N2> {
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3Iter<'a,T,N1,N2> {
-    type Item = Arr2View<'a,T,N2>;
+    type Item = Arr2View<'a,T,N1,N2>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let slice = std::mem::replace(&mut self.0, &mut []);
@@ -837,16 +853,20 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3Iter<'a,T,N1,N2> {
 
             self.0 = r;
 
-            Some(Arr2View(l))
+            Some(Arr2View {
+                arr: l
+            })
         }
     }
 }
 /// Implementation of a mutable view of a fixed-length 3D array
 #[derive(Debug,Eq,PartialEq)]
-pub struct Arr3ViewMut<'a,T,const N1:usize,const N2:usize>(&'a mut [T]);
-impl<'a,T,const N1:usize,const N2:usize> Arr3ViewMut<'a,T,N1,N2> {
+pub struct Arr3ViewMut<'a,T,const N1:usize,const N2:usize,const N3:usize> {
+    arr:&'a mut [T]
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3ViewMut<'a,T,N1,N2,N3> {
     pub fn iter_mut(&'a mut self) -> Arr3IterMut<'a,T,N1,N2> {
-        Arr3IterMut(&mut self.0)
+        Arr3IterMut(&mut self.arr)
     }
 }
 /// Implementation of an mutable iterator for fixed-length 3D arrays
@@ -860,7 +880,7 @@ impl<'a,T,const N1:usize,const N2:usize> Arr3IterMut<'a,T,N1,N2> {
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3IterMut<'a,T,N1,N2> {
-    type Item = Arr2ViewMut<'a,T,N2>;
+    type Item = Arr2ViewMut<'a,T,N1,N2>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let slice = std::mem::replace(&mut self.0, &mut []);
@@ -871,7 +891,9 @@ impl<'a,T,const N1:usize,const N2:usize> Iterator for Arr3IterMut<'a,T,N1,N2> {
 
             self.0 = r;
 
-            Some(Arr2ViewMut(l))
+            Some(Arr2ViewMut {
+                arr: l
+            })
         }
     }
 }
@@ -886,7 +908,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr4Iter<'a,T,N1,N2,N3> 
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4Iter<'a,T,N1,N2,N3> {
-    type Item = Arr3View<'a,T,N2,N3>;
+    type Item = Arr3View<'a,T,N1,N2,N3>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let slice = std::mem::replace(&mut self.0, &mut []);
@@ -897,7 +919,9 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4Iter<'a
 
             self.0 = r;
 
-            Some(Arr3View(l))
+            Some(Arr3View {
+                arr: l
+            })
         }
     }
 }
@@ -912,7 +936,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr4IterMut<'a,T,N1,N2,N
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4IterMut<'a,T,N1,N2,N3> {
-    type Item = Arr3ViewMut<'a,T,N2,N3>;
+    type Item = Arr3ViewMut<'a,T,N1,N2,N3>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let slice = std::mem::replace(&mut self.0, &mut []);
@@ -923,7 +947,9 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr4IterMut
 
             self.0 = r;
 
-            Some(Arr3ViewMut(l))
+            Some(Arr3ViewMut {
+                arr: l
+            })
         }
     }
 }
@@ -1430,7 +1456,7 @@ pub struct Arr2ParIter<'data,T,const N1:usize,const N2:usize>(&'data [T]);
 
 /// Implementation of plumbing::Producer for Arr2
 #[derive(Debug)]
-pub struct Arr2IterProducer<'data,T,const N1:usize,const N:usize>(&'data [T]);
+pub struct Arr2IterProducer<'data,T,const N1:usize,const N2:usize>(&'data [T]);
 
 impl<'data,T,const N1:usize, const N2:usize> Arr2IterProducer<'data,T,N1,N2> {
     /// Number of elements encompassed by the iterator element
@@ -1531,6 +1557,227 @@ impl<'data,T, const N1:usize, const N2:usize> IntoParallelRefIterator<'data> for
 
     fn par_iter(&'data self) -> Self::Iter {
         Arr2ParIter(&self.arr)
+    }
+}
+/// ParallelIterator implementation for Arr3
+#[derive(Debug)]
+pub struct Arr3ParIter<'data,T,const N1:usize,const N2:usize,const N3:usize>(&'data [T]);
+
+/// Implementation of plumbing::Producer for Arr3
+#[derive(Debug)]
+pub struct Arr3IterProducer<'data,T,const N1:usize,const N2:usize,const N3:usize>(&'data [T]);
+
+impl<'data,T,const N1:usize, const N2:usize, const N3:usize> Arr3IterProducer<'data,T,N1,N2,N3> {
+    /// Number of elements encompassed by the iterator element
+    const fn element_size(&self) -> usize {
+        N1 * N2
+    }
+}
+impl<'data,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr3IterProducer<'data,T,N1,N2,N3> {
+    type Item = Arr2View<'data,T,N2,N3>;
+
+    fn next(&mut self) -> Option<Arr2View<'data,T,N2,N3>> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+
+        if slice.is_empty() {
+            None
+        } else {
+            let (l,r) = slice.split_at(self.element_size());
+
+            self.0 = r;
+
+            Some(Arr2View {
+                arr: l
+            })
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (N1, Some(N1))
+    }
+}
+impl<'data,T,const N1:usize,const N2:usize,const N3:usize> std::iter::ExactSizeIterator for Arr3IterProducer<'data,T,N1,N2,N3> {
+    fn len(&self) -> usize {
+        N1
+    }
+}
+impl<'data,T,const N1:usize,const N2:usize,const N3:usize> std::iter::DoubleEndedIterator for Arr3IterProducer<'data,T,N1,N2,N3> {
+    fn next_back(&mut self) -> Option<Arr2View<'data,T,N2,N3>> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+
+        if slice.is_empty() {
+            None
+        } else {
+            let (l,r) = slice.split_at(self.0.len() - self.element_size());
+
+            self.0 = l;
+
+            Some(Arr2View {
+                arr:r
+            })
+        }
+    }
+}
+impl<'data, T: Send + Sync + 'static,const N1:usize,const N2:usize,const N3:usize> plumbing::Producer for Arr3IterProducer<'data,T,N1,N2,N3> {
+    type Item = Arr2View<'data,T,N2,N3>;
+    type IntoIter = Self;
+
+    fn into_iter(self) -> Self { self }
+
+    fn split_at(self, mid: usize) -> (Self, Self) {
+        let (l,r) = self.0.split_at(mid * N2 * N3);
+
+        (Arr3IterProducer(l),Arr3IterProducer(r))
+    }
+}
+impl<'data, T: Send + Sync + 'static,const N1: usize, const N2: usize, const N3:usize> ParallelIterator for Arr3ParIter<'data,T,N1,N2,N3> {
+    type Item = Arr2View<'data,T,N2,N3>;
+
+    fn opt_len(&self) -> Option<usize> { Some(IndexedParallelIterator::len(self)) }
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+        where
+            C: plumbing::UnindexedConsumer<Self::Item>,
+    {
+        self.drive(consumer)
+    }
+}
+impl<'data, T: Send + Sync + 'static, const N1: usize, const N2: usize, const N3:usize> IndexedParallelIterator for Arr3ParIter<'data,T,N1,N2,N3> {
+    fn len(&self) -> usize { N1 }
+
+    fn drive<C>(self, consumer: C) -> C::Result
+        where
+            C: plumbing::Consumer<Self::Item>,
+    {
+        plumbing::bridge(self, consumer)
+    }
+
+    fn with_producer<CB>(self, callback: CB) -> CB::Output
+        where
+            CB: plumbing::ProducerCallback<Self::Item>,
+    {
+        callback.callback(Arr3IterProducer::<T,N1,N2,N3>(&self.0))
+    }
+}
+impl<'data,T, const N1:usize, const N2:usize, const N3:usize> IntoParallelRefIterator<'data> for Arr3<T,N1,N2,N3>
+    where T: Send + Sync + 'static + Default {
+    type Iter = Arr3ParIter<'data,T,N1,N2,N3>;
+    type Item = Arr2View<'data,T,N2,N3>;
+
+    fn par_iter(&'data self) -> Self::Iter {
+        Arr3ParIter(&self.arr)
+    }
+}
+/// ParallelIterator implementation for Arr4
+#[derive(Debug)]
+pub struct Arr4ParIter<'data,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize>(&'data [T]);
+
+/// Implementation of plumbing::Producer for Arr4
+#[derive(Debug)]
+pub struct Arr4IterProducer<'data,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize>(&'data [T]);
+
+impl<'data,T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> Arr4IterProducer<'data,T,N1,N2,N3,N4> {
+    /// Number of elements encompassed by the iterator element
+    const fn element_size(&self) -> usize {
+        N1 * N2 * N3
+    }
+}
+impl<'data,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> Iterator for Arr4IterProducer<'data,T,N1,N2,N3,N4> {
+    type Item = Arr3View<'data,T,N2,N3,N4>;
+
+    fn next(&mut self) -> Option<Arr3View<'data,T,N2,N3,N4>> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+
+        if slice.is_empty() {
+            None
+        } else {
+            let (l,r) = slice.split_at(self.element_size());
+
+            self.0 = r;
+
+            Some(Arr3View {
+                arr: l
+            })
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (N1, Some(N1))
+    }
+}
+impl<'data,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> std::iter::ExactSizeIterator for Arr4IterProducer<'data,T,N1,N2,N3,N4> {
+    fn len(&self) -> usize {
+        N1
+    }
+}
+impl<'data,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> std::iter::DoubleEndedIterator for Arr4IterProducer<'data,T,N1,N2,N3,N4> {
+    fn next_back(&mut self) -> Option<Arr3View<'data,T,N2,N3,N4>> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+
+        if slice.is_empty() {
+            None
+        } else {
+            let (l,r) = slice.split_at(self.0.len() - self.element_size());
+
+            self.0 = l;
+
+            Some(Arr3View {
+                arr:r
+            })
+        }
+    }
+}
+impl<'data, T: Send + Sync + 'static,const N1:usize,const N2:usize,const N3:usize,const N4:usize> plumbing::Producer
+    for Arr4IterProducer<'data,T,N1,N2,N3,N4> {
+    type Item = Arr3View<'data,T,N2,N3,N4>;
+    type IntoIter = Self;
+
+    fn into_iter(self) -> Self { self }
+
+    fn split_at(self, mid: usize) -> (Self, Self) {
+        let (l,r) = self.0.split_at(mid * N2 * N3);
+
+        (Arr4IterProducer(l),Arr4IterProducer(r))
+    }
+}
+impl<'data, T: Send + Sync + 'static,const N1: usize, const N2: usize, const N3:usize,const N4:usize> ParallelIterator
+    for Arr4ParIter<'data,T,N1,N2,N3,N4> {
+    type Item = Arr3View<'data,T,N2,N3,N4>;
+
+    fn opt_len(&self) -> Option<usize> { Some(IndexedParallelIterator::len(self)) }
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+        where
+            C: plumbing::UnindexedConsumer<Self::Item>,
+    {
+        self.drive(consumer)
+    }
+}
+impl<'data, T: Send + Sync + 'static, const N1: usize, const N2: usize, const N3:usize, const N4:usize> IndexedParallelIterator
+    for Arr4ParIter<'data,T,N1,N2,N3,N4> {
+    fn len(&self) -> usize { N1 }
+
+    fn drive<C>(self, consumer: C) -> C::Result
+        where
+            C: plumbing::Consumer<Self::Item>,
+    {
+        plumbing::bridge(self, consumer)
+    }
+
+    fn with_producer<CB>(self, callback: CB) -> CB::Output
+        where
+            CB: plumbing::ProducerCallback<Self::Item>,
+    {
+        callback.callback(Arr4IterProducer::<T,N1,N2,N3,N4>(&self.0))
+    }
+}
+impl<'data,T, const N1:usize, const N2:usize, const N3:usize, const N4:usize> IntoParallelRefIterator<'data> for Arr4<T,N1,N2,N3,N4>
+    where T: Send + Sync + 'static + Default {
+    type Iter = Arr4ParIter<'data,T,N1,N2,N3,N4>;
+    type Item = Arr3View<'data,T,N2,N3,N4>;
+
+    fn par_iter(&'data self) -> Self::Iter {
+        Arr4ParIter(&self.arr)
     }
 }
 /// Implementation of ParallelIterator for VecArr

@@ -1559,6 +1559,15 @@ impl<'data,T, const N1:usize, const N2:usize> IntoParallelRefIterator<'data> for
         Arr2ParIter(&self.arr)
     }
 }
+impl<'data,T, const N1:usize, const N2:usize> IntoParallelRefIterator<'data> for Arr2View<'data,T,N1,N2>
+    where T: Send + Sync + 'static + Default {
+    type Iter = Arr2ParIter<'data,T,N1,N2>;
+    type Item = ArrView<'data,T,N2>;
+
+    fn par_iter(&'data self) -> Self::Iter {
+        Arr2ParIter(&self.arr)
+    }
+}
 /// ParallelIterator implementation for Arr3
 #[derive(Debug)]
 pub struct Arr3ParIter<'data,T,const N1:usize,const N2:usize,const N3:usize>(&'data [T]);
@@ -1660,6 +1669,15 @@ impl<'data, T: Send + Sync + 'static, const N1: usize, const N2: usize, const N3
     }
 }
 impl<'data,T, const N1:usize, const N2:usize, const N3:usize> IntoParallelRefIterator<'data> for Arr3<T,N1,N2,N3>
+    where T: Send + Sync + 'static + Default {
+    type Iter = Arr3ParIter<'data,T,N1,N2,N3>;
+    type Item = Arr2View<'data,T,N2,N3>;
+
+    fn par_iter(&'data self) -> Self::Iter {
+        Arr3ParIter(&self.arr)
+    }
+}
+impl<'data,T, const N1:usize, const N2:usize, const N3:usize> IntoParallelRefIterator<'data> for Arr3View<'data,T,N1,N2,N3>
     where T: Send + Sync + 'static + Default {
     type Iter = Arr3ParIter<'data,T,N1,N2,N3>;
     type Item = Arr2View<'data,T,N2,N3>;

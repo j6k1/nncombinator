@@ -463,6 +463,24 @@ impl<T,const N1:usize, const N2:usize, const N3:usize> IndexMut<(usize,usize,usi
         &mut self.arr[z * N2 * N3 + y * N3 + x]
     }
 }
+impl<T,const N1:usize, const N2: usize, const N3:usize> TryFrom<Vec<Arr2<T,N2,N3>>> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
+    type Error = SizeMismatchError;
+
+    fn try_from(v: Vec<Arr2<T,N2,N3>>) -> Result<Self, Self::Error> {
+        if v.len() != N1 {
+            Err(SizeMismatchError(v.len(),N1))
+        } else {
+            let mut buffer = Vec::with_capacity(N1 * N2 * N3);
+
+            for v in v.into_iter() {
+                buffer.extend_from_slice(&v.arr);
+            }
+            Ok(Arr3 {
+                arr: buffer.into_boxed_slice()
+            })
+        }
+    }
+}
 /// Fixed-length 4D array implementation
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr4<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> where T: Default {
@@ -526,6 +544,25 @@ impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> IndexMut<
             panic!("index out of bounds: the len is {} but the index is {}",N4,x);
         }
         &mut self.arr[i * N2 * N3 * N4 + z * N3 * N4 + y * N4 + x]
+    }
+}
+impl<T,const N1:usize, const N2: usize, const N3:usize, const N4:usize> TryFrom<Vec<Arr3<T,N2,N3,N4>>>
+    for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
+    type Error = SizeMismatchError;
+
+    fn try_from(v: Vec<Arr3<T,N2,N3,N4>>) -> Result<Self, Self::Error> {
+        if v.len() != N1 {
+            Err(SizeMismatchError(v.len(),N1))
+        } else {
+            let mut buffer = Vec::with_capacity(N1 * N2 * N3 * N4);
+
+            for v in v.into_iter() {
+                buffer.extend_from_slice(&v.arr);
+            }
+            Ok(Arr4 {
+                arr: buffer.into_boxed_slice()
+            })
+        }
     }
 }
 /// Implementation of an immutable view of a fixed-length 1D array

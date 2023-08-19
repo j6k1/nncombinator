@@ -1164,6 +1164,28 @@ impl<U,const N:usize> TryFrom<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + 
         }
     }
 }
+impl<U,const N:usize> TryFrom<Box<[U]>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Send {
+    type Error = SizeMismatchError;
+
+    fn try_from(arr: Box<[U]>) -> Result<Self, Self::Error> {
+        if arr.len() % N != 0 {
+            Err(SizeMismatchError(arr.len(),N))
+        } else {
+            let len = arr.len() / N;
+
+            Ok(VecArr {
+                arr: arr,
+                len: len,
+                t: PhantomData::<Arr<U, N>>
+            })
+        }
+    }
+}
+impl<U,const N:usize> From<VecArr<U,Arr<U,N>>> for Box<[U]> where U: Default + Clone + Send {
+    fn from(value: VecArr<U,Arr<U,N>>) -> Self {
+        value.arr
+    }
+}
 impl<'a,T,const N:usize> AsRawSlice<T> for VecArr<T,Arr<T,N>> where T: Default + Clone + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr

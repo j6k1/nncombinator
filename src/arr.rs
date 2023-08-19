@@ -70,6 +70,17 @@ impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Se
         }
     }
 }
+impl<'a,T,const N:usize> TryFrom<Box<[T]>> for Arr<T,N> where T: Default + Clone + Send {
+    type Error = SizeMismatchError;
+
+    fn try_from(arr: Box<[T]>) -> Result<Self, Self::Error> {
+        if arr.len() != N {
+            Err(SizeMismatchError(arr.len(),N))
+        } else {
+            Ok(Arr { arr: arr })
+        }
+    }
+}
 impl<'a,T,const N:usize> Add<T> for &'a Arr<T,N> where T: Add<Output=T> + Clone + Copy + Default + Send {
     type Output = Arr<T,N>;
 

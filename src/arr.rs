@@ -1181,8 +1181,8 @@ impl<U,const N:usize> TryFrom<Box<[U]>> for VecArr<U,Arr<U,N>> where U: Default 
         }
     }
 }
-impl<U,T> From<VecArr<U,T>> for Box<[U]> where U: Default + Clone + Send {
-    fn from(value: VecArr<U,T>) -> Self {
+impl<U,const N:usize> From<VecArr<U,Arr<U,N>>> for Box<[U]> where U: Default + Clone + Send {
+    fn from(value: VecArr<U,Arr<U,N>>) -> Self {
         value.arr
     }
 }

@@ -11,7 +11,11 @@ use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::Sum;
 
 pub trait SliceSize {
-    fn slice_size() -> usize;
+    const SIZE: usize;
+
+    fn slice_size() -> usize {
+        Self::SIZE
+    }
 }
 /// Fixed-length one-dimensional array implementation
 #[derive(Debug,Eq,PartialEq)]
@@ -108,10 +112,7 @@ impl<T,const N:usize> From<Arr<T,N>> for Box<[T]> where T: Default + Clone + Sen
     }
 }
 impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Send {
-    #[inline]
-    fn slice_size() -> usize {
-        N
-    }
+    const SIZE: usize = N;
 }
 impl<'a,T,const N:usize> Add<T> for &'a Arr<T,N> where T: Add<Output=T> + Clone + Copy + Default + Send {
     type Output = Arr<T,N>;
@@ -448,10 +449,7 @@ impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2
     }
 }
 impl<T,const N1:usize,const N2:usize> SliceSize for Arr2<T,N1,N2> where T: Default + Clone + Send {
-    #[inline]
-    fn slice_size() -> usize {
-        N1 * N2
-    }
+    const SIZE: usize = N1 * N2;
 }
 /// Fixed-length 3D array implementation
 #[derive(Debug,Eq,PartialEq)]
@@ -532,10 +530,7 @@ impl<T,const N1:usize, const N2: usize, const N3:usize> TryFrom<Vec<Arr2<T,N2,N3
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3<T,N1,N2,N3>
     where T: Default + Clone + Send {
-    #[inline]
-    fn slice_size() -> usize {
-        N1 * N2 * N3
-    }
+    const SIZE: usize = N1 * N2 * N3;
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
     fn as_raw_slice(&self) -> &[T] {
@@ -633,10 +628,7 @@ impl<T,const N1:usize, const N2: usize, const N3:usize, const N4:usize> TryFrom<
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> SliceSize for Arr4<T,N1,N2,N3,N4>
     where T: Default + Clone + Send {
-    #[inline]
-    fn slice_size() -> usize {
-        N1 * N2 * N3 * N4
-    }
+    const SIZE: usize = N1 * N2 * N3 * N4;
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawSlice<T> for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
     fn as_raw_slice(&self) -> &[T] {
@@ -691,10 +683,7 @@ impl<'a,T,const N:usize> AsRawSlice<T> for ArrView<'a,T,N> where T: Default + Cl
     }
 }
 impl<'a,T,const N:usize> SliceSize for ArrView<'a,T,N> where T: Default + Clone + Send {
-    #[inline]
-    fn slice_size() -> usize {
-        N
-    }
+    const SIZE: usize = N;
 }
 impl<'a,T,const N:usize> Add<T> for &'a ArrView<'a,T,N>
     where T: Add<Output=T> + Clone + Copy + Default + Send {
@@ -857,10 +846,7 @@ impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: De
     }
 }
 impl<'a,T,const N:usize> SliceSize for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
-    #[inline]
-    fn slice_size() -> usize {
-        N
-    }
+    const SIZE: usize = N;
 }
 impl<'a,T,const N:usize> AsRawSlice<T> for ArrViewMut<'a,T,N> where T: Default + Clone {
     fn as_raw_slice(&self) -> &[T] {
@@ -888,10 +874,7 @@ impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2View<'a,T,N1,N2> 
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> SliceSize for Arr2View<'a,T,N1,N2> where T: Default + Clone + Send {
-    #[inline]
-    fn slice_size() -> usize {
-        N1 * N2
-    }
+    const SIZE: usize = N1 * N2;
 }
 /// Implementation of an immutable iterator for fixed-length 2D arrays
 #[derive(Debug,Eq,PartialEq)]
@@ -936,10 +919,7 @@ impl<'a,T,const N1:usize,const N2:usize> Arr2ViewMut<'a,T,N1,N2> {
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> SliceSize for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Send {
-    #[inline]
-    fn slice_size() -> usize {
-        N1 * N2
-    }
+    const SIZE: usize = N1 * N2;
 }
 impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone {
     fn as_raw_slice(&self) -> &[T] {
@@ -995,10 +975,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3Vi
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3View<'a,T,N1,N2,N3> where T: Default + Clone + Send {
-    #[inline]
-    fn slice_size() -> usize {
-        N1 * N2 * N3
-    }
+    const SIZE: usize = N1 * N2 * N3;
 }
 /// Implementation of an immutable iterator for fixed-length 3D arrays
 #[derive(Debug,Eq,PartialEq)]
@@ -1049,10 +1026,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for 
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Send {
-    #[inline]
-    fn slice_size() -> usize {
-        N1 * N2 * N3
-    }
+    const SIZE: usize = N1 * N2 * N3;
 }
 /// Implementation of an mutable iterator for fixed-length 3D arrays
 #[derive(Debug,Eq,PartialEq)]

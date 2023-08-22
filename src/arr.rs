@@ -47,6 +47,24 @@ impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
         }
     }
 }
+impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + Send + 'a {
+    type ViewType = ArrView<'a,T,N>;
+
+    fn make_view(arr: &'a [T]) -> Self::ViewType {
+        ArrView {
+            arr: arr
+        }
+    }
+}
+impl<'a,T,const N:usize> MakeViewMut<'a,T> for Arr<T,N> where T: Default + Clone + Send + 'a {
+    type ViewType = ArrView<'a,T,N>;
+
+    fn make_view_mut(arr: &'a mut [T]) -> Self::ViewType {
+        ArrView {
+            arr: arr
+        }
+    }
+}
 impl<'data,U,const N:usize> From<ArrView<'data,U,N>> for Arr<U,N> where U: Default + Clone + Copy + Send {
     fn from(view: ArrView<'data,U, N>) -> Self {
         let mut v = Vec::new();
@@ -1193,6 +1211,7 @@ impl<T,const N:usize> Div<T> for DiffArr<T,N>
 pub struct VecArr<U,T> {
     arr:Box<[U]>,
     len:usize,
+    u:PhantomData<U>,
     t:PhantomData<T>
 }
 impl<U,T> VecArr<U,T> where U: Default + Clone + Copy + Send {
@@ -1201,46 +1220,60 @@ impl<U,T> VecArr<U,T> where U: Default + Clone + Copy + Send {
         self.len
     }
 }
-impl<U,const N:usize> VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
+impl<U,T> VecArr<U,T>
+    where U: Default + Clone + Copy + Send,
+          for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
     /// Create a VecArr instance of the specified size
     /// # Arguments
     /// * `size`- Size to be secured
-    pub fn with_size(size:usize) -> VecArr<U,Arr<U,N>> {
-        let mut arr = Vec::with_capacity(N * size);
+    pub fn with_size(size:usize) -> VecArr<U,T> {
+        let mut arr = Vec::with_capacity(T::slice_size() * size);
 
-        arr.resize_with(N * size,Default::default);
+        arr.resize_with(T::slice_size() * size,Default::default);
 
         VecArr {
             arr:arr.into_boxed_slice(),
             len:size,
-            t:PhantomData::<Arr<U,N>>
+            u:PhantomData::<U>,
+            t:PhantomData::<T>
         }
     }
 
     /// Obtaining a immutable iterator
-    pub fn iter(&self) -> VecArrIter<U,N> {
-        VecArrIter(&*self.arr)
+    pub fn iter(&self) -> VecArrIter<U,T> {
+        VecArrIter {
+            arr:&*self.arr,
+            t:PhantomData::<T>,
+            u:PhantomData::<U>
+        }
     }
 
     /// Obtaining a mutable iterator
-    pub fn iter_mut(&mut self) -> VecArrIterMut<U,N> {
-        VecArrIterMut(&mut *self.arr)
+    pub fn iter_mut(&mut self) -> VecArrIterMut<U,T> {
+        VecArrIterMut {
+            arr:&mut self.arr,
+            t:PhantomData::<T>,
+            u:PhantomData::<U>
+        }
     }
 }
-impl<U,const N:usize> From<Vec<Arr<U,N>>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
-    fn from(items: Vec<Arr<U, N>>) -> Self {
+impl<U,T> From<Vec<T>> for VecArr<U,T>
+    where U: Default + Clone + Copy + Send,
+          T: SliceSize + AsRawSlice<U> {
+    fn from(items: Vec<T>) -> Self {
         let len = items.len();
 
-        let mut buffer = Vec::with_capacity(len * N);
+        let mut buffer = Vec::with_capacity(len * T::slice_size());
 
         for item in items.into_iter() {
-            buffer.extend_from_slice(&item);
+            buffer.extend_from_slice(item.as_raw_slice());
         }
 
         VecArr {
             arr:buffer.into_boxed_slice(),
             len:len,
-            t:PhantomData::<Arr<U,N>>
+            u:PhantomData::<U>,
+            t:PhantomData::<T>
         }
     }
 }
@@ -1257,6 +1290,7 @@ impl<'data,U,const N:usize> From<Vec<ArrView<'data,U,N>>> for VecArr<U,Arr<U,N>>
         VecArr {
             arr:buffer.into_boxed_slice(),
             len:len,
+            u:PhantomData::<U>,
             t:PhantomData::<Arr<U,N>>
         }
     }
@@ -1273,6 +1307,7 @@ impl<U,const N:usize> TryFrom<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + 
             Ok(VecArr {
                 arr: items.into_boxed_slice(),
                 len: len,
+                u:PhantomData::<U>,
                 t: PhantomData::<Arr<U, N>>
             })
         }
@@ -1290,6 +1325,7 @@ impl<U,const N:usize> TryFrom<Box<[U]>> for VecArr<U,Arr<U,N>> where U: Default 
             Ok(VecArr {
                 arr: arr,
                 len: len,
+                u:PhantomData::<U>,
                 t: PhantomData::<Arr<U, N>>
             })
         }
@@ -1546,60 +1582,76 @@ impl<U,const N:usize> Sum for VecArr<U,Arr<U,N>>
         }).reduce(|| Arr::new(), |acc,r| &acc + &r)
     }
 }
+pub trait MakeView<'a,T> {
+    type ViewType;
+
+    fn make_view(arr:&'a [T]) -> Self::ViewType;
+}
+pub trait MakeViewMut<'a,T> {
+    type ViewType;
+
+    fn make_view_mut(arr:&'a mut [T]) -> Self::ViewType;
+}
 /// VecArr's Immutable Iterator
 #[derive(Debug,Eq,PartialEq)]
-pub struct VecArrIter<'a,T,const N:usize>(&'a [T]);
+pub struct VecArrIter<'a,U,T> where T: SliceSize + MakeView<'a,U> {
+    arr: &'a [U],
+    t:PhantomData<T>,
+    u:PhantomData<U>
+}
 
-impl<'a,T,const N:usize> VecArrIter<'a,T,N> {
+impl<'a,U,T> VecArrIter<'a,U,T> where T: SliceSize + MakeView<'a,U> {
     /// Number of elements encompassed by the iterator element
-    const fn element_size(&self) -> usize {
-        N
+    #[inline]
+    fn element_size(&self) -> usize {
+        T::slice_size()
     }
 }
-impl<'a,T,const N:usize> Iterator for VecArrIter<'a,T,N> {
-    type Item = ArrView<'a,T,N>;
+impl<'a,U,T> Iterator for VecArrIter<'a,U,T> where T: SliceSize + MakeView<'a,U> {
+    type Item = <T as MakeView<'a,U>>::ViewType;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let slice = std::mem::replace(&mut self.0, &mut []);
+        let slice = std::mem::replace(&mut self.arr, &mut []);
         if slice.is_empty() {
             None
         } else {
             let (l,r) = slice.split_at(self.element_size());
 
-            self.0 = r;
+            self.arr = r;
 
-            Some(ArrView {
-                arr:l
-            })
+            Some(T::make_view(l))
         }
     }
 }
 
 /// VecArr's mutable Iterator
 #[derive(Debug,Eq,PartialEq)]
-pub struct VecArrIterMut<'a,T,const N:usize>(&'a mut [T]);
+pub struct VecArrIterMut<'a,U,T> where T: SliceSize + MakeViewMut<'a,U> {
+    arr: &'a mut [U],
+    t:PhantomData<T>,
+    u:PhantomData<U>
+}
 
-impl<'a,T,const N:usize> VecArrIterMut<'a,T,N> {
+impl<'a,U,T> VecArrIterMut<'a,U,T> where T: SliceSize + MakeViewMut<'a,U> {
     /// Number of elements encompassed by the iterator element
-    const fn element_size(&self) -> usize {
-        N
+    #[inline]
+    fn element_size(&self) -> usize {
+        T::slice_size()
     }
 }
-impl<'a,T,const N:usize> Iterator for VecArrIterMut<'a,T,N> {
-    type Item = ArrViewMut<'a,T,N>;
+impl<'a,U,T> Iterator for VecArrIterMut<'a,U,T> where T: SliceSize + MakeViewMut<'a,U> {
+    type Item = <T as MakeViewMut<'a,U>>::ViewType;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let slice = std::mem::replace(&mut self.0, &mut []);
+        let slice = std::mem::replace(&mut self.arr, &mut []);
         if slice.is_empty() {
             None
         } else {
             let (l,r) = slice.split_at_mut(self.element_size());
 
-            self.0 = r;
+            self.arr = r;
 
-            Some(ArrViewMut {
-                arr:l
-            })
+            Some(T::make_view_mut(l))
         }
     }
 }

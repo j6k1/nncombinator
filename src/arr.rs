@@ -10,6 +10,9 @@ use crate::error::{IndexOutBoundError, SizeMismatchError};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::Sum;
 
+pub trait SliceSize {
+    fn slice_size() -> usize;
+}
 /// Fixed-length one-dimensional array implementation
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr<T,const N:usize> where T: Default + Clone + Send {
@@ -84,6 +87,12 @@ impl<T,const N:usize> TryFrom<Box<[T]>> for Arr<T,N> where T: Default + Clone + 
 impl<T,const N:usize> From<Arr<T,N>> for Box<[T]> where T: Default + Clone + Send {
     fn from(value: Arr<T,N>) -> Self {
         value.arr
+    }
+}
+impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Send {
+    #[inline]
+    fn slice_size() -> usize {
+        N
     }
 }
 impl<'a,T,const N:usize> Add<T> for &'a Arr<T,N> where T: Add<Output=T> + Clone + Copy + Default + Send {
@@ -420,6 +429,12 @@ impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2
         }
     }
 }
+impl<T,const N1:usize,const N2:usize> SliceSize for Arr2<T,N1,N2> where T: Default + Clone + Send {
+    #[inline]
+    fn slice_size() -> usize {
+        N1 * N2
+    }
+}
 /// Fixed-length 3D array implementation
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr3<T,const N1:usize, const N2:usize, const N3:usize> where T: Default {
@@ -495,6 +510,23 @@ impl<T,const N1:usize, const N2: usize, const N3:usize> TryFrom<Vec<Arr2<T,N2,N3
                 arr: buffer.into_boxed_slice()
             })
         }
+    }
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3<T,N1,N2,N3>
+    where T: Default + Clone + Send {
+    #[inline]
+    fn slice_size() -> usize {
+        N1 * N2 * N3
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
+    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
+        &mut self.arr
     }
 }
 /// Fixed-length 4D array implementation
@@ -581,6 +613,23 @@ impl<T,const N1:usize, const N2: usize, const N3:usize, const N4:usize> TryFrom<
         }
     }
 }
+impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> SliceSize for Arr4<T,N1,N2,N3,N4>
+    where T: Default + Clone + Send {
+    #[inline]
+    fn slice_size() -> usize {
+        N1 * N2 * N3 * N4
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawSlice<T> for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawMutSlice<'a,T> for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
+    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
+        &mut self.arr
+    }
+}
 /// Implementation of an immutable view of a fixed-length 1D array
 #[derive(Debug,Eq,PartialEq)]
 pub struct ArrView<'a,T,const N:usize> {
@@ -616,6 +665,17 @@ impl<'a,T,const N:usize> TryFrom<&'a [T]> for ArrView<'a,T,N> where T: Default +
         } else {
             Ok(ArrView { arr: arr })
         }
+    }
+}
+impl<'a,T,const N:usize> AsRawSlice<T> for ArrView<'a,T,N> where T: Default + Clone {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
+}
+impl<'a,T,const N:usize> SliceSize for ArrView<'a,T,N> where T: Default + Clone + Send {
+    #[inline]
+    fn slice_size() -> usize {
+        N
     }
 }
 impl<'a,T,const N:usize> Add<T> for &'a ArrView<'a,T,N>
@@ -767,11 +827,6 @@ impl<'a,T,const N:usize> DerefMut for ArrViewMut<'a,T,N> {
         self.arr
     }
 }
-impl<'a,T,const N:usize> AsRawSlice<T> for ArrView<'a,T,N> where T: Default + Clone {
-    fn as_raw_slice(&self) -> &[T] {
-        &self.arr
-    }
-}
 impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
     type Error = SizeMismatchError;
 
@@ -781,6 +836,22 @@ impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: De
         } else {
             Ok(ArrViewMut { arr: arr })
         }
+    }
+}
+impl<'a,T,const N:usize> SliceSize for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
+    #[inline]
+    fn slice_size() -> usize {
+        N
+    }
+}
+impl<'a,T,const N:usize> AsRawSlice<T> for ArrViewMut<'a,T,N> where T: Default + Clone {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
+}
+impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
+    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
+        &mut self.arr
     }
 }
 /// Implementation of a immutable view of a fixed-length 2D array
@@ -796,6 +867,12 @@ impl<'a,T,const N1:usize,const N2:usize> Arr2View<'a,T,N1,N2> {
 impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2View<'a,T,N1,N2> {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> SliceSize for Arr2View<'a,T,N1,N2> where T: Default + Clone + Send {
+    #[inline]
+    fn slice_size() -> usize {
+        N1 * N2
     }
 }
 /// Implementation of an immutable iterator for fixed-length 2D arrays
@@ -838,6 +915,22 @@ pub struct Arr2ViewMut<'a,T,const N1:usize,const N2:usize> {
 impl<'a,T,const N1:usize,const N2:usize> Arr2ViewMut<'a,T,N1,N2> {
     pub fn iter_mut(&'a mut self) -> Arr2IterMut<'a,T,N2> {
         Arr2IterMut(&mut self.arr)
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> SliceSize for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Send {
+    #[inline]
+    fn slice_size() -> usize {
+        N1 * N2
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> AsRawMutSlice<'a,T> for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Send {
+    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
+        &mut self.arr
     }
 }
 /// Implementation of an mutable iterator for fixed-length 2D arrays
@@ -883,7 +976,12 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3Vi
         &self.arr
     }
 }
-
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3View<'a,T,N1,N2,N3> where T: Default + Clone + Send {
+    #[inline]
+    fn slice_size() -> usize {
+        N1 * N2 * N3
+    }
+}
 /// Implementation of an immutable iterator for fixed-length 3D arrays
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr3Iter<'a,T,const N1:usize,const N2:usize>(&'a [T]);
@@ -920,6 +1018,22 @@ pub struct Arr3ViewMut<'a,T,const N1:usize,const N2:usize,const N3:usize> {
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3ViewMut<'a,T,N1,N2,N3> {
     pub fn iter_mut(&'a mut self) -> Arr3IterMut<'a,T,N1,N2> {
         Arr3IterMut(&mut self.arr)
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3ViewMut<'a,T,N1,N2,N3> {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Send {
+    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
+        &mut self.arr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Send {
+    #[inline]
+    fn slice_size() -> usize {
+        N1 * N2 * N3
     }
 }
 /// Implementation of an mutable iterator for fixed-length 3D arrays

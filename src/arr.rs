@@ -51,7 +51,7 @@ impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
         }
     }
 }
-impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + Send + 'a {
+impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
     type ViewType = ArrView<'a,T,N>;
 
     fn make_view(arr: &'a [T]) -> Self::ViewType {
@@ -60,7 +60,7 @@ impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + 
         }
     }
 }
-impl<'a,T,const N:usize> MakeViewMut<'a,T> for Arr<T,N> where T: Default + Clone + Send + 'a {
+impl<'a,T,const N:usize> MakeViewMut<'a,T> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
     type ViewType = ArrView<'a,T,N>;
 
     fn make_view_mut(arr: &'a mut [T]) -> Self::ViewType {
@@ -1557,12 +1557,12 @@ impl<U,const N:usize> Sum for VecArr<U,Arr<U,N>>
     }
 }
 pub trait MakeView<'a,T> {
-    type ViewType;
+    type ViewType: Send + Sync + 'a;
 
     fn make_view(arr:&'a [T]) -> Self::ViewType;
 }
 pub trait MakeViewMut<'a,T> {
-    type ViewType;
+    type ViewType: Send + Sync + 'a;
 
     fn make_view_mut(arr:&'a mut [T]) -> Self::ViewType;
 }
@@ -2029,16 +2029,21 @@ pub struct VecArrIterProducer<'data,C,T> {
     len: usize
 }
 
-impl<'data,T,const N:usize> VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+impl<'data,C,T> VecArrIterProducer<'data,C,T>
+    where T: Default + Clone + Send,
+          C: SliceSize + MakeView<'data,T> + Send {
+    #[inline]
     /// Number of elements encompassed by the iterator element
     fn element_size(&self) -> usize {
-        N
+        C::slice_size()
     }
 }
-impl<'data,T,const N:usize> Iterator for VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
-    type Item = ArrView<'data,T,N>;
+impl<'data,C,T> Iterator for VecArrIterProducer<'data,C,T>
+    where T: Default + Clone + Send,
+          C: SliceSize + MakeView<'data,T> + Send {
+    type Item = <C as MakeView<'data,T>>::ViewType;
 
-    fn next(&mut self) -> Option<ArrView<'data,T,N>> {
+    fn next(&mut self) -> Option<Self::Item> {
         let slice = std::mem::replace(&mut self.arr, &mut []);
 
         if slice.is_empty() {
@@ -2048,9 +2053,7 @@ impl<'data,T,const N:usize> Iterator for VecArrIterProducer<'data,Arr<T,N>,T> wh
 
             self.arr = r;
 
-            Some(ArrView {
-                arr:l
-            })
+            Some(C::make_view(l))
         }
     }
 
@@ -2058,13 +2061,17 @@ impl<'data,T,const N:usize> Iterator for VecArrIterProducer<'data,Arr<T,N>,T> wh
         ({self.len}, Some(self.len))
     }
 }
-impl<'data,T,const N:usize> std::iter::ExactSizeIterator for VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+impl<'data,C,T> std::iter::ExactSizeIterator for VecArrIterProducer<'data,C,T>
+    where T: Default + Clone + Send,
+          C: SliceSize + MakeView<'data,T> + Send {
     fn len(&self) -> usize {
         self.len
     }
 }
-impl<'data,T,const N:usize> std::iter::DoubleEndedIterator for VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
-    fn next_back(&mut self) -> Option<ArrView<'data,T,N>> {
+impl<'data,C,T> std::iter::DoubleEndedIterator for VecArrIterProducer<'data,C,T>
+    where T: Default + Clone + Send,
+          C: SliceSize + MakeView<'data,T> + Send {
+    fn next_back(&mut self) -> Option<Self::Item> {
         let slice = std::mem::replace(&mut self.arr, &mut []);
 
         if slice.is_empty() {
@@ -2074,50 +2081,54 @@ impl<'data,T,const N:usize> std::iter::DoubleEndedIterator for VecArrIterProduce
 
             self.arr = l;
 
-            Some(ArrView {
-                arr:r
-            })
+            Some(C::make_view(r))
         }
     }
 }
-impl<'data, T: Send + Sync + 'static,const N:usize> plumbing::Producer for VecArrIterProducer<'data,Arr<T,N>,T> where T: Default + Clone + Send {
-    type Item = ArrView<'data,T,N>;
+impl<'data, C, T> plumbing::Producer for VecArrIterProducer<'data,C,T>
+    where T: Default + Clone + Send + Sync + 'static,
+          C: SliceSize + MakeView<'data,T> + Send {
+    type Item = <C as MakeView<'data,T>>::ViewType;
     type IntoIter = Self;
 
     fn into_iter(self) -> Self { self }
 
     fn split_at(self, mid: usize) -> (Self, Self) {
-        let (l,r) = self.arr.split_at(mid * N);
+        let (l,r) = self.arr.split_at(mid * self.element_size());
 
         (VecArrIterProducer {
             arr: l,
-            t:PhantomData::<Arr<T,N>>,
+            t:PhantomData::<C>,
             len:self.len
         },VecArrIterProducer {
             arr: r,
-            t:PhantomData::<Arr<T,N>>,
+            t:PhantomData::<C>,
             len:self.len
         })
     }
 }
-impl<'data, T: Send + Sync + 'static,const N:usize> ParallelIterator for VecArrParIter<'data,Arr<T,N>,T> where T: Default + Clone + Send {
-    type Item = ArrView<'data,T,N>;
+impl<'data, C, T> ParallelIterator for VecArrParIter<'data,C,T>
+    where T: Default + Clone + Send + Sync + 'static,
+          C: SliceSize + MakeView<'data,T> + Send {
+    type Item = <C as MakeView<'data,T>>::ViewType;
 
     fn opt_len(&self) -> Option<usize> { Some(IndexedParallelIterator::len(self)) }
 
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    fn drive_unindexed<CS>(self, consumer: CS) -> CS::Result
         where
-            C: plumbing::UnindexedConsumer<Self::Item>,
+            CS: plumbing::UnindexedConsumer<Self::Item>,
     {
         self.drive(consumer)
     }
 }
-impl<'data, T: Send + Sync + 'static, const N:usize> IndexedParallelIterator for VecArrParIter<'data,Arr<T,N>,T> where T: Default + Clone + Send {
+impl<'data, C, T> IndexedParallelIterator for VecArrParIter<'data,C,T>
+    where T: Default + Clone + Send + Sync + 'static,
+          C: SliceSize + MakeView<'data,T> + Send {
     fn len(&self) -> usize { self.len }
 
-    fn drive<C>(self, consumer: C) -> C::Result
+    fn drive<CS>(self, consumer: CS) -> CS::Result
         where
-            C: plumbing::Consumer<Self::Item>,
+            CS: plumbing::Consumer<Self::Item>,
     {
         plumbing::bridge(self, consumer)
     }
@@ -2126,35 +2137,37 @@ impl<'data, T: Send + Sync + 'static, const N:usize> IndexedParallelIterator for
         where
             CB: plumbing::ProducerCallback<Self::Item>,
     {
-        callback.callback(VecArrIterProducer::<'data,Arr<T,N>,T> {
+        callback.callback(VecArrIterProducer::<'data,C,T> {
             arr:&self.arr,
-            t:PhantomData::<Arr<T,N>>,
+            t:PhantomData::<C>,
             len: self.len
         })
     }
 }
-impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for VecArr<T,Arr<T,N>>
-    where T: Default + Clone + Copy + Send + Sync + 'static {
-    type Iter = VecArrParIter<'data,Arr<T,N>,T>;
-    type Item = ArrView<'data,T,N>;
+impl<'data,C,T> IntoParallelRefIterator<'data> for VecArr<T,C>
+    where T: Default + Clone + Copy + Send + Sync + 'static,
+          C: SliceSize + MakeView<'data,T> + Send {
+    type Iter = VecArrParIter<'data,C,T>;
+    type Item = <C as MakeView<'data,T>>::ViewType;
 
     fn par_iter(&'data self) -> Self::Iter {
         VecArrParIter {
             arr: &self.arr,
-            t:PhantomData::<Arr<T,N>>,
+            t:PhantomData::<C>,
             len: self.len
         }
     }
 }
-impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for &'data VecArr<T,Arr<T,N>>
-    where T: Default + Clone + Copy + Send + Sync + 'static {
-    type Iter = VecArrParIter<'data,Arr<T,N>,T>;
-    type Item = ArrView<'data,T,N>;
+impl<'data,C,T> IntoParallelRefIterator<'data> for &'data VecArr<T,C>
+    where T: Default + Clone + Copy + Send + Sync + 'static,
+          C: SliceSize + MakeView<'data,T> + Send {
+    type Iter = VecArrParIter<'data,C,T>;
+    type Item = <C as MakeView<'data,T>>::ViewType;
 
     fn par_iter(&'data self) -> Self::Iter {
         VecArrParIter {
             arr: &self.arr,
-            t:PhantomData::<Arr<T,N>>,
+            t:PhantomData::<C>,
             len: self.len
         }
     }

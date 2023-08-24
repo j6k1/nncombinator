@@ -18,17 +18,96 @@ use crate::ope::UnitValue;
 /// Features defining the implementation of the various computational processes in the batch normalization layer
 pub trait DeviceBatchNorm<U,C,T,const N:usize>
     where U: UnitValue<U> {
+    /// Forward propagation calculation
+    /// # Arguments
+    /// * `input` - input
+    /// * `scale` - γ
+    /// * `bias` - β
+    /// * `estimated_mean` - μΒ
+    /// * `estimated_variance` - σΒ
+    ///
+    /// output = γ * ((input - μΒ) / sqrt(σ^2Β + 1e-6)) + β
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
     fn forward_batch_norm(&self, input: &Arr<U,N>, scale: &C, bias: &C,
                           estimated_mean: &C, estimated_variance: &C) -> Result<Arr<U,N>,EvaluateError>;
+    /// Forward propagation calculation (implemented in training mode)
+    /// # Arguments
+    /// * `input` - input
+    /// * `scale` - γ
+    /// * `bias` - β
+    /// * `estimated_mean` - μΒ
+    /// * `estimated_variance` - σΒ
+    ///
+    /// output = (γ * ((input - μΒ) / sqrt(σ^2Β + 1e-6)) + β,μΒ,1 / (σΒ + 1e-6))
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
     fn forward_batch_norm_train(&self, input: &Arr<U,N>, scale: &C, bias: &C,
                                 estimated_mean: &C, estimated_variance: &C) -> Result<(Arr<U,N>,T,T),EvaluateError>;
+    /// Forward propagation calculation in batch
+    /// # Arguments
+    /// * `input` - input
+    /// * `scale` - γ
+    /// * `bias` - β
+    /// * `estimated_mean` - μΒ
+    /// * `estimated_variance` - σΒ
+    ///
+    /// output = γ * ((input - μΒ) / sqrt(σ^2Β + 1e-6)) + β
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
     fn batch_forward_batch_norm(&self, input: &VecArr<U,Arr<U,N>>, scale: &C , bias: &C,
                                 estimated_mean: &C, estimated_variance: &C) -> Result<VecArr<U,Arr<U,N>>,EvaluateError>;
+    /// Forward propagation calculation in batch (implemented in training mode)
+    /// # Arguments
+    /// * `input` - input
+    /// * `scale` - γ
+    /// * `bias` - β
+    /// * `running_mean` - μΒ
+    /// * `running_variance` - σΒ
+    ///
+    /// running_mean = running_mean * momentum + (1 - momentum) * μΒ
+    /// running_variance = running_variance * momentum + (1 - momentum) * μΒ
+    ///
+    /// output = (γ * ((input - μΒ) / sqrt(σ^2Β + 1e-6)) + β,,μΒ,1 / (σΒ + 1e-6),running_mean,running_variance)
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
     fn batch_forward_batch_norm_train(&self, input: &VecArr<U,Arr<U,N>>, scale: &C, bias: &C,
                                       running_mean: &C, running_variance: &C, momentum: U)
                                       -> Result<(VecArr<U,Arr<U,N>>,T,T,Arr<U,N>,Arr<U,N>),TrainingError>;
+    /// Error back propagation calculation
+    /// # Arguments
+    /// * `loss` - loss input
+    /// * `input` - input
+    /// * `scale` - γ
+    /// * `saved_mean` - μΒ calculated during forward propagation
+    /// * `saved_inv_variance` - Inverse of σΒ calculated during forward propagati (1 / (σΒ + 1e-6))
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn backward_batch_norm(&self, loss:&Arr<U,N>, input: &Arr<U,N>, scale: &C,
                            saved_mean: &T, saved_inv_variance: &T) -> Result<(Arr<U, N>,Arr<U,N>,Arr<U,N>), TrainingError>;
+    /// Error back propagation calculation in batch
+    /// # Arguments
+    /// * `loss` - loss input
+    /// * `input` - input
+    /// * `scale` - γ
+    /// * `saved_mean` - μΒ calculated during forward propagation
+    /// * `saved_inv_variance` - Inverse of σΒ calculated during forward propagati (1 / (σΒ + 1e-6))
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn batch_backward_batch_norm(&self, loss:&VecArr<U,Arr<U,N>>, input: &VecArr<U,Arr<U,N>>,
                                  scale: &C, saved_mean: &T, saved_inv_variance: &T) -> Result<(VecArr<U,Arr<U, N>>,Arr<U,N>,Arr<U,N>), TrainingError>;
 }

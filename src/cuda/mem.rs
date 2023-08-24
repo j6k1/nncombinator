@@ -23,7 +23,9 @@ struct Usage {
 /// Momory Alloctype (Device or Host)
 #[derive(Debug)]
 pub enum Alloctype {
+    /// Device memory
     Device,
+    /// Host memory
     Host(libc::c_uint)
 }
 /// Cuda Memory pool

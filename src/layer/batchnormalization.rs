@@ -14,6 +14,7 @@ use crate::ope::{UnitValue};
 use crate::optimizer::Optimizer;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, UnitOrMarker};
 
+/// Structure that holds information related to mean and variance calculated during forward propagation during learning.
 #[derive(Debug)]
 pub struct MeanAndVariance<U,T,const N:usize> where U: UnitValue<U> {
     pub running_mean:Arr<U,N>,
@@ -21,6 +22,7 @@ pub struct MeanAndVariance<U,T,const N:usize> where U: UnitValue<U> {
     pub saved_mean:T,
     pub saved_inv_variance:T
 }
+/// Trait for BatchNormalizationLayer instance creation
 pub trait BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,BI,S,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
@@ -57,6 +59,7 @@ pub trait BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,BI,S,const N:usize>
     ///
     /// γ = 1, β = 0
     /// y = γx + β
+    /// momentum = 0.9
     fn new(parent:P,device:&D) -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError>;
 }
 ///  BatchNormalization Layer Implementation
@@ -814,6 +817,7 @@ impl<U,P,I,PI,BI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Cache
           BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> {
 }
+/// Builder for BatchNormalizationLayer instance creation
 pub struct BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
@@ -836,6 +840,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,P
           D: Device<U>,
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static {
+    /// Create an instance of BatchNormalizationLayerBuilder
     pub fn new() -> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,N> {
         BatchNormalizationLayerBuilder {
             u:PhantomData::<U>,
@@ -856,6 +861,10 @@ impl<U,C,P,D,I,PI,BI,S> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,0>
           D: Device<U>,
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static {
+    /// Create an instance of BatchNormalizationLayerBuilder with size
+    ///
+    /// # Types
+    /// * `N` - input size
     pub fn with_size<const N:usize>() -> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,BI,S,N> {
         BatchNormalizationLayerBuilder {
             u:PhantomData::<U>,
@@ -877,16 +886,48 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,P
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static,
           BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N> : BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,BI,S,N> {
+    /// Create an instance of BatchNormalizationLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    /// * `scale` - γ
+    /// * `bias` - β
+    /// * `momentum`- Learning rate when updating running_mean and running_variance
+    ///
+    /// y = γx + β
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`LayerInstantiationError`]
     pub fn build_with_params(&self,parent: P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
         -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError> {
         Ok(BatchNormalizationLayer::with_params(parent,device,scale,bias,momentum)?)
     }
 
+    /// Create an instance of BatchNormalizationLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    /// * `momentum`- Learning rate when updating running_mean and running_variance
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`LayerInstantiationError`]
     pub fn build_with_momentum(&self,parent:P,device:&D,momentum:U)
                              -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError> {
         Ok(BatchNormalizationLayer::with_momentum(parent,device,momentum)?)
     }
 
+    /// Create an instance of BatchNormalizationLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`LayerInstantiationError`]
     pub fn build(&self,parent: P,device:&D)
         -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>,LayerInstantiationError> {
         Ok(BatchNormalizationLayer::new(parent,device)?)

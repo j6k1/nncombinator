@@ -2,6 +2,7 @@ use std::ops::{Add, Div, Mul, Sub};
 use rayon::prelude::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator};
 use crate::arr::{Arr, VecArr};
 
+/// A type that expresses a broadcast of the inner type when computing with the inner type and its type collection
 #[derive(Debug,Clone)]
 pub struct Broadcast<T>(pub T) where T: Clone;
 impl<'a,U,const N:usize> Add<&'a VecArr<U,Arr<U,N>>> for Broadcast<Arr<U,N>>

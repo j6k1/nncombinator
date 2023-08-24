@@ -4,11 +4,19 @@ use rcudnn_sys::{cudnnSetTensor4dDescriptor, cudnnTensorDescriptor_t,cudnnStatus
 use rcudnn_sys::cudnnTensorFormat_t::CUDNN_TENSOR_NCHW;
 use crate::cuda::DataTypeInfo;
 
+/// Wrapper for cudnnTensorDescriptor_t initialized by cudnnSetTensor4dDescriptors
 pub struct CudnnTensor4dDescriptor<T> where T: DataTypeInfo {
     id: cudnnTensorDescriptor_t,
     t:PhantomData<T>
 }
 impl<T> CudnnTensor4dDescriptor<T> where T: DataTypeInfo {
+    /// Create an instance of CudnnTensor4dDescriptor
+    /// # Arguments
+    ///
+    /// * `n` - batch size
+    /// * `c` - Number of Channels
+    /// * `h` - height
+    /// * `w` - width
     pub fn new(n:usize,c:usize,h:usize,w:usize) -> Result<CudnnTensor4dDescriptor<T>,rcudnn::Error> where T: DataTypeInfo {
         let desc = API::create_tensor_descriptor()?;
 

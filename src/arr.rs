@@ -10,6 +10,7 @@ use crate::error::{IndexOutBoundError, SizeMismatchError};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::Sum;
 
+/// Trait that returns the number of elements in the slice held by itself
 pub trait SliceSize {
     const SIZE: usize;
 
@@ -51,6 +52,7 @@ impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
         }
     }
 }
+/// Trait that returns a view holding an immutable reference to the slice to be owned
 impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
     type ViewType = ArrView<'a,T,N>;
 
@@ -60,6 +62,7 @@ impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + 
         }
     }
 }
+/// Trait that returns a view holding an mutable reference to the slice to be owned
 impl<'a,T,const N:usize> MakeViewMut<'a,T> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
     type ViewType = ArrView<'a,T,N>;
 
@@ -1180,6 +1183,15 @@ impl<T,const N:usize> Div<T> for DiffArr<T,N>
         r
     }
 }
+/// Converter via for zero-cost conversion of VecArr<U,T> to VecArr<U,R>
+pub struct VecArrConverter<U,T>
+    where U: Default + Clone + Copy + Send,
+          for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+    arr:Box<[U]>,
+    len:usize,
+    u:PhantomData<U>,
+    t:PhantomData<T>
+}
 /// Implementation of fixed-length arrays whose size is not specified by a type parameter
 #[derive(Debug,Eq,PartialEq,Clone)]
 pub struct VecArr<U,T> {
@@ -1217,8 +1229,8 @@ impl<U,T> VecArr<U,T>
     pub fn iter(&self) -> VecArrIter<U,T> {
         VecArrIter {
             arr:&*self.arr,
+            u:PhantomData::<U>,
             t:PhantomData::<T>,
-            u:PhantomData::<U>
         }
     }
 
@@ -1226,14 +1238,24 @@ impl<U,T> VecArr<U,T>
     pub fn iter_mut(&mut self) -> VecArrIterMut<U,T> {
         VecArrIterMut {
             arr:&mut self.arr,
+            u:PhantomData::<U>,
             t:PhantomData::<T>,
-            u:PhantomData::<U>
+        }
+    }
+
+    /// Conversion to converter to VecArr with different internal types
+    pub fn into_converter(self) -> VecArrConverter<U,T> {
+        VecArrConverter {
+            arr:self.arr,
+            len:self.len,
+            u:PhantomData::<U>,
+            t:PhantomData::<T>,
         }
     }
 }
 impl<U,T> From<Vec<T>> for VecArr<U,T>
     where U: Default + Clone + Copy + Send,
-          T: SliceSize + AsRawSlice<U> {
+          for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> {
     fn from(items: Vec<T>) -> Self {
         let len = items.len();
 
@@ -1283,6 +1305,25 @@ impl<U,const N:usize> TryFrom<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + 
                 len: len,
                 u:PhantomData::<U>,
                 t: PhantomData::<Arr<U, N>>
+            })
+        }
+    }
+}
+impl<U,T,R> TryFrom<VecArrConverter<U,T>> for VecArr<U,R>
+    where U: Default + Clone + Copy + Send,
+          for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U>,
+          for<'b> R: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> {
+    type Error = SizeMismatchError;
+
+    fn try_from(s: VecArrConverter<U,T>) -> Result<Self,SizeMismatchError> {
+        if T::slice_size() != R::slice_size() {
+            Err(SizeMismatchError(T::slice_size(),R::slice_size()))
+        } else {
+            Ok(VecArr {
+                arr: s.arr,
+                len: s.len,
+                u:PhantomData::<U>,
+                t: PhantomData::<R>
             })
         }
     }

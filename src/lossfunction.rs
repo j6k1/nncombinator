@@ -36,10 +36,14 @@ pub trait BatchLossFunction<U,D>: LossFunction<U> + Send + Sync + 'static
     /// * `actual` - actual value
     fn batch_linear_derive<const N: usize>(&self,_: &D,expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
                                            -> Result<VecArr<U,Arr<U, N>>, TrainingError> {
+        let n = U::from_usize(actual.len()).ok_or(TrainingError::TypeCastError(
+            String::from("An error occurred when casting the batch size data type to U.")
+        ))?;
+
         Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
             a.par_iter()
                 .zip(e.par_iter())
-                .map(|(&a,&e)| self.derive(a,e))
+                .map(|(&a,&e)| self.derive(a,e) / n)
                 .collect::<Vec<U>>()
                 .try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())

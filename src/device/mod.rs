@@ -130,9 +130,13 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
 
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &VecArr<U,Arr<U, N>>, actual: &VecArr<U,Arr<U, N>>)
                                                                -> Result<VecArr<U,Arr<U, N>>, TrainingError> where f64: From<U> {
+        let n = U::from_usize(actual.len()).ok_or(TrainingError::TypeCastError(
+            String::from("An error occurred when casting the batch size data type to U.")
+        ))?;
+
         Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
             a.par_iter().zip(e.par_iter())
-                .map(|(&a,&e)| a - e).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
+                .map(|(&a,&e)| (a - e) / n).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 

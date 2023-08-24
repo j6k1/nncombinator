@@ -79,7 +79,7 @@ fn test_mnist() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = SGD::new(0.004);
+    let mut optimizer = SGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -95,7 +95,7 @@ fn test_mnist() {
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(100) {
+        for teachers in teachers.chunks(120) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -230,7 +230,7 @@ fn test_mnist_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = SGD::new(0.004);
+    let mut optimizer = SGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -246,7 +246,7 @@ fn test_mnist_for_gpu() {
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(100) {
+        for teachers in teachers.chunks(120) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -381,7 +381,7 @@ fn test_mnist_for_gpu_double() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = SGD::new(0.004);
+    let mut optimizer = SGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -397,7 +397,7 @@ fn test_mnist_for_gpu_double() {
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(100) {
+        for teachers in teachers.chunks(120) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -992,7 +992,7 @@ fn test_weather_batch_train() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.01);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -1170,7 +1170,7 @@ fn test_weather_batch_train_for_gpu() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.01);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -1348,7 +1348,7 @@ fn test_weather_batch_train_for_gpu_double() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.01);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -2805,7 +2805,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -2954,7 +2954,7 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3101,7 +3101,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3250,7 +3250,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3397,7 +3397,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -3545,7 +3545,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 

@@ -1313,19 +1313,15 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr
 
         {
             {
-                let n = U::from_usize(loss.len()).ok_or(TrainingError::TypeCastError(
-                    String::from("An error occurred when casting the batch size data type to U.")
-                ))?;
-
                 for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
-                    optimizer.update(g / n, w);
+                    optimizer.update(g, w);
                 }
 
                 s.map(|o| {
                     self.device.batch_backward_weight_gradient(&o, &loss).map(|g| {
                         for (mut u, g) in self.units.iter_mut().zip(g.iter()) {
                             for (w, &g) in u.iter_mut().zip(g.iter()) {
-                                optimizer.update(g / n, w);
+                                optimizer.update(g, w);
                             }
                         }
                     })
@@ -1357,19 +1353,15 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Cac
 
         {
             {
-                let n = U::from_usize(loss.len()).ok_or(TrainingError::TypeCastError(
-                    String::from("An error occurred when casting the batch size data type to U.")
-                ))?;
-
                 for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
-                    optimizer.update(g / n, w);
+                    optimizer.update(g, w);
                 }
 
                 s.map(|o| {
                     self.device.batch_backward_weight_gradient(&o, &loss).map(|g| {
                         for (mut u, g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
                             for (w, &g) in u.iter_mut().zip(g.iter()) {
-                                optimizer.update(g / n, w);
+                                optimizer.update(g, w);
                             }
                         }
                     })
@@ -1402,12 +1394,24 @@ impl<U,P,I,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,CachedT
           DeviceGpu<U>: Device<U>,
           Self: Loss<U> + BatchBackward<U> {
 }
+/// Trait for LinearLayer instance creation
 pub trait LinearLayerInstantiation<U,C,P,D,I,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=Arr<U,NI>> + BackwardAll<U,LossInput=Arr<U,NI>> +
              PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           D: Device<U> {
+    /// Create an instance of LinearLayers
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    /// * `ui` - Callback to generate weight of unit
+    /// * `bi` - Callback to generate weight of bias
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`LayerInstantiationError`]
     fn instantiation(parent:P,device:&D,ui: impl FnMut() -> U, bi: impl FnMut() -> U)
         -> Result<LinearLayer<U,C,P,D,I,NI,NO>,LayerInstantiationError>;
 }
@@ -1434,6 +1438,7 @@ impl<U,P,I,const NI:usize,const NO:usize> LinearLayerInstantiation<U,CachedTenso
         Ok(LinearLayer::<_,_,_,DeviceGpu<U>,_,NI,NO>::new(parent,device,ui,bi)?)
     }
 }
+/// Builder for LinearLayer instance creation
 pub struct LinearLayerBuilder<U,C,P,D,I,const NI:usize,const NO:usize>
     where U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -1450,6 +1455,11 @@ impl<U,C,P,D,I> LinearLayerBuilder<U,C,P,D,I,0,0>
     where U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           D: Device<U> {
+    /// Create an instance of LinearLayerBuilder
+    ///
+    /// # Types
+    /// * `N1` - input size
+    /// * `N2` - output size
     pub fn new<const N1:usize,const N2:usize>() -> LinearLayerBuilder<U,C,P,D,I,N1,N2> {
         LinearLayerBuilder {
             u:PhantomData::<U>,
@@ -1468,6 +1478,17 @@ impl<U,C,P,D,I,const NI:usize,const NO:usize> LinearLayerBuilder<U,C,P,D,I,NI,NO
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           D: Device<U> {
+    /// Create an instance of LinearLayers
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    /// * `ui` - Callback to generate weight of unit
+    /// * `bi` - Callback to generate weight of bias
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`LayerInstantiationError`]
     pub fn build(&self,parent: P, device:&D, ui: impl FnMut() -> U, bi: impl FnMut() -> U)
                  -> Result<LinearLayer<U,C,P,D,I,NI,NO>,LayerInstantiationError>
         where LinearLayer<U,C,P,D,I,NI,NO>: LinearLayerInstantiation<U,C,P,D,I,NI,NO> {

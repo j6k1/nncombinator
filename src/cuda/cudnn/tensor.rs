@@ -1,3 +1,5 @@
+//! Wrapper implementation for tensors used in cudnn
+
 use std::marker::PhantomData;
 use rcudnn::API;
 use rcudnn_sys::{cudnnSetTensor4dDescriptor, cudnnTensorDescriptor_t,cudnnStatus_t};

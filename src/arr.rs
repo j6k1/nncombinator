@@ -52,7 +52,6 @@ impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
         }
     }
 }
-/// Trait that returns a view holding an immutable reference to the slice to be owned
 impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
     type ViewType = ArrView<'a,T,N>;
 
@@ -62,7 +61,6 @@ impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + 
         }
     }
 }
-/// Trait that returns a view holding an mutable reference to the slice to be owned
 impl<'a,T,const N:usize> MakeViewMut<'a,T> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
     type ViewType = ArrView<'a,T,N>;
 
@@ -1597,14 +1595,26 @@ impl<U,const N:usize> Sum for VecArr<U,Arr<U,N>>
         }).reduce(|| Arr::new(), |acc,r| &acc + &r)
     }
 }
+/// Trait that returns a view holding an immutable reference to the slice to be owned
 pub trait MakeView<'a,T> {
+    /// Returned View type
     type ViewType: Send + Sync + 'a;
 
+    /// Create a view
+    /// # Arguments
+    /// * 'arr' - Slice of view references
+    ///
     fn make_view(arr:&'a [T]) -> Self::ViewType;
 }
+/// Trait that returns a view holding an mutable reference to the slice to be owned
 pub trait MakeViewMut<'a,T> {
+    /// Returned View type
     type ViewType: Send + Sync + 'a;
 
+    /// Create a view
+    /// # Arguments
+    /// * 'arr' - Slice of view references
+    ///
     fn make_view_mut(arr:&'a mut [T]) -> Self::ViewType;
 }
 /// VecArr's Immutable Iterator

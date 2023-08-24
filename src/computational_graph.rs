@@ -1,3 +1,4 @@
+//! Computational graph implementation
 use std::marker::PhantomData;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use num_traits::FromPrimitive;

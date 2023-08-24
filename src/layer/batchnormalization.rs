@@ -1,3 +1,4 @@
+//! Batch normalization layer implementation
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -17,9 +18,13 @@ use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, Te
 /// Structure that holds information related to mean and variance calculated during forward propagation during learning.
 #[derive(Debug)]
 pub struct MeanAndVariance<U,T,const N:usize> where U: UnitValue<U> {
+    /// Population mean per batch
     pub running_mean:Arr<U,N>,
+    /// Population variance per batch
     pub running_variance:Arr<U,N>,
+    /// Mean computed by the process of forward propagation during learning
     pub saved_mean:T,
+    /// Variance computed by the process of forward propagation during learning
     pub saved_inv_variance:T
 }
 /// Trait for BatchNormalizationLayer instance creation

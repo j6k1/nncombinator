@@ -1,3 +1,4 @@
+//! Implementation of the calculation process for full connected layers
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcublas_sys::{cublasDgemm_v2, cublasDgemv_v2, cublasOperation_t, cublasSgemm_v2, cublasSgemv_v2, cublasStatus_t};
 use crate::arr::{Arr, Arr2, VecArr};

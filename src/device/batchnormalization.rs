@@ -1,3 +1,4 @@
+//! Implementation of the calculation process for batch normalization
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcudnn::{API};
 use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BATCHNORM_SPATIAL};

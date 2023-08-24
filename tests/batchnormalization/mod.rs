@@ -76,12 +76,12 @@ fn test_mnist_batch_norm() {
 
     let mut correct_answers = 0;
 
-    let train_size = 60000;
-    let batch_size = 120;
+    let train_size = 20000;
+    let batch_size = 200;
 
     let mut teachers = teachers.into_iter().take(train_size).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -399,12 +399,12 @@ fn test_mnist_batch_norm_double() {
 
     let mut correct_answers = 0;
 
-    let train_size = 60000;
-    let batch_size = 120;
+    let train_size = 20000;
+    let batch_size = 200;
 
     let mut teachers = teachers.into_iter().take(train_size).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 

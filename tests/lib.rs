@@ -87,9 +87,9 @@ fn test_mnist() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(40000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..10 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -238,9 +238,9 @@ fn test_mnist_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(40000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..10 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -389,9 +389,9 @@ fn test_mnist_for_gpu_double() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(40000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..10 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -2813,9 +2813,9 @@ fn test_mnist_sigmoid_and_crossentropy() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(40000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..10 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -2962,9 +2962,9 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(40000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..10 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -3109,9 +3109,9 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(40000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..10 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -3258,9 +3258,9 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(40000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..10 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -3405,9 +3405,9 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(40000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..10 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
@@ -3553,9 +3553,9 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().take(40000).collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..10 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 

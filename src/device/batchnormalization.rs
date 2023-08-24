@@ -1,6 +1,6 @@
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcudnn::{API};
-use rcudnn_sys::cudnnBatchNormMode_t::CUDNN_BATCHNORM_SPATIAL;
+use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BATCHNORM_SPATIAL};
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
 
 use crate::arr::{Arr, VecArr};
@@ -534,7 +534,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         unsafe {
             match cudnnBatchNormalizationForwardTraining(
                 *self.cudnn.id_c(),
-                CUDNN_BATCHNORM_SPATIAL,
+                CUDNN_BATCHNORM_PER_ACTIVATION,
                 alpha.as_void_ptr(),
                 beta.as_void_ptr(),
                 *xd.id_c(),
@@ -612,7 +612,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         unsafe {
             match cudnnBatchNormalizationBackward(
                 *self.cudnn.id_c(),
-                CUDNN_BATCHNORM_SPATIAL,
+                CUDNN_BATCHNORM_PER_ACTIVATION,
                 alpha.as_void_ptr(),
                 beta.as_void_ptr(),
                 alpha.as_void_ptr(),
@@ -690,7 +690,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         unsafe {
             match cudnnBatchNormalizationBackward(
                 *self.cudnn.id_c(),
-                CUDNN_BATCHNORM_SPATIAL,
+                CUDNN_BATCHNORM_PER_ACTIVATION,
                 alpha.as_void_ptr(),
                 beta.as_void_ptr(),
                 alpha.as_void_ptr(),

@@ -33,7 +33,7 @@ use nncombinator::layer::input::InputLayer;
 use nncombinator::layer::linear::{LinearLayer, DiffLinearLayer};
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
-use nncombinator::optimizer::{MomentumSGD,SGD};
+use nncombinator::optimizer::{MomentumSGD};
 
 use crate::common::SHARED_MEMORY_POOL;
 
@@ -83,7 +83,7 @@ fn test_mnist() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = SGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -234,7 +234,7 @@ fn test_mnist_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = SGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -385,7 +385,7 @@ fn test_mnist_for_gpu_double() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = SGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -471,7 +471,7 @@ fn test_mnist_for_gpu_double() {
 
         let r = net.forward_all(input).unwrap();
 
-        let r = r.iter().enumerate().fold((0, -1.), |acc, (n, &t)| {
+        let r = r.iter().enumerate().fold((0, 0.0), |acc, (n, &t)| {
             if t > acc.1 {
                 (n, t)
             } else {
@@ -484,9 +484,9 @@ fn test_mnist_for_gpu_double() {
         }
     }
 
-    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f64 / count as f64 * 100.);
 
-    debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
+    debug_assert!(correct_answers as f64 / count as f64 * 100. > 80.)
 }
 #[test]
 fn test_weather() {

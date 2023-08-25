@@ -308,12 +308,12 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         let mut input_ptr = CudaMemoryPoolPtr::new(NI * input.len() ,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
 
-        let bias_inv:SerializedVec<f32,Arr<f32,NO>> = bias.par_iter().map(|&b| {
-            rayon::iter::repeat(b).take(input.len()).collect::<Vec<f32>>()
-        }).collect::<Vec<Vec<f32>>>().into_iter().flatten().collect::<Vec<f32>>().try_into()?;
+        let bias = rayon::iter::repeat(bias.iter().cloned().collect::<Vec<f32>>())
+                                                .take(input.len()).collect::<Vec<Vec<f32>>>()
+                                                .into_iter().flatten().collect::<Vec<f32>>();
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI * input.len())?;
-        output_ptr.memcpy(bias_inv.as_raw_slice().as_ptr(),NO * input.len())?;
+        output_ptr.memcpy(bias.as_slice().as_ptr(),NO * input.len())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(1.0f32)?;
@@ -615,12 +615,12 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         let mut input_ptr = CudaMemoryPoolPtr::new(NI * input.len() ,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
 
-        let bias_inv:SerializedVec<f64,Arr<f64,NO>> = bias.par_iter().map(|&b| {
-            rayon::iter::repeat(b).take(input.len()).collect::<Vec<f64>>()
-        }).collect::<Vec<Vec<f64>>>().into_iter().flatten().collect::<Vec<f64>>().try_into()?;
+        let bias = rayon::iter::repeat(bias.iter().cloned().collect::<Vec<f64>>())
+                                        .take(input.len()).collect::<Vec<Vec<f64>>>()
+                                        .into_iter().flatten().collect::<Vec<f64>>();
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI * input.len())?;
-        output_ptr.memcpy(bias_inv.as_raw_slice().as_ptr(),NO * input.len())?;
+        output_ptr.memcpy(bias.as_slice().as_ptr(),NO * input.len())?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(1.0f64)?;

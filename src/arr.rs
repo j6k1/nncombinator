@@ -1349,13 +1349,17 @@ impl<U,T> From<SerializedVec<U,T>> for Box<[U]> where U: Default + Clone + Send 
         value.arr
     }
 }
-impl<'a,T,const N:usize> AsRawSlice<T> for SerializedVec<T,Arr<T,N>> where T: Default + Clone + Send {
-    fn as_raw_slice(&self) -> &[T] {
+impl<'a,U,T> AsRawSlice<U> for SerializedVec<U,T>
+    where U: Default + Clone + Send,
+          T: SliceSize {
+    fn as_raw_slice(&self) -> &[U] {
         &self.arr
     }
 }
-impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for SerializedVec<T,Arr<T,N>> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
+impl<'a,U,T> AsRawMutSlice<'a,U> for SerializedVec<U,T>
+    where U: Default + Clone + Send,
+          T: SliceSize {
+    fn as_raw_mut_slice(&'a mut self) -> &'a mut [U] {
         &mut self.arr
     }
 }

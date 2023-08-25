@@ -113,7 +113,11 @@ mod tests {
     use crate::activation::ReLu;
     use crate::arr::Arr;
     use crate::device::DeviceCpu;
-    use crate::layer::{ActivationLayer, AddLayer, AddLayerTrain, InputLayer, LinearLayer, LinearOutputLayer};
+    use crate::layer::{AddLayer, AddLayerTrain};
+    use crate::layer::activation::ActivationLayer;
+    use crate::layer::input::InputLayer;
+    use crate::layer::linear::LinearLayer;
+    use crate::layer::output::LinearOutputLayer;
 
     #[test]
     fn build_layers() {

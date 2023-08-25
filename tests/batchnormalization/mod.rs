@@ -11,11 +11,14 @@ use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLu, SoftMax};
 use nncombinator::arr::Arr;
 use nncombinator::device::{DeviceCpu, DeviceGpu};
-use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, BatchForward, BatchTrain, ForwardAll, InputLayer, LinearLayerBuilder, LinearOutputLayer};
+use nncombinator::layer::{AddLayer, AddLayerTrain, BatchForward, BatchTrain, ForwardAll};
+use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::batchnormalization::{BatchNormalizationLayerBuilder};
+use nncombinator::layer::input::InputLayer;
+use nncombinator::layer::linear::LinearLayerBuilder;
+use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::optimizer::{MomentumSGD};
-
 use crate::common::SHARED_MEMORY_POOL;
 
 #[test]

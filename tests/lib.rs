@@ -27,7 +27,11 @@ use nncombinator::activation::{ReLu, Sigmoid, SoftMax, Swish, Tanh};
 use nncombinator::arr::{Arr, DiffArr};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
 use nncombinator::error::{TrainingError, UnsupportedOperationError};
-use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
+use nncombinator::layer::{AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, ForwardAll, ForwardDiff, Train};
+use nncombinator::layer::activation::ActivationLayer;
+use nncombinator::layer::input::InputLayer;
+use nncombinator::layer::linear::{LinearLayer, DiffLinearLayer};
+use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{MomentumSGD,SGD};
 

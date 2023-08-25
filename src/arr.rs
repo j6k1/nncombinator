@@ -1181,8 +1181,8 @@ impl<T,const N:usize> Div<T> for DiffArr<T,N>
         r
     }
 }
-/// Converter via for zero-cost conversion of VecArr<U,T> to VecArr<U,R>
-pub struct VecArrConverter<U,T>
+/// Converter via for zero-cost conversion of SerializedVec<U,T> to SerializedVec<U,R>
+pub struct SerializedVecConverter<U,T>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
     arr:Box<[U]>,
@@ -1192,30 +1192,30 @@ pub struct VecArrConverter<U,T>
 }
 /// Implementation of fixed-length arrays whose size is not specified by a type parameter
 #[derive(Debug,Eq,PartialEq,Clone)]
-pub struct VecArr<U,T> {
+pub struct SerializedVec<U,T> {
     arr:Box<[U]>,
     len:usize,
     u:PhantomData<U>,
     t:PhantomData<T>
 }
-impl<U,T> VecArr<U,T> where U: Default + Clone + Copy + Send {
+impl<U,T> SerializedVec<U,T> where U: Default + Clone + Copy + Send {
     /// get the number of element
     pub fn len(&self) -> usize {
         self.len
     }
 }
-impl<U,T> VecArr<U,T>
+impl<U,T> SerializedVec<U,T>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
-    /// Create a VecArr instance of the specified size
+    /// Create a SerializedVec instance of the specified size
     /// # Arguments
     /// * `size`- Size to be secured
-    pub fn with_size(size:usize) -> VecArr<U,T> {
+    pub fn with_size(size:usize) -> SerializedVec<U,T> {
         let mut arr = Vec::with_capacity(T::slice_size() * size);
 
         arr.resize_with(T::slice_size() * size,Default::default);
 
-        VecArr {
+        SerializedVec {
             arr:arr.into_boxed_slice(),
             len:size,
             u:PhantomData::<U>,
@@ -1224,8 +1224,8 @@ impl<U,T> VecArr<U,T>
     }
 
     /// Obtaining a immutable iterator
-    pub fn iter(&self) -> VecArrIter<U,T> {
-        VecArrIter {
+    pub fn iter(&self) -> SerializedVecIter<U,T> {
+        SerializedVecIter {
             arr:&*self.arr,
             u:PhantomData::<U>,
             t:PhantomData::<T>,
@@ -1233,17 +1233,17 @@ impl<U,T> VecArr<U,T>
     }
 
     /// Obtaining a mutable iterator
-    pub fn iter_mut(&mut self) -> VecArrIterMut<U,T> {
-        VecArrIterMut {
+    pub fn iter_mut(&mut self) -> SerializedVecIterMut<U,T> {
+        SerializedVecIterMut {
             arr:&mut self.arr,
             u:PhantomData::<U>,
             t:PhantomData::<T>,
         }
     }
 
-    /// Conversion to converter to VecArr with different internal types
-    pub fn into_converter(self) -> VecArrConverter<U,T> {
-        VecArrConverter {
+    /// Conversion to converter to SerializedVec with different internal types
+    pub fn into_converter(self) -> SerializedVecConverter<U,T> {
+        SerializedVecConverter {
             arr:self.arr,
             len:self.len,
             u:PhantomData::<U>,
@@ -1251,7 +1251,7 @@ impl<U,T> VecArr<U,T>
         }
     }
 }
-impl<U,T> From<Vec<T>> for VecArr<U,T>
+impl<U,T> From<Vec<T>> for SerializedVec<U,T>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> {
     fn from(items: Vec<T>) -> Self {
@@ -1263,7 +1263,7 @@ impl<U,T> From<Vec<T>> for VecArr<U,T>
             buffer.extend_from_slice(item.as_raw_slice());
         }
 
-        VecArr {
+        SerializedVec {
             arr:buffer.into_boxed_slice(),
             len:len,
             u:PhantomData::<U>,
@@ -1271,7 +1271,7 @@ impl<U,T> From<Vec<T>> for VecArr<U,T>
         }
     }
 }
-impl<'data,U,const N:usize> From<Vec<ArrView<'data,U,N>>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
+impl<'data,U,const N:usize> From<Vec<ArrView<'data,U,N>>> for SerializedVec<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
     fn from(items: Vec<ArrView<'data,U, N>>) -> Self {
         let len = items.len();
 
@@ -1281,7 +1281,7 @@ impl<'data,U,const N:usize> From<Vec<ArrView<'data,U,N>>> for VecArr<U,Arr<U,N>>
             buffer.extend_from_slice(&item);
         }
 
-        VecArr {
+        SerializedVec {
             arr:buffer.into_boxed_slice(),
             len:len,
             u:PhantomData::<U>,
@@ -1289,7 +1289,7 @@ impl<'data,U,const N:usize> From<Vec<ArrView<'data,U,N>>> for VecArr<U,Arr<U,N>>
         }
     }
 }
-impl<U,const N:usize> TryFrom<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
+impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
     type Error = SizeMismatchError;
 
     fn try_from(items: Vec<U>) -> Result<Self,SizeMismatchError> {
@@ -1298,7 +1298,7 @@ impl<U,const N:usize> TryFrom<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + 
         } else {
             let len = items.len() / N;
 
-            Ok(VecArr {
+            Ok(SerializedVec {
                 arr: items.into_boxed_slice(),
                 len: len,
                 u:PhantomData::<U>,
@@ -1307,17 +1307,17 @@ impl<U,const N:usize> TryFrom<Vec<U>> for VecArr<U,Arr<U,N>> where U: Default + 
         }
     }
 }
-impl<U,T,R> TryFrom<VecArrConverter<U,T>> for VecArr<U,R>
+impl<U,T,R> TryFrom<SerializedVecConverter<U,T>> for SerializedVec<U,R>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U>,
           for<'b> R: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> {
     type Error = SizeMismatchError;
 
-    fn try_from(s: VecArrConverter<U,T>) -> Result<Self,SizeMismatchError> {
+    fn try_from(s: SerializedVecConverter<U,T>) -> Result<Self,SizeMismatchError> {
         if T::slice_size() != R::slice_size() {
             Err(SizeMismatchError(T::slice_size(),R::slice_size()))
         } else {
-            Ok(VecArr {
+            Ok(SerializedVec {
                 arr: s.arr,
                 len: s.len,
                 u:PhantomData::<U>,
@@ -1326,7 +1326,7 @@ impl<U,T,R> TryFrom<VecArrConverter<U,T>> for VecArr<U,R>
         }
     }
 }
-impl<U,const N:usize> TryFrom<Box<[U]>> for VecArr<U,Arr<U,N>> where U: Default + Clone + Send {
+impl<U,const N:usize> TryFrom<Box<[U]>> for SerializedVec<U,Arr<U,N>> where U: Default + Clone + Send {
     type Error = SizeMismatchError;
 
     fn try_from(arr: Box<[U]>) -> Result<Self, Self::Error> {
@@ -1335,7 +1335,7 @@ impl<U,const N:usize> TryFrom<Box<[U]>> for VecArr<U,Arr<U,N>> where U: Default 
         } else {
             let len = arr.len() / N;
 
-            Ok(VecArr {
+            Ok(SerializedVec {
                 arr: arr,
                 len: len,
                 u:PhantomData::<U>,
@@ -1344,247 +1344,247 @@ impl<U,const N:usize> TryFrom<Box<[U]>> for VecArr<U,Arr<U,N>> where U: Default 
         }
     }
 }
-impl<U,T> From<VecArr<U,T>> for Box<[U]> where U: Default + Clone + Send {
-    fn from(value: VecArr<U,T>) -> Self {
+impl<U,T> From<SerializedVec<U,T>> for Box<[U]> where U: Default + Clone + Send {
+    fn from(value: SerializedVec<U,T>) -> Self {
         value.arr
     }
 }
-impl<'a,T,const N:usize> AsRawSlice<T> for VecArr<T,Arr<T,N>> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> AsRawSlice<T> for SerializedVec<T,Arr<T,N>> where T: Default + Clone + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr
     }
 }
-impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for VecArr<T,Arr<T,N>> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for SerializedVec<T,Arr<T,N>> where T: Default + Clone + Send {
     fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
         &mut self.arr
     }
 }
-impl<'a,U,const N:usize> Add<U> for &'a VecArr<U,Arr<U,N>>
+impl<'a,U,const N:usize> Add<U> for &'a SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U> {
-    type Output = VecArr<U,Arr<U,N>>;
+    type Output = SerializedVec<U,Arr<U,N>>;
 
     fn add(self, rhs: U) -> Self::Output {
         self.par_iter().map(|l| l + rhs).collect::<Vec<Arr<U,N>>>().into()
     }
 }
-impl<U,const N:usize> Add<U> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Add<U> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U>,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Add<U,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Add<U,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
     fn add(self, rhs: U) -> Self::Output {
         &self + rhs
     }
 }
-impl<'a,U,const N:usize> Sub<U> for &'a VecArr<U,Arr<U,N>>
+impl<'a,U,const N:usize> Sub<U> for &'a SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U> {
-    type Output = VecArr<U,Arr<U,N>>;
+    type Output = SerializedVec<U,Arr<U,N>>;
 
     fn sub(self, rhs: U) -> Self::Output {
         self.par_iter().map(|l| l - rhs).collect::<Vec<Arr<U,N>>>().into()
     }
 }
-impl<U,const N:usize> Sub<U> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Sub<U> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U>,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Sub<U,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Sub<U,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
     fn sub(self, rhs: U) -> Self::Output {
         &self - rhs
     }
 }
-impl<'a,U,const N:usize> Mul<U> for &'a VecArr<U,Arr<U,N>>
+impl<'a,U,const N:usize> Mul<U> for &'a SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U> {
-    type Output = VecArr<U,Arr<U,N>>;
+    type Output = SerializedVec<U,Arr<U,N>>;
 
     fn mul(self, rhs: U) -> Self::Output {
         self.par_iter().map(|l| l * rhs).collect::<Vec<Arr<U,N>>>().into()
     }
 }
-impl<U,const N:usize> Mul<U> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Mul<U> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U>,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Mul<U,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Mul<U,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
     fn mul(self, rhs: U) -> Self::Output {
         &self * rhs
     }
 }
-impl<'a,U,const N:usize> Div<U> for &'a VecArr<U,Arr<U,N>>
+impl<'a,U,const N:usize> Div<U> for &'a SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U> {
-    type Output = VecArr<U,Arr<U,N>>;
+    type Output = SerializedVec<U,Arr<U,N>>;
 
     fn div(self, rhs: U) -> Self::Output {
         self.par_iter().map(|l| l / rhs).collect::<Vec<Arr<U,N>>>().into()
     }
 }
-impl<U,const N:usize> Div<U> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Div<U> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U>,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Div<U,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Div<U,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
     fn div(self, rhs: U) -> Self::Output {
         &self / rhs
     }
 }
-impl<'a,'b: 'a,U,const N:usize> Add<&'b VecArr<U,Arr<U,N>>> for &'a VecArr<U,Arr<U,N>>
+impl<'a,'b: 'a,U,const N:usize> Add<&'b SerializedVec<U,Arr<U,N>>> for &'a SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U> {
-    type Output = VecArr<U,Arr<U,N>>;
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn add(self, rhs: &'b VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn add(self, rhs: &'b SerializedVec<U,Arr<U,N>>) -> Self::Output {
         self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l + r).collect::<Vec<Arr<U,N>>>().into()
     }
 }
-impl<U,const N:usize> Add<&VecArr<U,Arr<U,N>>> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Add<&SerializedVec<U,Arr<U,N>>> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Add<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Add<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn add(self, rhs: &VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn add(self, rhs: &SerializedVec<U,Arr<U,N>>) -> Self::Output {
         &self + rhs
     }
 }
-impl<U,const N:usize> Add<VecArr<U,Arr<U,N>>> for &VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Add<SerializedVec<U,Arr<U,N>>> for &SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Add<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Add<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn add(self, rhs: VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn add(self, rhs: SerializedVec<U,Arr<U,N>>) -> Self::Output {
         self + &rhs
     }
 }
-impl<U,const N:usize> Add<VecArr<U,Arr<U,N>>> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Add<SerializedVec<U,Arr<U,N>>> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Add<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Add<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn add(self, rhs: VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn add(self, rhs: SerializedVec<U,Arr<U,N>>) -> Self::Output {
         &self + &rhs
     }
 }
-impl<'a,'b: 'a,U,const N:usize> Sub<&'b VecArr<U,Arr<U,N>>> for &'a VecArr<U,Arr<U,N>>
+impl<'a,'b: 'a,U,const N:usize> Sub<&'b SerializedVec<U,Arr<U,N>>> for &'a SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U> {
-    type Output = VecArr<U,Arr<U,N>>;
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn sub(self, rhs: &'b VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn sub(self, rhs: &'b SerializedVec<U,Arr<U,N>>) -> Self::Output {
         self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l - r).collect::<Vec<Arr<U,N>>>().into()
     }
 }
-impl<U,const N:usize> Sub<&VecArr<U,Arr<U,N>>> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Sub<&SerializedVec<U,Arr<U,N>>> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Sub<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Sub<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn sub(self, rhs: &VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn sub(self, rhs: &SerializedVec<U,Arr<U,N>>) -> Self::Output {
         &self - rhs
     }
 }
-impl<U,const N:usize> Sub<VecArr<U,Arr<U,N>>> for &VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Sub<SerializedVec<U,Arr<U,N>>> for &SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Sub<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Sub<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn sub(self, rhs: VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn sub(self, rhs: SerializedVec<U,Arr<U,N>>) -> Self::Output {
         self - &rhs
     }
 }
-impl<U,const N:usize> Sub<VecArr<U,Arr<U,N>>> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Sub<SerializedVec<U,Arr<U,N>>> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Sub<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Sub<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn sub(self, rhs: VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn sub(self, rhs: SerializedVec<U,Arr<U,N>>) -> Self::Output {
         &self - &rhs
     }
 }
-impl<'a,'b: 'a,U,const N:usize> Mul<&'b VecArr<U,Arr<U,N>>> for &'a VecArr<U,Arr<U,N>>
+impl<'a,'b: 'a,U,const N:usize> Mul<&'b SerializedVec<U,Arr<U,N>>> for &'a SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U> {
-    type Output = VecArr<U,Arr<U,N>>;
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn mul(self, rhs: &'b VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn mul(self, rhs: &'b SerializedVec<U,Arr<U,N>>) -> Self::Output {
         self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l * r).collect::<Vec<Arr<U,N>>>().into()
     }
 }
-impl<U,const N:usize> Mul<&VecArr<U,Arr<U,N>>> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Mul<&SerializedVec<U,Arr<U,N>>> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Mul<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Mul<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn mul(self, rhs: &VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn mul(self, rhs: &SerializedVec<U,Arr<U,N>>) -> Self::Output {
         &self * rhs
     }
 }
-impl<U,const N:usize> Mul<VecArr<U,Arr<U,N>>> for &VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Mul<SerializedVec<U,Arr<U,N>>> for &SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Mul<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Mul<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn mul(self, rhs: VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn mul(self, rhs: SerializedVec<U,Arr<U,N>>) -> Self::Output {
         self * &rhs
     }
 }
-impl<U,const N:usize> Mul<VecArr<U,Arr<U,N>>> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Mul<SerializedVec<U,Arr<U,N>>> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Mul<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Mul<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn mul(self, rhs: VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn mul(self, rhs: SerializedVec<U,Arr<U,N>>) -> Self::Output {
         &self * &rhs
     }
 }
-impl<'a,'b: 'a,U,const N:usize> Div<&'b VecArr<U,Arr<U,N>>> for &'a VecArr<U,Arr<U,N>>
+impl<'a,'b: 'a,U,const N:usize> Div<&'b SerializedVec<U,Arr<U,N>>> for &'a SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U> {
-    type Output = VecArr<U,Arr<U,N>>;
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn div(self, rhs: &'b VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn div(self, rhs: &'b SerializedVec<U,Arr<U,N>>) -> Self::Output {
         self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l / r).collect::<Vec<Arr<U,N>>>().into()
     }
 }
-impl<U,const N:usize> Div<&VecArr<U,Arr<U,N>>> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Div<&SerializedVec<U,Arr<U,N>>> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Div<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Div<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn div(self, rhs: &VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn div(self, rhs: &SerializedVec<U,Arr<U,N>>) -> Self::Output {
         &self / rhs
     }
 }
-impl<U,const N:usize> Div<VecArr<U,Arr<U,N>>> for &VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Div<SerializedVec<U,Arr<U,N>>> for &SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Div<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Div<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn div(self, rhs: VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn div(self, rhs: SerializedVec<U,Arr<U,N>>) -> Self::Output {
         self / &rhs
     }
 }
-impl<U,const N:usize> Div<VecArr<U,Arr<U,N>>> for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Div<SerializedVec<U,Arr<U,N>>> for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Div<&'a VecArr<U,Arr<U,N>>,Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Div<&'a SerializedVec<U,Arr<U,N>>,Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
-    fn div(self, rhs: VecArr<U,Arr<U,N>>) -> Self::Output {
+    fn div(self, rhs: SerializedVec<U,Arr<U,N>>) -> Self::Output {
         &self / &rhs
     }
 }
-impl<'a,U,const N:usize> Neg for &'a VecArr<U,Arr<U,N>>
+impl<'a,U,const N:usize> Neg for &'a SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Neg<Output=U> {
-    type Output = VecArr<U,Arr<U,N>>;
+    type Output = SerializedVec<U,Arr<U,N>>;
 
     fn neg(self) -> Self::Output {
         self.par_iter().map(|v| -v).collect::<Vec<Arr<U,N>>>().into()
     }
 }
-impl<U,const N:usize> Neg for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Neg for SerializedVec<U,Arr<U,N>>
     where U: Send + Sync + Default + Clone + Copy + 'static + Neg<Output=U>,
-          for<'a> &'a VecArr<U,Arr<U,N>>: Neg<Output = VecArr<U,Arr<U,N>>> {
-    type Output = VecArr<U,Arr<U,N>>;
+          for<'a> &'a SerializedVec<U,Arr<U,N>>: Neg<Output = SerializedVec<U,Arr<U,N>>> {
+    type Output = SerializedVec<U,Arr<U,N>>;
 
     fn neg(self) -> Self::Output {
         (&self).neg()
     }
 }
-impl<U,const N:usize> Sum for VecArr<U,Arr<U,N>>
+impl<U,const N:usize> Sum for SerializedVec<U,Arr<U,N>>
     where U: Add<Output=U> + Clone + Copy + Default + Send + Sync + 'static,
           for<'a> ArrView<'a,U,N>: Add<ArrView<'a,U,N>,Output = Arr<U,N>> {
     type Output = Arr<U,N>;
@@ -1617,22 +1617,22 @@ pub trait MakeViewMut<'a,T> {
     ///
     fn make_view_mut(arr:&'a mut [T]) -> Self::ViewType;
 }
-/// VecArr's Immutable Iterator
+/// SerializedVec's Immutable Iterator
 #[derive(Debug,Eq,PartialEq)]
-pub struct VecArrIter<'a,U,T> where T: SliceSize + MakeView<'a,U> {
+pub struct SerializedVecIter<'a,U,T> where T: SliceSize + MakeView<'a,U> {
     arr: &'a [U],
     t:PhantomData<T>,
     u:PhantomData<U>
 }
 
-impl<'a,U,T> VecArrIter<'a,U,T> where T: SliceSize + MakeView<'a,U> {
+impl<'a,U,T> SerializedVecIter<'a,U,T> where T: SliceSize + MakeView<'a,U> {
     /// Number of elements encompassed by the iterator element
     #[inline]
     fn element_size(&self) -> usize {
         T::slice_size()
     }
 }
-impl<'a,U,T> Iterator for VecArrIter<'a,U,T> where T: SliceSize + MakeView<'a,U> {
+impl<'a,U,T> Iterator for SerializedVecIter<'a,U,T> where T: SliceSize + MakeView<'a,U> {
     type Item = <T as MakeView<'a,U>>::ViewType;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1649,22 +1649,22 @@ impl<'a,U,T> Iterator for VecArrIter<'a,U,T> where T: SliceSize + MakeView<'a,U>
     }
 }
 
-/// VecArr's mutable Iterator
+/// SerializedVec's mutable Iterator
 #[derive(Debug,Eq,PartialEq)]
-pub struct VecArrIterMut<'a,U,T> where T: SliceSize + MakeViewMut<'a,U> {
+pub struct SerializedVecIterMut<'a,U,T> where T: SliceSize + MakeViewMut<'a,U> {
     arr: &'a mut [U],
     t:PhantomData<T>,
     u:PhantomData<U>
 }
 
-impl<'a,U,T> VecArrIterMut<'a,U,T> where T: SliceSize + MakeViewMut<'a,U> {
+impl<'a,U,T> SerializedVecIterMut<'a,U,T> where T: SliceSize + MakeViewMut<'a,U> {
     /// Number of elements encompassed by the iterator element
     #[inline]
     fn element_size(&self) -> usize {
         T::slice_size()
     }
 }
-impl<'a,U,T> Iterator for VecArrIterMut<'a,U,T> where T: SliceSize + MakeViewMut<'a,U> {
+impl<'a,U,T> Iterator for SerializedVecIterMut<'a,U,T> where T: SliceSize + MakeViewMut<'a,U> {
     type Item = <T as MakeViewMut<'a,U>>::ViewType;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2064,23 +2064,23 @@ impl<'data,T, const N1:usize, const N2:usize, const N3:usize, const N4:usize> In
         Arr4ParIter(&self.arr)
     }
 }
-/// Implementation of ParallelIterator for VecArr
+/// Implementation of ParallelIterator for SerializedVec
 #[derive(Debug)]
-pub struct VecArrParIter<'data,C,T> {
+pub struct SerializedVecParIter<'data,C,T> {
     arr: &'data [T],
     t:PhantomData<C>,
     len: usize
 }
 
-/// Implementation of plumbing::Producer for VecArr
+/// Implementation of plumbing::Producer for SerializedVec
 #[derive(Debug)]
-pub struct VecArrIterProducer<'data,C,T> {
+pub struct SerializedVecIterProducer<'data,C,T> {
     arr: &'data [T],
     t:PhantomData<C>,
     len: usize
 }
 
-impl<'data,C,T> VecArrIterProducer<'data,C,T>
+impl<'data,C,T> SerializedVecIterProducer<'data,C,T>
     where T: Default + Clone + Send,
           C: SliceSize + MakeView<'data,T> + Send {
     #[inline]
@@ -2089,7 +2089,7 @@ impl<'data,C,T> VecArrIterProducer<'data,C,T>
         C::slice_size()
     }
 }
-impl<'data,C,T> Iterator for VecArrIterProducer<'data,C,T>
+impl<'data,C,T> Iterator for SerializedVecIterProducer<'data,C,T>
     where T: Default + Clone + Send,
           C: SliceSize + MakeView<'data,T> + Send {
     type Item = <C as MakeView<'data,T>>::ViewType;
@@ -2112,14 +2112,14 @@ impl<'data,C,T> Iterator for VecArrIterProducer<'data,C,T>
         ({self.len}, Some(self.len))
     }
 }
-impl<'data,C,T> std::iter::ExactSizeIterator for VecArrIterProducer<'data,C,T>
+impl<'data,C,T> std::iter::ExactSizeIterator for SerializedVecIterProducer<'data,C,T>
     where T: Default + Clone + Send,
           C: SliceSize + MakeView<'data,T> + Send {
     fn len(&self) -> usize {
         self.len
     }
 }
-impl<'data,C,T> std::iter::DoubleEndedIterator for VecArrIterProducer<'data,C,T>
+impl<'data,C,T> std::iter::DoubleEndedIterator for SerializedVecIterProducer<'data,C,T>
     where T: Default + Clone + Send,
           C: SliceSize + MakeView<'data,T> + Send {
     fn next_back(&mut self) -> Option<Self::Item> {
@@ -2136,7 +2136,7 @@ impl<'data,C,T> std::iter::DoubleEndedIterator for VecArrIterProducer<'data,C,T>
         }
     }
 }
-impl<'data, C, T> plumbing::Producer for VecArrIterProducer<'data,C,T>
+impl<'data, C, T> plumbing::Producer for SerializedVecIterProducer<'data,C,T>
     where T: Default + Clone + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send {
     type Item = <C as MakeView<'data,T>>::ViewType;
@@ -2147,18 +2147,18 @@ impl<'data, C, T> plumbing::Producer for VecArrIterProducer<'data,C,T>
     fn split_at(self, mid: usize) -> (Self, Self) {
         let (l,r) = self.arr.split_at(mid * self.element_size());
 
-        (VecArrIterProducer {
+        (SerializedVecIterProducer {
             arr: l,
             t:PhantomData::<C>,
             len:self.len
-        },VecArrIterProducer {
+        },SerializedVecIterProducer {
             arr: r,
             t:PhantomData::<C>,
             len:self.len
         })
     }
 }
-impl<'data, C, T> ParallelIterator for VecArrParIter<'data,C,T>
+impl<'data, C, T> ParallelIterator for SerializedVecParIter<'data,C,T>
     where T: Default + Clone + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send {
     type Item = <C as MakeView<'data,T>>::ViewType;
@@ -2172,7 +2172,7 @@ impl<'data, C, T> ParallelIterator for VecArrParIter<'data,C,T>
         self.drive(consumer)
     }
 }
-impl<'data, C, T> IndexedParallelIterator for VecArrParIter<'data,C,T>
+impl<'data, C, T> IndexedParallelIterator for SerializedVecParIter<'data,C,T>
     where T: Default + Clone + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send {
     fn len(&self) -> usize { self.len }
@@ -2188,35 +2188,35 @@ impl<'data, C, T> IndexedParallelIterator for VecArrParIter<'data,C,T>
         where
             CB: plumbing::ProducerCallback<Self::Item>,
     {
-        callback.callback(VecArrIterProducer::<'data,C,T> {
+        callback.callback(SerializedVecIterProducer::<'data,C,T> {
             arr:&self.arr,
             t:PhantomData::<C>,
             len: self.len
         })
     }
 }
-impl<'data,C,T> IntoParallelRefIterator<'data> for VecArr<T,C>
+impl<'data,C,T> IntoParallelRefIterator<'data> for SerializedVec<T,C>
     where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send {
-    type Iter = VecArrParIter<'data,C,T>;
+    type Iter = SerializedVecParIter<'data,C,T>;
     type Item = <C as MakeView<'data,T>>::ViewType;
 
     fn par_iter(&'data self) -> Self::Iter {
-        VecArrParIter {
+        SerializedVecParIter {
             arr: &self.arr,
             t:PhantomData::<C>,
             len: self.len
         }
     }
 }
-impl<'data,C,T> IntoParallelRefIterator<'data> for &'data VecArr<T,C>
+impl<'data,C,T> IntoParallelRefIterator<'data> for &'data SerializedVec<T,C>
     where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send {
-    type Iter = VecArrParIter<'data,C,T>;
+    type Iter = SerializedVecParIter<'data,C,T>;
     type Item = <C as MakeView<'data,T>>::ViewType;
 
     fn par_iter(&'data self) -> Self::Iter {
-        VecArrParIter {
+        SerializedVecParIter {
             arr: &self.arr,
             t:PhantomData::<C>,
             len: self.len

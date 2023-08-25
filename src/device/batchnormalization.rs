@@ -4,7 +4,7 @@ use rcudnn::{API};
 use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BATCHNORM_SPATIAL};
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
 
-use crate::arr::{Arr, VecArr};
+use crate::arr::{Arr, SerializedVec};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
@@ -62,8 +62,8 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn batch_forward_batch_norm(&self, input: &VecArr<U,Arr<U,N>>, scale: &C , bias: &C,
-                                estimated_mean: &C, estimated_variance: &C) -> Result<VecArr<U,Arr<U,N>>,EvaluateError>;
+    fn batch_forward_batch_norm(&self, input: &SerializedVec<U,Arr<U,N>>, scale: &C , bias: &C,
+                                estimated_mean: &C, estimated_variance: &C) -> Result<SerializedVec<U,Arr<U,N>>,EvaluateError>;
     /// Forward propagation calculation in batch (implemented in training mode)
     /// # Arguments
     /// * `input` - input
@@ -80,9 +80,9 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn batch_forward_batch_norm_train(&self, input: &VecArr<U,Arr<U,N>>, scale: &C, bias: &C,
+    fn batch_forward_batch_norm_train(&self, input: &SerializedVec<U,Arr<U,N>>, scale: &C, bias: &C,
                                       running_mean: &C, running_variance: &C, momentum: U)
-                                      -> Result<(VecArr<U,Arr<U,N>>,T,T,Arr<U,N>,Arr<U,N>),TrainingError>;
+                                      -> Result<(SerializedVec<U,Arr<U,N>>,T,T,Arr<U,N>,Arr<U,N>),TrainingError>;
     /// Error back propagation calculation
     /// # Arguments
     /// * `loss` - loss input
@@ -109,8 +109,8 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward_batch_norm(&self, loss:&VecArr<U,Arr<U,N>>, input: &VecArr<U,Arr<U,N>>,
-                                 scale: &C, saved_mean: &T, saved_inv_variance: &T) -> Result<(VecArr<U,Arr<U, N>>,Arr<U,N>,Arr<U,N>), TrainingError>;
+    fn batch_backward_batch_norm(&self, loss:&SerializedVec<U,Arr<U,N>>, input: &SerializedVec<U,Arr<U,N>>,
+                                 scale: &C, saved_mean: &T, saved_inv_variance: &T) -> Result<(SerializedVec<U,Arr<U, N>>,Arr<U,N>,Arr<U,N>), TrainingError>;
 }
 impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
     where U: UnitValue<U> {
@@ -152,8 +152,8 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         ))
     }
 
-    fn batch_forward_batch_norm(&self, input: &VecArr<U, Arr<U, N>>, scale: &Arr<U, N>, bias: &Arr<U, N>,
-                                estimated_mean: &Arr<U, N>, estimated_variance: &Arr<U, N>) -> Result<VecArr<U, Arr<U, N>>, EvaluateError> {
+    fn batch_forward_batch_norm(&self, input: &SerializedVec<U, Arr<U, N>>, scale: &Arr<U, N>, bias: &Arr<U, N>,
+                                estimated_mean: &Arr<U, N>, estimated_variance: &Arr<U, N>) -> Result<SerializedVec<U, Arr<U, N>>, EvaluateError> {
 
         let eps = U::from_f64(1e-6).ok_or(EvaluateError::TypeCastError(String::from(
             "Error in type conversion from usize."
@@ -171,11 +171,11 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 
-    fn batch_forward_batch_norm_train(&self, input: &VecArr<U, Arr<U, N>>,
+    fn batch_forward_batch_norm_train(&self, input: &SerializedVec<U, Arr<U, N>>,
                                       scale: &Arr<U, N>, bias: &Arr<U, N>,
                                       running_mean: &Arr<U, N>, running_variance: &Arr<U, N>,
                                       momentum: U)
-                                      -> Result<(VecArr<U,Arr<U,N>>,Arr<U,N>,Arr<U,N>,Arr<U,N>,Arr<U,N>), TrainingError> {
+                                      -> Result<(SerializedVec<U,Arr<U,N>>,Arr<U,N>,Arr<U,N>,Arr<U,N>,Arr<U,N>), TrainingError> {
 
         let eps = U::from_f64(1e-6).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from usize."
@@ -188,7 +188,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
 
         let mean:Arr<U,N> = SumNode::new().forward(input) / un;
 
-        let variance:VecArr<U,Arr<U,N>> = (input - Broadcast::<Arr<U,N>>(mean.clone()))
+        let variance:SerializedVec<U,Arr<U,N>> = (input - Broadcast::<Arr<U,N>>(mean.clone()))
             .par_iter()
             .map(|i| {
                 i.par_iter().map(|&i| {
@@ -199,7 +199,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
 
         let inv_variance:Arr<U,N> = variance.par_iter().map(|&v| U::one() / SqrtNode::new().forward(v + eps)).collect::<Vec<U>>().try_into()?;
 
-        let o:VecArr<U,Arr<U,N>> = Broadcast(inv_variance.clone()) * (input - Broadcast(mean.clone()));
+        let o:SerializedVec<U,Arr<U,N>> = Broadcast(inv_variance.clone()) * (input - Broadcast(mean.clone()));
 
         let running_mean = running_mean * momentum + &mean * (U::one() - momentum);
         let running_variance = running_variance * momentum + variance * (U::one() - momentum);
@@ -236,11 +236,11 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         Ok((dx,s,b))
     }
 
-    fn batch_backward_batch_norm(&self, loss: &VecArr<U, Arr<U, N>>,
-                                 input: &VecArr<U,Arr<U,N>>,
+    fn batch_backward_batch_norm(&self, loss: &SerializedVec<U, Arr<U, N>>,
+                                 input: &SerializedVec<U,Arr<U,N>>,
                                  scale: &Arr<U, N>,
                                  saved_mean: &Arr<U, N>, saved_inv_variance: &Arr<U, N>)
-                                 -> Result<(VecArr<U, Arr<U, N>>, Arr<U, N>, Arr<U, N>), TrainingError> {
+                                 -> Result<(SerializedVec<U, Arr<U, N>>, Arr<U, N>, Arr<U, N>), TrainingError> {
         let n = input.len();
 
         let un = U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
@@ -423,9 +423,9 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         }
     }
 
-    fn batch_forward_batch_norm(&self, input: &VecArr<U,Arr<U,N>>, scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
+    fn batch_forward_batch_norm(&self, input: &SerializedVec<U,Arr<U,N>>, scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
                                 estimated_mean: &CachedTensor<U,Arr<U,N>>, estimated_variance: &CachedTensor<U,Arr<U,N>>)
-        -> Result<VecArr<U,Arr<U,N>>, EvaluateError> {
+        -> Result<SerializedVec<U,Arr<U,N>>, EvaluateError> {
         let len = input.len() as i32;
 
         let mut input_ptr = CudaMemoryPoolPtr::<U>::new(len as usize * N,&self.memory_pool)?;
@@ -489,11 +489,11 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         }
     }
 
-    fn batch_forward_batch_norm_train(&self, input: &VecArr<U,Arr<U,N>>,
+    fn batch_forward_batch_norm_train(&self, input: &SerializedVec<U,Arr<U,N>>,
                                       scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
                                       running_mean: &CachedTensor<U,Arr<U,N>>, running_variance: &CachedTensor<U,Arr<U,N>>,
                                       momentum: U)
-                                      -> Result<(VecArr<U,Arr<U,N>>,CudaPtr<U>,CudaPtr<U>,Arr<U,N>,Arr<U,N>), TrainingError> {
+                                      -> Result<(SerializedVec<U,Arr<U,N>>,CudaPtr<U>,CudaPtr<U>,Arr<U,N>,Arr<U,N>), TrainingError> {
         let len = input.len() as i32;
 
         let mut input_ptr = CudaMemoryPoolPtr::<U>::new(len as usize * N,&self.memory_pool)?;
@@ -649,11 +649,11 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         }
     }
 
-    fn batch_backward_batch_norm(&self, loss: &VecArr<U,Arr<U,N>>,
-                                 input: &VecArr<U,Arr<U,N>>,
+    fn batch_backward_batch_norm(&self, loss: &SerializedVec<U,Arr<U,N>>,
+                                 input: &SerializedVec<U,Arr<U,N>>,
                                  scale: &CachedTensor<U,Arr<U,N>>,
                                  saved_mean: &CudaPtr<U>, saved_inv_variance: &CudaPtr<U>)
-                                 -> Result<(VecArr<U,Arr<U,N>>, Arr<U,N>, Arr<U,N>), TrainingError> {
+                                 -> Result<(SerializedVec<U,Arr<U,N>>, Arr<U,N>, Arr<U,N>), TrainingError> {
         let len = input.len() as i32;
 
         let mut loss_ptr = CudaMemoryPoolPtr::<U>::new(len as usize * N,&self.memory_pool)?;

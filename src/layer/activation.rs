@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use crate::activation::{Activation, BatchActivation};
-use crate::arr::{Arr, VecArr};
+use crate::arr::{Arr, SerializedVec};
 use crate::{Cons, Stack};
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
@@ -173,19 +173,19 @@ impl<U,P,A,I,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
 }
 impl<U,P,A,I,D,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,Arr<U,N>>> + BatchPreTrainBase<U> + BatchBackward<U> +
-             BatchLoss<U,BatchLossInput=VecArr<U,Arr<U,N>>>,
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,Arr<U,N>>> + BatchPreTrainBase<U> + BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=SerializedVec<U,Arr<U,N>>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: Activation<U,Arr<U,N>,Arr<U,N>,D>,
           I: Debug + Send + Sync {
-    type BatchInput = VecArr<U,I>;
-    type BatchOutput = VecArr<U,Arr<U,N>>;
+    type BatchInput = SerializedVec<U,I>;
+    type BatchOutput = SerializedVec<U,Arr<U,N>>;
 }
 impl<U,P,A,I,D,const N:usize> BatchForward for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,Arr<U,N>>> + BatchForward +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=VecArr<U,Arr<U,N>>>,
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,Arr<U,N>>> + BatchForward +
+             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,Arr<U,N>>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: BatchActivation<U,Arr<U,N>,Arr<U,N>,D>,
@@ -198,8 +198,8 @@ impl<U,P,A,I,D,const N:usize> BatchForward for ActivationLayer<U,P,A,I,Arr<U,N>,
 }
 impl<U,P,A,I,D,const N:usize> BatchPreTrainBase<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,Arr<U,N>>> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=VecArr<U,Arr<U,N>>>,
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,Arr<U,N>>> +
+             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,Arr<U,N>>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: Activation<U,Arr<U,N>,Arr<U,N>,D>,
@@ -208,8 +208,8 @@ impl<U,P,A,I,D,const N:usize> BatchPreTrainBase<U> for ActivationLayer<U,P,A,I,A
 }
 impl<U,P,A,I,D,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,Arr<U,N>>> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=VecArr<U,Arr<U,N>>>,
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,Arr<U,N>>> +
+             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,Arr<U,N>>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: BatchActivation<U,Arr<U,N>,Arr<U,N>,D>,
@@ -226,13 +226,13 @@ impl<U,P,A,I,D,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,Arr<U
 }
 impl<U,P,A,I,D,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,Arr<U,N>>> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=VecArr<U,Arr<U,N>>>,
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,Arr<U,N>>> +
+             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,Arr<U,N>>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: Activation<U,Arr<U,N>,Arr<U,N>,D>,
           I: Debug + Send + Sync {
-    type BatchLossInput = VecArr<U,Arr<U,N>>;
+    type BatchLossInput = SerializedVec<U,Arr<U,N>>;
     fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
         let (s,_) = stack.pop();
 
@@ -242,9 +242,9 @@ impl<U,P,A,I,D,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,Arr<U
 impl<U,P,A,I,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,Arr<U,N>,D>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=Arr<U,N>> +
              BackwardAll<U,LossInput=Arr<U,N>> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=VecArr<U,Arr<U,N>>> +
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,Arr<U,N>>> +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=VecArr<U,Arr<U,N>>>,
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,Arr<U,N>>>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           A: BatchActivation<U,Arr<U,N>,Arr<U,N>,D> + Activation<U,Arr<U,N>,Arr<U,N>,D>,

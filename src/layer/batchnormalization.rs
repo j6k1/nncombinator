@@ -2,7 +2,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use crate::arr::{Arr, VecArr};
+use crate::arr::{Arr, SerializedVec};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaPtr};
 use crate::cuda::mem::CachedTensor;
@@ -183,8 +183,8 @@ impl<U,P,I,PI,BI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           ConfigReadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
@@ -249,8 +249,8 @@ impl<T,U,P,I,PI,BI,const N:usize> Persistence<U,T,Linear>
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 
@@ -303,8 +303,8 @@ impl<U,P,I,PI,BI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
               I: Debug + Send + Sync,
               Arr<U,N>: From<PI>,
               PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-              VecArr<U,Arr<U,N>>: From<BI>,
-              BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+              SerializedVec<U,Arr<U,N>>: From<BI>,
+              BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
               ConfigReadError: From<<U as FromStr>::Err>,
               DeviceGpu<U>: Device<U> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
@@ -370,8 +370,8 @@ impl<T,U,P,I,PI,BI,const N:usize> Persistence<U,T,Linear>
               I: Debug + Send + Sync,
               Arr<U,N>: From<PI>,
               PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-              VecArr<U,Arr<U,N>>: From<BI>,
-              BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+              SerializedVec<U,Arr<U,N>>: From<BI>,
+              BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
               DeviceGpu<U>: Device<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
@@ -425,8 +425,8 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> Forward<Arr<U,N>,Result<Arr<U,N>,EvaluateE
           S: Debug + Sized + 'static,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
     fn forward(&self,input:&Arr<U,N>) -> Result<Arr<U,N>,EvaluateError> {
         self.device.forward_batch_norm(input,&self.scale,&self.bias,&self.running_mean,&self.running_variance)
     }
@@ -439,8 +439,8 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> ForwardAll for BatchNormalizationLayer<U,C
           S: Debug + Sized + 'static,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
     type Input = I;
     type Output = PI;
     fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
@@ -455,8 +455,8 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,
           S: Debug + Sized + 'static,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
     type OutStack = Cons<Cons<<P as PreTrain<U>>::OutStack,(S,S)>,Self::Output>;
 
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
@@ -487,8 +487,8 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> Backward<U,(&Arr<U,N>,&Arr<U,N>,&S,&S),Res
           S: Debug + Sized + 'static,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
     fn backward(&mut self, (loss,input,saved_mean,saved_inv_variance): (&Arr<U,N>,&Arr<U,N>,&S,&S)) -> Result<(Arr<U,N>,Arr<U,N>,Arr<U,N>),TrainingError> {
         self.device.backward_batch_norm(loss,
                                         input,
@@ -503,8 +503,8 @@ impl<U,P,I,PI,BI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
     type LossInput = PI;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
@@ -542,8 +542,8 @@ impl<U,P,I,PI,BI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Cac
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> {
     type LossInput = PI;
 
@@ -584,8 +584,8 @@ impl<U,P,C,I,PI,BI,S,const N:usize> AskDiffInput<U> for BatchNormalizationLayer<
           S: Debug + Sized + 'static,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           Self: PreTrain<U> {
     type DiffInput = P::DiffInput;
 
@@ -599,8 +599,8 @@ impl<U,P,I,PI,BI,const N:usize> Loss<U> for BatchNormalizationLayer<U,Arr<U,N>,P
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
 }
 impl<U,P,I,PI,BI,const N:usize> Loss<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
@@ -608,36 +608,36 @@ impl<U,P,I,PI,BI,const N:usize> Loss<U> for BatchNormalizationLayer<U,CachedTens
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> {
 }
 impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchForwardBase for BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward,
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=BI> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,S,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           Self: ForwardAll {
-    type BatchInput = VecArr<U,I>;
+    type BatchInput = SerializedVec<U,I>;
     type BatchOutput = BI;
 }
 impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchForward for BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward,
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=BI> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,S,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
@@ -647,7 +647,7 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchForward for BatchNormalizationLayer<U
 }
 impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward +
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=BI> + BatchForward +
              BatchPreTrainBase<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,S,N>,
@@ -655,14 +655,14 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizatio
           S: Debug + Sized + 'static,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           Self: PreTrain<U> {
     type BatchOutStack = Cons<Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,MeanAndVariance<U,S,N>>,Self::BatchOutput>;
 }
 impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLayer<U,C,P,D,I,PI,BI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward +
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=BI> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,S,N>,
@@ -670,8 +670,8 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLay
           S: Debug + Sized + 'static,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           Self: PreTrain<U> {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let s = self.parent.batch_pre_train(input)?;
@@ -695,15 +695,15 @@ impl<U,C,P,D,I,PI,BI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLay
 }
 impl<U,P,I,PI,BI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward +
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=BI> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=BI>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
     type BatchLossInput = BI;
 
     fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
@@ -744,15 +744,15 @@ impl<U,P,I,PI,BI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
 }
 impl<U,P,I,PI,BI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward +
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=BI> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=BI>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> {
     type BatchLossInput = BI;
 
@@ -799,27 +799,27 @@ impl<U,P,I,PI,BI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,C
 }
 impl<U,P,I,PI,BI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,BI,Arr<U,N>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward +
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=BI> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=BI>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static {
 }
 impl<U,P,I,PI,BI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,BI,CudaPtr<U>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=VecArr<U,I>,BatchOutput=BI> + BatchForward +
+             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=BI> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=BI>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          VecArr<U,Arr<U,N>>: From<BI>,
-          BI: From<VecArr<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
+          SerializedVec<U,Arr<U,N>>: From<BI>,
+          BI: From<SerializedVec<U,Arr<U,N>>> + Debug + Send + Sync + 'static,
           DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> {
 }
 /// Builder for BatchNormalizationLayer instance creation

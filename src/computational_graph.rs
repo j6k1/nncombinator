@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use num_traits::FromPrimitive;
 use rayon::prelude::{ParallelIterator, IntoParallelIterator};
-use crate::arr::{Arr, SerializedVec};
+use crate::arr::{AsView, MakeView, SerializedVec, SerializedVecView, SliceSize};
 use crate::ope::{One, Sqrt, Sum};
 
 /// Trait that defines a computational graph for calculating forward and back propagation of a neural network
@@ -81,47 +81,84 @@ impl<U> GraphNode<U,(U,U),(U,U),U> for BranchNode<U> where U: Add<Output = U> + 
     }
 }
 /// Sum node implementation
-pub struct SumNode<U> where U: Default + Clone + Copy + Send + Sync {
-    u:PhantomData<U>
+pub struct SumNode<U,C> where U: Default + Clone + Copy + Send + Sync {
+    u:PhantomData<U>,
+    c:PhantomData<C>
 }
-impl<U> SumNode<U> where U: Default + Clone + Copy + Send + Sync {
-    pub fn new() -> SumNode<U> {
+impl<U,C> SumNode<U,C> where U: Default + Clone + Copy + Send + Sync {
+    pub fn new() -> SumNode<U,C> {
         SumNode {
-            u:PhantomData::<U>
+            u:PhantomData::<U>,
+            c:PhantomData::<C>
         }
     }
 }
-impl<U,const N:usize> GraphNode<&SerializedVec<U,Arr<U,N>>,Arr<U,N>,(&Arr<U,N>,usize),SerializedVec<U,Arr<U,N>>>
-    for SumNode<U> where U: Add + Add<Output = U> + Default + Clone + Copy + Send + Sync + 'static,
-                         for<'a> &'a Arr<U,N>: Add<&'a Arr<U,N>,Output = Arr<U,N>> {
-    fn forward(&self,v: &SerializedVec<U, Arr<U, N>>) -> Arr<U, N> {
+impl<U,T> GraphNode<&SerializedVec<U,T>,T,(&T,usize),SerializedVec<U,T>> for SumNode<U,SerializedVec<U,T>>
+    where U: Default + Clone + Copy + Send + Sync + Add<Output=U> + 'static,
+          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Send + Sync + Default + Clone + Add<Output=T> + 'static,
+          for<'a> T: Add<<T as AsView<'a>>::ViewType,Output=T>,
+          SerializedVec<U,T>: From<Vec<T>> {
+    fn forward(&self,v: &SerializedVec<U,T>) -> T {
         v.sum()
     }
 
-    fn backward(&self,(d,n): (&Arr<U, N>,usize)) -> SerializedVec<U, Arr<U,N>> {
+    fn backward(&self,(d,n): (&T,usize)) -> SerializedVec<U,T> {
         (0..n).into_par_iter().map(|_| {
             d.clone().into()
-        }).collect::<Vec<Arr<U,N>>>().into()
+        }).collect::<Vec<T>>().into()
+    }
+}
+impl<'b,U,T> GraphNode<SerializedVecView<'b,U,T>,T,(&T,usize),SerializedVec<U,T>> for SumNode<U,SerializedVecView<'b,U,T>>
+    where U: Default + Clone + Copy + Send + Sync + Add<Output=U> + 'static,
+          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Send + Sync + Default + Clone + Add<Output=T> + 'static,
+          for<'a> T: Add<<T as AsView<'a>>::ViewType,Output=T>,
+          SerializedVec<U,T>: From<Vec<T>> {
+    fn forward(&self,v: SerializedVecView<'b,U,T>) -> T {
+        v.sum()
+    }
+
+    fn backward(&self,(d,n): (&T,usize)) -> SerializedVec<U,T> {
+        (0..n).into_par_iter().map(|_| {
+            d.clone().into()
+        }).collect::<Vec<T>>().into()
     }
 }
 /// Broadcast node implementation
-pub struct BroadcastNode<U> where U: Default + Clone + Send {
-    u:PhantomData<U>
+pub struct BroadcastNode<U,C> where U: Default + Clone + Send {
+    u:PhantomData<U>,
+    c:PhantomData<C>
 }
-impl<U> BroadcastNode<U> where U: Default + Clone + Send {
-    pub fn new() -> BroadcastNode<U> {
+impl<U,C> BroadcastNode<U,C> where U: Default + Clone + Send {
+    pub fn new() -> BroadcastNode<U,C> {
         BroadcastNode {
-            u:PhantomData::<U>
+            u:PhantomData::<U>,
+            c:PhantomData::<C>
         }
     }
 }
-impl<U,const N:usize> GraphNode<(&Arr<U,N>,usize),SerializedVec<U,Arr<U,N>>,&SerializedVec<U,Arr<U,N>>,Arr<U,N>>
-    for BroadcastNode<U> where U: Add + Add<Output = U> + Default + Clone + Copy + Send + Sync + 'static {
-    fn forward(&self,(v,n): (&Arr<U, N>,usize)) -> SerializedVec<U, Arr<U, N>> {
+impl<U,T> GraphNode<(&T,usize),SerializedVec<U,T>,&SerializedVec<U,T>,T> for BroadcastNode<U,&SerializedVec<U,T>>
+    where U: Default + Clone + Copy + Send + Sync + Add<Output=U> + 'static,
+          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Send + Sync + Default + Clone + Add<Output=T> + 'static,
+          for<'a> T: Add<<T as AsView<'a>>::ViewType,Output=T>,
+          SerializedVec<U,T>: From<Vec<T>> {
+    fn forward(&self,(v,n): (&T,usize)) -> SerializedVec<U,T> {
         (0..n).into_par_iter().map(|_| v.clone()).collect::<Vec<_>>().into()
     }
 
-    fn backward(&self,d: &SerializedVec<U, Arr<U, N>>) -> Arr<U, N> {
+    fn backward(&self,d: &SerializedVec<U,T>) -> T {
+        d.sum()
+    }
+}
+impl<'b,U,T> GraphNode<(&T,usize),SerializedVec<U,T>,SerializedVecView<'b,U,T>,T> for BroadcastNode<U,SerializedVecView<'b,U,T>>
+    where U: Default + Clone + Copy + Send + Sync + Add<Output=U> + 'static,
+          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Send + Sync + Default + Clone + Add<Output=T> + 'static,
+          for<'a> T: Add<<T as AsView<'a>>::ViewType,Output=T>,
+          SerializedVec<U,T>: From<Vec<T>> {
+    fn forward(&self,(v,n): (&T,usize)) -> SerializedVec<U,T> {
+        (0..n).into_par_iter().map(|_| v.clone()).collect::<Vec<_>>().into()
+    }
+
+    fn backward(&self,d: SerializedVecView<'b,U,T>) -> T {
         d.sum()
     }
 }

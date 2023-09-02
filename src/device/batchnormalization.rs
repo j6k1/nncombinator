@@ -32,7 +32,7 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn forward_batch_norm(&self, input: &ArrView<'_,U,N>, scale: &C, bias: &C,
+    fn forward_batch_norm<'a>(&self, input: &ArrView<'a,U,N>, scale: &C, bias: &C,
                           estimated_mean: &C, estimated_variance: &C) -> Result<Arr<U,N>,EvaluateError>;
     /// Forward propagation calculation (implemented in training mode)
     /// # Arguments
@@ -47,7 +47,7 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn forward_batch_norm_train(&self, input: ArrView<'_,U,N>, scale: &C, bias: &C,
+    fn forward_batch_norm_train<'a>(&self, input: ArrView<'a,U,N>, scale: &C, bias: &C,
                                 estimated_mean: &C, estimated_variance: &C) -> Result<(Arr<U,N>,T,T),EvaluateError>;
     /// Forward propagation calculation in batch
     /// # Arguments
@@ -62,7 +62,7 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn batch_forward_batch_norm(&self, input: SerializedVecView<'_,U,Arr<U,N>>, scale: &C , bias: &C,
+    fn batch_forward_batch_norm<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>, scale: &C , bias: &C,
                                 estimated_mean: &C, estimated_variance: &C) -> Result<SerializedVec<U,Arr<U,N>>,EvaluateError>;
     /// Forward propagation calculation in batch (implemented in training mode)
     /// # Arguments
@@ -80,7 +80,7 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn batch_forward_batch_norm_train(&self, input: SerializedVecView<'_,U,Arr<U,N>>, scale: &C, bias: &C,
+    fn batch_forward_batch_norm_train<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>, scale: &C, bias: &C,
                                       running_mean: &C, running_variance: &C, momentum: U)
                                       -> Result<(SerializedVec<U,Arr<U,N>>,T,T,Arr<U,N>,Arr<U,N>),TrainingError>;
     /// Error back propagation calculation
@@ -95,7 +95,7 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_batch_norm(&self, loss:ArrView<'_,U,N>, input: ArrView<'_,U,N>, scale: &C,
+    fn backward_batch_norm<'a>(&self, loss:ArrView<'a,U,N>, input: ArrView<'a,U,N>, scale: &C,
                            saved_mean: &T, saved_inv_variance: &T) -> Result<(Arr<U,N>,Arr<U,N>,Arr<U,N>), TrainingError>;
     /// Error back propagation calculation in batch
     /// # Arguments
@@ -109,12 +109,12 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward_batch_norm(&self, loss:SerializedVecView<'_,U,Arr<U,N>>, input: SerializedVecView<'_,U,Arr<U,N>>,
+    fn batch_backward_batch_norm<'a>(&self, loss:SerializedVecView<'a,U,Arr<U,N>>, input: SerializedVecView<'a,U,Arr<U,N>>,
                                  scale: &C, saved_mean: &T, saved_inv_variance: &T) -> Result<(SerializedVec<U,Arr<U,N>>,Arr<U,N>,Arr<U,N>), TrainingError>;
 }
 impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
     where U: UnitValue<U> {
-    fn forward_batch_norm(&self, input: &ArrView<'_,U,N>, scale: &Arr<U,N>, bias: &Arr<U,N>,
+    fn forward_batch_norm<'a>(&self, input: &ArrView<'a,U,N>, scale: &Arr<U,N>, bias: &Arr<U,N>,
                           estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<Arr<U,N>,EvaluateError> {
         let eps = U::from_f64(1e-6).ok_or(EvaluateError::TypeCastError(String::from(
             "Error in type conversion from usize."
@@ -130,7 +130,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             }).collect::<Vec<U>>().try_into()?)
     }
 
-    fn forward_batch_norm_train(&self, input: ArrView<'_,U,N>,
+    fn forward_batch_norm_train<'a>(&self, input: ArrView<'a,U,N>,
                                 scale: &Arr<U,N>,
                                 bias: &Arr<U,N>,
                                 estimated_mean: &Arr<U,N>,
@@ -152,7 +152,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         ))
     }
 
-    fn batch_forward_batch_norm(&self, input: SerializedVecView<'_,U,Arr<U,N>>, scale: &Arr<U,N>, bias: &Arr<U,N>,
+    fn batch_forward_batch_norm<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>, scale: &Arr<U,N>, bias: &Arr<U,N>,
                                 estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<SerializedVec<U,Arr<U,N>>, EvaluateError> {
 
         let eps = U::from_f64(1e-6).ok_or(EvaluateError::TypeCastError(String::from(
@@ -171,7 +171,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 
-    fn batch_forward_batch_norm_train(&self, input: SerializedVecView<'_,U,Arr<U,N>>,
+    fn batch_forward_batch_norm_train<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>,
                                       scale: &Arr<U,N>, bias: &Arr<U,N>,
                                       running_mean: &Arr<U,N>, running_variance: &Arr<U,N>,
                                       momentum: U)
@@ -186,7 +186,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             "Error in type conversion from usize."
         )))?;
 
-        let mean:Arr<U,N> = SumNode::new().forward(input) / un;
+        let mean:Arr<U,N> = SumNode::<U,SerializedVecView<'_,U,Arr<U,N>>>::new().forward(input) / un;
 
         let variance:SerializedVec<U,Arr<U,N>> = (input - Broadcast::<Arr<U,N>>(mean.clone()))
             .par_iter()
@@ -209,7 +209,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         Ok((o,mean,inv_variance,running_mean,running_variance))
     }
 
-    fn backward_batch_norm(&self, loss: ArrView<'_,U,N>, input: ArrView<'_,U,N>,
+    fn backward_batch_norm<'a>(&self, loss: ArrView<'a,U,N>, input: ArrView<'a,U,N>,
                            scale: &Arr<U,N>, saved_mean: &Arr<U,N>, saved_inv_variance: &Arr<U,N>)
                            -> Result<(Arr<U,N>, Arr<U,N>, Arr<U,N>), TrainingError> {
         let b = loss.clone();
@@ -236,8 +236,8 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         Ok((dx,s,b.into()))
     }
 
-    fn batch_backward_batch_norm(&self, loss: SerializedVecView<'_,U,Arr<U,N>>,
-                                 input: SerializedVecView<'_,U,Arr<U,N>>,
+    fn batch_backward_batch_norm<'a>(&self, loss: SerializedVecView<'a,U,Arr<U,N>>,
+                                 input: SerializedVecView<'a,U,Arr<U,N>>,
                                  scale: &Arr<U,N>,
                                  saved_mean: &Arr<U,N>, saved_inv_variance: &Arr<U,N>)
                                  -> Result<(SerializedVec<U,Arr<U,N>>, Arr<U,N>, Arr<U,N>), TrainingError> {
@@ -247,17 +247,17 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             "Error in type conversion from usize."
         )))?;
 
-        let b = BroadcastNode::new().backward(loss);
+        let b = BroadcastNode::<U,SerializedVecView<'_,U,Arr<U,N>>>::new().backward(loss);
 
         let x = BroadcastNode::<U,&SerializedVec<U,Arr<U,N>>>::new().forward((saved_mean,n));
         let x2 = input - &x;
         let iv = BroadcastNode::<U,&SerializedVec<U,Arr<U,N>>>::new().forward((saved_inv_variance,n));
 
-        let s = BroadcastNode::new().backward(&(&x2 * &iv * loss));
+        let s = BroadcastNode::<U,&SerializedVec<U,Arr<U,N>>>::new().backward(&(&x2 * &iv * loss));
 
         let dx1 = Broadcast(scale.clone()) * loss;
         let dx2 = &dx1 * iv;
-        let dx3 = BroadcastNode::new().backward(&(&x2 * dx1));
+        let dx3 = BroadcastNode::<U,&SerializedVec<U,Arr<U,N>>>::new().backward(&(&x2 * dx1));
         let dx4 = -(saved_inv_variance * saved_inv_variance) * dx3;
         let dx5 = dx4 * (saved_inv_variance / U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from f64.")
@@ -280,7 +280,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
 impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> for DeviceGpu<U>
     where U: UnitValue<U> + DataTypeInfo + AsVoidPtr,
           f64: From<U> {
-    fn forward_batch_norm(&self, input: &ArrView<'_,U,N>, scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
+    fn forward_batch_norm<'a>(&self, input: &ArrView<'a,U,N>, scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
                           estimated_mean: &CachedTensor<U,Arr<U,N>>, estimated_variance: &CachedTensor<U,Arr<U,N>>)
         -> Result<Arr<U,N>,EvaluateError> {
         let len = input.len() as i32;
@@ -346,7 +346,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         }
     }
 
-    fn forward_batch_norm_train(&self, input: ArrView<'_,U,N>,
+    fn forward_batch_norm_train<'a>(&self, input: ArrView<'a,U,N>,
                                 scale: &CachedTensor<U,Arr<U,N>>,
                                 bias: &CachedTensor<U,Arr<U,N>>,
                                 estimated_mean: &CachedTensor<U,Arr<U,N>>,
@@ -423,7 +423,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         }
     }
 
-    fn batch_forward_batch_norm(&self, input: SerializedVecView<'_,U,Arr<U,N>>, scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
+    fn batch_forward_batch_norm<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>, scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
                                 estimated_mean: &CachedTensor<U,Arr<U,N>>, estimated_variance: &CachedTensor<U,Arr<U,N>>)
         -> Result<SerializedVec<U,Arr<U,N>>, EvaluateError> {
         let len = input.len() as i32;
@@ -489,7 +489,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         }
     }
 
-    fn batch_forward_batch_norm_train(&self, input: SerializedVecView<'_,U,Arr<U,N>>,
+    fn batch_forward_batch_norm_train<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>,
                                       scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
                                       running_mean: &CachedTensor<U,Arr<U,N>>, running_variance: &CachedTensor<U,Arr<U,N>>,
                                       momentum: U)
@@ -573,7 +573,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         }
     }
 
-    fn backward_batch_norm(&self, loss: ArrView<'_,U,N>, input: ArrView<'_,U,N>,
+    fn backward_batch_norm<'a>(&self, loss: ArrView<'a,U,N>, input: ArrView<'a,U,N>,
                            scale: &CachedTensor<U,Arr<U,N>>, saved_mean: &CudaPtr<U>, saved_inv_variance: &CudaPtr<U>)
                            -> Result<(Arr<U,N>, Arr<U,N>, Arr<U,N>), TrainingError> {
         let len = input.len() as i32;
@@ -649,8 +649,8 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         }
     }
 
-    fn batch_backward_batch_norm(&self, loss: SerializedVecView<'_,U,Arr<U,N>>,
-                                 input: SerializedVecView<'_,U,Arr<U,N>>,
+    fn batch_backward_batch_norm<'a>(&self, loss: SerializedVecView<'a,U,Arr<U,N>>,
+                                 input: SerializedVecView<'a,U,Arr<U,N>>,
                                  scale: &CachedTensor<U,Arr<U,N>>,
                                  saved_mean: &CudaPtr<U>, saved_inv_variance: &CudaPtr<U>)
                                  -> Result<(SerializedVec<U,Arr<U,N>>, Arr<U,N>, Arr<U,N>), TrainingError> {

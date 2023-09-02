@@ -81,11 +81,11 @@ impl<U> GraphNode<U,(U,U),(U,U),U> for BranchNode<U> where U: Add<Output = U> + 
     }
 }
 /// Sum node implementation
-pub struct SumNode<U,C> where U: Default + Clone + Copy + Send + Sync {
+pub struct SumNode<U,C> where U: Default + Clone + Send + Sync {
     u:PhantomData<U>,
     c:PhantomData<C>
 }
-impl<U,C> SumNode<U,C> where U: Default + Clone + Copy + Send + Sync {
+impl<U,C> SumNode<U,C> where U: Default + Clone + Send + Sync {
     pub fn new() -> SumNode<U,C> {
         SumNode {
             u:PhantomData::<U>,
@@ -95,8 +95,9 @@ impl<U,C> SumNode<U,C> where U: Default + Clone + Copy + Send + Sync {
 }
 impl<U,T> GraphNode<&SerializedVec<U,T>,T,(&T,usize),SerializedVec<U,T>> for SumNode<U,SerializedVec<U,T>>
     where U: Default + Clone + Copy + Send + Sync + Add<Output=U> + 'static,
-          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Send + Sync + Default + Clone + Add<Output=T> + 'static,
-          for<'a> T: Add<<T as AsView<'a>>::ViewType,Output=T>,
+          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Default + Clone + Send + Sync +
+                  Add<Output=T> + Add<<T as AsView<'a>>::ViewType,Output=T>,
+          for<'a> <T as AsView<'a>>::ViewType: Send,
           SerializedVec<U,T>: From<Vec<T>> {
     fn forward(&self,v: &SerializedVec<U,T>) -> T {
         v.sum()
@@ -108,12 +109,14 @@ impl<U,T> GraphNode<&SerializedVec<U,T>,T,(&T,usize),SerializedVec<U,T>> for Sum
         }).collect::<Vec<T>>().into()
     }
 }
-impl<'b,U,T> GraphNode<SerializedVecView<'b,U,T>,T,(&T,usize),SerializedVec<U,T>> for SumNode<U,SerializedVecView<'b,U,T>>
+impl<'a,U,T> GraphNode<SerializedVecView<'a,U,T>,T,(&T,usize),SerializedVec<U,T>> for SumNode<U,SerializedVecView<'a,U,T>>
     where U: Default + Clone + Copy + Send + Sync + Add<Output=U> + 'static,
-          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Send + Sync + Default + Clone + Add<Output=T> + 'static,
-          for<'a> T: Add<<T as AsView<'a>>::ViewType,Output=T>,
+          for<'b> T: SliceSize + AsView<'b> + MakeView<'b,U> +
+                  Default + Clone + Send + Sync +
+                  Add<Output=T> + Add<<T as AsView<'b>>::ViewType,Output=T>,
+          for<'b> <T as AsView<'b>>::ViewType: Send,
           SerializedVec<U,T>: From<Vec<T>> {
-    fn forward(&self,v: SerializedVecView<'b,U,T>) -> T {
+    fn forward(&self,v: SerializedVecView<'a,U,T>) -> T {
         v.sum()
     }
 
@@ -124,11 +127,11 @@ impl<'b,U,T> GraphNode<SerializedVecView<'b,U,T>,T,(&T,usize),SerializedVec<U,T>
     }
 }
 /// Broadcast node implementation
-pub struct BroadcastNode<U,C> where U: Default + Clone + Send {
+pub struct BroadcastNode<U,C> where U: Default + Clone + Send + Sync {
     u:PhantomData<U>,
     c:PhantomData<C>
 }
-impl<U,C> BroadcastNode<U,C> where U: Default + Clone + Send {
+impl<U,C> BroadcastNode<U,C> where U: Default + Clone + Send + Sync {
     pub fn new() -> BroadcastNode<U,C> {
         BroadcastNode {
             u:PhantomData::<U>,
@@ -138,8 +141,9 @@ impl<U,C> BroadcastNode<U,C> where U: Default + Clone + Send {
 }
 impl<U,T> GraphNode<(&T,usize),SerializedVec<U,T>,&SerializedVec<U,T>,T> for BroadcastNode<U,&SerializedVec<U,T>>
     where U: Default + Clone + Copy + Send + Sync + Add<Output=U> + 'static,
-          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Send + Sync + Default + Clone + Add<Output=T> + 'static,
-          for<'a> T: Add<<T as AsView<'a>>::ViewType,Output=T>,
+          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Default + Clone + Send + Sync +
+                  Add<Output=T> + Add<<T as AsView<'a>>::ViewType,Output=T>,
+          for<'a> <T as AsView<'a>>::ViewType: Send,
           SerializedVec<U,T>: From<Vec<T>> {
     fn forward(&self,(v,n): (&T,usize)) -> SerializedVec<U,T> {
         (0..n).into_par_iter().map(|_| v.clone()).collect::<Vec<_>>().into()
@@ -151,8 +155,9 @@ impl<U,T> GraphNode<(&T,usize),SerializedVec<U,T>,&SerializedVec<U,T>,T> for Bro
 }
 impl<'b,U,T> GraphNode<(&T,usize),SerializedVec<U,T>,SerializedVecView<'b,U,T>,T> for BroadcastNode<U,SerializedVecView<'b,U,T>>
     where U: Default + Clone + Copy + Send + Sync + Add<Output=U> + 'static,
-          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Send + Sync + Default + Clone + Add<Output=T> + 'static,
-          for<'a> T: Add<<T as AsView<'a>>::ViewType,Output=T>,
+          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U> + Default + Clone + Send + Sync +
+                  Add<Output=T> + Add<<T as AsView<'a>>::ViewType,Output=T>,
+          for<'a> <T as AsView<'a>>::ViewType: Send,
           SerializedVec<U,T>: From<Vec<T>> {
     fn forward(&self,(v,n): (&T,usize)) -> SerializedVec<U,T> {
         (0..n).into_par_iter().map(|_| v.clone()).collect::<Vec<_>>().into()

@@ -110,9 +110,6 @@ impl Stack for Nil {
     }
 }
 
-pub trait FromRef<'a,T> {
-    fn from_ref(s: &'a T) -> Self;
-}
 #[cfg(test)]
 mod tests {
     use crate::activation::ReLu;

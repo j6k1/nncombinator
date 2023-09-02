@@ -6,7 +6,7 @@ use std::ops::{Add, Deref, DerefMut, Div, Index, IndexMut, Mul, Neg, Sub};
 use std;
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use crate::derive_arithmetic;
+use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::error::{IndexOutBoundError, SizeMismatchError};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::Sum;
@@ -88,6 +88,12 @@ impl<'a,T,const N:usize> AsViewMut<'a> for Arr<T,N> where T: Default + Clone + S
         ArrViewMut {
             arr: &mut self.arr
         }
+    }
+}
+impl<'a,'b,U,const N:usize> From<&'b &'a Arr<U,N>> for &'b Arr<U,N>
+    where U: Default + Clone + Send {
+    fn from(s: &'b &'a Arr<U,N>) -> Self {
+        *s
     }
 }
 impl<'data,U,const N:usize> From<ArrView<'data,U,N>> for Arr<U,N> where U: Default + Clone + Copy + Send {
@@ -211,138 +217,10 @@ impl<T,const N:usize> Div<T> for Arr<T,N> where T: Div<Output=T> + Clone + Copy 
         &self / rhs
     }
 }
-impl<T,const N:usize> Add<&Arr<T,N>> for &Arr<T,N>
-    where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn add(self, rhs: &Arr<T,N>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(&l,&r)| l + r)
-            .collect::<Vec<T>>().try_into().expect("An error occurred in the add of Arrand Arr.")
-    }
-}
-impl<T,const N:usize> Add<&Arr<T,N>> for Arr<T,N>
-    where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn add(self, rhs: &Arr<T, N>) -> Self::Output {
-        &self + rhs
-    }
-}
-impl<T,const N:usize> Add<Arr<T,N>> for &Arr<T,N>
-    where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn add(self, rhs: Arr<T, N>) -> Self::Output {
-        self + &rhs
-    }
-}
-impl<T,const N:usize> Add<Arr<T,N>> for Arr<T,N>
-    where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn add(self, rhs: Arr<T, N>) -> Self::Output {
-        &self + &rhs
-    }
-}
-impl<T,const N:usize> Sub<&Arr<T,N>> for &Arr<T,N>
-    where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn sub(self, rhs: &Arr<T,N>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(&l,&r)| l - r)
-            .collect::<Vec<T>>().try_into().expect("An error occurred in the sub of Arr and Arr.")
-    }
-}
-impl<T,const N:usize> Sub<&Arr<T,N>> for Arr<T,N>
-    where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn sub(self, rhs: &Arr<T, N>) -> Self::Output {
-        &self - rhs
-    }
-}
-impl<T,const N:usize> Sub<Arr<T,N>> for &Arr<T,N>
-    where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn sub(self, rhs: Arr<T, N>) -> Self::Output {
-        self - &rhs
-    }
-}
-impl<T,const N:usize> Sub<Arr<T,N>> for Arr<T,N>
-    where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn sub(self, rhs: Arr<T, N>) -> Self::Output {
-        &self - &rhs
-    }
-}
-impl<T,const N:usize> Mul<&Arr<T,N>> for &Arr<T,N>
-    where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn mul(self, rhs: &Arr<T,N>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(&l,&r)| l * r)
-            .collect::<Vec<T>>().try_into().expect("An error occurred when multiplying Arr by Arr.")
-    }
-}
-impl<T,const N:usize> Mul<&Arr<T,N>> for Arr<T,N>
-    where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn mul(self, rhs: &Arr<T, N>) -> Self::Output {
-        &self * rhs
-    }
-}
-impl<T,const N:usize> Mul<Arr<T,N>> for &Arr<T,N>
-    where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn mul(self, rhs: Arr<T, N>) -> Self::Output {
-        self * &rhs
-    }
-}
-impl<T,const N:usize> Mul<Arr<T,N>> for Arr<T,N>
-    where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn mul(self, rhs: Arr<T, N>) -> Self::Output {
-        &self * &rhs
-    }
-}
-impl<T,const N:usize> Div<&Arr<T,N>> for &Arr<T,N>
-    where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn div(self, rhs: &Arr<T,N>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(&l,&r)| l / r)
-            .collect::<Vec<T>>().try_into().expect("An error occurred in the division of Arr and Arr.")
-    }
-}
-impl<T,const N:usize> Div<&Arr<T,N>> for Arr<T,N>
-    where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn div(self, rhs: &Arr<T, N>) -> Self::Output {
-        &self / rhs
-    }
-}
-impl<T,const N:usize> Div<Arr<T,N>> for &Arr<T,N>
-    where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn div(self, rhs: Arr<T, N>) -> Self::Output {
-        self / &rhs
-    }
-}
-impl<T,const N:usize> Div<Arr<T,N>> for Arr<T,N>
-    where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn div(self, rhs: Arr<T, N>) -> Self::Output {
-        &self / &rhs
-    }
-}
+derive_arr_like_arithmetic! (&'a Arr<T,N> > &'a Arr<T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (Arr<T,N> > Arr<T,N> = r Arr<T,N> > r Arr<T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (&'a Arr<T,N> > Arr<T,N> = r Arr<T,N> > r Arr<T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (Arr<T,N> > &'a Arr<T,N> = r Arr<T,N> > r Arr<T,N> = Arr<T,N>);
 impl<'a,T,const N:usize> Neg for &'a Arr<T,N>
     where T: Neg<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
     type Output = Arr<T,N>;
@@ -361,70 +239,11 @@ impl<T,const N:usize> Neg for Arr<T,N>
         (&self).neg()
     }
 }
-impl<'a,T,const N:usize> Add<ArrView<'a,T,N>> for Arr<T,N>
-    where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
+derive_arr_like_arithmetic! (&'a Arr<T,N> > &'a ArrView<'a,T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (Arr<T,N> > ArrView<'a,T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (&'a Arr<T,N> > ArrView<'a,T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (Arr<T,N> > &'a ArrView<'a,T,N> = Arr<T,N>);
 
-    fn add(self, rhs: ArrView<'a,T, N>) -> Self::Output {
-        self.as_view() + rhs
-    }
-}
-impl<'a,T,const N:usize> Sub<ArrView<'a,T,N>> for Arr<T,N>
-    where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn sub(self, rhs: ArrView<'a,T, N>) -> Self::Output {
-        self.as_view() - rhs
-    }
-}
-impl<'a,T,const N:usize> Mul<ArrView<'a,T,N>> for Arr<T,N>
-    where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn mul(self, rhs: ArrView<'a,T, N>) -> Self::Output {
-        self.as_view() * rhs
-    }
-}
-impl<'a,T,const N:usize> Div<ArrView<'a,T,N>> for Arr<T,N>
-    where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn div(self, rhs: ArrView<'a,T, N>) -> Self::Output {
-        self.as_view() / rhs
-    }
-}
-impl<'a,T,const N:usize> Add<ArrView<'a,T,N>> for &Arr<T,N>
-    where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn add(self, rhs: ArrView<'a,T, N>) -> Self::Output {
-        self.as_view() + rhs
-    }
-}
-impl<'a,T,const N:usize> Sub<ArrView<'a,T,N>> for &Arr<T,N>
-    where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn sub(self, rhs: ArrView<'a,T, N>) -> Self::Output {
-        self.as_view() - rhs
-    }
-}
-impl<'a,T,const N:usize> Mul<ArrView<'a,T,N>> for &Arr<T,N>
-    where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn mul(self, rhs: ArrView<'a,T, N>) -> Self::Output {
-        self.as_view() * rhs
-    }
-}
-impl<'a,T,const N:usize> Div<ArrView<'a,T,N>> for &Arr<T,N>
-    where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn div(self, rhs: ArrView<'a,T, N>) -> Self::Output {
-        self.as_view() / rhs
-    }
-}
 impl<'a,T,const N:usize> AsRawSlice<T> for Arr<T,N> where T: Default + Clone + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr
@@ -858,42 +677,10 @@ impl<'a,T,const N:usize> Div<T> for ArrView<'a,T,N>
         &self / rhs
     }
 }
-impl<'a,'b: 'a,T,const N:usize> Add<ArrView<'b,T,N>> for ArrView<'a,T,N>
-    where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn add(self, rhs: ArrView<'b,T,N>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(&l,&r)| l + r)
-            .collect::<Vec<T>>().try_into().expect("An error occurred in the add of ArrView and ArrView.")
-    }
-}
-impl<'a,'b: 'a,T,const N:usize> Sub<ArrView<'b,T,N>> for ArrView<'a,T,N>
-    where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn sub(self, rhs: ArrView<'b,T,N>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(&l,&r)| l - r)
-            .collect::<Vec<T>>().try_into().expect("An error occurred in the add of ArrView and ArrView.")
-    }
-}
-impl<'a,'b: 'a,T,const N:usize> Mul<ArrView<'b,T,N>> for ArrView<'a,T,N>
-    where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn mul(self, rhs: ArrView<'b,T,N>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(&l,&r)| l * r)
-            .collect::<Vec<T>>().try_into().expect("An error occurred when multiplying ArrView by ArrView.")
-    }
-}
-impl<'a,'b: 'a,T,const N:usize> Div<ArrView<'b,T,N>> for ArrView<'a,T,N>
-    where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn div(self, rhs: ArrView<'b,T,N>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(&l,&r)| l / r)
-            .collect::<Vec<T>>().try_into().expect("An error occurred in the division of ArrView and ArrView.")
-    }
-}
+derive_arr_like_arithmetic! (&'a ArrView<'a,T,N> > &'a ArrView<'a,T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (ArrView<'a,T,N> > ArrView<'a,T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (&'a ArrView<'a,T,N> > ArrView<'a,T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (ArrView<'a,T,N> > &'a ArrView<'a,T,N> = Arr<T,N>);
 impl<'a,T,const N:usize> Neg for ArrView<'a,T,N>
     where T: Neg<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
     type Output = Arr<T,N>;
@@ -903,70 +690,11 @@ impl<'a,T,const N:usize> Neg for ArrView<'a,T,N>
             .collect::<Vec<T>>().try_into().expect("An error occurred during the sign reversal operation for each element of ArrView.")
     }
 }
-impl<'a,'b: 'a,T,const N:usize> Add<&'b Arr<T,N>> for ArrView<'a,T,N>
-    where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
+derive_arr_like_arithmetic! (&'a ArrView<'a,T,N> > &'a Arr<T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (ArrView<'a,T,N> > Arr<T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (&'a ArrView<'a,T,N> > Arr<T,N> = Arr<T,N>);
+derive_arr_like_arithmetic! (ArrView<'a,T,N> > &'a Arr<T,N> = Arr<T,N>);
 
-    fn add(self, rhs: &'b Arr<T, N>) -> Self::Output {
-        self + rhs.as_view()
-    }
-}
-impl<'a,T,const N:usize> Add<Arr<T,N>> for ArrView<'a,T,N>
-    where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn add(self, rhs: Arr<T, N>) -> Self::Output {
-        self + &rhs
-    }
-}
-impl<'a,'b: 'a,T,const N:usize> Sub<&'b Arr<T,N>> for ArrView<'a,T,N>
-    where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn sub(self, rhs: &'b Arr<T, N>) -> Self::Output {
-        self - rhs.as_view()
-    }
-}
-impl<'a,T,const N:usize> Sub<Arr<T,N>> for ArrView<'a,T,N>
-    where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn sub(self, rhs: Arr<T, N>) -> Self::Output {
-        self - &rhs
-    }
-}
-impl<'a,'b: 'a,T,const N:usize> Mul<&'b Arr<T,N>> for ArrView<'a,T,N>
-    where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn mul(self, rhs: &'b Arr<T, N>) -> Self::Output {
-        self * rhs.as_view()
-    }
-}
-impl<'a,T,const N:usize> Mul<Arr<T,N>> for ArrView<'a,T,N>
-    where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn mul(self, rhs: Arr<T, N>) -> Self::Output {
-        self * &rhs
-    }
-}
-impl<'a,'b: 'a,T,const N:usize> Div<&'b Arr<T,N>> for ArrView<'a,T,N>
-    where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn div(self, rhs: &'b Arr<T, N>) -> Self::Output {
-        self / rhs.as_view()
-    }
-}
-impl<'a,T,const N:usize> Div<Arr<T,N>> for ArrView<'a,T,N>
-    where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
-    type Output = Arr<T,N>;
-
-    fn div(self, rhs: Arr<T, N>) -> Self::Output {
-        self / &rhs
-    }
-}
 /// Implementation of an mutable view of a fixed-length 1D array
 #[derive(Debug,Eq,PartialEq)]
 pub struct ArrViewMut<'a,T,const N:usize> {
@@ -1604,50 +1332,7 @@ impl<U,T> Div<U> for SerializedVec<U,T>
         &self / rhs
     }
 }
-impl<'a,'b: 'a,U,T> Add<&'b SerializedVec<U,T>> for &'a SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U>,
-          T: SliceSize + MakeView<'a,U> + Send + Sync,
-          <T as AsView<'a>>::ViewType: Send + Add<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn add(self, rhs: &'b SerializedVec<U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l + r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,'b: 'a,U,T> Sub<&'b SerializedVec<U,T>> for &'a SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U>,
-          T: SliceSize + MakeView<'a,U> + Send + Sync,
-          <T as AsView<'a>>::ViewType: Send + Sub<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn sub(self, rhs: &'b SerializedVec<U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l - r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,'b: 'a,U,T> Mul<&'b SerializedVec<U,T>> for &'a SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U>,
-          T: SliceSize + MakeView<'a,U> + Send + Sync,
-          <T as AsView<'a>>::ViewType: Send + Mul<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn mul(self, rhs: &'b SerializedVec<U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l * r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,'b: 'a,U,T> Div<&'b SerializedVec<U,T>> for &'a SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U>,
-          T: SliceSize + MakeView<'a,U> + Send + Sync,
-          <T as AsView<'a>>::ViewType: Send + Div<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn div(self, rhs: &'b SerializedVec<U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l / r).collect::<Vec<T>>().into()
-    }
-}
+derive_arithmetic! (&'a SerializedVec<U,T> > &'a SerializedVec<U,T> = SerializedVec<U,T>);
 derive_arithmetic! (SerializedVec<U,T> > SerializedVec<U,T> = r SerializedVec<U,T> > r SerializedVec<U,T> = SerializedVec<U,T>);
 derive_arithmetic! (&'a SerializedVec<U,T> > SerializedVec<U,T> = r SerializedVec<U,T> > r SerializedVec<U,T> = SerializedVec<U,T>);
 derive_arithmetic! (SerializedVec<U,T> > &'a SerializedVec<U,T> = r SerializedVec<U,T> > r SerializedVec<U,T> = SerializedVec<U,T>);
@@ -1688,94 +1373,10 @@ impl<U,T> Sum for SerializedVec<U,T>
         }).reduce(|| T::default(), |acc,r| acc + r)
     }
 }
-impl<'a,U,T> Add<SerializedVecView<'a,U,T>> for &SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U>,
-          for<'b> T: SliceSize + MakeView<'b,U> + Send + Sync,
-          for<'b> <T as AsView<'b>>::ViewType: Send + Add<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn add(self, rhs: SerializedVecView<'a,U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l + r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,U,T> Add<SerializedVecView<'a,U,T>> for SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U>,
-          for<'b> T: SliceSize + MakeView<'b,U> + Send + Sync,
-          for<'b> <T as AsView<'b>>::ViewType: Send + Add<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn add(self, rhs: SerializedVecView<'a,U,T>) -> Self::Output {
-        &self + rhs
-    }
-}
-impl<'a,U,T> Sub<SerializedVecView<'a,U,T>> for &SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U>,
-          for<'b> T: SliceSize + MakeView<'b,U> + Send + Sync,
-          for<'b> <T as AsView<'b>>::ViewType: Send + Sub<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn sub(self, rhs: SerializedVecView<'a,U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l - r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,U,T> Sub<SerializedVecView<'a,U,T>> for SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U>,
-          for<'b> T: SliceSize + MakeView<'b,U> + Send + Sync,
-          for<'b> <T as AsView<'b>>::ViewType: Send + Sub<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn sub(self, rhs: SerializedVecView<'a,U,T>) -> Self::Output {
-        &self - rhs
-    }
-}
-impl<'a,U,T> Mul<SerializedVecView<'a,U,T>> for &SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U>,
-          for<'b> T: SliceSize + MakeView<'b,U> + Send + Sync,
-          for<'b> <T as AsView<'b>>::ViewType: Send + Mul<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn mul(self, rhs: SerializedVecView<'a,U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l * r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,U,T> Mul<SerializedVecView<'a,U,T>> for SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U>,
-          for<'b> T: SliceSize + MakeView<'b,U> + Send + Sync,
-          for<'b> <T as AsView<'b>>::ViewType: Send + Mul<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn mul(self, rhs: SerializedVecView<'a,U,T>) -> Self::Output {
-        &self * rhs
-    }
-}
-impl<'a,U,T> Div<SerializedVecView<'a,U,T>> for &SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U>,
-          for<'b> T: SliceSize + MakeView<'b,U> + Send + Sync,
-          for<'b> <T as AsView<'b>>::ViewType: Send + Div<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn div(self, rhs: SerializedVecView<'a,U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l / r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,U,T> Div<SerializedVecView<'a,U,T>> for SerializedVec<U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U>,
-          for<'b> T: SliceSize + MakeView<'b,U> + Send + Sync,
-          for<'b> <T as AsView<'b>>::ViewType: Send + Div<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn div(self, rhs: SerializedVecView<'a,U,T>) -> Self::Output {
-        &self / rhs
-    }
-}
+derive_arithmetic! (&'a SerializedVec<U,T> > &'a SerializedVecView<'a,U,T> = SerializedVec<U,T>);
+derive_arithmetic! (SerializedVec<U,T> > SerializedVecView<'a,U,T> = SerializedVec<U,T>);
+derive_arithmetic! (&'a SerializedVec<U,T> > SerializedVecView<'a,U,T> = SerializedVec<U,T>);
+derive_arithmetic! (SerializedVec<U,T> > &'a SerializedVecView<'a,U,T> = SerializedVec<U,T>);
 /// Trait that defines an immutable view that references itself
 pub trait AsView<'a> {
     /// Returned View type
@@ -1913,50 +1514,8 @@ impl<'a,U,T> Div<U> for SerializedVecView<'a,U,T>
         self.par_iter().map(|l| l / rhs).collect::<Vec<T>>().into()
     }
 }
-impl<'a,'b: 'a,U,T> Add<&'b SerializedVecView<'b,U,T>> for &'a SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Add<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
+derive_arithmetic! (&'a SerializedVecView<'a,U,T> > &'a SerializedVecView<'a,U,T> = SerializedVec<U,T>);
 
-    fn add(self, rhs: &'b SerializedVecView<'b,U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l + r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,'b: 'a,U,T> Sub<&'b SerializedVecView<'b,U,T>> for &'a SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Sub<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn sub(self, rhs: &'b SerializedVecView<'b,U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l - r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,'b: 'a,U,T> Mul<&'b SerializedVecView<'b,U,T>> for &'a SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Mul<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn mul(self, rhs: &'b SerializedVecView<'b,U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l * r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,'b: 'a,U,T> Div<&'b SerializedVecView<'b,U,T>> for &'a SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Div<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn div(self, rhs: &'b SerializedVecView<'b,U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l / r).collect::<Vec<T>>().into()
-    }
-}
 impl<'a,U,T> Neg for SerializedVecView<'a,U,T>
     where U: Send + Sync + Default + Clone + Copy + 'static + Neg<Output=U>,
           for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
@@ -1989,94 +1548,10 @@ impl<'data,U,T> Sum for SerializedVecView<'data,U,T>
         }).reduce(|| T::default(), |acc,r| acc + r)
     }
 }
-impl<'a,'b: 'a,U,T> Add<&'b SerializedVec<U,T>> for SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Add<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn add(self, rhs: &'b SerializedVec<U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l + r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,U,T> Add<SerializedVec<U,T>> for SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Add<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn add(self, rhs: SerializedVec<U,T>) -> Self::Output {
-        self + &rhs
-    }
-}
-impl<'a,'b: 'a,U,T> Sub<&'b SerializedVec<U,T>> for SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Sub<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn sub(self, rhs: &'b SerializedVec<U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l - r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,U,T> Sub<SerializedVec<U,T>> for SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Sub<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn sub(self, rhs: SerializedVec<U,T>) -> Self::Output {
-        self - &rhs
-    }
-}
-impl<'a,'b: 'a,U,T> Mul<&'b SerializedVec<U,T>> for SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Mul<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn mul(self, rhs: &'b SerializedVec<U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l * r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,U,T> Mul<SerializedVec<U,T>> for SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Mul<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn mul(self, rhs: SerializedVec<U,T>) -> Self::Output {
-        self * &rhs
-    }
-}
-impl<'a,'b: 'a,U,T> Div<&'b SerializedVec<U,T>> for SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Div<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn div(self, rhs: &'b SerializedVec<U,T>) -> Self::Output {
-        self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l / r).collect::<Vec<T>>().into()
-    }
-}
-impl<'a,U,T> Div<SerializedVec<U,T>> for SerializedVecView<'a,U,T>
-    where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U>,
-          for<'data> T: SliceSize + MakeView<'data,U> + Send + Sync,
-          for<'data> <T as AsView<'data>>::ViewType: Send + Div<Output=T>,
-          SerializedVec<U,T>: From<Vec<T>> {
-    type Output = SerializedVec<U,T>;
-
-    fn div(self, rhs: SerializedVec<U,T>) -> Self::Output {
-        self / &rhs
-    }
-}
+derive_arithmetic! (&'a SerializedVecView<'a,U,T> > &'a SerializedVec<U,T> = SerializedVec<U,T>);
+derive_arithmetic! (SerializedVecView<'a,U,T> > SerializedVec<U,T> = SerializedVec<U,T>);
+derive_arithmetic! (&'a SerializedVecView<'a,U,T> > SerializedVec<U,T> = SerializedVec<U,T>);
+derive_arithmetic! (SerializedVecView<'a,U,T> > &'a SerializedVec<U,T> = SerializedVec<U,T>);
 /// SerializedVec's Immutable Iterator
 #[derive(Debug,Eq,PartialEq)]
 pub struct SerializedVecIter<'a,U,T> where T: SliceSize + MakeView<'a,U> {

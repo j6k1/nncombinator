@@ -1,3 +1,11 @@
+/// Macros for automatic derivation of the implementation of the four arithmetic operations
+///
+/// # Arguments
+/// * `$lt` - the left hand side type
+/// * `$rt` - the right hand side type
+/// * `$clt` - Converted type of the left-hand side type
+/// * `$crt` - Converted type of the right-hand side type
+/// * `$ot` - output type
 #[macro_export]
 macro_rules! derive_arithmetic {
     ( Broadcast<T> > $rt:ty = $ot:ty) => {
@@ -221,6 +229,14 @@ macro_rules! derive_arithmetic {
         }
     };
 }
+/// Macro for automatic derivation of the implementation of the four arithmetic operations of Arr,ArrView.ss
+///
+/// # Arguments
+/// * `$lt` - the left hand side type
+/// * `$rt` - the right hand side type
+/// * `$clt` - Converted type of the left-hand side type
+/// * `$crt` - Converted type of the right-hand side type
+/// * `$ot` - output type
 #[macro_export]
 macro_rules! derive_arr_like_arithmetic {
     ($lt:ty > $rt:ty = $ot:ty) => {

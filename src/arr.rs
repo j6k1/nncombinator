@@ -1207,6 +1207,22 @@ impl<U,T,R> TryFrom<SerializedVecConverter<U,T>> for SerializedVec<U,R>
         }
     }
 }
+impl<'a,U,T> From<&'a SerializedVecView<'a,U,T>> for SerializedVec<U,T>
+    where U: Clone,
+          T: SliceSize {
+    fn from(s: &'a SerializedVecView<'a,U,T>) -> Self {
+        let mut v = Vec::with_capacity(s.len * T::slice_size());
+
+        v.extend_from_slice(s.arr);
+
+        SerializedVec {
+            arr: v.into_boxed_slice(),
+            len: s.len,
+            u:PhantomData::<U>,
+            t: PhantomData::<T>
+        }
+    }
+}
 impl<U,const N:usize> TryFrom<Box<[U]>> for SerializedVec<U,Arr<U,N>> where U: Default + Clone + Send {
     type Error = SizeMismatchError;
 

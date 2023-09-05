@@ -59,16 +59,24 @@ impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
     }
 }
 impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
-    fn make_view(arr: &'a [T]) -> Self::ViewType {
-        ArrView {
-            arr: arr
+    fn make_view(arr: &'a [T]) -> Result<Self::ViewType,SizeMismatchError> {
+        if arr.len() != Arr::<T,N>::slice_size() {
+            Err(SizeMismatchError(Arr::<T,N>::slice_size(),arr.len()))
+        } else {
+            Ok(ArrView {
+                arr: arr
+            })
         }
     }
 }
 impl<'a,T,const N:usize> MakeViewMut<'a,T> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
-    fn make_view_mut(arr: &'a mut [T]) -> Self::ViewType {
-        ArrViewMut {
-            arr: arr
+    fn make_view_mut(arr: &'a mut [T]) -> Result<Self::ViewType,SizeMismatchError> {
+        if arr.len() != Arr::<T,N>::slice_size() {
+            Err(SizeMismatchError(Arr::<T,N>::slice_size(),arr.len()))
+        } else {
+            Ok(ArrViewMut {
+                arr: arr
+            })
         }
     }
 }
@@ -1413,7 +1421,7 @@ pub trait MakeView<'a,T>: AsView<'a> {
     /// # Arguments
     /// * 'arr' - Slice of view references
     ///
-    fn make_view(arr:&'a [T]) -> Self::ViewType;
+    fn make_view(arr:&'a [T]) -> Result<Self::ViewType,SizeMismatchError>;
 }
 /// Trait that returns a view holding an mutable reference to the slice to be owned
 pub trait MakeViewMut<'a,T>: AsViewMut<'a> {
@@ -1421,7 +1429,7 @@ pub trait MakeViewMut<'a,T>: AsViewMut<'a> {
     /// # Arguments
     /// * 'arr' - Slice of view references
     ///
-    fn make_view_mut(arr:&'a mut [T]) -> Self::ViewType;
+    fn make_view_mut(arr:&'a mut [T]) -> Result<Self::ViewType,SizeMismatchError>;
 }
 /// Implementation of an immutable view of SerializedVec
 #[derive(Debug,Eq,PartialEq)]
@@ -1595,7 +1603,7 @@ impl<'a,U,T> Iterator for SerializedVecIter<'a,U,T> where T: SliceSize + MakeVie
 
             self.arr = r;
 
-            Some(T::make_view(l))
+            Some(T::make_view(l).expect("An error occurred while creating an immutable view in the iterator."))
         }
     }
 }
@@ -1627,7 +1635,7 @@ impl<'a,U,T> Iterator for SerializedVecIterMut<'a,U,T> where T: SliceSize + Make
 
             self.arr = r;
 
-            Some(T::make_view_mut(l))
+            Some(T::make_view_mut(l).expect("An error occurred while creating an mutable view in the iterator."))
         }
     }
 }
@@ -2063,7 +2071,7 @@ impl<'data,C,T> Iterator for SerializedVecIterProducer<'data,C,T>
 
             self.arr = r;
 
-            Some(C::make_view(l))
+            Some(C::make_view(l).expect("An error occurred while creating an immutable view in the iterator."))
         }
     }
 
@@ -2093,7 +2101,7 @@ impl<'data,C,T> std::iter::DoubleEndedIterator for SerializedVecIterProducer<'da
 
             self.arr = l;
 
-            Some(C::make_view(r))
+            Some(C::make_view(r).expect("An error occurred while creating an immutable view in the iterator."))
         }
     }
 }

@@ -48,7 +48,7 @@ pub trait Stack {
     /// Returns the result of taking ownership of the first element of the stack and applying the callback function.
     /// # Arguments
     /// * `f` - Applicable callbacks
-    fn take_map<F: FnOnce(Self::Head) -> (Self::Head,O),O>(self,f:F) -> (Self,O) where Self: Sized;
+    fn take_map<F: FnOnce(Self::Head) -> Result<(Self::Head, O),E>, O,E>(self, f: F) -> Result<(Self, O),E> where Self: Sized;
 }
 /// Stack containing elements
 #[derive(Debug,Clone)]
@@ -74,12 +74,12 @@ impl<R,T> Stack for Cons<R,T> where R: Stack {
         f(&self.1)
     }
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O { f(&self.0) }
-    fn take_map<F: FnOnce(Self::Head) -> (Self::Head, O), O>(self, f: F) -> (Self, O) where Self: Sized {
+    fn take_map<F: FnOnce(Self::Head) -> Result<(Self::Head, O),E>, O,E>(self, f: F) -> Result<(Self, O),E> where Self: Sized {
         let (s,h) = self.pop();
 
-        let (h,r) = f(h);
+        let (h,r) = f(h)?;
 
-        (Cons(s,h),r)
+        Ok((Cons(s,h),r))
     }
 }
 /// Empty stack, containing no elements
@@ -103,10 +103,10 @@ impl Stack for Nil {
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O, O>(&self, f: F) -> O {
         f(&Nil)
     }
-    fn take_map<F: FnOnce(Self::Head) -> (Self::Head, O), O>(self, f: F) -> (Self, O) where Self: Sized {
-        let (_,r) = f(());
+    fn take_map<F: FnOnce(Self::Head) -> Result<(Self::Head, O),E>, O,E>(self, f: F) -> Result<(Self, O),E> where Self: Sized {
+        let (_,r) = f(())?;
 
-        (Nil,r)
+        Ok((Nil,r))
     }
 }
 

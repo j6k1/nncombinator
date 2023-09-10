@@ -138,7 +138,7 @@ impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D
           PI: Debug + Send + Sync + From<Arr<U,N>>,
           I: Debug + Send + Sync,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
-    type LossInput = Arr<U,N>;
+    type LossInput = PI;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
         let (s,_) = stack.pop();
@@ -179,7 +179,7 @@ impl<U,P,A,I,PI,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,PI,D,N>
 
         let r = s.map(|u| self.f.derive(&self.device, &(&o).into(), &(&loss).into(), &u.into()))?;
 
-        Ok((Cons(s,o),r))
+        Ok((Cons(s,o),r.into()))
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,PI,D,N>

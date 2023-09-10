@@ -13,6 +13,7 @@ pub mod input;
 pub mod output;
 pub mod linear;
 pub mod activation;
+pub mod bridge;
 pub mod batchnormalization;
 
 /// Differential input

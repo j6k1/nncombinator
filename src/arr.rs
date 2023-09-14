@@ -1804,7 +1804,7 @@ pub struct Arr3IterProducer<'data,T,const N1:usize,const N2:usize,const N3:usize
 impl<'data,T,const N1:usize, const N2:usize, const N3:usize> Arr3IterProducer<'data,T,N1,N2,N3> {
     /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
-        N1 * N2
+        N2 * N3
     }
 }
 impl<'data,T,const N1:usize,const N2:usize,const N3:usize> Iterator for Arr3IterProducer<'data,T,N1,N2,N3> {
@@ -1922,7 +1922,7 @@ pub struct Arr4IterProducer<'data,T,const N1:usize,const N2:usize,const N3:usize
 impl<'data,T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> Arr4IterProducer<'data,T,N1,N2,N3,N4> {
     /// Number of elements encompassed by the iterator element
     const fn element_size(&self) -> usize {
-        N1 * N2 * N3
+        N2 * N3 * N4
     }
 }
 impl<'data,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> Iterator for Arr4IterProducer<'data,T,N1,N2,N3,N4> {
@@ -1978,7 +1978,7 @@ impl<'data, T: Send + Sync + 'static,const N1:usize,const N2:usize,const N3:usiz
     fn into_iter(self) -> Self { self }
 
     fn split_at(self, mid: usize) -> (Self, Self) {
-        let (l,r) = self.0.split_at(mid * N2 * N3);
+        let (l,r) = self.0.split_at(mid * N2 * N3 * N4);
 
         (Arr4IterProducer(l),Arr4IterProducer(r))
     }

@@ -5,10 +5,6 @@ use rayon::prelude::{ParallelIterator, IndexedParallelIterator, IntoParallelRefI
 use crate::arr::{AsView, MakeView, SerializedVec, SerializedVecView, SliceSize};
 use crate::derive_arithmetic;
 
-/// Trait to transform the shape
-pub trait ReShape<A,R> {
-    fn reshape(self,args:A) -> R;
-}
 /// A type that expresses a broadcast of the inner type when computing with the inner type and its type collection
 #[derive(Debug,Clone)]
 pub struct Broadcast<T>(pub T) where T: Clone;

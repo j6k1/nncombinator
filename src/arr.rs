@@ -850,7 +850,7 @@ pub struct Arr3View<'a,T,const N1:usize,const N2:usize,const N3:usize> {
     arr: &'a [T]
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3View<'a,T,N1,N2,N3> {
-    pub fn iter(&'a self) -> Arr3Iter<'a,T,N1,N2> {
+    pub fn iter(&'a self) -> Arr3Iter<'a,T,N2,N3> {
         Arr3Iter(&self.arr)
     }
 }
@@ -896,7 +896,7 @@ pub struct Arr3ViewMut<'a,T,const N1:usize,const N2:usize,const N3:usize> {
     arr:&'a mut [T]
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3ViewMut<'a,T,N1,N2,N3> {
-    pub fn iter_mut(&'a mut self) -> Arr3IterMut<'a,T,N1,N2> {
+    pub fn iter_mut(&'a mut self) -> Arr3IterMut<'a,T,N2,N3> {
         Arr3IterMut(&mut self.arr)
     }
 }

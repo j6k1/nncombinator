@@ -500,7 +500,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,
 
         {
             {
-                for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
+                for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce::<NO>((&loss).try_into()?)?.iter()) {
                     optimizer.update(g, w);
                 }
 
@@ -546,7 +546,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,
 
         {
             {
-                for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce(&loss)?.iter()) {
+                for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce::<NO>((&loss).try_into()?)?.iter()) {
                     optimizer.update(g, w);
                 }
 

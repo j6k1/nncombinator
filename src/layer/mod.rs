@@ -15,6 +15,7 @@ pub mod linear;
 pub mod activation;
 pub mod bridge;
 pub mod batchnormalization;
+pub mod bias;
 
 /// Differential input
 #[derive(Debug)]

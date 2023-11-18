@@ -266,7 +266,7 @@ pub trait TryAddLayer: ForwardAll where Self: Sized {
     ///
     /// This function may return the following errors
     /// * [`DeviceError`]
-    fn try_add_layer<C,F>(self,f:F) -> Result<C,DeviceError> where C: ForwardAll, F: FnOnce(Self) -> Result<C,DeviceError>;
+    fn try_add_layer<C,F,E>(self,f:F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E>;
 }
 /// Trait that defines a function that seeks to add a learnable layer to a neural network
 pub trait TryAddLayerTrain<U>: PreTrain<U> where Self: Sized, U: UnitValue<U> {
@@ -281,7 +281,7 @@ pub trait TryAddLayerTrain<U>: PreTrain<U> where Self: Sized, U: UnitValue<U> {
     fn try_add_layer_train<C,F>(self,f:F) -> Result<C,DeviceError> where C: Train<U>, F: FnOnce(Self) -> Result<C,DeviceError>;
 }
 impl<T> TryAddLayer for T where T: ForwardAll + Sized {
-    fn try_add_layer<C, F>(self, f: F) -> Result<C,DeviceError> where C: ForwardAll, F: FnOnce(Self) -> Result<C,DeviceError> {
+    fn try_add_layer<C,F,E>(self, f: F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E> {
         f(self)
     }
 }

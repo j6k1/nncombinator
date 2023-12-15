@@ -136,7 +136,7 @@ pub fn memcpy_async<T>(dst: *mut T, src: *const T, size: usize, kind: cudaMemcpy
     }
 }
 
-/// free up memoru
+/// free up memory
 /// # Arguments
 /// * `devptr` - Device Memory object to be free
 ///
@@ -157,7 +157,7 @@ pub fn free<T>(devptr: *mut T) -> Result<(),rcudnn::Error> {
     }
 }
 
-/// free up memoru
+/// free up memory
 /// # Arguments
 /// * `devptr` - Host Memory object to be free
 ///

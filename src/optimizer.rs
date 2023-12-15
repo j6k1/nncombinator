@@ -117,7 +117,7 @@ impl<U> Optimizer<U> for Adagrad<U> where U: UnitValue<U> {
         *w = *w - a * e / (gt.sqrt() + self.eps);
     }
 }
-/// Adagrad Implementation
+/// RMSprop Implementation
 pub struct RMSprop<U> where U: UnitValue<U> {
     a:U,
     mu:U,

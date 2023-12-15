@@ -21,9 +21,9 @@ pub mod bias;
 #[derive(Debug)]
 pub enum DiffInput<T,U,const NI:usize,const NO:usize>
     where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
-    /// diff
+    /// diff input
     Diff(T,Arr<U,NO>),
-    /// all
+    /// fully input
     NotDiff(Arr<U,NI>)
 }
 /// Trait defining the internal implementation of forward propagation of a neural network

@@ -513,6 +513,16 @@ impl<const N:usize> BiasLayerBuilder<N> {
         BiasLayerBuilder {}
     }
 
+    /// Create an instance of BiasLayers
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    /// * `ui` - Callback to generate weight of unit
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`LayerInstantiationError`]
     pub fn build<U,C,P,D,I,PI,UI: FnMut() -> U>(&self,parent:P,device:&D,ui:UI)
                                              -> Result<BiasLayer<U,C,P,D,I,PI,N>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> +

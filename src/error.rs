@@ -540,6 +540,7 @@ impl CudaRuntimeError {
 /// Error when layer instantiation fails
 #[derive(Debug)]
 pub enum LayerInstantiationError {
+    /// Error in cuda processing
     CudaError(CudaError)
 }
 impl fmt::Display for LayerInstantiationError {

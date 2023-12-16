@@ -1180,10 +1180,6 @@ pub struct DiffLinearLayerBuilder<const NI:usize,const NO:usize> {
 }
 impl<const NI:usize,const NO:usize> DiffLinearLayerBuilder<NI,NO> {
     /// Create an instance of DiffLinearLayerBuilder
-    ///
-    /// # Types
-    /// * `N1` - input size
-    /// * `N2` - output size
     pub fn new() -> DiffLinearLayerBuilder<NI, NO> {
         DiffLinearLayerBuilder {
             ni: PhantomData::<[(); NI]>,

@@ -770,71 +770,18 @@ impl<U,P,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,CachedTe
           DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> {
 }
 /// Builder for BatchNormalizationLayer instance creation
-pub struct BatchNormalizationLayerBuilder<U,C,P,D,I,PI,S,const N:usize>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U>,
-          I: Debug + Send + Sync,
-          S: Debug + Sized + 'static {
-    u:PhantomData<U>,
-    c:PhantomData<C>,
-    p:PhantomData<P>,
-    d:PhantomData<D>,
-    i:PhantomData<I>,
-    pi:PhantomData<PI>,
-    s:PhantomData<S>,
+pub struct BatchNormalizationLayerBuilder<const N:usize> {
     n:PhantomData<[();N]>
 }
-impl<U,C,P,D,I,PI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,S,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U>,
-          I: Debug + Send + Sync,
-          S: Debug + Sized + 'static {
+impl<const N:usize> BatchNormalizationLayerBuilder<N> {
     /// Create an instance of BatchNormalizationLayerBuilder
-    pub fn new() -> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,S,N> {
+    pub fn new() -> BatchNormalizationLayerBuilder<N> {
         BatchNormalizationLayerBuilder {
-            u:PhantomData::<U>,
-            c:PhantomData::<C>,
-            p:PhantomData::<P>,
-            d:PhantomData::<D>,
-            i:PhantomData::<I>,
-            pi:PhantomData::<PI>,
-            s:PhantomData::<S>,
             n:PhantomData::<[();N]>
         }
     }
 }
-impl<U,C,P,D,I,PI,S> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,S,0>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U>,
-          I: Debug + Send + Sync,
-          S: Debug + Sized + 'static {
-    /// Create an instance of BatchNormalizationLayerBuilder with size
-    ///
-    /// # Types
-    /// * `N` - input size
-    pub fn with_size<const N:usize>() -> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,S,N> {
-        BatchNormalizationLayerBuilder {
-            u:PhantomData::<U>,
-            c:PhantomData::<C>,
-            p:PhantomData::<P>,
-            d:PhantomData::<D>,
-            i:PhantomData::<I>,
-            pi:PhantomData::<PI>,
-            s:PhantomData::<S>,
-            n:PhantomData::<[();N]>
-        }
-    }
-}
-impl<U,C,P,D,I,PI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,S,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U>,
-          I: Debug + Send + Sync,
-          S: Debug + Sized + 'static,
-          BatchNormalizationLayer<U,C,P,D,I,PI,S,N> : BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,S,N> {
+impl<const N:usize> BatchNormalizationLayerBuilder<N> {
     /// Create an instance of BatchNormalizationLayer
     /// # Arguments
     /// * `parent` - upper layer
@@ -848,8 +795,14 @@ impl<U,C,P,D,I,PI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,S
     ///
     /// This function may return the following errors
     /// * [`LayerInstantiationError`]
-    pub fn build_with_params(&self,parent: P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
-        -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,S,N>,LayerInstantiationError> {
+    pub fn build_with_params<U,C,P,D,I,PI,S>(&self,parent: P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U)
+        -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,S,N>,LayerInstantiationError>
+        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+              U: Default + Clone + Copy + Send + UnitValue<U>,
+              D: Device<U>,
+              I: Debug + Send + Sync,
+              S: Debug + Sized + 'static,
+              BatchNormalizationLayer<U,C,P,D,I,PI,S,N> : BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,S,N> {
         Ok(BatchNormalizationLayer::with_params(parent,device,scale,bias,momentum)?)
     }
 
@@ -863,8 +816,14 @@ impl<U,C,P,D,I,PI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,S
     ///
     /// This function may return the following errors
     /// * [`LayerInstantiationError`]
-    pub fn build_with_momentum(&self,parent:P,device:&D,momentum:U)
-                             -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,S,N>,LayerInstantiationError> {
+    pub fn build_with_momentum<U,C,P,D,I,PI,S>(&self,parent:P,device:&D,momentum:U)
+                             -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,S,N>,LayerInstantiationError>
+        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+              U: Default + Clone + Copy + Send + UnitValue<U>,
+              D: Device<U>,
+              I: Debug + Send + Sync,
+              S: Debug + Sized + 'static,
+              BatchNormalizationLayer<U,C,P,D,I,PI,S,N> : BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,S,N>{
         Ok(BatchNormalizationLayer::with_momentum(parent,device,momentum)?)
     }
 
@@ -877,8 +836,14 @@ impl<U,C,P,D,I,PI,S,const N:usize> BatchNormalizationLayerBuilder<U,C,P,D,I,PI,S
     ///
     /// This function may return the following errors
     /// * [`LayerInstantiationError`]
-    pub fn build(&self,parent: P,device:&D)
-        -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,S,N>,LayerInstantiationError> {
+    pub fn build<U,C,P,D,I,PI,S>(&self,parent: P,device:&D)
+        -> Result<BatchNormalizationLayer<U,C,P,D,I,PI,S,N>,LayerInstantiationError>
+        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+              U: Default + Clone + Copy + Send + UnitValue<U>,
+              D: Device<U>,
+              I: Debug + Send + Sync,
+              S: Debug + Sized + 'static,
+              BatchNormalizationLayer<U,C,P,D,I,PI,S,N> : BatchNormalizationLayerInstantiation<U,C,P,D,I,PI,S,N> {
         Ok(BatchNormalizationLayer::new(parent,device)?)
     }
 }

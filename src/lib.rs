@@ -126,7 +126,7 @@ mod tests {
         let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
         let device = DeviceCpu::new().unwrap();
 
-        let _l = i.add_layer(|l| LinearLayerBuilder::new::<4,1>().build(l,&device, || 1., || 0.).unwrap());
+        let _l = i.add_layer(|l| LinearLayerBuilder::<4,1>::new().build(l,&device, || 1., || 0.).unwrap());
     }
 
     #[test]
@@ -135,7 +135,7 @@ mod tests {
         let device = DeviceCpu::new().unwrap();
 
         let _l = i.add_layer(|l| {
-            LinearLayerBuilder::new::<4,1>().build(l,&device,|| 1., || 0.).unwrap()
+            LinearLayerBuilder::<4,1>::new().build(l,&device,|| 1., || 0.).unwrap()
         }).add_layer(|l| {
             ActivationLayer::new(l,ReLu::new(&device),&device)
         }).add_layer_train(|l| LinearOutputLayer::new(l,&device));

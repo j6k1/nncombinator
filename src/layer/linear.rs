@@ -646,50 +646,20 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> LinearLayerInstantiation<U,CachedTe
     }
 }
 /// Builder for LinearLayer instance creation
-pub struct LinearLayerBuilder<U,C,P,D,I,PI,const NI:usize,const NO:usize>
-    where U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          PI: Debug + Send + Sync,
-          D: Device<U> {
-    u:PhantomData<U>,
-    c:PhantomData<C>,
-    p:PhantomData<P>,
-    d:PhantomData<D>,
-    i:PhantomData<I>,
-    pi:PhantomData<PI>,
+pub struct LinearLayerBuilder<const NI:usize,const NO:usize> {
     ni:PhantomData<[();NI]>,
     no:PhantomData<[();NO]>
 }
-impl<U,C,P,D,I,PI> LinearLayerBuilder<U,C,P,D,I,PI,0,0>
-    where U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          PI: Debug + Send + Sync,
-          D: Device<U> {
+impl<const NI:usize,const NO:usize> LinearLayerBuilder<NI,NO> {
     /// Create an instance of LinearLayerBuilder
-    ///
-    /// # Types
-    /// * `N1` - input size
-    /// * `N2` - output size
-    pub fn new<const N1:usize,const N2:usize>() -> LinearLayerBuilder<U,C,P,D,I,PI,N1,N2> {
+    pub fn new() -> LinearLayerBuilder<NI,NO> {
         LinearLayerBuilder {
-            u:PhantomData::<U>,
-            c:PhantomData::<C>,
-            p:PhantomData::<P>,
-            d:PhantomData::<D>,
-            i:PhantomData::<I>,
-            pi:PhantomData::<PI>,
-            ni:PhantomData::<[();N1]>,
-            no:PhantomData::<[();N2]>
+            ni:PhantomData::<[();NI]>,
+            no:PhantomData::<[();NO]>
         }
     }
 }
-impl<U,C,P,D,I,PI,const NI:usize,const NO:usize> LinearLayerBuilder<U,C,P,D,I,PI,NI,NO>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=Arr<U,NI>> +
-             PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          PI: Debug + Send + Sync,
-          D: Device<U> {
+impl<const NI:usize,const NO:usize> LinearLayerBuilder<NI,NO> {
     /// Create an instance of LinearLayers
     /// # Arguments
     /// * `parent` - upper layer
@@ -701,9 +671,15 @@ impl<U,C,P,D,I,PI,const NI:usize,const NO:usize> LinearLayerBuilder<U,C,P,D,I,PI
     ///
     /// This function may return the following errors
     /// * [`LayerInstantiationError`]
-    pub fn build(&self,parent: P, device:&D, ui: impl FnMut() -> U, bi: impl FnMut() -> U)
+    pub fn build<U,C,P,D,I,PI>(&self,parent: P, device:&D, ui: impl FnMut() -> U, bi: impl FnMut() -> U)
                  -> Result<LinearLayer<U,C,P,D,I,PI,NI,NO>,LayerInstantiationError>
-        where LinearLayer<U,C,P,D,I,PI,NI,NO>: LinearLayerInstantiation<U,C,P,D,I,PI,NI,NO> {
+        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=Arr<U,NI>> +
+                 PreTrain<U> + Loss<U>,
+              U: Default + Clone + Copy + UnitValue<U>,
+              I: Debug + Send + Sync,
+              PI: Debug + Send + Sync,
+              D: Device<U>,
+              LinearLayer<U,C,P,D,I,PI,NI,NO>: LinearLayerInstantiation<U,C,P,D,I,PI,NI,NO> {
 
         LinearLayer::instantiation(parent,device,ui,bi)
     }
@@ -1198,45 +1174,24 @@ impl<U,P,I,const NI:usize,const NO:usize> DiffLinearLayerInstantiation<U,CachedT
     }
 }
 /// Builder for DiffLinearLayer instance creation
-pub struct DiffLinearLayerBuilder<U,C,P,D,I,const NI:usize,const NO:usize>
-    where U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          D: Device<U> {
-    u:PhantomData<U>,
-    c:PhantomData<C>,
-    p:PhantomData<P>,
-    d:PhantomData<D>,
-    i:PhantomData<I>,
+pub struct DiffLinearLayerBuilder<const NI:usize,const NO:usize> {
     ni:PhantomData<[();NI]>,
     no:PhantomData<[();NO]>
 }
-impl<U,C,P,D,I> DiffLinearLayerBuilder<U,C,P,D,I,0,0>
-    where U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          D: Device<U> {
+impl<const NI:usize,const NO:usize> DiffLinearLayerBuilder<NI,NO> {
     /// Create an instance of DiffLinearLayerBuilder
     ///
     /// # Types
     /// * `N1` - input size
     /// * `N2` - output size
-    pub fn new<const N1:usize,const N2:usize>() -> DiffLinearLayerBuilder<U,C,P,D,I,N1,N2> {
+    pub fn new() -> DiffLinearLayerBuilder<NI, NO> {
         DiffLinearLayerBuilder {
-            u:PhantomData::<U>,
-            c:PhantomData::<C>,
-            p:PhantomData::<P>,
-            d:PhantomData::<D>,
-            i:PhantomData::<I>,
-            ni:PhantomData::<[();N1]>,
-            no:PhantomData::<[();N2]>
+            ni: PhantomData::<[(); NI]>,
+            no: PhantomData::<[(); NO]>
         }
     }
 }
-impl<U,C,P,D,I,const NI:usize,const NO:usize> DiffLinearLayerBuilder<U,C,P,D,I,NI,NO>
-    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + BackwardAll<U,LossInput=Arr<U,NI>> +
-             PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          D: Device<U> {
+impl<const NI:usize,const NO:usize> DiffLinearLayerBuilder<NI,NO> {
     /// Create an instance of LinearLayers
     /// # Arguments
     /// * `parent` - upper layer
@@ -1248,9 +1203,14 @@ impl<U,C,P,D,I,const NI:usize,const NO:usize> DiffLinearLayerBuilder<U,C,P,D,I,N
     ///
     /// This function may return the following errors
     /// * [`LayerInstantiationError`]
-    pub fn build(&self,parent: P, device:&D, ui: impl FnMut() -> U, bi: impl FnMut() -> U)
+    pub fn build<U,C,P,D,I>(&self,parent: P, device:&D, ui: impl FnMut() -> U, bi: impl FnMut() -> U)
                  -> Result<DiffLinearLayer<U,C,P,D,I,NI,NO>,LayerInstantiationError>
-        where DiffLinearLayer<U,C,P,D,I,NI,NO>: DiffLinearLayerInstantiation<U,C,P,D,I,NI,NO> {
+        where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + BackwardAll<U,LossInput=Arr<U,NI>> +
+                 PreTrain<U> + Loss<U>,
+              U: Default + Clone + Copy + UnitValue<U>,
+              I: Debug + Send + Sync,
+              D: Device<U>,
+              DiffLinearLayer<U,C,P,D,I,NI,NO>: DiffLinearLayerInstantiation<U,C,P,D,I,NI,NO> {
 
         DiffLinearLayer::instantiation(parent,device,ui,bi)
     }

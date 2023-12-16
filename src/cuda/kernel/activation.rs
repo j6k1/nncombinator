@@ -115,6 +115,7 @@ impl Kernel for SigmoidForward<f64> {
     const FUNC_PTR: *const c_void = sigmoid_forward_double as *const c_void;
     type Args = ActivationForwardArgs<f64>;
 }
+/// Implementation of derivatives of the sigmoid activation function
 pub struct SigmoidBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
@@ -154,6 +155,7 @@ impl Kernel for ReLuForward<f64> {
     const FUNC_PTR: *const c_void = relu_forward_double as *const c_void;
     type Args = ActivationForwardArgs<f64>;
 }
+/// Implementation of derivatives of the ReLu activation function
 pub struct ReLuBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
@@ -173,6 +175,7 @@ impl Kernel for ReLuBackward<f64> {
     const FUNC_PTR: *const c_void = relu_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<f64>;
 }
+/// Swish activation function implementation
 pub struct SwishForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
@@ -192,7 +195,7 @@ impl Kernel for SwishForward<f64> {
     const FUNC_PTR: *const c_void = swish_forward_double as *const c_void;
     type Args = ActivationForwardArgs<f64>;
 }
-/// Swish activation function implementation
+/// Implementation of derivatives of the Swish activation function
 pub struct SwishBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
@@ -212,6 +215,7 @@ impl Kernel for SwishBackward<f64> {
     const FUNC_PTR: *const c_void = swish_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<f64>;
 }
+/// Tanh activation function implementation
 pub struct TanhForward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
@@ -231,7 +235,7 @@ impl Kernel for TanhForward<f64> {
     const FUNC_PTR: *const c_void = tanh_forward_double as *const c_void;
     type Args = ActivationForwardArgs<f64>;
 }
-/// Tanh activation function implementation
+/// Implementation of derivatives of the Tanh activation function
 pub struct TanhBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }
@@ -271,6 +275,7 @@ impl Kernel for SoftMaxForward<f64> {
     const FUNC_PTR: *const c_void = softmax_forward_double as *const c_void;
     type Args = ActivationForwardArgs<f64>;
 }
+/// Implementation of derivatives of the softmax activation function
 pub struct SoftMaxBackward<T> where T: DataTypeInfo {
     t:PhantomData<T>
 }

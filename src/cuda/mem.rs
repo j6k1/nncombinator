@@ -23,7 +23,9 @@ struct Usage {
 /// Momory Alloctype (Device or Host)
 #[derive(Debug)]
 pub enum Alloctype {
+    /// Device memory
     Device,
+    /// Host memory
     Host(libc::c_uint)
 }
 /// Cuda Memory pool
@@ -319,6 +321,7 @@ impl Drop for MemoryPool {
     }
 }
 /// Mutable object that automatically updates cuda memory when exiting scope
+#[derive(Debug)]
 pub struct ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value: &'a mut T,
     ptr:&'a mut CudaMemoryPoolPtr<U>
@@ -355,6 +358,7 @@ impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<
     }
 }
 /// Object that collectively manages cuda memory paired with a value of a specified type
+#[derive(Debug)]
 pub struct CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     value:T,
     ptr:CudaMemoryPoolPtr<U>

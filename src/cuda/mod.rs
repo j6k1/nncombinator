@@ -1,29 +1,36 @@
 //! Function to wrap and handle cuda kernel
 
-use std::fmt::Debug;
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, Mutex};
-use cuda_runtime_sys::dim3;
+use cuda_runtime_sys::{cudaHostAllocDefault, dim3};
 use libc::c_void;
 use rcudnn::Error;
 use rcudnn::utils::DataType;
-use rcudnn_sys::{cudaMemcpyKind, cudaStream_t};
+use rcudnn_sys::{cudaMemcpyKind, cudaStream_t, cudnnDataType_t};
 use crate::cuda::mem::MemoryPool;
 use crate::error::{CudaError, CudaRuntimeError};
 
 pub mod ffi;
 pub mod mem;
 pub mod kernel;
+pub mod cudnn;
 
 /// Trait to associate a type with a cudnn type
 pub trait DataTypeInfo {
     /// get cudnn data type
     fn cudnn_data_type() -> DataType;
+    /// get cudnn raw data type
+    fn cudnn_raw_data_type() -> cudnnDataType_t;
     /// get size
     fn size() -> usize;
 }
 impl DataTypeInfo for f32 {
     fn cudnn_data_type() -> DataType {
         DataType::Float
+    }
+    fn cudnn_raw_data_type() -> cudnnDataType_t {
+        cudnnDataType_t::CUDNN_DATA_FLOAT
     }
     fn size() -> usize {
         4_usize
@@ -32,6 +39,9 @@ impl DataTypeInfo for f32 {
 impl DataTypeInfo for f64 {
     fn cudnn_data_type() -> DataType {
         DataType::Double
+    }
+    fn cudnn_raw_data_type() -> cudnnDataType_t {
+        cudnnDataType_t::CUDNN_DATA_DOUBLE
     }
     fn size() -> usize {
         8_usize
@@ -304,6 +314,7 @@ pub trait MemoryAsync<T: Default + Debug>: AsMutVoidPtr {
     fn read_to_vec_with_size_async(&mut self,stream: cudaStream_t,size:usize) -> Result<Vec<T>,rcudnn::Error>;
 }
 /// Wrapper to handle cuda device memory
+#[derive(Debug)]
 pub struct CudaPtr<T> {
     ptr:*mut T,
     size:usize,
@@ -405,6 +416,7 @@ impl<T> AsMutPtr<T> for CudaPtr<T> {
     }
 }
 /// Wrapper to handle cuda host memory
+#[derive(Debug)]
 pub struct CudaHostPtr<T> {
     ptr:*mut T,
     size:usize,
@@ -672,6 +684,11 @@ impl<T> AsMutPtr<T> for CudaMemoryPoolPtr<T> {
         self.ptr
     }
 }
+impl<T> Debug for CudaMemoryPoolPtr<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f,"CudaMemoryPoolPtr {{ ptr: {:?}, size {:?} }}",self.ptr,self.size)
+    }
+}
 impl TryFrom<f32> for CudaPtr<f32> {
     type Error = CudaError;
 
@@ -686,6 +703,24 @@ impl TryFrom<f64> for CudaPtr<f64> {
 
     fn try_from(value: f64) -> Result<Self, Self::Error> {
         let mut ptr:CudaPtr<f64> = CudaPtr::new(1)?;
+        ptr.memcpy(&value as *const f64,1)?;
+        Ok(ptr)
+    }
+}
+impl TryFrom<f32> for CudaHostPtr<f32> {
+    type Error = CudaError;
+
+    fn try_from(value: f32) -> Result<Self, Self::Error> {
+        let mut ptr:CudaHostPtr<f32> = CudaHostPtr::new(1,cudaHostAllocDefault)?;
+        ptr.memcpy(&value as *const f32,1)?;
+        Ok(ptr)
+    }
+}
+impl TryFrom<f64> for CudaHostPtr<f64> {
+    type Error = CudaError;
+
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        let mut ptr:CudaHostPtr<f64> = CudaHostPtr::new(1,cudaHostAllocDefault)?;
         ptr.memcpy(&value as *const f64,1)?;
         Ok(ptr)
     }

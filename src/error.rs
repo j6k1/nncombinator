@@ -252,6 +252,8 @@ pub enum EvaluateError {
     SizeMismatchError(SizeMismatchError),
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidStateError(InvalidStateError),
+    /// Error raised when cast of primitive type fails
+    TypeCastError(String)
 }
 impl fmt::Display for EvaluateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -261,7 +263,8 @@ impl fmt::Display for EvaluateError {
             EvaluateError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
             EvaluateError::CudaRuntimeError(e) => write!(f,"{}",e),
             EvaluateError::SizeMismatchError(e) => write!(f,"{}",e),
-            EvaluateError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e)
+            EvaluateError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e),
+            EvaluateError::TypeCastError(s) => write!(f,"{}",s),
         }
     }
 }
@@ -273,7 +276,8 @@ impl error::Error for EvaluateError {
             EvaluateError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
             EvaluateError::CudaRuntimeError(_) => "An error occurred while running the Cuda kernel.",
             EvaluateError::SizeMismatchError(_) => "memory size does not match.",
-            EvaluateError::InvalidStateError(_) => "Invalid state."
+            EvaluateError::InvalidStateError(_) => "Invalid state.",
+            EvaluateError::TypeCastError(_) => "Typecast failed.",
         }
     }
 
@@ -284,7 +288,9 @@ impl error::Error for EvaluateError {
             EvaluateError::CudnnError(e) => Some(e),
             EvaluateError::CudaRuntimeError(_) => None,
             EvaluateError::SizeMismatchError(e) => Some(e),
-            EvaluateError::InvalidStateError(e) => Some(e)
+            EvaluateError::InvalidStateError(e) => Some(e),
+            EvaluateError::TypeCastError(_) => None
+
         }
     }
 }
@@ -529,5 +535,40 @@ impl CudaRuntimeError {
         CudaRuntimeError {
             raw: raw
         }
+    }
+}
+/// Error when layer instantiation fails
+#[derive(Debug)]
+pub enum LayerInstantiationError {
+    /// Error in cuda processing
+    CudaError(CudaError)
+}
+impl fmt::Display for LayerInstantiationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            LayerInstantiationError::CudaError(e) => {
+                write!(f,"An unexpected error occurred during layer instantiation ({})",e)
+            }
+        }
+    }
+}
+impl error::Error for LayerInstantiationError {
+    fn description(&self) -> &str {
+        match self {
+            LayerInstantiationError::CudaError(_) => {
+                "An unexpected error occurred during layer instantiation (An error occurred in the process of cudas)."
+            }
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            LayerInstantiationError::CudaError(ref e) => Some(e),
+        }
+    }
+}
+impl From<CudaError> for LayerInstantiationError {
+    fn from(err: CudaError) -> LayerInstantiationError {
+        LayerInstantiationError::CudaError(err)
     }
 }

@@ -5,6 +5,10 @@ extern crate rand_xorshift;
 extern crate statrs;
 extern crate csv;
 extern crate lazy_static;
+extern crate mnist;
+
+pub mod batchnormalization;
+pub mod common;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -14,25 +18,24 @@ use std::io::{BufRead, BufReader};
 use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 use csv::Reader;
-use lazy_static::lazy_static;
 use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLu, Sigmoid, SoftMax, Swish, Tanh};
 use nncombinator::arr::{Arr, DiffArr};
-use nncombinator::cuda::mem::{Alloctype, MemoryPool};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
 use nncombinator::error::{TrainingError, UnsupportedOperationError};
-use nncombinator::layer::{ActivationLayer, AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, DiffLinearLayer, ForwardAll, ForwardDiff, InputLayer, LinearLayer, LinearOutputLayer, Train};
+use nncombinator::layer::{AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, ForwardAll, ForwardDiff, Train};
+use nncombinator::layer::activation::ActivationLayer;
+use nncombinator::layer::input::InputLayer;
+use nncombinator::layer::linear::{DiffLinearLayerBuilder, LinearLayerBuilder};
+use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
-use nncombinator::optimizer::{MomentumSGD,SGD};
+use nncombinator::optimizer::{MomentumSGD};
 
-lazy_static! {
-    static ref SHARED_MEMORY_POOL:Arc<Mutex<MemoryPool>> = Arc::new(Mutex::new(MemoryPool::new(Alloctype::Device).unwrap()));
-}
+use crate::common::SHARED_MEMORY_POOL;
 
 #[test]
 fn test_mnist() {
@@ -51,17 +54,17 @@ fn test_mnist() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -80,7 +83,7 @@ fn test_mnist() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = SGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -90,13 +93,13 @@ fn test_mnist() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(100) {
+        for teachers in teachers.chunks(200) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -202,17 +205,17 @@ fn test_mnist_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -231,7 +234,7 @@ fn test_mnist_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = SGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -239,15 +242,15 @@ fn test_mnist_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(100) {
+        for teachers in teachers.chunks(200) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -353,17 +356,17 @@ fn test_mnist_for_gpu_double() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,100,10>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -382,7 +385,7 @@ fn test_mnist_for_gpu_double() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = SGD::new(0.004);
+    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -390,15 +393,15 @@ fn test_mnist_for_gpu_double() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(100) {
+        for teachers in teachers.chunks(200) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -468,7 +471,7 @@ fn test_mnist_for_gpu_double() {
 
         let r = net.forward_all(input).unwrap();
 
-        let r = r.iter().enumerate().fold((0, -1.), |acc, (n, &t)| {
+        let r = r.iter().enumerate().fold((0, 0.0), |acc, (n, &t)| {
             if t > acc.1 {
                 (n, t)
             } else {
@@ -481,9 +484,9 @@ fn test_mnist_for_gpu_double() {
         }
     }
 
-    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f64 / count as f64 * 100.);
 
-    debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
+    debug_assert!(correct_answers as f64 / count as f64 * 100. > 80.)
 }
 #[test]
 fn test_weather() {
@@ -501,12 +504,12 @@ fn test_weather() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -659,12 +662,12 @@ fn test_weather_by_forward_diff() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        DiffLinearLayer::<_,_,_,DeviceCpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -835,12 +838,12 @@ fn test_diff_learn_error() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        DiffLinearLayer::<_,_,_,DeviceCpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -888,12 +891,12 @@ fn test_diff_learn_error_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        DiffLinearLayer::<_,_,_,DeviceGpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -940,17 +943,17 @@ fn test_weather_batch_train() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,1>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -993,7 +996,7 @@ fn test_weather_batch_train() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.01);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -1118,17 +1121,17 @@ fn test_weather_batch_train_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,1>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -1171,7 +1174,7 @@ fn test_weather_batch_train_for_gpu() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.01);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -1296,17 +1299,17 @@ fn test_weather_batch_train_for_gpu_double() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,100,1>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -1349,7 +1352,7 @@ fn test_weather_batch_train_for_gpu_double() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.01);
+    let mut optimizer = MomentumSGD::new(0.001);
 
     let mut rng = rand::thread_rng();
 
@@ -1471,12 +1474,12 @@ fn test_penguins() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,6,50>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<6,50>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,50,3>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<50,3>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -1683,12 +1686,12 @@ fn test_penguins_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,6,50>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<6,50>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,50,3>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<50,3>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -1894,12 +1897,12 @@ fn test_weather_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2052,12 +2055,12 @@ fn test_weather_by_forward_diff_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        DiffLinearLayer::<_,_,_,DeviceGpu<f32>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2230,12 +2233,12 @@ fn test_penguins_for_gpu_double() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,6,50>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<6,50>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,50,3>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<50,3>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2441,12 +2444,12 @@ fn test_weather_for_gpu_double() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2599,12 +2602,12 @@ fn test_weather_by_forward_diff_for_gpu_double() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        DiffLinearLayer::<_,_,_,DeviceGpu<f64>,_,14,100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f64>,_,100,1>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2777,17 +2780,17 @@ fn test_mnist_sigmoid_and_crossentropy() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,1>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2814,15 +2817,15 @@ fn test_mnist_sigmoid_and_crossentropy() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(120) {
+        for teachers in teachers.chunks(200) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -2926,17 +2929,17 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,1>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2963,15 +2966,15 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(120) {
+        for teachers in teachers.chunks(200) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -3073,17 +3076,17 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,1>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer_train(|l| {
@@ -3110,15 +3113,15 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(120) {
+        for teachers in teachers.chunks(200) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -3222,17 +3225,17 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,1>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer_train(|l| {
@@ -3259,15 +3262,15 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(120) {
+        for teachers in teachers.chunks(200) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -3369,17 +3372,17 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Swish::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Swish::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceCpu<f32>,_,100,1>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.)
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer_train(|l| {
@@ -3406,15 +3409,15 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(120) {
+        for teachers in teachers.chunks(200) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {
@@ -3517,17 +3520,17 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,{ 28*28 },100>::new(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Swish::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,100>::new(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Swish::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayer::<_,_,_,DeviceGpu<f32>,_,100,1>::new(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer_train(|l| {
@@ -3554,15 +3557,15 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     let mut correct_answers = 0;
 
-    let mut teachers = teachers.into_iter().collect::<Vec<(usize,PathBuf)>>();
+    let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..3 {
+    for _ in 0..5 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(120) {
+        for teachers in teachers.chunks(200) {
             count += 1;
 
             let batch_data = teachers.iter().map(|(n, path)| {

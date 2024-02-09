@@ -244,9 +244,9 @@ macro_rules! derive_arr_like_arithmetic {
             where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
             type Output = $ot;
 
+            #[inline]
             fn add(self, rhs: $rt) -> Self::Output {
-                self.iter().zip(rhs.iter()).map(|(&l,&r)| l + r)
-                    .collect::<Vec<T>>().try_into().expect("An error occurred in the add of Arr and Arr.")
+                self.iter().zip(rhs.iter()).map(|(&l,&r)| l + r).collect::<Vec<T>>().try_into().unwrap()
             }
         }
 
@@ -254,9 +254,21 @@ macro_rules! derive_arr_like_arithmetic {
             where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
             type Output = $ot;
 
+            #[inline]
             fn sub(self, rhs: $rt) -> Self::Output {
-                self.iter().zip(rhs.iter()).map(|(&l,&r)| l - r)
-                    .collect::<Vec<T>>().try_into().expect("An error occurred in the sub of Arr and Arr.")
+                let l:&[T;N] = (&self).as_raw_slice().try_into().unwrap();
+                let r:&[T;N] = (&rhs).as_raw_slice().try_into().unwrap();
+
+                let mut o = <$ot>::new();
+                {
+                    let o:&mut [T;N] = (&mut o).as_raw_mut_slice().try_into().unwrap();
+
+                    for i in 0..N {
+                        o[i] = l[i] - r[i];
+                    }
+                }
+
+                o
             }
         }
 
@@ -264,9 +276,21 @@ macro_rules! derive_arr_like_arithmetic {
             where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
             type Output = $ot;
 
+            #[inline]
             fn mul(self, rhs: $rt) -> Self::Output {
-                self.iter().zip(rhs.iter()).map(|(&l,&r)| l * r)
-                    .collect::<Vec<T>>().try_into().expect("An error occurred in the mul of Arr and Arr.")
+                let l:&[T;N] = (&self).as_raw_slice().try_into().unwrap();
+                let r:&[T;N] = (&rhs).as_raw_slice().try_into().unwrap();
+
+                let mut o = <$ot>::new();
+                {
+                    let o:&mut [T;N] = (&mut o).as_raw_mut_slice().try_into().unwrap();
+
+                    for i in 0..N {
+                        o[i] = l[i] * r[i];
+                    }
+                }
+
+                o
             }
         }
 
@@ -274,9 +298,21 @@ macro_rules! derive_arr_like_arithmetic {
             where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
             type Output = $ot;
 
+            #[inline]
             fn div(self, rhs: $rt) -> Self::Output {
-                self.iter().zip(rhs.iter()).map(|(&l,&r)| l / r)
-                    .collect::<Vec<T>>().try_into().expect("An error occurred in the sub of Arr and Arr.")
+                let l:&[T;N] = (&self).as_raw_slice().try_into().unwrap();
+                let r:&[T;N] = (&rhs).as_raw_slice().try_into().unwrap();
+
+                let mut o = <$ot>::new();
+                {
+                    let o:&mut [T;N] = (&mut o).as_raw_mut_slice().try_into().unwrap();
+
+                    for i in 0..N {
+                        o[i] = l[i] / r[i];
+                    }
+                }
+
+                o
             }
         }
     };

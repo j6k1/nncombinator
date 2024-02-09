@@ -120,11 +120,11 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             "Error in type conversion from usize."
         )))?;
 
-        Ok(input.par_iter()
-            .zip(scale.par_iter())
-            .zip(bias.par_iter())
-            .zip(estimated_mean.par_iter())
-            .zip(estimated_variance.par_iter())
+        Ok(input.iter()
+            .zip(scale.iter())
+            .zip(bias.iter())
+            .zip(estimated_mean.iter())
+            .zip(estimated_variance.iter())
             .map(|((((&i,&scale),&bias),&mean),&variance)| {
                 scale * ((i - mean) / SqrtNode::new().forward(variance + eps)) + bias
             }).collect::<Vec<U>>().try_into()?)

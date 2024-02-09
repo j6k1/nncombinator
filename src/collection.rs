@@ -1,7 +1,8 @@
 //! Definition and implementation of various collection typess
 use std::fmt::Debug;
 use std::ops::{Add, Div, Mul, Sub};
-use rayon::prelude::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator};
+use std::iter;
+
 use crate::arr::{AsView, MakeView, SerializedVec, SerializedVecView, SliceSize};
 use crate::derive_arithmetic;
 

@@ -2,7 +2,6 @@
 use std::marker::PhantomData;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use num_traits::FromPrimitive;
-use rayon::prelude::{ParallelIterator, IntoParallelIterator};
 use crate::arr::{AsView, MakeView, SerializedVec, SerializedVecView, SliceSize};
 use crate::ope::{One, Sqrt, Sum};
 
@@ -104,7 +103,7 @@ impl<U,T> GraphNode<&SerializedVec<U,T>,T,(&T,usize),SerializedVec<U,T>> for Sum
     }
 
     fn backward(&self,(d,n): (&T,usize)) -> SerializedVec<U,T> {
-        (0..n).into_par_iter().map(|_| {
+        (0..n).map(|_| {
             d.clone().into()
         }).collect::<Vec<T>>().into()
     }
@@ -121,7 +120,7 @@ impl<'a,U,T> GraphNode<SerializedVecView<'a,U,T>,T,(&T,usize),SerializedVec<U,T>
     }
 
     fn backward(&self,(d,n): (&T,usize)) -> SerializedVec<U,T> {
-        (0..n).into_par_iter().map(|_| {
+        (0..n).map(|_| {
             d.clone().into()
         }).collect::<Vec<T>>().into()
     }
@@ -146,7 +145,7 @@ impl<U,T> GraphNode<(&T,usize),SerializedVec<U,T>,&SerializedVec<U,T>,T> for Bro
           for<'a> <T as AsView<'a>>::ViewType: Send,
           SerializedVec<U,T>: From<Vec<T>> {
     fn forward(&self,(v,n): (&T,usize)) -> SerializedVec<U,T> {
-        (0..n).into_par_iter().map(|_| v.clone()).collect::<Vec<_>>().into()
+        (0..n).map(|_| v.clone()).collect::<Vec<_>>().into()
     }
 
     fn backward(&self,d: &SerializedVec<U,T>) -> T {
@@ -160,7 +159,7 @@ impl<'b,U,T> GraphNode<(&T,usize),SerializedVec<U,T>,SerializedVecView<'b,U,T>,T
           for<'a> <T as AsView<'a>>::ViewType: Send,
           SerializedVec<U,T>: From<Vec<T>> {
     fn forward(&self,(v,n): (&T,usize)) -> SerializedVec<U,T> {
-        (0..n).into_par_iter().map(|_| v.clone()).collect::<Vec<_>>().into()
+        (0..n).map(|_| v.clone()).collect::<Vec<_>>().into()
     }
 
     fn backward(&self,d: SerializedVecView<'b,U,T>) -> T {

@@ -1,5 +1,4 @@
 //! Implementation of the calculation process for batch normalization
-use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcudnn::{API};
 use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BATCHNORM_SPATIAL};
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
@@ -139,16 +138,16 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             "Error in type conversion from usize."
         )))?;
 
-        Ok((input.par_iter()
-                .zip(scale.par_iter())
-                .zip(bias.par_iter())
-                .zip(estimated_mean.par_iter())
-                .zip(estimated_variance.par_iter())
+        Ok((input.iter()
+                .zip(scale.iter())
+                .zip(bias.iter())
+                .zip(estimated_mean.iter())
+                .zip(estimated_variance.iter())
                 .map(|((((&i,&scale),&bias),&mean),&variance)| {
                     scale * ((i - mean) / SqrtNode::new().forward(variance + eps)) + bias
                 }).collect::<Vec<U>>().try_into()?,
             estimated_mean.clone(),
-            estimated_variance.par_iter().map(|&v| U::one() / SqrtNode::new().forward(v + eps)).collect::<Vec<U>>().try_into()?
+            estimated_variance.iter().map(|&v| U::one() / SqrtNode::new().forward(v + eps)).collect::<Vec<U>>().try_into()?
         ))
     }
 
@@ -159,12 +158,12 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             "Error in type conversion from usize."
         )))?;
 
-        Ok(input.par_iter().map(|input| {
-            input.par_iter()
-                .zip(scale.par_iter())
-                .zip(bias.par_iter())
-                .zip(estimated_mean.par_iter())
-                .zip(estimated_variance.par_iter())
+        Ok(input.iter().map(|input| {
+            input.iter()
+                .zip(scale.iter())
+                .zip(bias.iter())
+                .zip(estimated_mean.iter())
+                .zip(estimated_variance.iter())
                 .map(|((((&i,&scale),&bias),&mean),&variance)| {
                     scale * (i - mean) / SqrtNode::new().forward(variance + eps) + bias
                 }).collect::<Vec<U>>().try_into()
@@ -189,15 +188,15 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         let mean:Arr<U,N> = SumNode::<U,SerializedVecView<'_,U,Arr<U,N>>>::new().forward(input) / un;
 
         let variance:SerializedVec<U,Arr<U,N>> = (input - Broadcast::<Arr<U,N>>(mean.clone()))
-            .par_iter()
+            .iter()
             .map(|i| {
-                i.par_iter().map(|&i| {
+                i.iter().map(|&i| {
                     SquareNode::new().forward(i)
                 }).collect::<Vec<U>>().try_into()
             }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into();
         let variance = variance.sum() / un;
 
-        let inv_variance:Arr<U,N> = variance.par_iter().map(|&v| U::one() / SqrtNode::new().forward(v + eps)).collect::<Vec<U>>().try_into()?;
+        let inv_variance:Arr<U,N> = variance.iter().map(|&v| U::one() / SqrtNode::new().forward(v + eps)).collect::<Vec<U>>().try_into()?;
 
         let o:SerializedVec<U,Arr<U,N>> = Broadcast(inv_variance.clone()) * (input - Broadcast(mean.clone()));
 

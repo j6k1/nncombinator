@@ -18,7 +18,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn add(self, rhs: $rt) -> Self::Output {
-                rayon::iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.par_iter()).map(|(l,r)| {
+                iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.iter()).map(|(l,r)| {
                     l + r
                 }).collect::<Vec<T>>().into()
             }
@@ -33,7 +33,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn sub(self, rhs: $rt) -> Self::Output {
-                rayon::iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.par_iter()).map(|(l,r)| {
+                iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.iter()).map(|(l,r)| {
                     l - r
                 }).collect::<Vec<T>>().into()
             }
@@ -48,7 +48,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn mul(self, rhs: $rt) -> Self::Output {
-                rayon::iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.par_iter()).map(|(l,r)| {
+                iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.iter()).map(|(l,r)| {
                     l * r
                 }).collect::<Vec<T>>().into()
             }
@@ -63,7 +63,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn div(self, rhs: $rt) -> Self::Output {
-                rayon::iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.par_iter()).map(|(l,r)| {
+                iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.iter()).map(|(l,r)| {
                     l / r
                 }).collect::<Vec<T>>().into()
             }
@@ -79,7 +79,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
         
             fn add(self, rhs: Broadcast<T>) -> Self::Output {
-                self.par_iter().zip(rayon::iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
+                self.iter().zip(iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
                     l + r
                 }).collect::<Vec<T>>().into()
             }
@@ -94,7 +94,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn sub(self, rhs: Broadcast<T>) -> Self::Output {
-                self.par_iter().zip(rayon::iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
+                self.iter().zip(iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
                     l - r
                 }).collect::<Vec<T>>().into()
             }
@@ -109,7 +109,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn mul(self, rhs: Broadcast<T>) -> Self::Output {
-                self.par_iter().zip(rayon::iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
+                self.iter().zip(iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
                     l * r
                 }).collect::<Vec<T>>().into()
             }
@@ -124,7 +124,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn div(self, rhs: Broadcast<T>) -> Self::Output {
-                self.par_iter().zip(rayon::iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
+                self.iter().zip(iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
                     l / r
                 }).collect::<Vec<T>>().into()
             }
@@ -139,7 +139,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn add(self, rhs: $rt) -> Self::Output {
-                self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l + r).collect::<Vec<T>>().into()
+                self.iter().zip(rhs.iter()).map(|(l,r)| l + r).collect::<Vec<T>>().into()
             }
         }
 
@@ -151,7 +151,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn sub(self, rhs: $rt) -> Self::Output {
-                self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l - r).collect::<Vec<T>>().into()
+                self.iter().zip(rhs.iter()).map(|(l,r)| l - r).collect::<Vec<T>>().into()
             }
         }
 
@@ -163,7 +163,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn mul(self, rhs: $rt) -> Self::Output {
-                self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l * r).collect::<Vec<T>>().into()
+                self.iter().zip(rhs.iter()).map(|(l,r)| l * r).collect::<Vec<T>>().into()
             }
         }
 
@@ -175,7 +175,7 @@ macro_rules! derive_arithmetic {
             type Output = $ot;
 
             fn div(self, rhs: $rt) -> Self::Output {
-                self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l / r).collect::<Vec<T>>().into()
+                self.iter().zip(rhs.iter()).map(|(l,r)| l / r).collect::<Vec<T>>().into()
             }
         }
     };

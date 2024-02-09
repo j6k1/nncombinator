@@ -1090,7 +1090,7 @@ impl<U,T> SerializedVec<U,T> where U: Default + Clone + Copy + Send {
 }
 impl<U,T> SerializedVec<U,T>
     where U: Default + Clone + Copy + Send,
-          for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+          for<'a> T: SliceSize + MakeView<'a,U> {
     /// Create a SerializedVec instance of the specified size
     /// # Arguments
     /// * `size`- Size to be secured
@@ -1115,21 +1115,24 @@ impl<U,T> SerializedVec<U,T>
             t:PhantomData::<T>,
         }
     }
-
-    /// Obtaining a mutable iterator
-    pub fn iter_mut(&mut self) -> SerializedVecIterMut<U,T> {
-        SerializedVecIterMut {
-            arr:&mut self.arr,
-            u:PhantomData::<U>,
-            t:PhantomData::<T>,
-        }
-    }
-
+}
+impl<U,T> SerializedVec<U,T>
+    where U: Default + Clone + Copy + Send,
+          for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
     /// Conversion to converter to SerializedVec with different internal types
     pub fn into_converter(self) -> SerializedVecConverter<U,T> {
         SerializedVecConverter {
             arr:self.arr,
             len:self.len,
+            u:PhantomData::<U>,
+            t:PhantomData::<T>,
+        }
+    }
+
+    /// Obtaining a mutable iterator
+    pub fn iter_mut(&mut self) -> SerializedVecIterMut<U,T> {
+        SerializedVecIterMut {
+            arr:&mut self.arr,
             u:PhantomData::<U>,
             t:PhantomData::<T>,
         }
@@ -1447,7 +1450,7 @@ impl<'a,U,T> SerializedVecView<'a,U,T> where U: Default + Clone + Copy + Send {
 }
 impl<'a,U,T> SerializedVecView<'a,U,T>
     where U: Default + Clone + Copy + Send,
-          T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+          T: SliceSize + MakeView<'a,U> {
     /// Obtaining a immutable iterator
     pub fn iter(&self) -> SerializedVecIter<'a,U,T> {
         SerializedVecIter {

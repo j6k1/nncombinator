@@ -31,10 +31,12 @@ impl<U> AddNode<U> where U: Add<Output = U> + Clone {
     }
 }
 impl<U> GraphNode<(U,U),U,U,(U,U)> for AddNode<U> where U: Add<Output = U> + Clone {
+    #[inline]
     fn forward(&self,(l,r):(U,U)) -> U {
         l + r
     }
 
+    #[inline]
     fn backward(&self,d:U) -> (U,U) {
         (d.clone(),d)
     }
@@ -51,10 +53,12 @@ impl<U> MulNode<U> where U: Mul<Output = U> + Clone {
     }
 }
 impl<U> GraphNode<(U,U),U,(U,U,U),(U,U)> for MulNode<U> where U: Mul<Output = U> + Clone {
+    #[inline]
     fn forward(&self,(l,r):(U,U)) -> U {
         l * r
     }
 
+    #[inline]
     fn backward(&self,(l,r,d):(U,U,U)) -> (U,U) {
         (r * d.clone(), l * d)
     }
@@ -71,10 +75,12 @@ impl<U> BranchNode<U> where U: Add<Output = U> + Clone {
     }
 }
 impl<U> GraphNode<U,(U,U),(U,U),U> for BranchNode<U> where U: Add<Output = U> + Clone {
+    #[inline]
     fn forward(&self,v:U) -> (U,U) {
         (v.clone(),v)
     }
 
+    #[inline]
     fn backward(&self,(d1,d2):(U,U)) -> U {
         d1 + d2
     }
@@ -98,10 +104,12 @@ impl<U,T> GraphNode<&SerializedVec<U,T>,T,(&T,usize),SerializedVec<U,T>> for Sum
                   Add<Output=T> + Add<<T as AsView<'a>>::ViewType,Output=T>,
           for<'a> <T as AsView<'a>>::ViewType: Send,
           SerializedVec<U,T>: From<Vec<T>> {
+    #[inline]
     fn forward(&self,v: &SerializedVec<U,T>) -> T {
         v.sum()
     }
 
+    #[inline]
     fn backward(&self,(d,n): (&T,usize)) -> SerializedVec<U,T> {
         (0..n).map(|_| {
             d.clone().into()
@@ -115,10 +123,12 @@ impl<'a,U,T> GraphNode<SerializedVecView<'a,U,T>,T,(&T,usize),SerializedVec<U,T>
                   Add<Output=T> + Add<<T as AsView<'b>>::ViewType,Output=T>,
           for<'b> <T as AsView<'b>>::ViewType: Send,
           SerializedVec<U,T>: From<Vec<T>> {
+    #[inline]
     fn forward(&self,v: SerializedVecView<'a,U,T>) -> T {
         v.sum()
     }
 
+    #[inline]
     fn backward(&self,(d,n): (&T,usize)) -> SerializedVec<U,T> {
         (0..n).map(|_| {
             d.clone().into()
@@ -144,10 +154,12 @@ impl<U,T> GraphNode<(&T,usize),SerializedVec<U,T>,&SerializedVec<U,T>,T> for Bro
                   Add<Output=T> + Add<<T as AsView<'a>>::ViewType,Output=T>,
           for<'a> <T as AsView<'a>>::ViewType: Send,
           SerializedVec<U,T>: From<Vec<T>> {
+    #[inline]
     fn forward(&self,(v,n): (&T,usize)) -> SerializedVec<U,T> {
         (0..n).map(|_| v.clone()).collect::<Vec<_>>().into()
     }
 
+    #[inline]
     fn backward(&self,d: &SerializedVec<U,T>) -> T {
         d.sum()
     }
@@ -158,10 +170,12 @@ impl<'b,U,T> GraphNode<(&T,usize),SerializedVec<U,T>,SerializedVecView<'b,U,T>,T
                   Add<Output=T> + Add<<T as AsView<'a>>::ViewType,Output=T>,
           for<'a> <T as AsView<'a>>::ViewType: Send,
           SerializedVec<U,T>: From<Vec<T>> {
+    #[inline]
     fn forward(&self,(v,n): (&T,usize)) -> SerializedVec<U,T> {
         (0..n).map(|_| v.clone()).collect::<Vec<_>>().into()
     }
 
+    #[inline]
     fn backward(&self,d: SerializedVecView<'b,U,T>) -> T {
         d.sum()
     }
@@ -179,10 +193,12 @@ impl<U> ReciprocalNode<U> where U: Div + Div<Output = U> + Mul + Mul<Output = U>
 }
 impl<U> GraphNode<U,U,U,U> for ReciprocalNode<U>
     where U: Div + Div<Output = U> + Neg + Neg<Output = U> + One + Mul + Mul<Output = U> + One + Clone + Copy {
+    #[inline]
     fn forward(&self,v: U) -> U {
         U::one() / v
     }
 
+    #[inline]
     fn backward(&self,d: U) -> U {
         -(U::one() / (d * d))
     }
@@ -201,10 +217,12 @@ impl<U> SqrtNode<U> where U: Sqrt + Div + Div<Output = U> + FromPrimitive {
 impl<U> GraphNode<U,U,U,U> for SqrtNode<U>
     where U: Sqrt + Div + Div<Output = U> + Mul + Mul<Output = U> + One + FromPrimitive {
 
+    #[inline]
     fn forward(&self,v: U) -> U {
         v.sqrt()
     }
 
+    #[inline]
     fn backward(&self,d: U) -> U {
         U::one() / (U::from_f64(2.).expect("Error in type conversion from f64.") * d.sqrt())
     }
@@ -223,10 +241,12 @@ impl<U> SquareNode<U> where U: FromPrimitive + Mul + Mul<Output = U> {
 impl<U> GraphNode<U,U,(U,U),U> for SquareNode<U>
     where U: FromPrimitive + Mul + Mul<Output = U> + Clone + Copy {
 
+    #[inline]
     fn forward(&self,v: U) -> U {
         v * v
     }
 
+    #[inline]
     fn backward(&self,(i,d): (U, U)) -> U {
         U::from_f64(2.).expect("Error in type conversion from f64.") * i * d
     }
@@ -243,10 +263,12 @@ impl<U> SubNode<U> where U: Sub + Sub<Output = U> + Neg + Clone{
     }
 }
 impl<U> GraphNode<(U,U),U,U,(U,U)> for SubNode<U> where U: Sub + Sub<Output = U> + Neg + Neg<Output = U> + Clone {
+    #[inline]
     fn forward(&self,(l,r): (U, U)) -> U {
         l - r
     }
 
+    #[inline]
     fn backward(&self,d: U) -> (U,U) {
         (d.clone(),-d)
     }

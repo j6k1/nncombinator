@@ -113,6 +113,7 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
 }
 impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
     where U: UnitValue<U> {
+    #[inline]
     fn forward_batch_norm<'a>(&self, input: &ArrView<'a,U,N>, scale: &Arr<U,N>, bias: &Arr<U,N>,
                           estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<Arr<U,N>,EvaluateError> {
         let eps = U::from_f64(1e-6).ok_or(EvaluateError::TypeCastError(String::from(
@@ -129,6 +130,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             }).collect::<Vec<U>>().try_into()?)
     }
 
+    #[inline]
     fn forward_batch_norm_train<'a>(&self, input: ArrView<'a,U,N>,
                                 scale: &Arr<U,N>,
                                 bias: &Arr<U,N>,
@@ -151,6 +153,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         ))
     }
 
+    #[inline]
     fn batch_forward_batch_norm<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>, scale: &Arr<U,N>, bias: &Arr<U,N>,
                                 estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<SerializedVec<U,Arr<U,N>>, EvaluateError> {
 
@@ -170,6 +173,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 
+    #[inline]
     fn batch_forward_batch_norm_train<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>,
                                       scale: &Arr<U,N>, bias: &Arr<U,N>,
                                       running_mean: &Arr<U,N>, running_variance: &Arr<U,N>,
@@ -185,7 +189,13 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
             "Error in type conversion from usize."
         )))?;
 
-        let mean:Arr<U,N> = SumNode::<U,SerializedVecView<'_,U,Arr<U,N>>>::new().forward(input) / un;
+        let un_inv = U::from_f64(1.).ok_or(TrainingError::TypeCastError(
+            String::from(
+                "Error in type conversion from usize."
+            )
+        ))? / un;
+
+        let mean:Arr<U,N> = SumNode::<U,SerializedVecView<'_,U,Arr<U,N>>>::new().forward(input) * un_inv;
 
         let variance:SerializedVec<U,Arr<U,N>> = (input - Broadcast::<Arr<U,N>>(mean.clone()))
             .iter()
@@ -194,7 +204,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
                     SquareNode::new().forward(i)
                 }).collect::<Vec<U>>().try_into()
             }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into();
-        let variance = variance.sum() / un;
+        let variance = variance.sum() * un_inv;
 
         let inv_variance:Arr<U,N> = variance.iter().map(|&v| U::one() / SqrtNode::new().forward(v + eps)).collect::<Vec<U>>().try_into()?;
 
@@ -208,6 +218,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         Ok((o,mean,inv_variance,running_mean,running_variance))
     }
 
+    #[inline]
     fn backward_batch_norm<'a>(&self, loss: ArrView<'a,U,N>, input: ArrView<'a,U,N>,
                            scale: &Arr<U,N>, saved_mean: &Arr<U,N>, saved_inv_variance: &Arr<U,N>)
                            -> Result<(Arr<U,N>, Arr<U,N>, Arr<U,N>), TrainingError> {
@@ -221,7 +232,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         let dx2 = &dx1 * saved_inv_variance;
         let dx3 = &x * dx1;
         let dx4 =  -(saved_inv_variance * saved_inv_variance) * dx3;
-        let dx5 = dx4 * (saved_inv_variance / U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
+        let dx5 = dx4 * (saved_inv_variance * U::from_f64(0.5).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from f64.")
         ))?);
         let dx6 = &x * dx5 * U::from_usize(2).ok_or(TrainingError::TypeCastError(String::from(
@@ -235,6 +246,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         Ok((dx,s,b.into()))
     }
 
+    #[inline]
     fn batch_backward_batch_norm<'a>(&self, loss: SerializedVecView<'a,U,Arr<U,N>>,
                                  input: SerializedVecView<'a,U,Arr<U,N>>,
                                  scale: &Arr<U,N>,
@@ -245,6 +257,10 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         let un = U::from_usize(n).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from usize."
         )))?;
+
+        let un_inv = U::from_usize(1).ok_or(TrainingError::TypeCastError(String::from(
+            "Error in type conversion from usize."
+        )))? / un;
 
         let b = BroadcastNode::<U,SerializedVecView<'_,U,Arr<U,N>>>::new().backward(loss);
 
@@ -258,10 +274,10 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         let dx2 = &dx1 * iv;
         let dx3 = BroadcastNode::<U,&SerializedVec<U,Arr<U,N>>>::new().backward(&(&x2 * dx1));
         let dx4 = -(saved_inv_variance * saved_inv_variance) * dx3;
-        let dx5 = dx4 * (saved_inv_variance / U::from_f64(2.).ok_or(TrainingError::TypeCastError(String::from(
+        let dx5 = dx4 * (saved_inv_variance * U::from_f64(0.5).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from f64.")
         ))?);
-        let dx6 = SumNode::<U,SerializedVec<U,Arr<U,N>>>::new().backward((&(dx5 / un),n));
+        let dx6 = SumNode::<U,SerializedVec<U,Arr<U,N>>>::new().backward((&(dx5 * un_inv),n));
         let dx7 = x2 * dx6 * U::from_usize(2).ok_or(TrainingError::TypeCastError(String::from(
             "Error in type conversion from usize."
         )))?;
@@ -269,7 +285,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         let dx9 = &dx8;
         let dx10 = -&dx8;
         let dx11 = BroadcastNode::<U,&SerializedVec<U,Arr<U,N>>>::new().backward(&dx10);
-        let dx12 = SumNode::<U,SerializedVec<U,Arr<U,N>>>::new().backward((&dx11,n)) / un;
+        let dx12 = SumNode::<U,SerializedVec<U,Arr<U,N>>>::new().backward((&dx11,n)) * un_inv;
 
         let dx = dx9 + dx12;
 

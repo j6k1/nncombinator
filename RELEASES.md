@@ -1,3 +1,49 @@
+Version 0.8.0 (2023-12-16)
+===========================
+
+Refactoring and functionality additions
+--------
+Changed the type name of VecArr to SerializedVec
+Changed the type name of VecArrIter to SerializedVecIter
+Changed the type name of VecArrIterMut to VecArrIterMut
+
+Type additions
+- 
+- SerializedVecView
+- SliceSize
+- MakeView
+- MakeViewMut
+- Arr3View
+- Arr3ViewMut
+- Arr3ParIter
+- SerializedVecIterProducer
+- SerializedVecParIter
+- SerializedVecConverter
+- Arr3ViewMut
+- Arithmetic
+
+- Partitioning of layer and device modules
+
+Add module
+- 
+- collections
+- computational_graph
+- cuda::cudnn::tensor
+- device::batchnormalization
+- device::bias
+- layer::batchnormalization
+- layer::bias
+- layer::bridge
+
+Add Functions
+-
+- Add DataTypeInfo::cudnn_raw_data_type method
+- Add Stack::take_map method
+
+-
+changed interface of layer,device implementation
+-
+
 Version 0.7.0 (2022-12-06)
 ===========================
 

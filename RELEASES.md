@@ -3,9 +3,12 @@ Version 0.8.0 (2023-12-16)
 
 Refactoring and functionality additions
 --------
-Changed the type name of VecArr to SerializedVec
-Changed the type name of VecArrIter to SerializedVecIter
-Changed the type name of VecArrIterMut to VecArrIterMut
+
+Changed the type name
+-
+- Changed the type name of VecArr to SerializedVec
+- Changed the type name of VecArrIter to SerializedVecIter
+- Changed the type name of VecArrIterMut to VecArrIterMut
 
 Type additions
 - 
@@ -40,7 +43,6 @@ Add Functions
 - Add DataTypeInfo::cudnn_raw_data_type method
 - Add Stack::take_map method
 
--
 changed interface of layer,device implementation
 -
 

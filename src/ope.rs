@@ -245,6 +245,12 @@ pub trait Sum {
 
     fn sum(&self) -> Self::Output;
 }
+/// Trait defining the operation of the product of matrices
+pub trait Product<Rhs> {
+    type Output;
+
+    fn product(self,rhs:Rhs) -> Self::Output;
+}
 /// Type indicating support for four arithmetic operations
 pub trait Arithmetic<Rhs = Self,O = Self>: Add<Rhs,Output = O> + Sub<Rhs,Output = O> +
                                            Mul<Rhs,Output = O> + Div<Rhs,Output = O> + Neg<Output = O> {}

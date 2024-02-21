@@ -2,14 +2,14 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::{Add, Deref, DerefMut, Div, Index, IndexMut, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, Deref, DerefMut, Div, Index, IndexMut, Mul, Neg, Sub};
 use std;
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::error::{IndexOutBoundError, SizeMismatchError};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
-use crate::ope::Sum;
+use crate::ope::{Product, Sum};
 
 /// Trait that returns the number of elements in the slice held by itself
 pub trait SliceSize {
@@ -703,6 +703,23 @@ derive_arr_like_arithmetic! (ArrView<'a,T,N> > Arr<T,N> = Arr<T,N>);
 derive_arr_like_arithmetic! (&'a ArrView<'a,T,N> > Arr<T,N> = Arr<T,N>);
 derive_arr_like_arithmetic! (ArrView<'a,T,N> > &'a Arr<T,N> = Arr<T,N>);
 
+impl<'a,T,const N1:usize, const N2:usize> Product<&'a Arr2<T,N1,N2>> for ArrView<'a,T,N1>
+    where T: Add<Output=T> + AddAssign + Mul<Output=T> + Default + Clone + Copy + Send {
+    type Output = Arr<T,N2>;
+
+    #[inline]
+    fn product(self, rhs: &'a Arr2<T, N1, N2>) -> Self::Output {
+        let mut o = Arr::new();
+
+        for (&l,r) in self.iter().zip(rhs.iter()) {
+            for (o,&r) in o.iter_mut().zip(r.iter()) {
+                *o += l * r;
+            }
+        }
+
+        o
+    }
+}
 /// Implementation of an mutable view of a fixed-length 1D array
 #[derive(Debug,Eq,PartialEq)]
 pub struct ArrViewMut<'a,T,const N:usize> {

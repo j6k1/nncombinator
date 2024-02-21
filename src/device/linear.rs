@@ -8,6 +8,7 @@ use crate::device::{DeviceCpu, DeviceGpu};
 use crate::error::{EvaluateError, TrainingError};
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
+use crate::ope::Product;
 
 /// Trait that defines the implementation of various calculation processes in the linear layer
 pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U> {
@@ -79,22 +80,12 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
                                       -> Result<Arr2<U, NI, NO>, TrainingError>;
 }
 impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U> where U: UnitValue<U> {
+    #[inline]
     fn forward_linear<'a>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: ArrView<'a,U, NI>) -> Result<Arr<U, NO>, EvaluateError> {
-        let mut output:Arr<U,NO> = Arr::new();
-
-        for (o,w) in output.iter_mut().zip(bias.iter()) {
-            *o += *w;
-        }
-
-        for (i,u) in input.iter().zip(units.iter()) {
-            for (o,w) in output.iter_mut().zip(u.iter()) {
-                *o += *i * *w;
-            }
-        }
-
-        Ok(output)
+        Ok(input.product(units) + bias)
     }
 
+    #[inline]
     fn backward_linear<'a>(&self, units: &Arr2<U, NI, NO>, input: &'a Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError> {
         Ok(units.par_iter().map(|u| {
             u.par_iter().zip(input.par_iter())
@@ -104,12 +95,14 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
         }).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))?)
     }
 
+    #[inline]
     fn backward_weight_gradient<'a>(&self, o: ArrView<'a,U,NI>, loss: &'a Arr<U,NO>) -> Result<Arr2<U, NI, NO>, TrainingError> {
         Ok(o.par_iter().cloned().map(|o| {
             loss.par_iter().cloned().map(|l| o * l).collect::<Vec<U>>().try_into()
         }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.try_into().map_err(|e| TrainingError::from(e))?)
     }
 
+    #[inline]
     fn batch_backward_linear<'a>(&self, units: &Arr2<U, NI, NO>, input: &'a SerializedVec<U,Arr<U, NO>>)
                              -> Result<SerializedVec<U,Arr<U, NI>>, TrainingError> {
         Ok(input.par_iter().map(|l| {
@@ -122,6 +115,7 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
         }).collect::<Result<Vec<Arr<U,NI>>,_>>()?.into())
     }
 
+    #[inline]
     fn batch_forward_linear<'a>(&self,bias:&Arr<U,NO>,units:&Arr2<U,NI,NO>,input:SerializedVecView<'a,U,Arr<U,NI>>)
                             -> Result<SerializedVec<U,Arr<U,NO>>,TrainingError> {
         input.par_iter().map(|input| {
@@ -141,6 +135,7 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
         }).collect::<Result<Vec<Arr<U, NO>>, _>>().map(|r| r.into()).map_err(|e| TrainingError::from(e))
     }
 
+    #[inline]
     fn batch_backward_weight_gradient<'a>(&self, o: SerializedVecView<'a,U,Arr<U,NI>>, loss: &'a SerializedVec<U, Arr<U,NO>>)
                                       -> Result<Arr2<U,NI,NO>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter()).map(|(o,l)| o.par_iter().map(|&o| {
@@ -155,6 +150,7 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
     }
 }
 impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f32,NI,NO>>,NI,NO> for DeviceGpu<f32> {
+    #[inline]
     fn forward_linear<'a>(&self, bias: &Arr<f32,NO>, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: ArrView<'a,f32,NI>)
                       -> Result<Arr<f32, NO>, EvaluateError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
@@ -202,6 +198,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         }
     }
 
+    #[inline]
     fn backward_linear<'a>(&self, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &'a Arr<f32,NO>)
                        -> Result<Arr<f32, NI>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
@@ -252,6 +249,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         }
     }
 
+    #[inline]
     fn backward_weight_gradient<'a>(&self, o: ArrView<'a,f32,NI>, loss: &'a Arr<f32,NO>) -> Result<Arr2<f32, NI,NO>, TrainingError> {
         let mut o_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
@@ -303,6 +301,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         }
     }
 
+    #[inline]
     fn batch_forward_linear<'a>(&self,bias:&Arr<f32,NO>,units:&CachedTensor<f32,Arr2<f32,NI,NO>>,input:SerializedVecView<'a,f32,Arr<f32,NI>>)
                             -> Result<SerializedVec<f32,Arr<f32,NO>>,TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NI * input.len() ,&self.memory_pool)?;
@@ -358,6 +357,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         }
     }
 
+    #[inline]
     fn batch_backward_linear<'a>(&self, units: &CachedTensor<f32, Arr2<f32, NI, NO>>, input: &'a SerializedVec<f32,Arr<f32, NO>>) -> Result<SerializedVec<f32, Arr<f32, NI>>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * input.len(),&self.memory_pool)?;
@@ -407,6 +407,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         }
     }
 
+    #[inline]
     fn batch_backward_weight_gradient<'a>(&self, o: SerializedVecView<'a,f32,Arr<f32, NI>>, loss: &'a SerializedVec<f32, Arr<f32, NO>>)
                                       -> Result<Arr2<f32, NI, NO>, TrainingError> {
         let n = o.len();
@@ -462,6 +463,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     }
 }
 impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f64,NI,NO>>,NI,NO> for DeviceGpu<f64> {
+    #[inline]
     fn forward_linear<'a>(&self, bias: &Arr<f64,NO>, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: ArrView<'a,f64,NI>)
                       -> Result<Arr<f64, NO>, EvaluateError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
@@ -509,6 +511,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         }
     }
 
+    #[inline]
     fn backward_linear<'a>(&self, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &'a Arr<f64,NO>)
                        -> Result<Arr<f64, NI>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
@@ -559,6 +562,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         }
     }
 
+    #[inline]
     fn backward_weight_gradient<'a>(&self, o: ArrView<'a,f64,NI>, loss: &'a Arr<f64,NO>) -> Result<Arr2<f64,NI,NO>, TrainingError> {
         let mut o_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
@@ -610,6 +614,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         }
     }
 
+    #[inline]
     fn batch_forward_linear<'a>(&self,bias:&Arr<f64,NO>,units:&CachedTensor<f64,Arr2<f64,NI,NO>>,input:SerializedVecView<'a,f64,Arr<f64,NI>>)
                             -> Result<SerializedVec<f64,Arr<f64,NO>>,TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NI * input.len() ,&self.memory_pool)?;
@@ -665,6 +670,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         }
     }
 
+    #[inline]
     fn batch_backward_linear<'a>(&self, units: &CachedTensor<f64, Arr2<f64, NI, NO>>, input: &'a SerializedVec<f64,Arr<f64, NO>>)
         -> Result<SerializedVec<f64, Arr<f64, NI>>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
@@ -715,6 +721,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
         }
     }
 
+    #[inline]
     fn batch_backward_weight_gradient<'a>(&self, o: SerializedVecView<'a,f64,Arr<f64, NI>>, loss: &'a SerializedVec<f64,Arr<f64,NO>>)
         -> Result<Arr2<f64, NI, NO>, TrainingError> {
         let n = o.len();

@@ -86,7 +86,7 @@ impl<U> Optimizer<U> for MomentumSGD<U> where U: UnitValue<U> {
         let mu = self.mu;
 
         let lambda = self.lambda;
-        *vt = mu * *vt - (U::one() - mu) * a * (e + lambda * *w);
+        *vt = mu * *vt - a * (e + lambda * *w);
         *w = *w + *vt;
     }
 }

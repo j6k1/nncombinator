@@ -415,10 +415,14 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,A
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + Send + Sync + From<Arr<U,NI>> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr2<U,NI,NO>>;
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr2<U,NI,NO>,Arr<U,NO>)>;
 
     fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer:&mut OP) -> Result<(), TrainingError> {
-        let (s,g) = stack.pop();
+        let (s,(g,bg)) = stack.pop();
+
+        for (w,&g) in self.bias.iter_mut().zip(bg.iter()) {
+            optimizer.update(g, w);
+        }
 
         for (mut u,g) in self.units.iter_mut().zip(g.iter()) {
             for (w,&g) in u.iter_mut().zip(g.iter()) {
@@ -436,10 +440,14 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,C
           I: Debug + Send + Sync,
           PI: Debug + Send + Sync + From<Arr<U,NI>>,
           DeviceGpu<U>: Device<U> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr2<U,NI,NO>>;
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr2<U,NI,NO>,Arr<U,NO>)>;
 
     fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer:&mut OP) -> Result<(), TrainingError> {
-        let (s,g) = stack.pop();
+        let (s,(g,bg)) = stack.pop();
+
+        for (w,&g) in self.bias.iter_mut().zip(bg.iter()) {
+            optimizer.update(g, w);
+        }
 
         for (mut u,g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
             for (w,&g) in u.iter_mut().zip(g.iter()) {
@@ -1152,10 +1160,14 @@ impl<U,P,I,const NI:usize,const NO:usize> UpdateWeight<U> for DiffLinearLayer<U,
     PreTrain<U> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr2<U,NI,NO>>;
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr2<U,NI,NO>,Arr<U,NO>)>;
 
     fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer:&mut OP) -> Result<(), TrainingError> {
-        let (s,g) = stack.pop();
+        let (s,(g,bg)) = stack.pop();
+
+        for (w,&g) in self.bias.iter_mut().zip(bg.iter()) {
+            optimizer.update(g, w);
+        }
 
         for (mut u,g) in self.units.iter_mut().zip(g.iter()) {
             for (w,&g) in u.iter_mut().zip(g.iter()) {
@@ -1172,10 +1184,14 @@ impl<U,P,I,const NI:usize,const NO:usize> UpdateWeight<U> for DiffLinearLayer<U,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           DeviceGpu<U>: Device<U> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr2<U,NI,NO>>;
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr2<U,NI,NO>,Arr<U,NO>)>;
 
     fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer:&mut OP) -> Result<(), TrainingError> {
-        let (s,g) = stack.pop();
+        let (s,(g,bg)) = stack.pop();
+
+        for (w,&g) in self.bias.iter_mut().zip(bg.iter()) {
+            optimizer.update(g, w);
+        }
 
         for (mut u,g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
             for (w,&g) in u.iter_mut().zip(g.iter()) {

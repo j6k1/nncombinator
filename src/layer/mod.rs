@@ -109,7 +109,7 @@ pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
 }
 /// Trait defining the implementation of updating weights process in a neural network
 pub trait UpdateWeight<U> where U: UnitValue<U> {
-    /// Type of object to keep the results of forward propagation needed to perform error back propagation.
+    /// Type of object that holds the gradient needed to update the weights of the units in each layer.
     type GradientStack: Stack + Debug + Sized;
     /// Type of object that holds the gradient needed to update the unit weights.
     /// # Arguments

@@ -9,7 +9,7 @@ use crate::cuda::mem::CachedTensor;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::linear::DeviceLinear;
 use crate::error::{ConfigReadError, CudaError, EvaluateError, LayerInstantiationError, PersistenceError, SizeMismatchError, TrainingError, UnsupportedOperationError};
-use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, DiffInput, Forward, ForwardAll, Loss, PreTrain};
+use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, DiffInput, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::optimizer::Optimizer;
@@ -407,6 +407,47 @@ impl<U,C,P,D,I,PI,const NI:usize,const NO:usize> AskDiffInput<U> for LinearLayer
 
     fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
         stack.map_remaining(|s| self.parent.ask_diff_input(s))
+    }
+}
+impl<U,P,I,PI,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,PI,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=Arr<U,NI>> +
+             PreTrain<U> + Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          I: Debug + Send + Sync,
+          PI: Debug + Send + Sync + From<Arr<U,NI>> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr2<U,NI,NO>>;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer:&mut OP) -> Result<(), TrainingError> {
+        let (s,g) = stack.pop();
+
+        for (mut u,g) in self.units.iter_mut().zip(g.iter()) {
+            for (w,&g) in u.iter_mut().zip(g.iter()) {
+                optimizer.update(g, w);
+            }
+        }
+
+        Ok(self.parent.update_weight(s,optimizer)?)
+    }
+}
+impl<U,P,I,PI,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,PI,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=Arr<U,NI>> +
+             PreTrain<U> + Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          I: Debug + Send + Sync,
+          PI: Debug + Send + Sync + From<Arr<U,NI>>,
+          DeviceGpu<U>: Device<U> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr2<U,NI,NO>>;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer:&mut OP) -> Result<(), TrainingError> {
+        let (s,g) = stack.pop();
+
+        for (mut u,g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
+            for (w,&g) in u.iter_mut().zip(g.iter()) {
+                optimizer.update(g, w);
+            }
+        }
+
+        Ok(self.parent.update_weight(s,optimizer)?)
     }
 }
 impl<U,P,I,PI,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,PI,NI,NO>
@@ -1104,6 +1145,45 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,C
         let (s,loss) = self.parent.loss(next_loss,lossf,s)?;
 
         self.parent.backward_all(loss, s, optimizer, lossf)
+    }
+}
+impl<U,P,I,const NI:usize,const NO:usize> UpdateWeight<U> for DiffLinearLayer<U,Arr2<U,NI,NO>,P,DeviceCpu<U>,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
+    PreTrain<U> + Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          I: Debug + Send + Sync {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr2<U,NI,NO>>;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer:&mut OP) -> Result<(), TrainingError> {
+        let (s,g) = stack.pop();
+
+        for (mut u,g) in self.units.iter_mut().zip(g.iter()) {
+            for (w,&g) in u.iter_mut().zip(g.iter()) {
+                optimizer.update(g, w);
+            }
+        }
+
+        Ok(self.parent.update_weight(s,optimizer)?)
+    }
+}
+impl<U,P,I,const NI:usize,const NO:usize> UpdateWeight<U> for DiffLinearLayer<U,CachedTensor<U,Arr2<U,NI,NO>>,P,DeviceGpu<U>,I,NI,NO>
+    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
+             PreTrain<U> + Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          I: Debug + Send + Sync,
+          DeviceGpu<U>: Device<U> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr2<U,NI,NO>>;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer:&mut OP) -> Result<(), TrainingError> {
+        let (s,g) = stack.pop();
+
+        for (mut u,g) in self.units.scoped_mut().iter_mut().zip(g.iter()) {
+            for (w,&g) in u.iter_mut().zip(g.iter()) {
+                optimizer.update(g, w);
+            }
+        }
+
+        Ok(self.parent.update_weight(s,optimizer)?)
     }
 }
 impl<U,C,P,D,I,const NI:usize,const NO:usize> AskDiffInput<U> for DiffLinearLayer<U,C,P,D,I,NI,NO>

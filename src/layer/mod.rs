@@ -107,6 +107,20 @@ pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
     /// * [`EvaluateError`]
     fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError>;
 }
+/// Trait defining the implementation of updating weights process in a neural network
+pub trait UpdateWeight<U> where U: UnitValue<U> {
+    /// Type of object to keep the results of forward propagation needed to perform error back propagation.
+    type GradientStack: Stack + Debug + Sized;
+    /// Type of object that holds the gradient needed to update the unit weights.
+    /// # Arguments
+    /// * `stack` - Stack to store calculation results at upper layers
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack:Self::GradientStack, optimizer:&mut OP) -> Result<(), TrainingError>;
+}
 /// Trait that defines the function of differential application of inputs in the process of forward propagation to neural networks.
 pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
     /// Forward propagation (differential application)

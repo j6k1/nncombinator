@@ -7,7 +7,7 @@ use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecConverter, Serialized
 use crate::{Cons, Stack};
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain};
+use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::optimizer::Optimizer;
@@ -148,6 +148,19 @@ impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         self.f.is_canonical_link(l)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> UpdateWeight<U> for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          PI: Debug + Send + Sync + From<Arr<U,N>>,
+          I: Debug + Send + Sync {
+    type GradientStack = <P as UpdateWeight<U>>::GradientStack;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer: &mut OP) -> Result<(), TrainingError> {
+        Ok(self.parent.update_weight(stack,optimizer)?)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> AskDiffInput<U> for ActivationLayer<U,P,A,I,PI,D,N>

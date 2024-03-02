@@ -9,7 +9,7 @@ use crate::cuda::mem::CachedTensor;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain};
+use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::{UnitValue};
 use crate::optimizer::Optimizer;
@@ -529,6 +529,67 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Cached
         let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
 
         self.parent.backward_all(loss.into(), s, optimizer, lossf)
+    }
+}
+impl<U,P,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,Arr<U,N>,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          I: Debug + Send + Sync {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr<U,N>,Arr<U,N>,Option<(Arr<U,N>,Arr<U,N>)>)>;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer: &mut OP) -> Result<(), TrainingError> {
+        let (s,(scale,bias,saved)) = stack.pop();
+
+        for (w,&g) in self.scale.iter_mut().zip(scale.iter()) {
+            optimizer.update(g,w)
+        }
+
+        for (w,&g) in self.bias.iter_mut().zip(bias.iter()) {
+            optimizer.update(g,w)
+        }
+
+        if let Some((running_mean,running_variance)) = saved {
+            for (it, &m) in self.running_mean.iter_mut().zip(running_mean.iter()) {
+                *it = m;
+            }
+
+            for (it, &v) in self.running_variance.iter_mut().zip(running_variance.iter()) {
+                *it = v;
+            }
+        }
+
+        Ok(self.parent.update_weight(s,optimizer)?)
+    }
+}
+impl<U,P,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          I: Debug + Send + Sync,
+          DeviceGpu<U>: Device<U> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr<U,N>,Arr<U,N>,Option<(Arr<U,N>,Arr<U,N>)>)>;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer: &mut OP) -> Result<(), TrainingError> {
+        let (s,(scale,bias,saved)) = stack.pop();
+
+        for (w,&g) in self.scale.scoped_mut().iter_mut().zip(scale.iter()) {
+            optimizer.update(g,w)
+        }
+
+        for (w,&g) in self.bias.scoped_mut().iter_mut().zip(bias.iter()) {
+            optimizer.update(g,w)
+        }
+
+        if let Some((running_mean,running_variance)) = saved {
+            for (it, &m) in self.running_mean.scoped_mut().iter_mut().zip(running_mean.iter()) {
+                *it = m;
+            }
+
+            for (it, &v) in self.running_variance.scoped_mut().iter_mut().zip(running_variance.iter()) {
+                *it = v;
+            }
+        }
+
+        Ok(self.parent.update_weight(s,optimizer)?)
     }
 }
 impl<U,P,C,I,PI,S,const N:usize> AskDiffInput<U> for BatchNormalizationLayer<U,C,P,DeviceCpu<U>,I,PI,S,N>

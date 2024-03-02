@@ -2,11 +2,11 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use crate::Stack;
+use crate::{Stack};
 use crate::arr::{Arr, SerializedVec};
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchTrain, ForwardAll, Loss, PreTrain, Train};
+use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchTrain, ForwardAll, Loss, PreTrain, Train, UpdateWeight};
 use crate::lossfunction::{BatchLossFunction, LossFunction};
 use crate::ope::UnitValue;
 use crate::optimizer::Optimizer;
@@ -112,6 +112,19 @@ impl<U,P,D,I,const NO:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,I,Arr<U,
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
         self.parent.backward_all(input, stack, optimizer, lossf)
+    }
+}
+impl<U,P,D,I,const NO:usize> UpdateWeight<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
+    where P: BackwardAll<U,LossInput=Arr<U,NO>> +
+             ForwardAll<Input=I,Output=Arr<U,NO>> +
+             PreTrain<U> + Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync {
+    type GradientStack = <P as UpdateWeight<U>>::GradientStack;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer: &mut OP) -> Result<(), TrainingError> {
+        Ok(self.parent.update_weight(stack,optimizer)?)
     }
 }
 impl<U,P,D,I,const NO:usize> AskDiffInput<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>

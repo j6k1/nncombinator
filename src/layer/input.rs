@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::arr::SerializedVec;
 use crate::{Cons, Nil};
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PreTrain};
+use crate::layer::{BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::optimizer::Optimizer;
@@ -64,6 +64,13 @@ impl<U,O,LI> BackwardAll<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Deb
     type LossInput = LI;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, _: Self::LossInput, _:Self::OutStack, _: &mut OP, _:&L) -> Result<(), TrainingError> {
+        Ok(())
+    }
+}
+impl<U,O,LI> UpdateWeight<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
+    type GradientStack = Nil;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, _: Self::GradientStack, _: &mut OP) -> Result<(), TrainingError> {
         Ok(())
     }
 }

@@ -9,7 +9,7 @@ use crate::cuda::mem::CachedTensor;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::bias::DeviceBias;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain};
+use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::{UnitValue};
 use crate::optimizer::Optimizer;
@@ -264,6 +264,43 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,CachedTensor<U,Arr<U
         let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
 
         self.parent.backward_all(loss, s, optimizer, lossf)
+    }
+}
+impl<U,P,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<U> + Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          I: Debug + Send + Sync,
+          PI: Debug + Send + Sync {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr<U,N>>;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer: &mut OP) -> Result<(), TrainingError> {
+        let (s,bias) = stack.pop();
+
+        for (w,&g) in self.bias.iter_mut().zip(bias.iter()) {
+            optimizer.update(g, w);
+        }
+
+        Ok(self.parent.update_weight(s,optimizer)?)
+    }
+}
+impl<U,P,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<U> + Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          I: Debug + Send + Sync,
+          PI: Debug + Send + Sync,
+          DeviceGpu<U>: Device<U> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr<U,N>>;
+
+    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer: &mut OP) -> Result<(), TrainingError> {
+        let (s,bias) = stack.pop();
+
+        for (w,&g) in self.bias.scoped_mut().iter_mut().zip(bias.iter()) {
+            optimizer.update(g, w);
+        }
+
+        Ok(self.parent.update_weight(s,optimizer)?)
     }
 }
 impl<U,C,P,D,I,PI,const N:usize> AskDiffInput<U> for BiasLayer<U,C,P,D,I,PI,N>

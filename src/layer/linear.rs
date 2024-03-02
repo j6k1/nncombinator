@@ -333,6 +333,8 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Ar
 
         let loss = input;
 
+        let next_loss = self.backward(&loss)?;
+
         {
             for (w,&g) in self.bias.iter_mut().zip(loss.iter()) {
                 optimizer.update(g, w);
@@ -349,9 +351,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Ar
             })?;
         }
 
-        let loss= self.backward(&loss.into())?;
-
-        let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
+        let (s,loss) = self.parent.loss(next_loss.into(),lossf,s)?;
 
         self.parent.backward_all(loss, s, optimizer, lossf)
     }
@@ -370,6 +370,8 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Ca
 
         let loss = input;
 
+        let next_loss = self.backward(&loss)?;
+
         {
             for (w,&g) in self.bias.iter_mut().zip(loss.iter()) {
                 optimizer.update(g, w);
@@ -386,9 +388,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Ca
             })?;
         }
 
-        let loss= self.backward(&loss.into())?;
-
-        let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
+        let (s,loss) = self.parent.loss(next_loss.into(),lossf,s)?;
 
         self.parent.backward_all(loss, s, optimizer, lossf)
     }
@@ -498,6 +498,8 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,
 
         let loss = input;
 
+        let next_loss = self.device.batch_backward_linear(&self.units, &loss)?;
+
         {
             {
                 for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce::<NO>((&loss).try_into()?)?.iter()) {
@@ -516,11 +518,9 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,
             }
         }
 
-        let loss = self.device.batch_backward_linear(&self.units, &loss)?;
-
         let (
             s,loss
-        ) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
+        ) = self.parent.batch_loss(next_loss.into_converter().try_into()?,lossf,s)?;
 
         self.parent.batch_backward(loss, s, optimizer, lossf)
     }
@@ -544,6 +544,8 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,
 
         let loss = input;
 
+        let next_loss = self.device.batch_backward_linear(&self.units, &loss)?;
+
         {
             {
                 for (w,&g) in self.bias.iter_mut().zip(self.device.batch_linear_reduce::<NO>((&loss).try_into()?)?.iter()) {
@@ -562,12 +564,10 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,
             }
         }
 
-        let loss = self.device.batch_backward_linear(&self.units, &loss)?;
-
         let (
             s,
             loss
-        ) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
+        ) = self.parent.batch_loss(next_loss.into_converter().try_into()?,lossf,s)?;
 
         self.parent.batch_backward(loss, s, optimizer, lossf)
     }
@@ -1020,6 +1020,8 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,A
 
         let loss = input;
 
+        let next_loss= self.backward(&loss)?;
+
         {
             for (w,&g) in self.bias.iter_mut().zip(loss.iter()) {
                 optimizer.update(g, w);
@@ -1049,9 +1051,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,A
             })?;
         }
 
-        let loss= self.backward(&loss)?;
-
-        let (s,loss) = self.parent.loss(loss,lossf,s)?;
+        let (s,loss) = self.parent.loss(next_loss,lossf,s)?;
 
         self.parent.backward_all(loss, s, optimizer, lossf)
     }
@@ -1069,6 +1069,8 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,C
         let (s,_) = stack.pop();
 
         let loss = input;
+
+        let next_loss= self.backward(&loss)?;
 
         {
             for (w,&g) in self.bias.iter_mut().zip(loss.iter()) {
@@ -1099,9 +1101,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,C
             })?;
         }
 
-        let loss= self.backward(&loss)?;
-
-        let (s,loss) = self.parent.loss(loss,lossf,s)?;
+        let (s,loss) = self.parent.loss(next_loss,lossf,s)?;
 
         self.parent.backward_all(loss, s, optimizer, lossf)
     }

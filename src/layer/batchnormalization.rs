@@ -472,7 +472,7 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr<U,
     type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
 
         let (s,_) = stack.pop();
@@ -486,7 +486,7 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr<U,
 
         let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
 
-        let (l,s) = self.parent.backward_all(loss.into(), s, optimizer, lossf)?;
+        let (l,s) = self.parent.backward_all(loss.into(), s, lossf)?;
 
         Ok((l,Cons(s,(scale,bias,None))))
     }
@@ -502,7 +502,7 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Cached
     type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
 
         let (s,_) = stack.pop();
@@ -516,7 +516,7 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Cached
 
         let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
 
-        let (l,s) = self.parent.backward_all(loss.into(), s, optimizer, lossf)?;
+        let (l,s) = self.parent.backward_all(loss.into(), s, lossf)?;
 
         Ok((l,Cons(s,(scale,bias,None))))
     }
@@ -708,7 +708,7 @@ impl<U,P,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Arr<
     type BatchLossInput = SerializedVec<U,PI>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let loss = (&input).try_into()?;
 
@@ -729,7 +729,7 @@ impl<U,P,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Arr<
              loss
         ) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
 
-        let (l,s) = self.parent.batch_backward(loss, s, optimizer, lossf)?;
+        let (l,s) = self.parent.batch_backward(loss, s, lossf)?;
 
         Ok((l,Cons(s,(scale,bias,Some((running_mean,running_variance))))))
     }
@@ -750,7 +750,7 @@ impl<U,P,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Cach
     type BatchLossInput = SerializedVec<U,PI>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let loss = (&input).try_into()?;
 
@@ -771,7 +771,7 @@ impl<U,P,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Cach
             loss
         ) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
 
-        let (l,s) = self.parent.batch_backward(loss, s, optimizer, lossf)?;
+        let (l,s) = self.parent.batch_backward(loss, s, lossf)?;
 
         Ok((l,Cons(s,(scale,bias,Some((running_mean,running_variance))))))
     }

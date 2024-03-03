@@ -60,14 +60,13 @@ pub trait BackwardAll<U>: PreTrain<U> + UpdateWeight<U> where U: UnitValue<U> {
     /// # Arguments
     /// * `input` - loss
     /// * `stack` - Stack to store calculation results at upper layers
-    /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
     /// * `lossf` - loss function
     ///
     /// # Errors
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::LossInput, stack:Self::OutStack, optimizer:&mut OP, lossf:&L)
+    fn backward_all<L: LossFunction<U>>(&mut self, input:Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError>;
     fn is_canonical_link<L: LossFunction<U>>(&self,_:&L) -> bool {
         false
@@ -189,14 +188,13 @@ pub trait BatchBackward<U>: BatchPreTrainBase<U> + UpdateWeight<U> where U: Unit
     /// # Arguments
     /// * `input` - loss
     /// * `stack` - Stack to store calculation results at upper layers
-    /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
     /// * `lossf` - loss function
     ///
     /// # Errors
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, optimizer:&mut OP, lossf:&L)
+    fn batch_backward<L: LossFunction<U>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, lossf:&L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError>;
 }
 /// Trait that defines the implementation of the process of calculating the loss during error back propagation of neural networks by batch processing.

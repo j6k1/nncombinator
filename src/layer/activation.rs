@@ -141,11 +141,11 @@ impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D
     type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
-        self.parent.backward_all(input.into(), s, optimizer,lossf)
+        self.parent.backward_all(input.into(), s, lossf)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -278,11 +278,11 @@ impl<U,P,A,I,PI,D,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,PI
     type BatchLossInput = SerializedVec<U,PI>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
-        self.parent.batch_backward(input, s, optimizer, lossf)
+        self.parent.batch_backward(input, s, lossf)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,PI,D,N>

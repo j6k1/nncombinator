@@ -97,9 +97,9 @@ impl<U,P,I,PI,CI,D> BackwardAll<U> for BridgeLayer<U,P,I,PI,CI,D>
     type LossInput = CI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-        Ok(self.parent.backward_all(input.into(), stack, optimizer,lossf)?.into())
+        Ok(self.parent.backward_all(input.into(), stack, lossf)?.into())
     }
 }
 impl<U,P,I,PI,CI,D> UpdateWeight<U> for BridgeLayer<U,P,I,PI,CI,D>
@@ -201,9 +201,9 @@ impl<U,P,I,PI,CI,D> BatchBackward<U> for BridgeLayer<U,P,I,PI,CI,D>
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,CI>,Error=SizeMismatchError> {
     type BatchLossInput = SerializedVec<U,CI>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-        self.parent.batch_backward(input.into_converter().try_into()?, stack, optimizer, lossf)
+        self.parent.batch_backward(input.into_converter().try_into()?, stack, lossf)
     }
 }
 impl<U,P,I,PI,CI,D> BatchLoss<U> for BridgeLayer<U,P,I,PI,CI,D>

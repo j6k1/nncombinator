@@ -329,7 +329,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Ar
     type LossInput = Arr<U,NO>;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
@@ -345,7 +345,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Ar
 
         let (s,loss) = self.parent.loss(next_loss.into(),lossf,s)?;
 
-        let (l,s) = self.parent.backward_all(loss, s, optimizer, lossf)?;
+        let (l,s) = self.parent.backward_all(loss, s, lossf)?;
 
         Ok((l,Cons(s,(g,bg))))
     }
@@ -360,7 +360,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Ca
     type LossInput = Arr<U,NO>;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
@@ -376,7 +376,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Ca
 
         let (s,loss) = self.parent.loss(next_loss.into(),lossf,s)?;
 
-        let (l,s) = self.parent.backward_all(loss, s, optimizer, lossf)?;
+        let (l,s) = self.parent.backward_all(loss, s, lossf)?;
 
         Ok((l,Cons(s,(g,bg))))
     }
@@ -531,7 +531,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,
     type BatchLossInput = SerializedVec<U,Arr<U,NO>>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s, _) = stack.pop();
 
@@ -549,7 +549,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,
             s,loss
         ) = self.parent.batch_loss(next_loss.into_converter().try_into()?,lossf,s)?;
 
-        let (l,s) = self.parent.batch_backward(loss, s, optimizer, lossf)?;
+        let (l,s) = self.parent.batch_backward(loss, s, lossf)?;
 
         Ok((l,Cons(s,(g,bg))))
     }
@@ -569,7 +569,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,
     type BatchLossInput = SerializedVec<U,Arr<U,NO>>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s, _) = stack.pop();
 
@@ -588,7 +588,7 @@ impl<U,P,I,PI,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,
             loss
         ) = self.parent.batch_loss(next_loss.into_converter().try_into()?,lossf,s)?;
 
-        let (l,s) = self.parent.batch_backward(loss, s, optimizer, lossf)?;
+        let (l,s) = self.parent.batch_backward(loss, s, lossf)?;
 
         Ok((l,Cons(s,(g,bg))))
     }
@@ -1037,7 +1037,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,A
     type LossInput = Arr<U,NO>;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
@@ -1062,7 +1062,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,A
 
         let (s,loss) = self.parent.loss(next_loss,lossf,s)?;
 
-        let (l,s) = self.parent.backward_all(loss, s, optimizer, lossf)?;
+        let (l,s) = self.parent.backward_all(loss, s, lossf)?;
 
         Ok((l,Cons(s,(g,bg))))
     }
@@ -1077,7 +1077,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,C
     type LossInput = Arr<U,NO>;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
@@ -1102,7 +1102,7 @@ impl<U,P,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,C
 
         let (s,loss) = self.parent.loss(next_loss,lossf,s)?;
 
-        let (l,s) = self.parent.backward_all(loss, s, optimizer, lossf)?;
+        let (l,s) = self.parent.backward_all(loss, s, lossf)?;
 
         Ok((l,Cons(s,(g,bg))))
     }

@@ -111,9 +111,9 @@ impl<U,P,D,I,const NO:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,I,Arr<U,
     type LossInput = Arr<U,NO>;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-        self.parent.backward_all(input, stack, optimizer, lossf)
+        self.parent.backward_all(input, stack, lossf)
     }
 }
 impl<U,P,D,I,const NO:usize> UpdateWeight<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
@@ -166,7 +166,7 @@ impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
             self.parent.loss(loss,lossf,stack)?
         };
 
-        let (_,s) = self.backward_all(loss,stack,optimizer,lossf)?;
+        let (_,s) = self.backward_all(loss,stack,lossf)?;
 
         self.parent.update_weight(s,optimizer)?;
 
@@ -229,9 +229,9 @@ impl<U,P,D,I,IO> BatchBackward<U> for LinearOutputLayer<U,P,D,I,IO>
     type BatchLossInput = SerializedVec<U,IO>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-        self.parent.batch_backward(input,stack,optimizer,lossf)
+        self.parent.batch_backward(input,stack,lossf)
     }
 }
 impl<U,P,D,I,const N:usize> BatchTrain<U,D> for LinearOutputLayer<U,P,D,I,Arr<U,N>>
@@ -266,7 +266,7 @@ impl<U,P,D,I,const N:usize> BatchTrain<U,D> for LinearOutputLayer<U,P,D,I,Arr<U,
             self.parent.batch_loss(loss,lossf,stack)?
         };
 
-        let (_,s) = self.parent.batch_backward(loss,stack,optimizer,lossf)?;
+        let (_,s) = self.parent.batch_backward(loss,stack,lossf)?;
 
         self.parent.update_weight(s,optimizer)?;
 

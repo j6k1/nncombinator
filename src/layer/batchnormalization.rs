@@ -470,9 +470,10 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr<U,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
     type LossInput = PI;
+    type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
-        -> Result<(), TrainingError> {
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
 
         let (s,_) = stack.pop();
         let (s,(m,iv)) = s.pop();
@@ -483,17 +484,11 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr<U,
             self.backward(((&loss).into(),input.into(),&m,&iv))
         })?;
 
-        for (w,&g) in self.scale.iter_mut().zip(scale.iter()) {
-            optimizer.update(g,w)
-        }
-
-        for (w,&g) in self.bias.iter_mut().zip(bias.iter()) {
-            optimizer.update(g,w)
-        }
-
         let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
 
-        self.parent.backward_all(loss.into(), s, optimizer, lossf)
+        let (l,s) = self.parent.backward_all(loss.into(), s, optimizer, lossf)?;
+
+        Ok((l,Cons(s,(scale,bias,None))))
     }
 }
 impl<U,P,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
@@ -505,9 +500,10 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Cached
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
           DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> {
     type LossInput = PI;
+    type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
-                                                         -> Result<(), TrainingError> {
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
 
         let (s,_) = stack.pop();
         let (s,(m,iv)) = s.pop();
@@ -518,17 +514,11 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Cached
             self.backward(((&loss).into(),input.into(),&m,&iv))
         })?;
 
-        for (w,&g) in self.scale.scoped_mut().iter_mut().zip(scale.iter()) {
-            optimizer.update(g,w)
-        }
-
-        for (w,&g) in self.bias.scoped_mut().iter_mut().zip(bias.iter()) {
-            optimizer.update(g,w)
-        }
-
         let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
 
-        self.parent.backward_all(loss.into(), s, optimizer, lossf)
+        let (l,s) = self.parent.backward_all(loss.into(), s, optimizer, lossf)?;
+
+        Ok((l,Cons(s,(scale,bias,None))))
     }
 }
 impl<U,P,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,Arr<U,N>,N>
@@ -716,8 +706,10 @@ impl<U,P,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Arr<
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError> {
     type BatchLossInput = SerializedVec<U,PI>;
+    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
+    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let loss = (&input).try_into()?;
 
         let (s, _) = stack.pop();
@@ -737,18 +729,9 @@ impl<U,P,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Arr<
              loss
         ) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
 
-        for (w,&g) in self.scale.iter_mut().zip(scale.iter()) {
-            optimizer.update(g,w)
-        }
+        let (l,s) = self.parent.batch_backward(loss, s, optimizer, lossf)?;
 
-        for (w,&g) in self.bias.iter_mut().zip(bias.iter()) {
-            optimizer.update(g,w)
-        }
-
-        self.running_mean = running_mean;
-        self.running_variance = running_variance;
-
-        self.parent.batch_backward(loss, s, optimizer, lossf)
+        Ok((l,Cons(s,(scale,bias,Some((running_mean,running_variance))))))
     }
 }
 impl<U,P,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
@@ -765,8 +748,10 @@ impl<U,P,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Cach
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
           DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> {
     type BatchLossInput = SerializedVec<U,PI>;
+    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
+    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let loss = (&input).try_into()?;
 
         let (s, _) = stack.pop();
@@ -782,25 +767,13 @@ impl<U,P,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Cach
             self.device.batch_backward_batch_norm(loss,input.try_into()?,&self.scale,&saved_mean,&saved_inv_variance)
         })?;
 
-        let (s,loss) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
+        let (s,
+            loss
+        ) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
 
-        for (w,&g) in self.scale.scoped_mut().iter_mut().zip(scale.iter()) {
-            optimizer.update(g,w)
-        }
+        let (l,s) = self.parent.batch_backward(loss, s, optimizer, lossf)?;
 
-        for (w,&g) in self.bias.scoped_mut().iter_mut().zip(bias.iter()) {
-            optimizer.update(g,w)
-        }
-
-        for (it,&m) in self.running_mean.scoped_mut().iter_mut().zip(running_mean.iter()) {
-            *it = m;
-        }
-
-        for (it,&v) in self.running_variance.scoped_mut().iter_mut().zip(running_variance.iter()) {
-            *it = v;
-        }
-
-        self.parent.batch_backward(loss, s, optimizer, lossf)
+        Ok((l,Cons(s,(scale,bias,Some((running_mean,running_variance))))))
     }
 }
 impl<U,P,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,Arr<U,N>,N>

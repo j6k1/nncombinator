@@ -50,9 +50,11 @@ pub trait ForwardAll {
     fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError>;
 }
 /// Trait defining the implementation of error back propagation in neural networks
-pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {
+pub trait BackwardAll<U>: PreTrain<U> + UpdateWeight<U> where U: UnitValue<U> {
     /// Losses during neural network training
     type LossInput: Debug;
+    /// Losses in the top layer during neural network training
+    type LossOutput: Debug;
 
     /// Back propagation of errors
     /// # Arguments
@@ -65,7 +67,8 @@ pub trait BackwardAll<U>: PreTrain<U> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::LossInput, stack:Self::OutStack, optimizer:&mut OP, lossf:&L) -> Result<(), TrainingError>;
+    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::LossInput, stack:Self::OutStack, optimizer:&mut OP, lossf:&L)
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError>;
     fn is_canonical_link<L: LossFunction<U>>(&self,_:&L) -> bool {
         false
     }
@@ -177,9 +180,11 @@ pub trait BatchForward: BatchForwardBase {
     fn batch_forward(&self,input:Self::BatchInput) -> Result<Self::BatchOutput, TrainingError>;
 }
 /// Trait defining an implementation of error back propagation for neural networks with batch processing.
-pub trait BatchBackward<U>: BatchPreTrainBase<U> where U: UnitValue<U> {
+pub trait BatchBackward<U>: BatchPreTrainBase<U> + UpdateWeight<U> where U: UnitValue<U> {
     /// Losses during neural network training for batch execution
     type BatchLossInput: Debug;
+    /// Losses in the top layer during neural network training
+    type BatchLossOutput: Debug;
     /// Back propagation of errors
     /// # Arguments
     /// * `input` - loss
@@ -191,7 +196,8 @@ pub trait BatchBackward<U>: BatchPreTrainBase<U> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, optimizer:&mut OP, lossf:&L) -> Result<(), TrainingError>;
+    fn batch_backward<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, optimizer:&mut OP, lossf:&L)
+        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError>;
 }
 /// Trait that defines the implementation of the process of calculating the loss during error back propagation of neural networks by batch processing.
 pub trait BatchLoss<U>: BatchBackward<U> + Loss<U> where U: UnitValue<U> {

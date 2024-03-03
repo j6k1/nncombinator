@@ -216,26 +216,26 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,Arr<U,N>,P,DeviceCpu
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
-          for<'a> PI: Debug + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
+          for<'a> PI: Debug + Clone + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
     type LossInput = PI;
+    type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
+    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
         let loss = input;
 
-        {
-            for (w,&g) in self.bias.iter_mut().zip(self.device.backward_bias_weight_gradient((&loss).into())?.iter()) {
-                optimizer.update(g, w);
-            }
-        }
+        let g = loss.clone().into();
 
-        let loss= self.backward(loss)?;
+        let next_loss= self.backward(loss)?;
 
-        let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
+        let (s,next_loss) = self.parent.loss(next_loss.into(),lossf,s)?;
 
-        self.parent.backward_all(loss, s, optimizer, lossf)
+        let (l,s) = self.parent.backward_all(next_loss, s, optimizer, lossf)?;
+
+        Ok((l,Cons(s,g)))
     }
 }
 impl<U,P,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,N>
@@ -243,27 +243,27 @@ impl<U,P,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,CachedTensor<U,Arr<U
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
-          for<'a> PI: Debug + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
+          for<'a> PI: Debug + Clone + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           DeviceGpu<U>: Device<U> + DeviceBias<U,CachedTensor<U,Arr<U,N>>,N>,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
     type LossInput = PI;
+    type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
+    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L)
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
         let loss = input;
 
-        {
-            for (w,&g) in self.bias.scoped_mut().iter_mut().zip(self.device.backward_bias_weight_gradient((&loss).into())?.iter()) {
-                optimizer.update(g, w);
-            }
-        }
+        let g = loss.clone().into();
 
-        let loss= self.backward(loss)?;
+        let next_loss= self.backward(loss)?;
 
-        let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
+        let (s,next_loss) = self.parent.loss(next_loss.into(),lossf,s)?;
 
-        self.parent.backward_all(loss, s, optimizer, lossf)
+        let (l,s) = self.parent.backward_all(next_loss, s, optimizer, lossf)?;
+
+        Ok((l,Cons(s,g)))
     }
 }
 impl<U,P,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,N>
@@ -324,14 +324,14 @@ impl<U,P,I,PI,const N:usize> Loss<U> for BiasLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,P
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
-          for<'a> PI: Debug + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
+          for<'a> PI: Debug + Clone + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
 }
 impl<U,P,I,PI,const N:usize> Loss<U> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,N>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + From<PI>,
+          PI: Debug + Send + Clone + Sync + From<PI>,
           Arr<U,N>: From<PI>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           DeviceGpu<U>: Device<U>,
@@ -407,27 +407,25 @@ impl<U,P,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,Arr<U,N>,P,DeviceC
           SerializedVec<U,Arr<U,N>>: TryFrom<SerializedVecConverter<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError> {
     type BatchLossInput = SerializedVec<U,PI>;
+    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
+    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s, _) = stack.pop();
 
         let loss = input;
 
-        {
-            {
-                for (w,&g) in self.bias.iter_mut().zip(self.device.batch_backward_bias_weight_gradient((&loss).try_into()?)?.iter()) {
-                    optimizer.update(g, w);
-                }
-            }
-        }
+        let g = self.device.batch_backward_bias_weight_gradient((&loss).try_into()?)?;
 
-        let loss = self.device.batch_backward_bias(loss.into_converter().try_into()?)?;
+        let next_loss = self.device.batch_backward_bias(loss.into_converter().try_into()?)?;
 
         let (
-            s,loss
-        ) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
+            s,next_loss
+        ) = self.parent.batch_loss(next_loss.into_converter().try_into()?,lossf,s)?;
 
-        self.parent.batch_backward(loss, s, optimizer, lossf)
+        let (l,s) = self.parent.batch_backward(next_loss, s, optimizer, lossf)?;
+
+        Ok((l,Cons(s,g)))
     }
 }
 impl<U,P,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,DeviceGpu<U>,I,PI,N>
@@ -444,26 +442,26 @@ impl<U,P,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,CachedTensor<U,Arr
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
           DeviceGpu<U>: Device<U> + DeviceBias<U,CachedTensor<U,Arr<U,N>>,N> {
     type BatchLossInput = SerializedVec<U,Arr<U,N>>;
+    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
+    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L)
+        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         let (s, _) = stack.pop();
 
         let loss = input;
 
-        {
-            for (w,&g) in self.bias.scoped_mut().iter_mut().zip(self.device.batch_backward_bias_weight_gradient((&loss).try_into()?)?.iter()) {
-                optimizer.update(g, w);
-            }
-        }
+        let g = self.device.batch_backward_bias_weight_gradient((&loss).try_into()?)?;
 
-        let loss = self.device.batch_backward_bias(loss.into_converter().try_into()?)?;
+        let next_loss = self.device.batch_backward_bias(loss.into_converter().try_into()?)?;
 
         let (
             s,
-            loss
-        ) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
+            next_loss
+        ) = self.parent.batch_loss(next_loss.into_converter().try_into()?,lossf,s)?;
 
-        self.parent.batch_backward(loss, s, optimizer, lossf)
+        let (l,s) = self.parent.batch_backward(next_loss, s, optimizer, lossf)?;
+
+        Ok((l,Cons(s,g)))
     }
 }
 impl<U,P,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,Arr<U,N>,P,DeviceCpu<U>,I,PI,N>
@@ -474,7 +472,7 @@ impl<U,P,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,Arr<U,N>,P,DeviceCpu<U
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
-          for<'a> PI: Debug + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
+          for<'a> PI: Debug + Clone + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,Arr<U,N>>: TryFrom<SerializedVecConverter<U,PI>,Error=SizeMismatchError>,
@@ -488,7 +486,7 @@ impl<U,P,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,CachedTensor<U,Arr<U,N
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           Arr<U,N>: From<PI>,
-          for<'a> PI: Debug + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>>,
+          for<'a> PI: Debug + Clone + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,Arr<U,N>>: TryFrom<SerializedVecConverter<U,PI>,Error=SizeMismatchError>,

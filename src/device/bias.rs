@@ -32,16 +32,6 @@ pub trait DeviceBias<U,T,const N: usize> where U: UnitValue<U> {
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn backward_bias<'a>(&self, input:Arr<U,N>) -> Result<Arr<U,N>, TrainingError>;
-    /// Calculate the gradient of the weights
-    /// # Arguments
-    /// * `loss` - loss
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`TrainingError`]
-    fn backward_bias_weight_gradient<'a>(&self, loss: ArrView<'a,U,N>)
-                                    -> Result<ArrView<'a,U,N>, TrainingError>;
     /// Forward propagation calculation in batch
     /// # Arguments
     /// * `bias` - bias weights
@@ -81,10 +71,6 @@ impl<U,const N:usize> DeviceBias<U,Arr<U,N>,N> for DeviceCpu<U> where U: UnitVal
 
     fn backward_bias<'a>(&self, input: Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
         Ok(input)
-    }
-
-    fn backward_bias_weight_gradient<'a>(&self, loss: ArrView<'a, U,N>) -> Result<ArrView<'a,U,N>, TrainingError> {
-        Ok(loss)
     }
 
     fn batch_forward_bias<'a>(&self, bias: &Arr<U,N>, input: SerializedVecView<'a, U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U,N>>, TrainingError> {
@@ -143,10 +129,6 @@ impl<const N:usize> DeviceBias<f32,CachedTensor<f32,Arr<f32,N>>,N> for DeviceGpu
 
     fn backward_bias<'a>(&self, input: Arr<f32,N>) -> Result<Arr<f32,N>, TrainingError> {
         Ok(input)
-    }
-
-    fn backward_bias_weight_gradient<'a>(&self, loss: ArrView<'a,f32,N>) -> Result<ArrView<'a,f32,N>, TrainingError> {
-        Ok(loss)
     }
 
     fn batch_forward_bias<'a>(&self, bias: &CachedTensor<f32,Arr<f32,N>>, input: SerializedVecView<'a,f32,Arr<f32,N>>) -> Result<SerializedVec<f32,Arr<f32,N>>, TrainingError> {
@@ -244,10 +226,6 @@ impl<const N:usize> DeviceBias<f64,CachedTensor<f64,Arr<f64,N>>,N> for DeviceGpu
 
     fn backward_bias<'a>(&self, input: Arr<f64,N>) -> Result<Arr<f64,N>, TrainingError> {
         Ok(input)
-    }
-
-    fn backward_bias_weight_gradient<'a>(&self, loss: ArrView<'a,f64,N>) -> Result<ArrView<'a,f64,N>, TrainingError> {
-        Ok(loss)
     }
 
     fn batch_forward_bias<'a>(&self, bias: &CachedTensor<f64,Arr<f64,N>>, input: SerializedVecView<'a,f64, Arr<f64,N>>) -> Result<SerializedVec<f64, Arr<f64,N>>, TrainingError> {

@@ -8,6 +8,7 @@ use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::error::{IndexOutBoundError, SizeMismatchError};
+use crate::layer::BatchDataType;
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::{Product, Sum};
 
@@ -261,6 +262,9 @@ impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for Arr<T,N> where T: Default + Clo
     fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
         &mut self.arr
     }
+}
+impl<T,const N:usize> BatchDataType for Arr<T,N> where T: Default + Clone + Send {
+    type Type = SerializedVec<T,Arr<T,N>>;
 }
 /// Fixed-length 2D array implementation
 #[derive(Debug,Eq,PartialEq)]

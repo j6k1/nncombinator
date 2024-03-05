@@ -26,6 +26,10 @@ pub enum DiffInput<T,U,const NI:usize,const NO:usize>
     /// fully input
     NotDiff(Arr<U,NI>)
 }
+/// Trait that defines the data type during batch training corresponding to the data type
+pub trait BatchDataType {
+    type Type;
+}
 /// Trait defining the internal implementation of forward propagation of a neural network
 pub trait Forward<I,O> {
     /// Forward propagation implementation

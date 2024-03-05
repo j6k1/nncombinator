@@ -2,10 +2,9 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use crate::arr::SerializedVec;
 use crate::{Cons, Nil};
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::optimizer::Optimizer;
@@ -77,30 +76,52 @@ impl<U,O,LI> UpdateWeight<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: De
     }
 }
 impl<U,O,LI> Loss<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {}
-impl<U,O,LI> BatchForwardBase for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
-    type BatchInput = SerializedVec<U,O>;
-    type BatchOutput = SerializedVec<U,O>;
+impl<U,O,LI> BatchForwardBase for InputLayer<U,O,LI>
+    where U: UnitValue<U>,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          <O as BatchDataType>::Type: Debug {
+    type BatchInput = <O as BatchDataType>::Type;
+    type BatchOutput = <O as BatchDataType>::Type;
 }
-impl<U,O,LI> BatchForward for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
+impl<U,O,LI> BatchForward for InputLayer<U,O,LI>
+    where U: UnitValue<U>, O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          <O as BatchDataType>::Type: Debug {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput,TrainingError> {
         Ok(input)
     }
 }
-impl<U,O,LI> BatchPreTrainBase<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
-    type BatchOutStack = Cons<Nil,SerializedVec<U,O>>;
+impl<U,O,LI> BatchPreTrainBase<U> for InputLayer<U,O,LI>
+    where U: UnitValue<U>, O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          <O as BatchDataType>::Type: Debug {
+    type BatchOutStack = Cons<Nil,<O as BatchDataType>::Type>;
 }
-impl<U,O,LI> BatchPreTrain<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
+impl<U,O,LI> BatchPreTrain<U> for InputLayer<U,O,LI>
+    where U: UnitValue<U>, O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          <O as BatchDataType>::Type: Debug {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         Ok(Cons(Nil,input))
     }
 }
-impl<U,O,LI> BatchBackward<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
-    type BatchLossInput = SerializedVec<U,LI>;
-    type BatchLossOutput = SerializedVec<U,LI>;
+impl<U,O,LI> BatchBackward<U> for InputLayer<U,O,LI>
+    where U: UnitValue<U>, O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug + BatchDataType,
+          <O as BatchDataType>::Type: Debug,
+          <LI as BatchDataType>::Type: Debug {
+    type BatchLossInput = <LI as BatchDataType>::Type;
+    type BatchLossOutput = <LI as BatchDataType>::Type;
 
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, _: Self::BatchOutStack, _: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
 }
-impl<U,O,LI> BatchLoss<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {}
+impl<U,O,LI> BatchLoss<U> for InputLayer<U,O,LI>
+    where U: UnitValue<U>, O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug + BatchDataType,
+          <O as BatchDataType>::Type: Debug,
+          <LI as BatchDataType>::Type: Debug {
+}

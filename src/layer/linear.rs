@@ -499,7 +499,7 @@ impl<U,C,P,D,I,PI,const NI:usize,const NO:usize> BatchPreTrainBase<U> for Linear
           Self: PreTrain<U> {
     type BatchOutStack = Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,Self::BatchOutput>;
 }
-impl<U,C,P,D,I,PI,const NI:usize,const NO:usize> Forward<SerializedVec<U,PI>,Result<SerializedVec<U,Arr<U,NO>>,TrainingError>>
+impl<U,C,P,D,I,PI,const NI:usize,const NO:usize> Forward<SerializedVecView<'_,U,Arr<U,NI>>,Result<SerializedVec<U,Arr<U,NO>>,TrainingError>>
     for LinearLayer<U,C,P,D,I,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,PI>> + BatchForward +
@@ -510,8 +510,8 @@ impl<U,C,P,D,I,PI,const NI:usize,const NO:usize> Forward<SerializedVec<U,PI>,Res
           PI: Debug + Send + Sync + From<Arr<U,NI>>,
           for<'a> ArrView<'a,U,NI>: From<&'a PI>,
           for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError> {
-    fn forward(&self, input: &SerializedVec<U,PI>) -> Result<SerializedVec<U,Arr<U,NO>>,TrainingError> {
-        Ok(self.device.batch_forward_linear(&self.bias,&self.units,input.try_into()?)?)
+    fn forward(&self, input: &SerializedVecView<'_,U,Arr<U,NI>>) -> Result<SerializedVec<U,Arr<U,NO>>,TrainingError> {
+        Ok(self.device.batch_forward_linear(&self.bias,&self.units,*input)?)
     }
 }
 impl<U,C,P,D,I,PI,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U,C,P,D,I,PI,NI,NO>
@@ -527,7 +527,7 @@ impl<U,C,P,D,I,PI,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLaye
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let r = self.parent.batch_pre_train(input)?;
 
-        let u = r.map(|input| self.forward(input))?;
+        let u = r.map(|input| self.forward(&SerializedVecView::try_from(input)?))?;
 
         Ok(Cons(r,u))
     }

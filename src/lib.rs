@@ -54,6 +54,25 @@ pub trait Stack {
 #[derive(Debug,Clone)]
 pub struct Cons<R,T>(pub R,pub T) where R: Stack;
 
+impl<R,T> Cons<R,T> where R: Stack {
+    /// Returns a reference to the remaining items in the stack, not including the top item in the stack.
+    pub fn get_remaining(&self) -> &R {
+        match self {
+            &Cons(ref parent,_) => {
+                parent
+            }
+        }
+    }
+
+    /// Returns a reference to the top item on the stack
+    pub fn get_head(&self) -> &T {
+        match self {
+            &Cons(_, ref head) => {
+                head
+            }
+        }
+    }
+}
 impl<R,T> Stack for Cons<R,T> where R: Stack {
     type Remaining = R;
     type Head = T;

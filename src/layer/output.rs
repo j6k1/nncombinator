@@ -6,7 +6,7 @@ use crate::{Stack};
 use crate::arr::{Arr, SerializedVec};
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchTrain, ForwardAll, Loss, PreTrain, Train, UpdateWeight};
+use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ForwardAll, Loss, PreTrain, Train, UpdateWeight};
 use crate::lossfunction::{BatchLossFunction, LossFunction};
 use crate::ope::UnitValue;
 use crate::optimizer::Optimizer;
@@ -175,56 +175,61 @@ impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
 }
 impl<U,P,D,I,IO> BatchForwardBase for LinearOutputLayer<U,P,D,I,IO>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,IO>>,
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,IO>>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           IO: Debug + Send + Sync + 'static,
-          I: Debug + Send + Sync {
-    type BatchInput = SerializedVec<U,I>;
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug {
+    type BatchInput = <I as BatchDataType>::Type;
     type BatchOutput = SerializedVec<U,IO>;
 }
 impl<U,P,D,I,IO> BatchForward for LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,IO>> + BatchForward,
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,IO>> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           IO: Debug + Send + Sync + 'static,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         self.parent.batch_forward(input)
     }
 }
 impl<U,P,D,I,IO> BatchPreTrainBase<U> for LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,IO>> + BatchForward +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,IO>> + BatchForward +
              BatchPreTrainBase<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           IO: Debug + Send + Sync + 'static,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug {
     type BatchOutStack = P::BatchOutStack;
 }
 impl<U,P,D,I,IO> BatchPreTrain<U> for LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,IO>> + BatchForward +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,IO>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           IO: Debug + Send + Sync + 'static,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         self.parent.batch_pre_train(input)
     }
 }
 impl<U,P,D,I,IO> BatchBackward<U> for LinearOutputLayer<U,P,D,I,IO>
     where P: ForwardAll<Input=I,Output=IO> + BackwardAll<U,LossInput=IO> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,IO>> + BatchForward +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,IO>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + UpdateWeight<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,IO>>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           IO: Debug + Send + Sync + 'static,
-          I: Debug + Send + Sync,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug,
           Self: UpdateWeight<U,GradientStack = <P as UpdateWeight<U>>::GradientStack> {
     type BatchLossInput = SerializedVec<U,IO>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
@@ -236,16 +241,17 @@ impl<U,P,D,I,IO> BatchBackward<U> for LinearOutputLayer<U,P,D,I,IO>
 }
 impl<U,P,D,I,const N:usize> BatchTrain<U,D> for LinearOutputLayer<U,P,D,I,Arr<U,N>>
     where P: ForwardAll<Input=I,Output=Arr<U,N>> + BackwardAll<U,LossInput=Arr<U,N>> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,Arr<U,N>>> + BatchForward +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,Arr<U,N>>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,Arr<U,N>>>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
-          I: Debug + Send + Sync,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug + BatchSize,
           f64: From<U> {
     fn batch_train<OP: Optimizer<U>,L: BatchLossFunction<U,D>>(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, optimizer:&mut OP, lossf:&L) -> Result<U, TrainingError> {
-        if expected.len() != input.len() {
-            return Err(TrainingError::from(SizeMismatchError(expected.len(),input.len())));
+        if expected.len() != input.size() {
+            return Err(TrainingError::from(SizeMismatchError(expected.len(),input.size())));
         }
 
         let stack = self.batch_pre_train(input)?;

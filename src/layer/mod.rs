@@ -30,6 +30,10 @@ pub enum DiffInput<T,U,const NI:usize,const NO:usize>
 pub trait BatchDataType {
     type Type;
 }
+/// Trait that defines the ability to get the size of a batch
+pub trait BatchSize {
+    fn size(&self) -> usize;
+}
 /// Trait defining the internal implementation of forward propagation of a neural network
 pub trait Forward<I,O> {
     /// Forward propagation implementation

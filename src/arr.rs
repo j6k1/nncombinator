@@ -8,7 +8,7 @@ use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::error::{IndexOutBoundError, SizeMismatchError};
-use crate::layer::BatchDataType;
+use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::{Product, Sum};
 
@@ -1106,6 +1106,12 @@ pub struct SerializedVec<U,T> {
 impl<U,T> SerializedVec<U,T> where U: Default + Clone + Copy + Send {
     /// get the number of element
     pub fn len(&self) -> usize {
+        self.len
+    }
+}
+impl<U,T> BatchSize for SerializedVec<U,T> {
+    /// get the number of element
+    fn size(&self) -> usize {
         self.len
     }
 }

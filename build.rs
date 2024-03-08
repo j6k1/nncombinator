@@ -29,12 +29,12 @@ fn main() {
 		Command::new("nvcc")
 			.args(&["-O3",
 				"src/kernel.cu",
-				// static library (.lib) を出力させる
+				// Output static library (.lib)
 				"-lib",
-				// Cコンパイラのパスを指定
+				// Specify the path to the C compiler
 				"-ccbin",
 				"cl.exe",
-				// Cコンパイラにwarning 4819を無視するよう指示
+				// Instruct C compiler to ignore warning 4819
 				"-Xcompiler", "-wd4819",
 				"-o",
 			])

@@ -56,6 +56,7 @@ pub struct Cons<R,T>(pub R,pub T) where R: Stack;
 
 impl<R,T> Cons<R,T> where R: Stack {
     /// Returns a reference to the remaining items in the stack, not including the top item in the stack.
+    #[inline]
     pub fn get_remaining(&self) -> &R {
         match self {
             &Cons(ref parent,_) => {
@@ -65,6 +66,7 @@ impl<R,T> Cons<R,T> where R: Stack {
     }
 
     /// Returns a reference to the top item on the stack
+    #[inline]
     pub fn get_head(&self) -> &T {
         match self {
             &Cons(_, ref head) => {
@@ -77,6 +79,7 @@ impl<R,T> Stack for Cons<R,T> where R: Stack {
     type Remaining = R;
     type Head = T;
 
+    #[inline]
     fn pop(self) -> (Self::Remaining, Self::Head) {
         match self {
             Cons(parent,head) => {
@@ -85,14 +88,18 @@ impl<R,T> Stack for Cons<R,T> where R: Stack {
         }
     }
 
+    #[inline]
     fn push<H>(self,head:H) -> Cons<Self, H> where Self: Sized {
         Cons(self,head)
     }
 
+    #[inline]
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
         f(&self.1)
     }
+    #[inline]
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O { f(&self.0) }
+    #[inline]
     fn take_map<F: FnOnce(Self::Head) -> Result<(Self::Head, O),E>, O,E>(self, f: F) -> Result<(Self, O),E> where Self: Sized {
         let (s,h) = self.pop();
 
@@ -108,20 +115,25 @@ pub struct Nil;
 impl Stack for Nil {
     type Remaining = Nil;
     type Head = ();
+    #[inline]
     fn pop(self) -> (Self::Remaining, Self::Head) {
         (Nil,())
     }
 
+    #[inline]
     fn push<H>(self, head: H) -> Cons<Self, H> where Self: Sized {
         Cons(Nil,head)
     }
 
+    #[inline]
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
         f(&())
     }
+    #[inline]
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O, O>(&self, f: F) -> O {
         f(&Nil)
     }
+    #[inline]
     fn take_map<F: FnOnce(Self::Head) -> Result<(Self::Head, O),E>, O,E>(self, f: F) -> Result<(Self, O),E> where Self: Sized {
         let (_,r) = f(())?;
 

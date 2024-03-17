@@ -33,7 +33,7 @@ use nncombinator::layer::input::InputLayer;
 use nncombinator::layer::linear::{DiffLinearLayerBuilder, LinearLayerBuilder};
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
-use nncombinator::optimizer::{MomentumSGD};
+use nncombinator::optimizer::{MomentumSGDBuilder};
 
 use crate::common::SHARED_MEMORY_POOL;
 
@@ -52,19 +52,30 @@ fn test_mnist() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+             move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+             &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,10>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -83,7 +94,6 @@ fn test_mnist() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -128,7 +138,7 @@ fn test_mnist() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -203,19 +213,30 @@ fn test_mnist_for_gpu() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,10>::new().build(l,&device,
+        move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -234,7 +255,6 @@ fn test_mnist_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -279,7 +299,7 @@ fn test_mnist_for_gpu() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -354,19 +374,30 @@ fn test_mnist_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+        move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+        move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,10>::new().build(l,&device,
+        move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -385,7 +416,6 @@ fn test_mnist_for_gpu_double() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -430,7 +460,7 @@ fn test_mnist_for_gpu_double() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -502,14 +532,22 @@ fn test_weather() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+        move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -552,8 +590,6 @@ fn test_weather() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     let mut correct_answers = 0;
@@ -582,7 +618,7 @@ fn test_weather() {
 
             let lossf = CrossEntropy::new();
 
-            net.train(expected, input, &mut optimizer, &lossf).unwrap();
+            net.train(expected, input, &lossf).unwrap();
         }
     }
 
@@ -660,14 +696,22 @@ fn test_weather_by_forward_diff() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        DiffLinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -710,8 +754,6 @@ fn test_weather_by_forward_diff() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     let mut correct_answers = 0;
@@ -740,7 +782,7 @@ fn test_weather_by_forward_diff() {
 
             let lossf = CrossEntropy::new();
 
-            net.train(expected, DiffInput::NotDiff(input), &mut optimizer, &lossf).unwrap();
+            net.train(expected, DiffInput::NotDiff(input), &lossf).unwrap();
         }
     }
 
@@ -836,14 +878,22 @@ fn test_diff_learn_error() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        DiffLinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -854,7 +904,6 @@ fn test_diff_learn_error() {
 
     let s = net.forward_diff(DiffInput::NotDiff(input)).unwrap();
 
-    let mut optimizer = MomentumSGD::new(0.001);
     let lossf = CrossEntropy::new();
 
     let mut expected = Arr::new();
@@ -864,7 +913,7 @@ fn test_diff_learn_error() {
     let o = net.ask_diff_input(&s);
     let d = DiffArr::new();
 
-    match net.train(expected, DiffInput::Diff(d,o), &mut optimizer, &lossf) {
+    match net.train(expected, DiffInput::Diff(d,o), &lossf) {
         Err(TrainingError::UnsupportedOperationError(e)) => {
             assert_eq!(e,UnsupportedOperationError(
                 String::from("Training from difference information is not supported.")
@@ -889,14 +938,22 @@ fn test_diff_learn_error_for_gpu() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        DiffLinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -907,7 +964,6 @@ fn test_diff_learn_error_for_gpu() {
 
     let s = net.forward_diff(DiffInput::NotDiff(input)).unwrap();
 
-    let mut optimizer = MomentumSGD::new(0.001);
     let lossf = CrossEntropy::new();
 
     let mut expected = Arr::new();
@@ -917,7 +973,7 @@ fn test_diff_learn_error_for_gpu() {
     let o = net.ask_diff_input(&s);
     let d = DiffArr::new();
 
-    match net.train(expected, DiffInput::Diff(d,o), &mut optimizer, &lossf) {
+    match net.train(expected, DiffInput::Diff(d,o), &lossf) {
         Err(TrainingError::UnsupportedOperationError(e)) => {
             assert_eq!(e,UnsupportedOperationError(
                 String::from("Training from difference information is not supported.")
@@ -941,19 +997,30 @@ fn test_weather_batch_train() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -996,8 +1063,6 @@ fn test_weather_batch_train() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     let mut correct_answers = 0;
@@ -1036,7 +1101,7 @@ fn test_weather_batch_train() {
 
                 acc
             });
-            let loss = net.batch_train(train_data.0.into(),train_data.1.into(),&mut optimizer,&lossf).unwrap();
+            let loss = net.batch_train(train_data.0.into(),train_data.1.into(),&lossf).unwrap();
 
             println!("total_loss = {}",loss);
         }
@@ -1119,19 +1184,30 @@ fn test_weather_batch_train_for_gpu() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -1174,8 +1250,6 @@ fn test_weather_batch_train_for_gpu() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     let mut correct_answers = 0;
@@ -1214,7 +1288,7 @@ fn test_weather_batch_train_for_gpu() {
 
                 acc
             });
-            let loss = net.batch_train(train_data.0.into(),train_data.1.into(),&mut optimizer,&lossf).unwrap();
+            let loss = net.batch_train(train_data.0.into(),train_data.1.into(),&lossf).unwrap();
 
             println!("total_loss = {}",loss);
         }
@@ -1297,19 +1371,30 @@ fn test_weather_batch_train_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -1352,8 +1437,6 @@ fn test_weather_batch_train_for_gpu_double() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     let mut correct_answers = 0;
@@ -1392,7 +1475,7 @@ fn test_weather_batch_train_for_gpu_double() {
 
                 acc
             });
-            let loss = net.batch_train(train_data.0.into(),train_data.1.into(),&mut optimizer,&lossf).unwrap();
+            let loss = net.batch_train(train_data.0.into(),train_data.1.into(),&lossf).unwrap();
 
             println!("total_loss = {}",loss);
         }
@@ -1472,14 +1555,22 @@ fn test_penguins() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<6,50>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<6,50>::new().build(l,&device,
+        move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+         &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<50,3>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<50,3>::new().build(l,&device,
+        move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -1554,8 +1645,6 @@ fn test_penguins() {
         (*t,row.iter().map(|&x| (x - average) / dev_sta).collect::<Vec<f32>>())
     }).collect::<Vec<(usize,Vec<f32>)>>();
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     teachers.shuffle(&mut rng);
@@ -1578,7 +1667,7 @@ fn test_penguins() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            net.train(expected, input, &mut optimizer, &lossf).unwrap();
+            net.train(expected, input, &lossf).unwrap();
         }
     }
 
@@ -1684,14 +1773,22 @@ fn test_penguins_for_gpu() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<6,50>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<6,50>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<50,3>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<50,3>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -1766,8 +1863,6 @@ fn test_penguins_for_gpu() {
         (*t,row.iter().map(|&x| (x - average) / dev_sta).collect::<Vec<f32>>())
     }).collect::<Vec<(usize,Vec<f32>)>>();
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     teachers.shuffle(&mut rng);
@@ -1790,7 +1885,7 @@ fn test_penguins_for_gpu() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            net.train(expected, input, &mut optimizer, &lossf).unwrap();
+            net.train(expected, input, &lossf).unwrap();
         }
     }
 
@@ -1895,14 +1990,22 @@ fn test_weather_for_gpu() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -1945,8 +2048,6 @@ fn test_weather_for_gpu() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     let mut correct_answers = 0;
@@ -1975,7 +2076,7 @@ fn test_weather_for_gpu() {
 
             let lossf = CrossEntropy::new();
 
-            net.train(expected, input, &mut optimizer, &lossf).unwrap();
+            net.train(expected, input, &lossf).unwrap();
         }
     }
 
@@ -2053,14 +2154,22 @@ fn test_weather_by_forward_diff_for_gpu() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        DiffLinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2103,8 +2212,6 @@ fn test_weather_by_forward_diff_for_gpu() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     let mut correct_answers = 0;
@@ -2133,7 +2240,7 @@ fn test_weather_by_forward_diff_for_gpu() {
 
             let lossf = CrossEntropy::new();
 
-            net.train(expected, DiffInput::NotDiff(input), &mut optimizer, &lossf).unwrap();
+            net.train(expected, DiffInput::NotDiff(input), &lossf).unwrap();
         }
     }
 
@@ -2231,14 +2338,22 @@ fn test_penguins_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<6,50>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<6,50>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<50,3>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<50,3>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2313,8 +2428,6 @@ fn test_penguins_for_gpu_double() {
         (*t,row.iter().map(|&x| (x - average) / dev_sta).collect::<Vec<f64>>())
     }).collect::<Vec<(usize,Vec<f64>)>>();
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     teachers.shuffle(&mut rng);
@@ -2337,7 +2450,7 @@ fn test_penguins_for_gpu_double() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            net.train(expected, input, &mut optimizer, &lossf).unwrap();
+            net.train(expected, input, &lossf).unwrap();
         }
     }
 
@@ -2442,14 +2555,22 @@ fn test_weather_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2492,8 +2613,6 @@ fn test_weather_for_gpu_double() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     let mut correct_answers = 0;
@@ -2522,7 +2641,7 @@ fn test_weather_for_gpu_double() {
 
             let lossf = CrossEntropy::new();
 
-            net.train(expected, input, &mut optimizer, &lossf).unwrap();
+            net.train(expected, input, &lossf).unwrap();
         }
     }
 
@@ -2600,14 +2719,22 @@ fn test_weather_by_forward_diff_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        DiffLinearLayerBuilder::<14,100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2650,8 +2777,6 @@ fn test_weather_by_forward_diff_for_gpu_double() {
         teachers.push((t,columns));
     }
 
-    let mut optimizer = MomentumSGD::new(0.001);
-
     let mut rng = rand::thread_rng();
 
     let mut correct_answers = 0;
@@ -2680,7 +2805,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
 
             let lossf = CrossEntropy::new();
 
-            net.train(expected, DiffInput::NotDiff(input), &mut optimizer, &lossf).unwrap();
+            net.train(expected, DiffInput::NotDiff(input), &lossf).unwrap();
         }
     }
 
@@ -2778,19 +2903,30 @@ fn test_mnist_sigmoid_and_crossentropy() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2806,10 +2942,9 @@ fn test_mnist_sigmoid_and_crossentropy() {
             .join(n.to_string())).unwrap() {
             let path = entry.unwrap().path();
 
-            teachers.push((n,path));
+            teachers.push((n, path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -2858,7 +2993,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
 
             let lossf = CrossEntropy::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -2927,19 +3062,30 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer_train(|l| {
@@ -2958,7 +3104,6 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -3007,7 +3152,7 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
 
             let lossf = CrossEntropy::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -3074,19 +3219,30 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.0004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer_train(|l| {
@@ -3105,7 +3261,6 @@ fn test_mnist_tanh_and_relu_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -3154,7 +3309,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
             let lossf = Mse::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -3223,19 +3378,30 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer_train(|l| {
@@ -3254,7 +3420,6 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -3303,7 +3468,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
             let lossf = Mse::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -3370,19 +3535,30 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Swish::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Swish::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer_train(|l| {
@@ -3401,7 +3577,6 @@ fn test_mnist_tanh_and_swish_and_mse() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -3450,7 +3625,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
             let lossf = Mse::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -3518,19 +3693,30 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Swish::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Swish::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,1>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer_train(|l| {
@@ -3549,7 +3735,6 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.004);
 
     let mut rng = rand::thread_rng();
 
@@ -3598,7 +3783,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
             let lossf = Mse::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();

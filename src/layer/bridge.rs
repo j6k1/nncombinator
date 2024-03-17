@@ -9,7 +9,6 @@ use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, Batc
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
-use crate::optimizer::Optimizer;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
 
 /// Bridge layer Implementation
@@ -112,8 +111,8 @@ impl<U,P,I,PI,CI,D> UpdateWeight<U> for BridgeLayer<U,P,I,PI,CI,D>
           I: Debug + Send + Sync, {
     type GradientStack = <P as UpdateWeight<U>>::GradientStack;
 
-    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer: &mut OP) -> Result<(), TrainingError> {
-        Ok(self.parent.update_weight(stack,optimizer)?)
+    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+        Ok(self.parent.update_weight(stack)?)
     }
 }
 impl<U,P,I,PI,CI,D> AskDiffInput<U> for BridgeLayer<U,P,I,PI,CI,D>

@@ -9,7 +9,6 @@ use crate::error::{ConfigReadError, EvaluateError, PersistenceError, SizeMismatc
 use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ForwardAll, Loss, PreTrain, Train, UpdateWeight};
 use crate::lossfunction::{BatchLossFunction, LossFunction};
 use crate::ope::UnitValue;
-use crate::optimizer::Optimizer;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
 
 /// Layer implementation of the output layer (linear layer)
@@ -125,8 +124,8 @@ impl<U,P,D,I,const NO:usize> UpdateWeight<U> for LinearOutputLayer<U,P,D,I,Arr<U
           I: Debug + Send + Sync {
     type GradientStack = <P as UpdateWeight<U>>::GradientStack;
 
-    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer: &mut OP) -> Result<(), TrainingError> {
-        Ok(self.parent.update_weight(stack,optimizer)?)
+    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+        Ok(self.parent.update_weight(stack)?)
     }
 }
 impl<U,P,D,I,const NO:usize> AskDiffInput<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
@@ -147,7 +146,7 @@ impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync {
-    fn train<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, expected: Self::Output, input: Self::Input, optimizer: &mut OP, lossf: &L) -> Result<U, TrainingError> {
+    fn train<L: LossFunction<U>>(&mut self, expected: Self::Output, input: Self::Input, lossf: &L) -> Result<U, TrainingError> {
         let stack = self.pre_train(input)?;
 
         let total_loss = stack.map(|l| self.device.loss_linear_total(&expected,l,lossf));
@@ -168,7 +167,7 @@ impl<U,P,D,I,const NO:usize> Train<U> for LinearOutputLayer<U,P,D,I,Arr<U,NO>>
 
         let (_,s) = self.backward_all(loss,stack,lossf)?;
 
-        self.parent.update_weight(s,optimizer)?;
+        self.parent.update_weight(s)?;
 
         Ok(total_loss)
     }
@@ -249,7 +248,7 @@ impl<U,P,D,I,const N:usize> BatchTrain<U,D> for LinearOutputLayer<U,P,D,I,Arr<U,
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug + BatchSize,
           f64: From<U> {
-    fn batch_train<OP: Optimizer<U>,L: BatchLossFunction<U,D>>(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, optimizer:&mut OP, lossf:&L) -> Result<U, TrainingError> {
+    fn batch_train<L: BatchLossFunction<U,D>>(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, lossf:&L) -> Result<U, TrainingError> {
         if expected.len() != input.size() {
             return Err(TrainingError::from(SizeMismatchError(expected.len(),input.size())));
         }
@@ -274,7 +273,7 @@ impl<U,P,D,I,const N:usize> BatchTrain<U,D> for LinearOutputLayer<U,P,D,I,Arr<U,
 
         let (_,s) = self.parent.batch_backward(loss,stack,lossf)?;
 
-        self.parent.update_weight(s,optimizer)?;
+        self.parent.update_weight(s)?;
 
         Ok(total_loss)
     }

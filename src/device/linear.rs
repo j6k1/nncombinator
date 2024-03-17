@@ -11,7 +11,7 @@ use crate::ope::UnitValue;
 use crate::ope::Product;
 
 /// Trait that defines the implementation of various calculation processes in the linear layer
-pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U> {
+pub trait DeviceLinear<U,T,B,const NI: usize,const NO: usize> where U: UnitValue<U> {
     /// Forward propagation calculation
     /// # Arguments
     /// * `bias` - bias weights
@@ -22,7 +22,7 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn forward_linear<'a>(&self, bias:&Arr<U,NO>, units:&T, input:ArrView<'a,U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
+    fn forward_linear<'a>(&self, bias:&B, units:&T, input:ArrView<'a,U,NI>) -> Result<Arr<U, NO>, EvaluateError>;
     /// Error back propagation calculation
     /// # Arguments
     /// * `units` - unit weights
@@ -54,7 +54,7 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_forward_linear<'a>(&self,bias:&Arr<U,NO>,units:&T,input:SerializedVecView<'a,U,Arr<U,NI>>)
+    fn batch_forward_linear<'a>(&self,bias:&B,units:&T,input:SerializedVecView<'a,U,Arr<U,NI>>)
                             -> Result<SerializedVec<U,Arr<U,NO>>,TrainingError>;
     /// Error back propagation in batch
     /// # Arguments
@@ -79,7 +79,7 @@ pub trait DeviceLinear<U,T,const NI: usize,const NO: usize> where U: UnitValue<U
     fn batch_backward_weight_gradient<'a>(&self, o: SerializedVecView<'a,U,Arr<U,NI>>, loss: &'a SerializedVec<U,Arr<U,NO>>)
                                       -> Result<Arr2<U, NI, NO>, TrainingError>;
 }
-impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U> where U: UnitValue<U> {
+impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO> for DeviceCpu<U> where U: UnitValue<U> {
     #[inline]
     fn forward_linear<'a>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: ArrView<'a,U, NI>) -> Result<Arr<U, NO>, EvaluateError> {
         Ok(input.product(units) + bias)
@@ -149,7 +149,7 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,NI,NO> for 
         }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.try_into().map_err(|e| TrainingError::from(e))?)
     }
 }
-impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f32,NI,NO>>,NI,NO> for DeviceGpu<f32> {
+impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f32,NI,NO>>,Arr<f32,NO>,NI,NO> for DeviceGpu<f32> {
     #[inline]
     fn forward_linear<'a>(&self, bias: &Arr<f32,NO>, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: ArrView<'a,f32,NI>)
                       -> Result<Arr<f32, NO>, EvaluateError> {
@@ -462,7 +462,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
         }
     }
 }
-impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f64,NI,NO>>,NI,NO> for DeviceGpu<f64> {
+impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f64,NI,NO>>,Arr<f64,NO>,NI,NO> for DeviceGpu<f64> {
     #[inline]
     fn forward_linear<'a>(&self, bias: &Arr<f64,NO>, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: ArrView<'a,f64,NI>)
                       -> Result<Arr<f64, NO>, EvaluateError> {

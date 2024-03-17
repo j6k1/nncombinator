@@ -10,7 +10,6 @@ use crate::error::{ConfigReadError, EvaluateError, PersistenceError, SizeMismatc
 use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
-use crate::optimizer::Optimizer;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
 
 /// Activation layer Implementation
@@ -161,8 +160,8 @@ impl<U,P,A,I,PI,D,const N:usize> UpdateWeight<U> for ActivationLayer<U,P,A,I,PI,
           I: Debug + Send + Sync {
     type GradientStack = <P as UpdateWeight<U>>::GradientStack;
 
-    fn update_weight<OP: Optimizer<U>>(&mut self, stack: Self::GradientStack, optimizer: &mut OP) -> Result<(), TrainingError> {
-        Ok(self.parent.update_weight(stack,optimizer)?)
+    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+        Ok(self.parent.update_weight(stack)?)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> AskDiffInput<U> for ActivationLayer<U,P,A,I,PI,D,N>

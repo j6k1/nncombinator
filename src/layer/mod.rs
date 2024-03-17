@@ -7,7 +7,6 @@ use crate::{Stack};
 use crate::error::{DeviceError, EvaluateError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
-use crate::optimizer::*;
 
 pub mod input;
 pub mod output;
@@ -129,7 +128,7 @@ pub trait UpdateWeight<U> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn update_weight<OP: Optimizer<U>>(&mut self, stack:Self::GradientStack, optimizer:&mut OP) -> Result<(), TrainingError>;
+    fn update_weight(&mut self, stack:Self::GradientStack) -> Result<(), TrainingError>;
 }
 /// Trait that defines the function of differential application of inputs in the process of forward propagation to neural networks.
 pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
@@ -149,14 +148,13 @@ pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
     /// # Arguments
     /// * `expected` - expected value
     /// * `input` - loss
-    /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
     /// * `lossf` - loss function
     ///
     /// # Errors
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn train<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, optimizer:&mut OP, lossf:&L) -> Result<U, TrainingError>;
+    fn train<L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, lossf:&L) -> Result<U, TrainingError>;
 }
 /// Trait that defines the function to query information to calculate the difference when applying the difference of neural networks.
 pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
@@ -249,14 +247,13 @@ pub trait BatchTrain<U,D>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackwa
     /// # Arguments
     /// * `expected` - expected value
     /// * `input` - loss
-    /// * `optimizer` - Optimizer object that implements the algorithm used to update the weights
     /// * `lossf` - loss function
     ///
     /// # Errors
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_train<OP: Optimizer<U>,L: BatchLossFunction<U,D>>(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, optimizer:&mut OP, lossf:&L) -> Result<U, TrainingError>;
+    fn batch_train<L: BatchLossFunction<U,D>>(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, lossf:&L) -> Result<U, TrainingError>;
 }
 /// Trait that defines the ability to add layers to a neural network.
 pub trait AddLayer: ForwardAll where Self: Sized {

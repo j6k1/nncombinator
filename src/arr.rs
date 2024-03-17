@@ -146,6 +146,16 @@ impl<T,const N:usize> From<Arr<T,N>> for Box<[T]> where T: Default + Clone + Sen
         value.arr
     }
 }
+impl<'a,T,const N:usize> From<&'a Arr<T,N>> for &'a [T] where T: Default + Clone + Send {
+    fn from(arr: &'a Arr<T, N>) -> Self {
+        &arr.arr
+    }
+}
+impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for &'a mut [T] where T: Default + Clone + Send {
+    fn from(arr: &'a mut Arr<T, N>) -> Self {
+        &mut arr.arr
+    }
+}
 impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Send {
     const SIZE: usize = N;
 }
@@ -361,6 +371,16 @@ impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2
                 arr: buffer.into_boxed_slice()
             })
         }
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> From<&'a Arr2<T,N1,N2>> for &'a [T] where T: Default + Clone + Send {
+    fn from(arr: &'a Arr2<T, N1, N2>) -> Self {
+        arr.as_raw_slice()
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> From<&'a mut Arr2<T,N1,N2>> for &'a mut [T] where T: Default + Clone + Send {
+    fn from(arr: &'a mut Arr2<T, N1, N2>) -> Self {
+        arr.as_raw_mut_slice()
     }
 }
 impl<T,const N1:usize,const N2:usize> SliceSize for Arr2<T,N1,N2> where T: Default + Clone + Send {

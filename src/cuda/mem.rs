@@ -429,3 +429,11 @@ impl<U,T> AsMutKernelPtrBase for CachedTensor<U,T> where U: Debug + Default, T: 
         self.ptr.as_mut_kernel_ptr()
     }
 }
+impl<'a,U,T> From<&'a mut CachedTensor<U,T>> for &'a mut [U]
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          &'a mut [U]: From<&'a mut T> {
+    fn from(t: &'a mut CachedTensor<U,T>) -> Self {
+        (&mut t.value).into()
+    }
+}

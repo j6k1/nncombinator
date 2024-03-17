@@ -151,22 +151,25 @@ mod tests {
     use crate::layer::input::InputLayer;
     use crate::layer::linear::{LinearLayerBuilder};
     use crate::layer::output::LinearOutputLayer;
+    use crate::optimizer::SGDBuilder;
 
     #[test]
     fn build_layers() {
         let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
         let device = DeviceCpu::new().unwrap();
+        let optimizer_builder = SGDBuilder::new(0.01);
 
-        let _l = i.add_layer(|l| LinearLayerBuilder::<4,1>::new().build(l,&device, || 1., || 0.).unwrap());
+        let _l = i.add_layer(|l| LinearLayerBuilder::<4,1>::new().build(l,&device, || 1., || 0.,&optimizer_builder).unwrap());
     }
 
     #[test]
     fn build_train_layers() {
         let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
         let device = DeviceCpu::new().unwrap();
+        let optimizer_builder = SGDBuilder::new(0.01);
 
         let _l = i.add_layer(|l| {
-            LinearLayerBuilder::<4,1>::new().build(l,&device,|| 1., || 0.).unwrap()
+            LinearLayerBuilder::<4,1>::new().build(l,&device,|| 1., || 0.,&optimizer_builder).unwrap()
         }).add_layer(|l| {
             ActivationLayer::new(l,ReLu::new(&device),&device)
         }).add_layer_train(|l| LinearOutputLayer::new(l,&device));

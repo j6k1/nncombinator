@@ -7,7 +7,6 @@ use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingErr
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
-use crate::optimizer::Optimizer;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
 
 pub struct InputLayer<U,O,LI> where U: UnitValue<U> {
@@ -71,7 +70,7 @@ impl<U,O,LI> BackwardAll<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Deb
 impl<U,O,LI> UpdateWeight<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
     type GradientStack = Nil;
 
-    fn update_weight<OP: Optimizer<U>>(&mut self, _: Self::GradientStack, _: &mut OP) -> Result<(), TrainingError> {
+    fn update_weight(&mut self, _: Self::GradientStack) -> Result<(), TrainingError> {
         Ok(())
     }
 }

@@ -2,6 +2,7 @@
 
 use std::fmt;
 use std::fmt::{Debug, Formatter};
+use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::{cudaHostAllocDefault, dim3};
 use libc::c_void;
@@ -687,6 +688,130 @@ impl<T> AsMutPtr<T> for CudaMemoryPoolPtr<T> {
 impl<T> Debug for CudaMemoryPoolPtr<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f,"CudaMemoryPoolPtr {{ ptr: {:?}, size {:?} }}",self.ptr,self.size)
+    }
+}
+/// Cuda memory object representing a 1D array with dimension number as type parameter
+pub struct CudaTensor1dPtr<T,const N:usize> {
+    ptr:CudaMemoryPoolPtr<T>
+}
+impl<T,const N:usize> CudaTensor1dPtr<T,N> {
+    /// Create an instance of CudaTensor1dPtr
+    /// # Arguments
+    /// * `memory_pool` - memory pool object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
+    pub fn new(memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CudaTensor1dPtr<T,N>, CudaError> {
+        Ok(CudaTensor1dPtr {
+            ptr:CudaMemoryPoolPtr::new(N,memory_pool)?
+        })
+    }
+}
+impl<T,const N:usize> Deref for CudaTensor1dPtr<T,N> {
+    type Target = CudaMemoryPoolPtr<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ptr
+    }
+}
+impl<T,const N:usize> DerefMut for CudaTensor1dPtr<T,N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ptr
+    }   
+}
+/// Cuda memory object representing a 2D array with dimension number as type parameter
+pub struct CudaTensor2dPtr<T,const N1:usize,const N2:usize> {
+    ptr:CudaMemoryPoolPtr<T>
+}
+impl<T,const N1:usize,const N2:usize> CudaTensor2dPtr<T,N1,N2> {
+    /// Create an instance of CudaTensor1dPtr
+    /// # Arguments
+    /// * `memory_pool` - memory pool object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
+    pub fn new(memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CudaTensor2dPtr<T,N1,N2>, CudaError> {
+        Ok(CudaTensor2dPtr {
+            ptr:CudaMemoryPoolPtr::new(N1*N2,memory_pool)?
+        })
+    }
+}
+impl<T,const N1:usize,const N2:usize> Deref for CudaTensor2dPtr<T,N1,N2> {
+    type Target = CudaMemoryPoolPtr<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ptr
+    }
+}
+impl<T,const N1:usize,const N2:usize> DerefMut for CudaTensor2dPtr<T,N1,N2> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ptr
+    }
+}
+/// Cuda memory object representing a 3D array with dimension number as type parameter
+pub struct CudaTensor3dPtr<T,const N1:usize,const N2:usize,const N3:usize> {
+    ptr:CudaMemoryPoolPtr<T>
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize> CudaTensor3dPtr<T,N1,N2,N3> {
+    /// Create an instance of CudaTensor1dPtr
+    /// # Arguments
+    /// * `memory_pool` - memory pool object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
+    pub fn new(memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CudaTensor3dPtr<T,N1,N2,N3>, CudaError> {
+        Ok(CudaTensor3dPtr {
+            ptr:CudaMemoryPoolPtr::new(N1*N2*N3,memory_pool)?
+        })
+    }
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize> Deref for CudaTensor3dPtr<T,N1,N2,N3> {
+    type Target = CudaMemoryPoolPtr<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ptr
+    }
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize> DerefMut for CudaTensor3dPtr<T,N1,N2,N3> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ptr
+    }
+}
+/// Cuda memory object representing a 4D array with dimension number as type parameter
+pub struct CudaTensor4dPtr<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> {
+    ptr:CudaMemoryPoolPtr<T>
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> CudaTensor4dPtr<T,N1,N2,N3,N4> {
+    /// Create an instance of CudaTensor1dPtr
+    /// # Arguments
+    /// * `memory_pool` - memory pool object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaError`]
+    pub fn new(memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CudaTensor4dPtr<T,N1,N2,N3,N4>, CudaError> {
+        Ok(CudaTensor4dPtr {
+            ptr:CudaMemoryPoolPtr::new(N1*N2*N3*N4,memory_pool)?
+        })
+    }
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> Deref for CudaTensor4dPtr<T,N1,N2,N3,N4> {
+    type Target = CudaMemoryPoolPtr<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ptr
+    }
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> DerefMut for CudaTensor4dPtr<T,N1,N2,N3,N4> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ptr
     }
 }
 impl TryFrom<f32> for CudaPtr<f32> {

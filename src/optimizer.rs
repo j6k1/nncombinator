@@ -120,6 +120,7 @@ impl<U,D> OptimizerBuilder<U,D> for SGDBuilder<U,D> where U: UnitValue<U>, D: De
 /// MomentumSGD Implementation
 pub struct MomentumSGD<U,D,T> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>,
+    size:usize,
     a:U,
     mu:U,
     lambda:U,
@@ -132,6 +133,7 @@ impl<U> MomentumSGD<U,DeviceCpu<U>,Box<[U]>> where U: UnitValue<U> {
     pub fn new(_:&DeviceCpu<U>,size:usize,a:U) -> MomentumSGD<U,DeviceCpu<U>,Box<[U]>> {
         MomentumSGD {
             d:PhantomData::<DeviceCpu<U>>,
+            size:size,
             a:a,
             mu:U::from_f64(0.9).expect("Error in type conversion from f64."),
             lambda:U::default(),
@@ -148,6 +150,7 @@ impl<U> MomentumSGD<U,DeviceCpu<U>,Box<[U]>> where U: UnitValue<U> {
     pub fn with_params(_:&DeviceCpu<U>,size:usize,a:U,mu:U,lambda:U) -> MomentumSGD<U,DeviceCpu<U>,Box<[U]>> {
         MomentumSGD {
             d:PhantomData::<DeviceCpu<U>>,
+            size:size,
             a:a,
             mu:mu,
             lambda:lambda,
@@ -179,6 +182,7 @@ impl<U> MomentumSGD<U,DeviceGpu<U>,Box<[U]>> where U: UnitValue<U>, DeviceGpu<U>
     pub fn new(device:&DeviceGpu<U>,size:usize,a:U) -> MomentumSGD<U,DeviceGpu<U>,Box<[U]>> {
         MomentumSGD {
             d:PhantomData::<DeviceGpu<U>>,
+            size:size,
             a:a,
             mu:U::from_f64(0.9).expect("Error in type conversion from f64."),
             lambda:U::default(),
@@ -195,6 +199,7 @@ impl<U> MomentumSGD<U,DeviceGpu<U>,Box<[U]>> where U: UnitValue<U>, DeviceGpu<U>
     pub fn with_params(device:&DeviceGpu<U>,size:usize,a:U,mu:U,lambda:U) -> MomentumSGD<U,DeviceGpu<U>,Box<[U]>> {
         MomentumSGD {
             d:PhantomData::<DeviceGpu<U>>,
+            size:size,
             a:a,
             mu:mu,
             lambda:lambda,
@@ -273,6 +278,7 @@ impl<U> OptimizerBuilder<U,DeviceGpu<U>> for MomentumSGDBuilder<U,DeviceGpu<U>>
 /// Adagrad Implementation
 pub struct Adagrad<U,D,T> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>,
+    size:usize,
     a:U,
     gt:T,
     eps:U
@@ -282,6 +288,7 @@ impl<U> Adagrad<U,DeviceCpu<U>,Box<[U]>> where U: UnitValue<U> {
     pub fn new(_:&DeviceCpu<U>,size:usize) -> Adagrad<U,DeviceCpu<U>,Box<[U]>> {
         Adagrad {
             d:PhantomData::<DeviceCpu<U>>,
+            size:size,
             a:U::from_f64(0.01).expect("Error in type conversion from f64."),
             gt:vec![U::default();size].into_boxed_slice(),
             eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
@@ -307,6 +314,7 @@ impl<U> Adagrad<U,DeviceGpu<U>,Box<[U]>> where U: UnitValue<U>, DeviceGpu<U>: De
     pub fn new(device:&DeviceGpu<U>,size:usize) -> Adagrad<U,DeviceGpu<U>,Box<[U]>> {
         Adagrad {
             d:PhantomData::<DeviceGpu<U>>,
+            size:size,
             a:U::from_f64(0.01).expect("Error in type conversion from f64."),
             gt:vec![U::default();size].into_boxed_slice(),
             eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
@@ -359,6 +367,7 @@ impl<U> OptimizerBuilder<U,DeviceGpu<U>> for AdagradBuilder<U,DeviceGpu<U>>
 /// RMSprop Implementation
 pub struct RMSprop<U,D,T> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>,
+    size:usize,
     a:U,
     mu:U,
     gt:T,
@@ -369,6 +378,7 @@ impl<U> RMSprop<U,DeviceCpu<U>,Box<[U]>> where U: UnitValue<U> {
     pub fn new(_:&DeviceCpu<U>,size:usize) -> RMSprop<U,DeviceCpu<U>,Box<[U]>> {
         RMSprop {
             d:PhantomData::<DeviceCpu<U>>,
+            size:size,
             a:U::from_f64(0.0001f64).expect("Error in type conversion from f64."),
             mu:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
             gt:vec![U::default();size].into_boxed_slice(),
@@ -396,6 +406,7 @@ impl<U> RMSprop<U,DeviceGpu<U>,Box<[U]>> where U: UnitValue<U>, DeviceGpu<U>: De
     pub fn new(device:&DeviceGpu<U>,size:usize) -> RMSprop<U,DeviceGpu<U>,Box<[U]>> {
         RMSprop {
             d:PhantomData::<DeviceGpu<U>>,
+            size:size,
             a:U::from_f64(0.0001f64).expect("Error in type conversion from f64."),
             mu:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
             gt:vec![U::default();size].into_boxed_slice(),
@@ -450,6 +461,7 @@ impl<U> OptimizerBuilder<U,DeviceGpu<U>> for RMSpropBuilder<U,DeviceGpu<U>>
 /// Adam Implementation
 pub struct Adam<U,D,T> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>,
+    size:usize,
     a:U,
     mt:T,
     vt:T,
@@ -464,6 +476,7 @@ impl<U> Adam<U,DeviceCpu<U>,Box<[U]>> where U: UnitValue<U> {
     pub fn new(_:&DeviceCpu<U>,size:usize) -> Adam<U,DeviceCpu<U>,Box<[U]>> {
         Adam {
             d:PhantomData::<DeviceCpu<U>>,
+            size:size,
             a:U::from_f64(0.001f64).expect("Error in type conversion from f64."),
             mt:vec![U::default();size].into_boxed_slice(),
             vt:vec![U::default();size].into_boxed_slice(),
@@ -503,6 +516,7 @@ impl<U> Adam<U,DeviceGpu<U>,Box<[U]>> where U: UnitValue<U>, DeviceGpu<U>: Devic
     pub fn new(device:&DeviceGpu<U>,size:usize) -> Adam<U,DeviceGpu<U>,Box<[U]>> {
         Adam {
             d:PhantomData::<DeviceGpu<U>>,
+            size:size,
             a:U::from_f64(0.001f64).expect("Error in type conversion from f64."),
             mt:vec![U::default();size].into_boxed_slice(),
             vt:vec![U::default();size].into_boxed_slice(),

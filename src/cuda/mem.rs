@@ -21,7 +21,7 @@ struct Usage {
     allocated: bool
 }
 /// Momory Alloctype (Device or Host)
-#[derive(Debug)]
+#[derive(Debug,Copy,Clone)]
 pub enum Alloctype {
     /// Device memory
     Device,
@@ -306,6 +306,11 @@ impl MemoryPool {
         }
 
         Ok(())
+    }
+
+    /// Get the type of memory allocation
+    pub fn get_alloc_type(&self) -> Alloctype {
+        self.alloc_type
     }
 }
 impl Drop for MemoryPool {

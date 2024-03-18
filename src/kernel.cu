@@ -459,6 +459,97 @@ __device__ void loss_linear_batch_cross_entropy_multiclass_derive(const T *t, T 
         r[i] = -(t[i] / r[i]) / batch_size;
     }
 }
+
+template<typename T>
+
+__device__ void update_with_sgd(T *weight, const T *grad, const size_t size, const T a, const T lambda) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (index < size) {
+        T w = weight[index];
+
+        w = w - a * (grad[index] + lambda * w);
+
+        weight[index] = w;
+    }
+}
+
+template<typename T>
+
+__device__ void update_with_momentum_sgd(T *weight, const T *grad, const size_t size, const T a, const T mu, const T lambda, T *vt) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (index < size) {
+        T w = weight[index];
+        T _vt = vt[index];
+
+        _vt = mu * _vt - a * (grad[index] + lambda * w);
+        w = w + _vt;
+
+        weight[index] = w;
+        vt[index] = _vt;
+    }
+}
+
+template<typename T>
+
+__device__ void update_with_adagrad(T *weight, const T *grad, const size_t size, const T a, const T eps, T *gt) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (index < size) {
+        T w = weight[index];
+        T _gt = gt[index];
+        const T e = grad[index];
+
+        _gt += e * e;
+        w = w - a * e / (sqrt(_gt) + eps);
+
+        weight[index] = w;
+        gt[index] = _gt;
+    }
+}
+
+template<typename T>
+
+__device__ void update_with_rmsprop(T *weight, const T *grad, const size_t size, const T a, const T mu, const T eps, T *gt) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (index < size) {
+        T w = weight[index];
+        T _gt = gt[index];
+        const e = grad[index];
+
+        _gt = mu * _gt + (1 - mu) * e * e;
+        w = w - a * e / (sqrt(_gt) + eps);
+
+        weight[index] = w;
+        gt[index] = _gt;
+    }
+}
+
+template<typename T>
+
+__device__ void update_with_adam(T *weight, const T *grad, const size_t size, const T a, const T eps, T *mt, T *vt, const T b1, const T b2, T b1t, T : b2t) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (index < size) {
+        T w = weight[index];
+        T _mt = mt[index];
+        T _vt = vt[index];
+        const e = grad[index];
+
+        _mt = b1 * _mt + (1 - b1) * e;
+        _vt = b2 * _vt + (1 - b2) * e * e;
+
+        w = w - a * (_mt / (1 - b1t)) / sqrt((_vt / (1 - b2t)) + eps);
+
+        weight[index] = w;
+        gt[index] = _gt;
+        mt[index] = _mt;
+        vt[index] = _vt;
+    }
+}
+
 extern "C" {
 	__global__ void sigmoid_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
         sigmoid_forward(input_output,units_len,batch_len);
@@ -577,5 +668,43 @@ extern "C" {
 
     __global__ void loss_linear_batch_cross_entropy_multiclass_derive_double(const double *t, double *r, const int nlen, const int batch_size) {
         loss_linear_batch_cross_entropy_multiclass_derive(t,r,nlen,batch_size);
+    }
+    __global__ void update_with_sgd(float *weight, const float *grad, const size_t size, const float a, const float lambda) {
+        update_with_sgd(weight,grad,size,a,lambda);
+    }
+    __global__ void update_with_sgd(double *weight, const double *grad, const size_t size, const double a, const double lambda) {
+        update_with_sgd(weight,grad,size,a,lambda);
+    }
+
+    __global__ void update_with_momentum_sgd(float *weight, const float *grad, const size_t size, const float a, const float mu, const float lambda, float *vt) {
+        update_with_momentum_sgd(weight,grad,size,a,mu,lambda,vt);
+    }
+
+    __global__ void update_with_momentum_sgd(double *weight, const double *grad, const size_t size, const double a, const double mu, const double lambda, double *vt) {
+        update_with_momentum_sgd(weight,grad,size,a,mu,lambda,vt);
+    }
+
+    __global__ void update_with_adagrad(float *weight, const float *grad, const size_t size, const float a, const float eps, float *gt) {
+        update_with_adagrad(weight,grad,size,a,eps,gt);
+    }
+
+    __global__ void update_with_adagrad(double *weight, const double *grad, const size_t size, const double a, const double eps, double *gt) {
+        update_with_adagrad(weight,grad,size,a,eps,gt);
+    }
+
+    __global__ void update_with_rmsprop(float *weight, const float *grad, const size_t size, const float a, const float mu, const float eps, float *gt) {
+        update_with_rmsprop(weight,grad,size,a,mu,eps,gt);
+    }
+
+    __global__ void update_with_rmsprop(double *weight, const double *grad, const size_t size, const double a, const double mu, double eps, double *gt) {
+        update_with_rmsprop(weight,grad,size,a,mu,eps,gt);
+    }
+
+    __global__ void update_with_adam(float *weight, const float *grad, const size_t size, const float a, const float eps, float *mt, float *vt, const float b1, const float b2, float b1t, float : b2t) {
+        update_with_adam(weight,grad,size,a,eps,mt,vt,b1,b2,b1t,b2t);
+    }
+
+    __global__ void update_with_adam(double *weight, const double *grad, const size_t size, const double a, const double eps, double *mt, double *vt, const double b1, const double b2, double b1t, double : b2t) {
+        update_with_adam(weight,grad,size,a,eps,mt,vt,b1,b2,b1t,b2t);
     }
 }

@@ -49,8 +49,8 @@ impl DataTypeInfo for f64 {
     }
 }
 pub(crate) mod private {
-    pub trait AsKernelPtrBase {
-        fn as_kernel_ptr(&self) -> *const libc::c_void;
+    pub trait AsConstKernelPtrBase {
+        fn as_const_kernel_ptr(&self) -> *mut libc::c_void;
     }
 
     pub trait AsMutKernelPtrBase {
@@ -58,12 +58,12 @@ pub(crate) mod private {
     }
 }
 /// Trait defining the conversion to an immutable pointer type passed to the cuda kernel
-pub trait AsKernelPtr: private::AsKernelPtrBase {
+pub trait AsConstKernelPtr: private::AsConstKernelPtrBase {
 }
 /// Trait defining the conversion to an smutable pointer type passed to the cuda kernel
 pub trait AsMutKernelPtr: private::AsMutKernelPtrBase {
 }
-impl<T> AsKernelPtr for T where T: private::AsKernelPtrBase {}
+impl<T> AsConstKernelPtr for T where T: private::AsConstKernelPtrBase {}
 impl<T> AsMutKernelPtr for T where T: private::AsMutKernelPtrBase {}
 /// Obtaining an immutable void pointer
 pub trait AsVoidPtr {
@@ -151,19 +151,9 @@ impl AsMutVoidPtr for f64 {
         self as *mut f64 as *mut libc::c_void
     }
 }
-impl private::AsKernelPtrBase for i32 {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const i32 as *const libc::c_void
-    }
-}
 impl private::AsMutKernelPtrBase for i32 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut i32 as *mut libc::c_void
-    }
-}
-impl private::AsKernelPtrBase for u32 {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const u32 as *const libc::c_void
     }
 }
 impl private::AsMutKernelPtrBase for u32 {
@@ -171,19 +161,9 @@ impl private::AsMutKernelPtrBase for u32 {
        self as *mut u32 as *mut libc::c_void
     }
 }
-impl private::AsKernelPtrBase for i64 {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const i64 as *const libc::c_void
-    }
-}
 impl private::AsMutKernelPtrBase for i64 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut i64 as *mut libc::c_void
-    }
-}
-impl private::AsKernelPtrBase for u64 {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const u64 as *const libc::c_void
     }
 }
 impl private::AsMutKernelPtrBase for u64 {
@@ -191,29 +171,14 @@ impl private::AsMutKernelPtrBase for u64 {
        self as *mut u64 as *mut libc::c_void
     }
 }
-impl private::AsKernelPtrBase for usize {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const usize as *const libc::c_void
-    }
-}
 impl private::AsMutKernelPtrBase for usize {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut usize as *mut libc::c_void
     }
 }
-impl private::AsKernelPtrBase for f32 {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const f32 as *const libc::c_void
-    }
-}
 impl private::AsMutKernelPtrBase for f32 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         self as *mut f32 as *mut libc::c_void
-    }
-}
-impl private::AsKernelPtrBase for f64 {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self as *const f64 as *const libc::c_void
     }
 }
 impl private::AsMutKernelPtrBase for f64 {
@@ -386,9 +351,9 @@ impl<T> Drop for CudaPtr<T> {
         ffi::free(self.ptr).unwrap();
     }
 }
-impl<T> private::AsKernelPtrBase for CudaPtr<T> {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        &self.ptr as *const *mut T as *const libc::c_void
+impl<T> private::AsConstKernelPtrBase for CudaPtr<T> {
+    fn as_const_kernel_ptr(&self) -> *mut libc::c_void {
+        self.ptr as *mut *const T as *mut libc::c_void
     }
 }
 impl<T> private::AsMutKernelPtrBase for CudaPtr<T> {
@@ -545,9 +510,9 @@ impl<T> AsMutPtr<T> for CudaHostPtr<T> {
         self.ptr
     }
 }
-impl<T> private::AsKernelPtrBase for CudaHostPtr<T> {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        &self.ptr as *const *mut T as *const libc::c_void
+impl<T> private::AsConstKernelPtrBase for CudaHostPtr<T> {
+    fn as_const_kernel_ptr(&self) -> *mut libc::c_void {
+        self.ptr as *mut *const T as *mut libc::c_void
     }
 }
 impl<T> private::AsMutKernelPtrBase for CudaHostPtr<T> {
@@ -655,9 +620,9 @@ impl<T> Drop for CudaMemoryPoolPtr<T> {
         }
     }
 }
-impl<T> private::AsKernelPtrBase for CudaMemoryPoolPtr<T> {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        &self.ptr as *const *mut T as *const libc::c_void
+impl<T> private::AsConstKernelPtrBase for CudaMemoryPoolPtr<T> {
+    fn as_const_kernel_ptr(&self) -> *mut libc::c_void {
+        self.ptr as *mut *const T as *mut libc::c_void
     }
 }
 impl<T> private::AsMutKernelPtrBase for CudaMemoryPoolPtr<T> {

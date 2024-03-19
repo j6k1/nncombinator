@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use libc::c_void;
 use crate::cuda::{AsPtr, AsVoidPtr, CudaMemoryPoolPtr, ffi, Memory};
-use crate::cuda::private::{AsMutKernelPtrBase, AsKernelPtrBase};
+use crate::cuda::private::{AsMutKernelPtrBase, AsConstKernelPtrBase};
 use crate::error::{CudaError};
 use crate::list::ListNode;
 use crate::mem::AsRawSlice;
@@ -424,9 +424,9 @@ impl<U,T> AsVoidPtr for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlic
         self.ptr.as_void_ptr()
     }
 }
-impl<U,T> AsKernelPtrBase for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self.ptr.as_kernel_ptr()
+impl<U,T> AsConstKernelPtrBase for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+    fn as_const_kernel_ptr(&self) -> *mut libc::c_void {
+        self.ptr.as_const_kernel_ptr()
     }
 }
 impl<U,T> AsMutKernelPtrBase for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {

@@ -1,7 +1,7 @@
 //! Implementation of various loss functions
 use std::marker::PhantomData;
 use libc::{c_int, c_void};
-use crate::cuda::{AsMutKernelPtr, CudaPtr, DataTypeInfo, Kernel, KernelArgs};
+use crate::cuda::{AsKernelPtr, CudaPtr, DataTypeInfo, Kernel, KernelArgs};
 
 extern "C" {
     fn loss_linear_batch_mse_derive_float(r: *const f32, t: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
@@ -38,7 +38,7 @@ impl<T> LinearBatchMseArgs<T> where T: DataTypeInfo {
     }
 }
 impl<T> KernelArgs for LinearBatchMseArgs<T> where T: DataTypeInfo {
-    fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             &mut self.expected,
             &mut self.actual,
@@ -93,7 +93,7 @@ impl<T> LinearBatchCrossEntropyArgs<T> where T: DataTypeInfo {
     }
 }
 impl<T> KernelArgs for LinearBatchCrossEntropyArgs<T> where T: DataTypeInfo {
-    fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             &mut self.expected,
             &mut self.actual,
@@ -147,7 +147,7 @@ impl<T> LinearBatchCrossEntropyMulticlassArgs<T> where T: DataTypeInfo {
     }
 }
 impl<T> KernelArgs for LinearBatchCrossEntropyMulticlassArgs<T> where T: DataTypeInfo {
-    fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             &mut self.expected,
             &mut self.actual,

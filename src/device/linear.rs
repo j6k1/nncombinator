@@ -1,10 +1,14 @@
 //! Implementation of the calculation process for full connected layers
+
+use std::mem;
+use cuda_runtime_sys::dim3;
+use libc::c_uint;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcublas_sys::{cublasDgemm_v2, cublasDgemv_v2, cublasOperation_t, cublasSgemm_v2, cublasSgemv_v2, cublasStatus_t};
-use crate::arr::{Arr, Arr2, ArrView, SerializedVec, SerializedVecView};
-use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
-use crate::cuda::mem::CachedTensor;
-use crate::device::{DeviceCpu, DeviceGpu};
+use crate::arr::{Arr, Arr2, ArrView, DiffArr, SerializedVec, SerializedVecView};
+use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, CudaTensor1dPtr, CudaTensor2dPtr, DataTypeInfo, Kernel, Memory, MemoryMoveTo};
+use crate::cuda::kernel::device::{DiffLinearForward, DiffLinearForwardArgs};
+use crate::device::{DeviceCpu, DeviceGpu, DeviceMemoryPool, DeviceReduce};
 use crate::error::{EvaluateError, TrainingError};
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
@@ -43,7 +47,7 @@ pub trait DeviceLinear<U,T,B,const NI: usize,const NO: usize> where U: UnitValue
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn backward_weight_gradient<'a>(&self, o: ArrView<'a,U,NI>, loss: &'a Arr<U,NO>)
-                                -> Result<Arr2<U, NI,NO>, TrainingError>;
+                                -> Result<T, TrainingError>;
     /// Forward propagation calculation in batch
     /// # Arguments
     /// * `bias` - bias weights
@@ -77,7 +81,11 @@ pub trait DeviceLinear<U,T,B,const NI: usize,const NO: usize> where U: UnitValue
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn batch_backward_weight_gradient<'a>(&self, o: SerializedVecView<'a,U,Arr<U,NI>>, loss: &'a SerializedVec<U,Arr<U,NO>>)
-                                      -> Result<Arr2<U, NI, NO>, TrainingError>;
+                                      -> Result<T, TrainingError>;
+    /// convolutional calculation
+    /// # Arguments
+    /// * `loss` - loss
+    fn batch_linear_reduce<'a>(&self, loss: SerializedVecView<'a,U,Arr<U,NO>>) -> Result<B,TrainingError>;
 }
 impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO> for DeviceCpu<U> where U: UnitValue<U> {
     #[inline]
@@ -148,16 +156,21 @@ impl<U,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,N
             v.try_into()
         }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.try_into().map_err(|e| TrainingError::from(e))?)
     }
-}
-impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f32,NI,NO>>,Arr<f32,NO>,NI,NO> for DeviceGpu<f32> {
+
     #[inline]
-    fn forward_linear<'a>(&self, bias: &Arr<f32,NO>, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: ArrView<'a,f32,NI>)
+    fn batch_linear_reduce<'a>(&self, loss: SerializedVecView<'a,U,Arr<U,NO>>) -> Result<Arr<U,NO>,TrainingError> {
+        self.reduce(loss)
+    }
+}
+impl<const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,NI,NO>,CudaTensor1dPtr<f32,NO>,NI,NO> for DeviceGpu<f32> {
+    #[inline]
+    fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<f32,NO>, units: &CudaTensor2dPtr<f32,NI,NO>, input: ArrView<'a,f32,NI>)
                       -> Result<Arr<f32, NO>, EvaluateError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
-        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+        bias.memcpy_to(&mut output_ptr,NO)?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(1.0f32)?;
@@ -199,14 +212,11 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     }
 
     #[inline]
-    fn backward_linear<'a>(&self, units: &CachedTensor<f32,Arr2<f32,NI,NO>>, input: &'a Arr<f32,NO>)
-                       -> Result<Arr<f32, NI>, TrainingError> {
+    fn backward_linear<'a>(&self, units: &CudaTensor2dPtr<f32,NI,NO>, input: &'a Arr<f32,NO>) -> Result<Arr<f32, NI>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
-        let mut units_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
-        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI * NO)?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(0.0f32)?;
@@ -250,10 +260,10 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     }
 
     #[inline]
-    fn backward_weight_gradient<'a>(&self, o: ArrView<'a,f32,NI>, loss: &'a Arr<f32,NO>) -> Result<Arr2<f32, NI,NO>, TrainingError> {
+    fn backward_weight_gradient<'a>(&self, o: ArrView<'a,f32,NI>, loss: &'a Arr<f32,NO>) -> Result<CudaTensor2dPtr<f32, NI,NO>, TrainingError> {
         let mut o_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
+        let mut output_ptr = CudaTensor2dPtr::<f32,NI,NO>::new(&self.memory_pool)?;
 
         o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO)?;
@@ -279,7 +289,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                Ok(output_ptr.read_to_vec()?.try_into()?)
+                Ok(output_ptr)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
@@ -302,17 +312,17 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     }
 
     #[inline]
-    fn batch_forward_linear<'a>(&self,bias:&Arr<f32,NO>,units:&CachedTensor<f32,Arr2<f32,NI,NO>>,input:SerializedVecView<'a,f32,Arr<f32,NI>>)
+    fn batch_forward_linear<'a>(&self,bias:&CudaTensor1dPtr<f32,NO>,units:&CudaTensor2dPtr<f32,NI,NO>,input:SerializedVecView<'a,f32,Arr<f32,NI>>)
                             -> Result<SerializedVec<f32,Arr<f32,NO>>,TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NI * input.len() ,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
 
-        let bias = rayon::iter::repeat(bias.iter().cloned().collect::<Vec<f32>>())
+        let bias = rayon::iter::repeat(bias.read_to_vec()?.into_boxed_slice().iter().cloned().collect::<Vec<f32>>())
                                                 .take(input.len()).collect::<Vec<Vec<f32>>>()
                                                 .into_iter().flatten().collect::<Vec<f32>>();
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI * input.len())?;
-        output_ptr.memcpy(bias.as_slice().as_ptr(),NO * input.len())?;
+        output_ptr.memcpy(bias.as_ptr(),NO * input.len())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(1.0f32)?;
@@ -358,7 +368,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
     }
 
     #[inline]
-    fn batch_backward_linear<'a>(&self, units: &CachedTensor<f32, Arr2<f32, NI, NO>>, input: &'a SerializedVec<f32,Arr<f32, NO>>) -> Result<SerializedVec<f32, Arr<f32, NI>>, TrainingError> {
+    fn batch_backward_linear<'a>(&self, units: &CudaTensor2dPtr<f32, NI, NO>, input: &'a SerializedVec<f32,Arr<f32, NO>>) -> Result<SerializedVec<f32, Arr<f32, NI>>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * input.len(),&self.memory_pool)?;
 
@@ -409,12 +419,12 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
 
     #[inline]
     fn batch_backward_weight_gradient<'a>(&self, o: SerializedVecView<'a,f32,Arr<f32, NI>>, loss: &'a SerializedVec<f32, Arr<f32, NO>>)
-                                      -> Result<Arr2<f32, NI, NO>, TrainingError> {
+        -> Result<CudaTensor2dPtr<f32, NI, NO>, TrainingError> {
         let n = o.len();
 
         let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO * n,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
+        let mut output_ptr = CudaTensor2dPtr::<f32,NI,NO>::new(&self.memory_pool)?;
 
         o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI * n)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * n)?;
@@ -440,7 +450,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                Ok(output_ptr.read_to_vec()?.try_into()?)
+                Ok(output_ptr)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
@@ -461,16 +471,21 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CachedTensor<f32,Arr2<f3
             }
         }
     }
-}
-impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f64,NI,NO>>,Arr<f64,NO>,NI,NO> for DeviceGpu<f64> {
+
     #[inline]
-    fn forward_linear<'a>(&self, bias: &Arr<f64,NO>, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: ArrView<'a,f64,NI>)
+    fn batch_linear_reduce<'a>(&self, loss: SerializedVecView<'a,f32,Arr<f32,NO>>) -> Result<CudaTensor1dPtr<f32,NO>,TrainingError> {
+        self.reduce(loss)
+    }
+}
+impl<const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,NI,NO>,CudaTensor1dPtr<f64,NO>,NI,NO> for DeviceGpu<f64> {
+    #[inline]
+    fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<f64,NO>, units: &CudaTensor2dPtr<f64,NI,NO>, input: ArrView<'a,f64,NI>)
                       -> Result<Arr<f64, NO>, EvaluateError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
-        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+        bias.memcpy_to(&mut output_ptr,NO)?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(1.0f64)?;
@@ -512,14 +527,12 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
     }
 
     #[inline]
-    fn backward_linear<'a>(&self, units: &CachedTensor<f64,Arr2<f64,NI,NO>>, input: &'a Arr<f64,NO>)
+    fn backward_linear<'a>(&self, units: &CudaTensor2dPtr<f64,NI,NO>, input: &'a Arr<f64,NO>)
                        -> Result<Arr<f64, NI>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
-        let mut units_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
-        units_ptr.memcpy(units.as_raw_slice().as_ptr(),NI * NO)?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(0.0f64)?;
@@ -563,10 +576,10 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
     }
 
     #[inline]
-    fn backward_weight_gradient<'a>(&self, o: ArrView<'a,f64,NI>, loss: &'a Arr<f64,NO>) -> Result<Arr2<f64,NI,NO>, TrainingError> {
+    fn backward_weight_gradient<'a>(&self, o: ArrView<'a,f64,NI>, loss: &'a Arr<f64,NO>) -> Result<CudaTensor2dPtr<f64,NI,NO>, TrainingError> {
         let mut o_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
+        let mut output_ptr = CudaTensor2dPtr::<f64,NI,NO>::new(&self.memory_pool)?;
 
         o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO)?;
@@ -592,7 +605,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                Ok(output_ptr.read_to_vec()?.try_into()?)
+                Ok(output_ptr)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
@@ -615,12 +628,12 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
     }
 
     #[inline]
-    fn batch_forward_linear<'a>(&self,bias:&Arr<f64,NO>,units:&CachedTensor<f64,Arr2<f64,NI,NO>>,input:SerializedVecView<'a,f64,Arr<f64,NI>>)
+    fn batch_forward_linear<'a>(&self,bias:&CudaTensor1dPtr<f64,NO>,units:&CudaTensor2dPtr<f64,NI,NO>,input:SerializedVecView<'a,f64,Arr<f64,NI>>)
                             -> Result<SerializedVec<f64,Arr<f64,NO>>,TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NI * input.len() ,&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
 
-        let bias = rayon::iter::repeat(bias.iter().cloned().collect::<Vec<f64>>())
+        let bias = rayon::iter::repeat(bias.read_to_vec()?.into_boxed_slice().iter().cloned().collect::<Vec<f64>>())
                                         .take(input.len()).collect::<Vec<Vec<f64>>>()
                                         .into_iter().flatten().collect::<Vec<f64>>();
 
@@ -671,7 +684,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
     }
 
     #[inline]
-    fn batch_backward_linear<'a>(&self, units: &CachedTensor<f64, Arr2<f64, NI, NO>>, input: &'a SerializedVec<f64,Arr<f64, NO>>)
+    fn batch_backward_linear<'a>(&self, units: &CudaTensor2dPtr<f64, NI, NO>, input: &'a SerializedVec<f64,Arr<f64, NO>>)
         -> Result<SerializedVec<f64, Arr<f64, NI>>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO * input.len(),&self.memory_pool)?;
         let mut output_ptr = CudaMemoryPoolPtr::new(NI * input.len(),&self.memory_pool)?;
@@ -723,12 +736,12 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
 
     #[inline]
     fn batch_backward_weight_gradient<'a>(&self, o: SerializedVecView<'a,f64,Arr<f64, NI>>, loss: &'a SerializedVec<f64,Arr<f64,NO>>)
-        -> Result<Arr2<f64, NI, NO>, TrainingError> {
+        -> Result<CudaTensor2dPtr<f64, NI, NO>, TrainingError> {
         let n = o.len();
 
         let mut o_ptr = CudaMemoryPoolPtr::new(NI * n,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO * n,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(NI * NO,&self.memory_pool)?;
+        let mut output_ptr = CudaTensor2dPtr::<f64,NI,NO>::new(&self.memory_pool)?;
 
         o_ptr.memcpy(o.as_raw_slice().as_ptr(),NI * n)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO * n)?;
@@ -754,7 +767,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                Ok(output_ptr.read_to_vec()?.try_into()?)
+                Ok(output_ptr)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
@@ -774,5 +787,62 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CachedTensor<f64,Arr2<f6
                 )));
             }
         }
+    }
+
+    #[inline]
+    fn batch_linear_reduce<'a>(&self, loss: SerializedVecView<'a,f64,Arr<f64,NO>>) -> Result<CudaTensor1dPtr<f64,NO>,TrainingError> {
+        self.reduce(loss)
+    }
+}
+/// Trait that defines the implementation of various computational processes in the differentially applicable linear layer
+pub trait DeviceDiffLinear<'a,U,T,const NI: usize,const NO: usize>
+    where U: UnitValue<U> {
+    fn forward_diff_linear(&self,input:&'a DiffArr<U,NI>,units: &'a T,output: ArrView<'a,U,NO>) -> Result<Arr<U, NO>,EvaluateError>;
+}
+impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U>
+    where U: UnitValue<U> {
+    fn forward_diff_linear(&self, input: &'a DiffArr<U, NI>, units: &'a Arr2<U, NI, NO>, output: ArrView<'a,U,NO>) -> Result<Arr<U, NO>,EvaluateError> {
+        let mut output:Arr<U,NO> = output.into();
+
+        for &(i,d) in input.iter() {
+            for (o,j) in output.iter_mut().zip(0..NO) {
+                *o += units[(i,j)] * d;
+            }
+        }
+        Ok(output)
+    }
+}
+impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,CudaTensor2dPtr<U,NI,NO>,NI,NO> for DeviceGpu<U>
+    where U: UnitValue<U> + DataTypeInfo,
+          for<'b> DiffLinearForward<'b,U,NI,NO>: Kernel<Args=DiffLinearForwardArgs<'b,U,NI,NO>> {
+    fn forward_diff_linear(&self, input: &'a DiffArr<U, NI>, units: &'a CudaTensor2dPtr<U, NI, NO>, output: ArrView<'a,U,NO>)
+        -> Result<Arr<U, NO>,EvaluateError> {
+        let len = input.len();
+
+        let (indexes,input) = input.iter().fold((Vec::new(),Vec::new()), | mut acc, &(i,d)| {
+            acc.0.push(i);
+            acc.1.push(d);
+
+            acc
+        });
+
+        let mut indexes_ptr = CudaMemoryPoolPtr::new(len,self.get_memory_pool())?;
+        let mut input_ptr = CudaMemoryPoolPtr::new(len,self.get_memory_pool())?;
+
+        indexes_ptr.memcpy(indexes.as_ptr(),len)?;
+        input_ptr.memcpy(input.as_ptr(),len)?;
+
+        let mut output_ptr = CudaTensor1dPtr::<U,NO>::new(self.get_memory_pool())?;
+
+        output_ptr.memcpy(output.as_ptr(),NO)?;
+
+        let mut args = DiffLinearForwardArgs::new(indexes_ptr,input_ptr,units,output_ptr,NO,len);
+
+        let mut kernel = DiffLinearForward::new();
+
+        kernel.launch(dim3 { x: NO as c_uint, y: 1, z: 1},
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
+
+        Ok(args.output.read_to_vec()?.try_into()?)
     }
 }

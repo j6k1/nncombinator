@@ -5,12 +5,13 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::arr::{Arr, ArrView, MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SerializedVecView, SliceSize};
 use crate::{Cons, Stack};
-use crate::cuda::mem::CachedTensor;
+use crate::cuda::{CudaTensor1dPtr, Memory};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::bias::DeviceBias;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, SizeMismatchError, TrainingError};
 use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
+use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, UnitOrMarker};
@@ -77,7 +78,7 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
         Ok(())
     }
 }
-impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
@@ -89,9 +90,13 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 
-        for b in self.bias.scoped_mut().iter_mut() {
+        let mut bias = Arr::<U,N>::new();
+
+        for b in bias.iter_mut() {
             *b = persistence.read()?;
         }
+
+        self.bias.memcpy(bias.as_raw_slice().as_ptr(),N)?;
 
         Ok(())
     }
@@ -101,7 +106,9 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
 
         persistence.write(UnitOrMarker::LayerStart);
 
-        for b in self.bias.iter() {
+        let bias = self.bias.read_to_vec()?;
+
+        for b in bias.iter() {
             persistence.write(UnitOrMarker::Unit(*b));
         }
 
@@ -136,7 +143,7 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,Arr<U,
         Ok(())
     }
 }
-impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
@@ -148,9 +155,13 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,Cached
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 
-        for b in self.bias.scoped_mut().iter_mut() {
+        let mut bias = Arr::<U,N>::new();
+
+        for b in bias.iter_mut() {
             *b = persistence.read()?;
         }
+
+        self.bias.memcpy(bias.as_raw_slice().as_ptr(),N)?;
 
         Ok(())
     }
@@ -158,7 +169,9 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,Cached
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        for b in self.bias.scoped_mut().iter() {
+        let bias = self.bias.read_to_vec()?;
+
+        for b in bias.iter() {
             persistence.write(*b)?;
         }
 
@@ -231,8 +244,8 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,Arr<U,N>,P,OP,Dev
           Arr<U,N>: From<PI>,
           for<'a> PI: Debug + Clone + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::Target: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
     type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
@@ -253,18 +266,17 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,Arr<U,N>,P,OP,Dev
         Ok((l,Cons(s,g)))
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
     where P: BackwardAll<U,LossInput=PI> + ForwardAll<Input=I,Output=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,DeviceGpu<U>>,
           Arr<U,N>: From<PI>,
           for<'a> PI: Debug + Clone + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
-          DeviceGpu<U>: Device<U> + DeviceBias<U,CachedTensor<U,Arr<U,N>>,N>,
+          DeviceGpu<U>: Device<U> + DeviceBias<U,CudaTensor1dPtr<U,N>,N>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut CachedTensor<U,Arr<U,N>>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
     type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
@@ -274,7 +286,9 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,CachedTensor<U,Ar
 
         let loss = input;
 
-        let g = loss.clone().into();
+        let mut g = CudaTensor1dPtr::<U,N>::new(self.device.get_memory_pool())?;
+
+        g.memcpy(Arr::<U,N>::from(loss.clone()).as_raw_slice().as_ptr(),N)?;
 
         let next_loss= self.backward(loss)?;
 
@@ -292,19 +306,19 @@ impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,Arr<U,N>,P,OP,De
           I: Debug + Send + Sync,
           PI: Debug + Send + Sync,
           OP: Optimizer<U,DeviceCpu<U>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::Target: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
     type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr<U,N>>;
 
     fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
         let (s,bias) = stack.pop();
 
-        self.optimizer.update((&bias).into(),(&mut self.bias).into());
+        self.optimizer.update((&bias).into(),(&mut self.bias).into())?;
 
         Ok(self.parent.update_weight(s)?)
     }
 }
-impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
@@ -312,15 +326,14 @@ impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,CachedTensor<U,A
           PI: Debug + Send + Sync,
           OP: Optimizer<U,DeviceGpu<U>>,
           DeviceGpu<U>: Device<U>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut CachedTensor<U,Arr<U,N>>> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr<U,N>>;
+          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,CudaTensor1dPtr<U,N>>;
 
     fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
         let (s,bias) = stack.pop();
 
-        self.optimizer.update((&bias).into(),(&mut self.bias).into());
+        self.optimizer.update((&bias).into(),(&mut self.bias).into())?;
 
         Ok(self.parent.update_weight(s)?)
     }
@@ -350,10 +363,10 @@ impl<U,P,OP,I,PI,const N:usize> Loss<U> for BiasLayer<U,Arr<U,N>,P,OP,DeviceCpu<
           Arr<U,N>: From<PI>,
           for<'a> PI: Debug + Clone + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::Target: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
 }
-impl<U,P,OP,I,PI,const N:usize> Loss<U> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<U,P,OP,I,PI,const N:usize> Loss<U> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
     where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -363,9 +376,8 @@ impl<U,P,OP,I,PI,const N:usize> Loss<U> for BiasLayer<U,CachedTensor<U,Arr<U,N>>
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           DeviceGpu<U>: Device<U>,
           Self: BackwardAll<U>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut CachedTensor<U,Arr<U,N>>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchForwardBase for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
@@ -446,8 +458,8 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,Arr<U,N>,P,OP,D
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,Arr<U,N>>: TryFrom<SerializedVecConverter<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::Target: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
     type BatchLossInput = SerializedVec<U,PI>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
@@ -470,7 +482,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,Arr<U,N>,P,OP,D
         Ok((l,Cons(s,g)))
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
@@ -484,10 +496,9 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,CachedTensor<U,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,Arr<U,N>>: TryFrom<SerializedVecConverter<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
-          DeviceGpu<U>: Device<U> + DeviceBias<U,CachedTensor<U,Arr<U,N>>,N>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut CachedTensor<U,Arr<U,N>>> {
+          DeviceGpu<U>: Device<U> + DeviceBias<U,CudaTensor1dPtr<U,N>,N>,
+          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
     type BatchLossInput = SerializedVec<U,Arr<U,N>>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
@@ -526,10 +537,10 @@ impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,Arr<U,N>,P,OP,Devic
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,Arr<U,N>>: TryFrom<SerializedVecConverter<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::Target: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
 }
-impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
@@ -545,9 +556,8 @@ impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,CachedTensor<U,Arr<
           SerializedVec<U,Arr<U,N>>: TryFrom<SerializedVecConverter<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
           DeviceGpu<U>: Device<U>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut CachedTensor<U,Arr<U,N>>>,
+          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>>,
           Self: Loss<U> + BatchBackward<U> {
 }
 impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,N> for BiasLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,N>
@@ -571,11 +581,11 @@ impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,Arr<U,N>,P,OP,DeviceCpu
             device: device.clone(),
             bias: bias,
             u:PhantomData::<U>,
-            optimizer:b.build(N)
+            optimizer:b.build(N)?
         })
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,N> for BiasLayer<U,Arr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N> for BiasLayer<U,Arr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -583,21 +593,13 @@ impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,CachedTensor<U,Arr<U,N>
           OP: Optimizer<U,DeviceGpu<U>>,
           DeviceGpu<U>: Device<U> {
     fn instantiation<UI: FnMut() -> U,B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent: P, device: &DeviceGpu<U>, ui: UI, b: &B)
-        -> Result<BiasLayer<U, CachedTensor<U,Arr<U,N>>, P, OP, DeviceGpu<U>, I, PI, N>, LayerInstantiationError> {
-        let mut ui = ui;
-
-        let mut bias = Arr::new();
-
-        for it in bias.iter_mut() {
-            *it = ui();
-        }
-
+        -> Result<BiasLayer<U, CudaTensor1dPtr<U,N>, P, OP, DeviceGpu<U>, I, PI, N>, LayerInstantiationError> {
         Ok(BiasLayer {
             parent: parent,
             device: device.clone(),
-            bias: CachedTensor::new(bias,device.get_memory_pool())?,
+            bias: CudaTensor1dPtr::with_initializer(device.get_memory_pool(),ui)?,
             u:PhantomData::<U>,
-            optimizer:b.build(N)
+            optimizer:b.build(N)?
         })
     }
 }

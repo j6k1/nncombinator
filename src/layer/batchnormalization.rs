@@ -4,24 +4,24 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::arr::{Arr, ArrView, MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SerializedVecView, SliceSize};
 use crate::{Cons, Stack};
-use crate::cuda::{CudaPtr};
-use crate::cuda::mem::CachedTensor;
+use crate::cuda::{CudaPtr, CudaTensor1dPtr, Memory};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, SizeMismatchError, TrainingError};
 use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
+use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, UnitOrMarker};
 
 /// Structure that holds information related to mean and variance calculated during forward propagation during learning.
 #[derive(Debug)]
-pub struct MeanAndVariance<U,T,const N:usize> where U: UnitValue<U> {
+pub struct MeanAndVariance<T> {
     /// Population mean per batch
-    pub running_mean:Arr<U,N>,
+    pub running_mean:T,
     /// Population variance per batch
-    pub running_variance:Arr<U,N>,
+    pub running_variance:T,
     /// Mean computed by the process of forward propagation during learning
     pub saved_mean:T,
     /// Variance computed by the process of forward propagation during learning
@@ -117,8 +117,8 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,Arr<U,N>,
             running_variance:running_variance,
             pi:PhantomData::<PI>,
             s:PhantomData::<Arr<U,N>>,
-            scale_optimizer:b.build(N),
-            bias_optimizer:b.build(N)
+            scale_optimizer:b.build(N)?,
+            bias_optimizer:b.build(N)?
         })
     }
 
@@ -138,39 +138,40 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,Arr<U,N>,
         Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."),b)
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
-    for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,DeviceGpu<U>>,
           DeviceGpu<U>: Device<U> {
     fn with_params<B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent:P,device:&DeviceGpu<U>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>,LayerInstantiationError> {
-        let running_mean = Arr::new();
-        let mut running_variance = Arr::new();
+        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>,LayerInstantiationError> {
+        let mut scale_ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
 
-        for v in running_variance.iter_mut() {
-            *v = U::one();
-        }
+        scale_ptr.memcpy(scale.as_raw_slice().as_ptr(),N)?;
+
+        let mut bias_ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
+
+        bias_ptr.memcpy(bias.as_raw_slice().as_ptr(),N)?;
 
         Ok(BatchNormalizationLayer {
             parent:parent,
             device:device.clone(),
-            scale:CachedTensor::new(scale,device.get_memory_pool())?,
-            bias:CachedTensor::new(bias,device.get_memory_pool())?,
+            scale:scale_ptr,
+            bias:bias_ptr,
             momentum:momentum,
-            running_mean:CachedTensor::new(running_mean,device.get_memory_pool())?,
-            running_variance:CachedTensor::new(running_variance,device.get_memory_pool())?,
+            running_mean:CudaTensor1dPtr::with_initializer(device.get_memory_pool(),Default::default)?,
+            running_variance:CudaTensor1dPtr::with_initializer(device.get_memory_pool(),|| U::one())?,
             pi:PhantomData::<PI>,
             s:PhantomData::<CudaPtr<U>>,
-            scale_optimizer:b.build(N),
-            bias_optimizer:b.build(N)
+            scale_optimizer:b.build(N)?,
+            bias_optimizer:b.build(N)?
         })
     }
 
     fn with_momentum<B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent:P,device:&DeviceGpu<U>,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>,LayerInstantiationError> {
+        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>,LayerInstantiationError> {
         let mut scale = Arr::new();
 
         for i in scale.iter_mut() {
@@ -181,7 +182,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,CachedTen
     }
 
     fn new<B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent:P,device:&DeviceGpu<U>,b:&B)
-        -> Result<BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>,LayerInstantiationError> {
+        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>,LayerInstantiationError> {
         Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."),b)
     }
 }
@@ -280,11 +281,11 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear>
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        for i in self.bias.iter() {
+        for i in self.scale.iter() {
             persistence.write(*i)?;
         }
 
-        for i in self.scale.iter() {
+        for i in self.bias.iter() {
             persistence.write(*i)?;
         }
 
@@ -300,7 +301,7 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear>
     }
 }
 impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized>
-    for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
         where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
                  PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
               U: Default + Clone + Copy + UnitValue<U> + FromStr,
@@ -311,21 +312,34 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 
-        for i in self.scale.scoped_mut().iter_mut() {
+        let mut scale = Arr::<U,N>::new();
+
+        for i in scale.iter_mut() {
             *i = persistence.read()?;
         }
 
-        for i in self.bias.scoped_mut().iter_mut() {
+        let mut bias = Arr::<U,N>::new();
+
+        for i in bias.iter_mut() {
             *i = persistence.read()?;
         }
 
-        for i in self.running_mean.scoped_mut().iter_mut() {
+        let mut running_mean = Arr::<U,N>::new();
+
+        for i in running_mean.iter_mut() {
             *i = persistence.read()?;
         }
 
-        for i in self.running_variance.scoped_mut().iter_mut() {
+        let mut running_variance = Arr::<U,N>::new();
+
+        for i in running_variance.iter_mut() {
             *i = persistence.read()?;
         }
+
+        self.scale.memcpy(scale.as_raw_slice().as_ptr(),N)?;
+        self.bias.memcpy(bias.as_raw_slice().as_ptr(),N)?;
+        self.running_mean.memcpy(running_mean.as_raw_slice().as_ptr(),N)?;
+        self.running_variance.memcpy(running_variance.as_raw_slice().as_ptr(),N)?;
 
         Ok(())
     }
@@ -337,25 +351,33 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
 
         persistence.write(UnitOrMarker::UnitsStart);
 
-        for i in self.scale.iter() {
+        let scale = self.scale.read_to_vec()?;
+
+        for i in scale.iter() {
             persistence.write(UnitOrMarker::Unit(*i));
         }
 
         persistence.write(UnitOrMarker::UnitsStart);
 
-        for i in self.bias.iter() {
+        let bias = self.bias.read_to_vec()?;
+
+        for i in bias.iter() {
             persistence.write(UnitOrMarker::Unit(*i));
         }
 
         persistence.write(UnitOrMarker::UnitsStart);
 
-        for i in self.running_mean.iter() {
+        let running_mean = self.running_mean.read_to_vec()?;
+
+        for i in running_mean.iter() {
             persistence.write(UnitOrMarker::Unit(*i));
         }
 
         persistence.write(UnitOrMarker::UnitsStart);
 
-        for i in self.running_variance.iter() {
+        let running_variance = self.running_variance.read_to_vec()?;
+
+        for i in running_variance.iter() {
             persistence.write(UnitOrMarker::Unit(*i));
         }
 
@@ -363,7 +385,7 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
     }
 }
 impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear>
-    for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
         where T: LinearPersistence<U>,
               P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
                  PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
@@ -374,21 +396,34 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear>
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 
-        for i in self.scale.scoped_mut().iter_mut() {
+        let mut scale = Arr::<U,N>::new();
+
+        for i in scale.iter_mut() {
             *i = persistence.read()?;
         }
 
-        for i in self.bias.scoped_mut().iter_mut() {
+        let mut bias = Arr::<U,N>::new();
+
+        for i in bias.iter_mut() {
             *i = persistence.read()?;
         }
 
-        for i in self.running_mean.scoped_mut().iter_mut() {
+        let mut running_mean = Arr::<U,N>::new();
+
+        for i in running_mean.iter_mut() {
             *i = persistence.read()?;
         }
 
-        for i in self.running_variance.scoped_mut().iter_mut() {
+        let mut running_variance = Arr::<U,N>::new();
+
+        for i in running_variance.iter_mut() {
             *i = persistence.read()?;
         }
+
+        self.scale.memcpy(scale.as_raw_slice().as_ptr(),N)?;
+        self.bias.memcpy(bias.as_raw_slice().as_ptr(),N)?;
+        self.running_mean.memcpy(running_mean.as_raw_slice().as_ptr(),N)?;
+        self.running_variance.memcpy(running_variance.as_raw_slice().as_ptr(),N)?;
 
         Ok(())
     }
@@ -396,19 +431,27 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear>
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        for i in self.bias.iter() {
+        let scale = Arr::<U,N>::try_from(self.scale.read_to_vec()?)?;
+
+        for i in scale.iter() {
             persistence.write(*i)?;
         }
 
-        for i in self.scale.iter() {
+        let bias = Arr::<U,N>::try_from(self.bias.read_to_vec()?)?;
+
+        for i in bias.iter() {
             persistence.write(*i)?;
         }
 
-        for i in self.running_mean.iter() {
+        let running_mean = Arr::<U,N>::try_from(self.running_mean.read_to_vec()?)?;
+
+        for i in running_mean.iter() {
             persistence.write(*i)?;
         }
 
-        for i in self.running_variance.iter() {
+        let running_variance = Arr::<U,N>::try_from(self.running_variance.read_to_vec()?)?;
+
+        for i in running_variance.iter() {
             persistence.write(*i)?;
         }
 
@@ -418,7 +461,7 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear>
 impl<U,C,P,OP,D,I,PI,S,const N:usize> Forward<ArrView<'_,U,N>,Result<Arr<U,N>,EvaluateError>> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static,
           OP: Optimizer<U,D> {
@@ -429,7 +472,7 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> Forward<ArrView<'_,U,N>,Result<Arr<U,N>,Ev
 impl<U,C,P,OP,D,I,PI,S,const N:usize> ForwardAll for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static,
           OP: Optimizer<U,D>,
@@ -444,14 +487,15 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> ForwardAll for BatchNormalizationLayer<U,C
 impl<U,C,P,OP,D,I,PI,S,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static,
+          C: Debug,
           OP: Optimizer<U,D>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
-    type OutStack = Cons<Cons<<P as PreTrain<U>>::OutStack,(S,S)>,Self::Output>;
+    type OutStack = Cons<Cons<<P as PreTrain<U>>::OutStack,(C,C)>,Self::Output>;
 
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
         let s = self.parent.pre_train(input)?;
@@ -467,16 +511,18 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,
         Ok(s.push((m,iv)).push(u.into()))
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> Backward<U,(ArrView<'_,U,N>,ArrView<'_,U,N>,&S,&S),Result<(Arr<U,N>,Arr<U,N>,Arr<U,N>),TrainingError>>
+impl<U,C,P,OP,D,I,PI,S,const N:usize> Backward<U,(ArrView<'_,U,N>,ArrView<'_,U,N>,&C,&C),Result<(Arr<U,N>,C,C),TrainingError>>
     for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
 
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,N>,
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static,
+          C: Debug,
           OP: Optimizer<U,D> {
-    fn backward(&mut self, (loss,input,saved_mean,saved_inv_variance): (ArrView<'_,U,N>,ArrView<'_,U,N>,&S,&S)) -> Result<(Arr<U,N>,Arr<U,N>,Arr<U,N>),TrainingError> {
+    fn backward(&mut self, (loss,input,saved_mean,saved_inv_variance): (ArrView<'_,U,N>,ArrView<'_,U,N>,&C,&C))
+        -> Result<(Arr<U,N>,C,C),TrainingError> {
         self.device.backward_batch_norm(loss,
                                         input,
                                         &self.scale,
@@ -492,8 +538,8 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::Target: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
     type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
@@ -516,7 +562,7 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr
         Ok((l,Cons(s,(scale,bias,None))))
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -524,10 +570,9 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Cac
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut CachedTensor<U,Arr<U,N>>> {
+          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,N>,
+          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
     type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
@@ -555,15 +600,15 @@ impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,Ar
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,DeviceCpu<U>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::Target: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
     type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr<U,N>,Arr<U,N>,Option<(Arr<U,N>,Arr<U,N>)>)>;
 
     fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
         let (s,(scale,bias,saved)) = stack.pop();
 
-        self.bias_optimizer.update((&bias).into(),(&mut self.bias).into());
-        self.scale_optimizer.update((&scale).into(),(&mut self.scale).into());
+        self.bias_optimizer.update((&bias).into(),(&mut self.bias).into())?;
+        self.scale_optimizer.update((&scale).into(),(&mut self.scale).into())?;
 
         if let Some((running_mean,running_variance)) = saved {
             for (it, &m) in self.running_mean.iter_mut().zip(running_mean.iter()) {
@@ -578,31 +623,25 @@ impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,Ar
         Ok(self.parent.update_weight(s)?)
     }
 }
-impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,DeviceGpu<U>>,
           DeviceGpu<U>: Device<U>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut CachedTensor<U,Arr<U,N>>> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr<U,N>,Arr<U,N>,Option<(Arr<U,N>,Arr<U,N>)>)>;
+          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>,Option<(CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>)>)>;
 
     fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
         let (s,(scale,bias,saved)) = stack.pop();
 
-        self.bias_optimizer.update((&bias).into(),(&mut self.bias).into());
-        self.scale_optimizer.update((&scale).into(),(&mut self.scale).into());
+        self.bias_optimizer.update((&bias).into(),(&mut self.bias).into())?;
+        self.scale_optimizer.update((&scale).into(),(&mut self.scale).into())?;
 
         if let Some((running_mean,running_variance)) = saved {
-            for (it, &m) in self.running_mean.scoped_mut().iter_mut().zip(running_mean.iter()) {
-                *it = m;
-            }
-
-            for (it, &v) in self.running_variance.scoped_mut().iter_mut().zip(running_variance.iter()) {
-                *it = v;
-            }
+            self.running_mean = running_mean;
+            self.running_variance = running_variance;
         }
 
         Ok(self.parent.update_weight(s)?)
@@ -614,6 +653,7 @@ impl<U,P,OP,C,I,PI,S,const N:usize> AskDiffInput<U> for BatchNormalizationLayer<
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           S: Debug + Sized + 'static,
+          C: Debug,
           OP: Optimizer<U,DeviceCpu<U>>,
           Self: PreTrain<U> {
     type DiffInput = P::DiffInput;
@@ -630,10 +670,10 @@ impl<U,P,OP,I,PI,const N:usize> Loss<U> for BatchNormalizationLayer<U,Arr<U,N>,P
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::Target: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
 }
-impl<U,P,OP,I,PI,const N:usize> Loss<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+impl<U,P,OP,I,PI,const N:usize> Loss<U> for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -641,18 +681,18 @@ impl<U,P,OP,I,PI,const N:usize> Loss<U> for BatchNormalizationLayer<U,CachedTens
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut CachedTensor<U,Arr<U,N>>> {
+          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,N>,
+          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
 }
 impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchForwardBase for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,N>,
           I: Debug + Send + Sync + BatchDataType,
           S: Debug + Sized + 'static,
+          C: Debug,
           OP: Optimizer<U,D>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
@@ -668,9 +708,10 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchForward for BatchNormalizationLayer<U
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,N>,
           I: Debug + Send + Sync + BatchDataType,
           S: Debug + Sized + 'static,
+          C: Debug,
           OP: Optimizer<U,D>,
           <I as BatchDataType>::Type: Debug,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
@@ -689,10 +730,11 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizatio
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
              BatchPreTrainBase<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
+          U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
+          D: Device<U> + DeviceBatchNorm<U,C,N>,
           I: Debug + Send + Sync + BatchDataType,
           S: Debug + Sized + 'static,
+          C: Debug,
           OP: Optimizer<U,D>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
@@ -701,16 +743,17 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizatio
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
           Self: PreTrain<U> {
-    type BatchOutStack = Cons<Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,MeanAndVariance<U,S,N>>,Self::BatchOutput>;
+    type BatchOutStack = Cons<Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,MeanAndVariance<C>>,Self::BatchOutput>;
 }
 impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,S,N>,
+          U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
+          D: Device<U> + DeviceBatchNorm<U,C,N>,
           I: Debug + Send + Sync + BatchDataType,
           S: Debug + Sized + 'static,
+          C: Debug,
           OP: Optimizer<U,D>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
@@ -740,7 +783,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
+          U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           OP: Optimizer<U,DeviceCpu<U>>,
@@ -749,8 +792,8 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::Target: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
     type BatchLossInput = SerializedVec<U,PI>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
@@ -780,12 +823,12 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
         Ok((l,Cons(s,(scale,bias,Some((running_mean,running_variance))))))
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
+          U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,DeviceGpu<U>>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
@@ -794,10 +837,9 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,C
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut CachedTensor<U,Arr<U,N>>> {
+          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,N>,
+          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
     type BatchLossInput = SerializedVec<U,PI>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
@@ -832,7 +874,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Arr<U
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
+          U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,DeviceCpu<U>>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
@@ -841,15 +883,15 @@ impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Arr<U
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::Target: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
 }
-impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,CachedTensor<U,Arr<U,N>>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
+          U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,DeviceGpu<U>>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
@@ -858,10 +900,9 @@ impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Cache
           for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
           SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError>,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::Grad: From<&'a Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut Arr<U,N>>,
-          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::Target: From<&'a mut CachedTensor<U,Arr<U,N>>> {
+          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,N>,
+          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
+          for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
 }
 /// Builder for BatchNormalizationLayer instance creation
 pub struct BatchNormalizationLayerBuilder<const N:usize> {

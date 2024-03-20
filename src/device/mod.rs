@@ -5,6 +5,7 @@ pub mod bias;
 
 use std::marker::PhantomData;
 use std::{mem};
+use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
@@ -17,7 +18,7 @@ use rcublas::api::PointerMode;
 use rcudnn::Cudnn;
 use rcudnn_sys::cudnnHandle_t;
 use crate::arr::{Arr, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaPtr, Kernel, Memory};
+use crate::cuda::{CudaPtr, CudaTensor1dPtr, DataTypeInfo, Kernel, Memory};
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::cuda::mem::{MemoryPool};
 use crate::error::{DeviceError, TrainingError};
@@ -56,11 +57,6 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
     /// * [`TrainingError`]
     fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &SerializedVec<U,Arr<U, N>>, actual: &SerializedVec<U,Arr<U, N>>)
                                                                -> Result<SerializedVec<U,Arr<U, N>>, TrainingError> where f64: From<U>;
-
-    /// convolutional calculation
-    /// # Arguments
-    /// * `loss` - loss
-    fn batch_linear_reduce<'a,const N: usize>(&self, loss:SerializedVecView<'a,U,Arr<U,N>>) -> Result<Arr<U,N>,  TrainingError>;
     /// Calculation of total Losses (all batch)
     /// # Arguments
     /// * `expected` - expected value
@@ -84,6 +80,10 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
             String::from("An error occurred in the type conversion of the total loss.")
         ))
     }
+}
+/// Characteristics defining devices responsible for various convolutional computations of neural networks
+pub trait DeviceReduce<T,R,U,const N:usize> where U: UnitValue<U> {
+    fn reduce(&self, input: T) -> Result<R, TrainingError>;
 }
 /// Implementation of Device to be computed by CPU
 pub struct DeviceCpu<U> where U: UnitValue<U> {
@@ -140,8 +140,11 @@ impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
                 .map(|(&a,&e)| (a - e) / n).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
-
-    fn batch_linear_reduce<'a,const N: usize>(&self, loss: SerializedVecView<'a,U,Arr<U, N>>) -> Result<Arr<U,N>,  TrainingError> {
+}
+impl<'a,U,const N:usize> DeviceReduce<SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,U,N> for DeviceCpu<U>
+    where U: UnitValue<U> + Debug {
+    #[inline]
+    fn reduce(&self, loss: SerializedVecView<'a,U,Arr<U, N>>) -> Result<Arr<U,N>,  TrainingError> {
         Ok(loss.par_iter()
             .map(|l| l.into())
             .map(|l| Ok(l)).reduce(|| Ok(Arr::new()), |acc,l| {
@@ -330,20 +333,24 @@ impl Device<f32> for DeviceGpu<f32> {
 
         Ok(args.actual.read_to_vec()?.try_into()?)
     }
+}
+impl<'a,U,const N:usize> DeviceReduce<SerializedVecView<'a,U,Arr<U,N>>,CudaTensor1dPtr<U,N>,U,N> for DeviceGpu<U>
+    where U: UnitValue<U> + DataTypeInfo,
+          ReduceLinearBatch::<U,N>: Kernel<Args=ReduceLinearBatchArgs<U,N>> {
+    #[inline]
+    fn reduce(&self, input: SerializedVecView<'a, U, Arr<U, N>>) -> Result<CudaTensor1dPtr<U, N>, TrainingError> {
+        let mut loss_ptr = CudaPtr::new(input.len() * N).unwrap();
+        loss_ptr.memcpy(input.as_raw_slice().as_ptr(),input.len() * N).unwrap();
+        let output_ptr = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool()).unwrap();
 
-    fn batch_linear_reduce<'a,const N: usize>(&self, loss: SerializedVecView<'a,f32, Arr<f32, N>>) -> Result<Arr<f32, N>, TrainingError> {
-        let mut loss_ptr = CudaPtr::new(loss.len() * N).unwrap();
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),loss.len() * N).unwrap();
-        let output_ptr = CudaPtr::new(N).unwrap();
+        let mut args = ReduceLinearBatchArgs::new(loss_ptr,output_ptr,N,input.len());
 
-        let mut args = ReduceLinearBatchArgs::new(loss_ptr,output_ptr,N,loss.len());
-
-        let mut kernel = ReduceLinearBatch::<f32>::new();
+        let mut kernel = ReduceLinearBatch::<U,N>::new();
 
         kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<f32>()).unwrap();
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
 
-        Ok(args.output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 }
 impl Device<f64> for DeviceGpu<f64> {
@@ -393,23 +400,8 @@ impl Device<f64> for DeviceGpu<f64> {
 
         Ok(args.actual.read_to_vec()?.try_into()?)
     }
-
-    fn batch_linear_reduce<'a,const N: usize>(&self, loss: SerializedVecView<'a,f64,Arr<f64, N>>) -> Result<Arr<f64, N>, TrainingError> {
-        let mut loss_ptr = CudaPtr::new(loss.len() * N).unwrap();
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),loss.len() * N).unwrap();
-        let output_ptr = CudaPtr::new(N).unwrap();
-
-        let mut args = ReduceLinearBatchArgs::new(loss_ptr,output_ptr,N,loss.len());
-
-        let mut kernel = ReduceLinearBatch::<f64>::new();
-
-        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<f64>()).unwrap();
-
-        Ok(args.output.read_to_vec()?.try_into()?)
-    }
 }
-impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
+impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> + Debug {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,

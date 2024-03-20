@@ -549,6 +549,62 @@ __device__ void update_with_adam(T *weight, const T *grad, const size_t size, co
         vt[index] = _vt;
     }
 }
+template<typename T>
+
+__device__ void forward_diff_linear(const size_t *indexes, const *T input const *T units, T *output, const size_t output_size, const size_t diff_len) {
+    extern __shared__ char smem[];
+    T *sdata = reinterpret_cast<T*>(smem);
+
+    if (blockIdx.x < output_size) {
+        unsigned int out_index = blockIdx.x;
+        unsigned int tid = threadIdx.x;
+        unsigned int i = tid;
+        unsigned int n = diff_len;
+        unsigned int distance = blockDim.x;
+
+        sdata[tid] = (T)0;
+
+        while (i < n) {
+            sdata[tid] += units[indexes[i] * output_size + out_index] * input[i];
+            i += distance;
+        }
+        __syncthreads();
+
+        if (tid < 512) {
+            sdata[tid] += sdata[tid + 512];
+        }
+        __syncthreads();
+
+        if (tid < 256) {
+            sdata[tid] += sdata[tid + 256];
+        }
+        __syncthreads();
+
+        if (tid < 128) {
+            sdata[tid] += sdata[tid + 128];
+        }
+        __syncthreads();
+
+        if (tid < 64) {
+            sdata[tid] += sdata[tid + 64];
+        }
+        __syncthreads();
+
+        if (tid < 32) {
+            sdata[tid] += sdata[tid + 32];
+        }
+
+        __syncthreads();
+
+        if (tid > 0 && tid < 32) {
+            sdata[0] += sdata[tid];
+        }
+
+        if (tid == 0) {
+            output[out_index] += sdata[0];
+        }
+    }
+}
 
 extern "C" {
 	__global__ void sigmoid_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
@@ -669,42 +725,50 @@ extern "C" {
     __global__ void loss_linear_batch_cross_entropy_multiclass_derive_double(const double *t, double *r, const int nlen, const int batch_size) {
         loss_linear_batch_cross_entropy_multiclass_derive(t,r,nlen,batch_size);
     }
-    __global__ void update_with_sgd(float *weight, const float *grad, const size_t size, const float a, const float lambda) {
+    __global__ void update_with_sgd_float(float *weight, const float *grad, const size_t size, const float a, const float lambda) {
         update_with_sgd(weight,grad,size,a,lambda);
     }
-    __global__ void update_with_sgd(double *weight, const double *grad, const size_t size, const double a, const double lambda) {
+    __global__ void update_with_sgd_double(double *weight, const double *grad, const size_t size, const double a, const double lambda) {
         update_with_sgd(weight,grad,size,a,lambda);
     }
 
-    __global__ void update_with_momentum_sgd(float *weight, const float *grad, const size_t size, const float a, const float mu, const float lambda, float *vt) {
+    __global__ void update_with_momentum_sgd_float(float *weight, const float *grad, const size_t size, const float a, const float mu, const float lambda, float *vt) {
         update_with_momentum_sgd(weight,grad,size,a,mu,lambda,vt);
     }
 
-    __global__ void update_with_momentum_sgd(double *weight, const double *grad, const size_t size, const double a, const double mu, const double lambda, double *vt) {
+    __global__ void update_with_momentum_sgd_double(double *weight, const double *grad, const size_t size, const double a, const double mu, const double lambda, double *vt) {
         update_with_momentum_sgd(weight,grad,size,a,mu,lambda,vt);
     }
 
-    __global__ void update_with_adagrad(float *weight, const float *grad, const size_t size, const float a, const float eps, float *gt) {
+    __global__ void update_with_adagrad_float(float *weight, const float *grad, const size_t size, const float a, const float eps, float *gt) {
         update_with_adagrad(weight,grad,size,a,eps,gt);
     }
 
-    __global__ void update_with_adagrad(double *weight, const double *grad, const size_t size, const double a, const double eps, double *gt) {
+    __global__ void update_with_adagrad_double(double *weight, const double *grad, const size_t size, const double a, const double eps, double *gt) {
         update_with_adagrad(weight,grad,size,a,eps,gt);
     }
 
-    __global__ void update_with_rmsprop(float *weight, const float *grad, const size_t size, const float a, const float mu, const float eps, float *gt) {
+    __global__ void update_with_rmsprop_float(float *weight, const float *grad, const size_t size, const float a, const float mu, const float eps, float *gt) {
         update_with_rmsprop(weight,grad,size,a,mu,eps,gt);
     }
 
-    __global__ void update_with_rmsprop(double *weight, const double *grad, const size_t size, const double a, const double mu, double eps, double *gt) {
+    __global__ void update_with_rmsprop_double(double *weight, const double *grad, const size_t size, const double a, const double mu, double eps, double *gt) {
         update_with_rmsprop(weight,grad,size,a,mu,eps,gt);
     }
 
-    __global__ void update_with_adam(float *weight, const float *grad, const size_t size, const float a, const float eps, float *mt, float *vt, const float b1, const float b2, float b1t, float : b2t) {
+    __global__ void update_with_adam_float(float *weight, const float *grad, const size_t size, const float a, const float eps, float *mt, float *vt, const float b1, const float b2, float b1t, float b2t) {
         update_with_adam(weight,grad,size,a,eps,mt,vt,b1,b2,b1t,b2t);
     }
 
-    __global__ void update_with_adam(double *weight, const double *grad, const size_t size, const double a, const double eps, double *mt, double *vt, const double b1, const double b2, double b1t, double : b2t) {
+    __global__ void update_with_adam_double(double *weight, const double *grad, const size_t size, const double a, const double eps, double *mt, double *vt, const double b1, const double b2, double b1t, double b2t) {
         update_with_adam(weight,grad,size,a,eps,mt,vt,b1,b2,b1t,b2t);
+    }
+
+    __global__ void forward_diff_linear_float(const size_t *indexes, const *float input const *float units, float *output, const size_t output_size, const size_t diff_len) {
+        forward_diff_linear(indexes,input,units,output,output_size,diff_len);
+    }
+
+    __global__ void forward_diff_linear_double(const size_t *indexes, const *double input const *double units, double *output, const size_t output_size, const size_t diff_len) {
+        forward_diff_linear(indexes,input,units,output,output_size,diff_len);
     }
 }

@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 use libc::{c_void, size_t};
-use crate::cuda::{AsMutKernelPtr, CudaPtr, DataTypeInfo, Kernel, KernelArgs};
+use crate::cuda::{AsKernelPtr, CudaPtr, DataTypeInfo, Kernel, KernelArgs};
 
 extern "C" {
     fn sigmoid_forward_float(input_output: *mut f32, len: size_t, units_len: size_t) -> c_void;
@@ -49,7 +49,7 @@ impl<T> ActivationForwardArgs<T> where T: DataTypeInfo {
     }
 }
 impl<T> KernelArgs for ActivationForwardArgs<T> where T: DataTypeInfo {
-    fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             &mut self.input_output,
             &mut self.units_len,
@@ -85,7 +85,7 @@ impl<T> ActivationBackwardArgs<T> where T: DataTypeInfo {
     }
 }
 impl<T> KernelArgs for ActivationBackwardArgs<T> where T: DataTypeInfo {
-    fn as_vec(&mut self) -> Vec<&mut dyn AsMutKernelPtr> {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             &mut self.o,
             &mut self.u,

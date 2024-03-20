@@ -1,4 +1,5 @@
 //! Implementation of the calculation process for batch normalization
+use std::ops::DerefMut;
 use rcudnn::{API};
 use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BATCHNORM_SPATIAL};
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
@@ -7,16 +8,15 @@ use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
-use crate::cuda::{AsMutVoidPtr, AsPtr, AsVoidPtr, CudaMemoryPoolPtr, CudaPtr, DataTypeInfo, Memory};
+use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaMemoryPoolPtr, CudaTensor1dPtr, DataTypeInfo, Memory, MemoryMoveTo};
 use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
-use crate::cuda::mem::CachedTensor;
-use crate::device::{DeviceCpu, DeviceGpu};
+use crate::device::{DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::error::{EvaluateError, TrainingError};
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
 
 /// Features defining the implementation of the various computational processes in the batch normalization layer
-pub trait DeviceBatchNorm<U,C,T,const N:usize>
+pub trait DeviceBatchNorm<U,C,const N:usize>
     where U: UnitValue<U> {
     /// Forward propagation calculation
     /// # Arguments
@@ -47,7 +47,7 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     /// This function may return the following errors
     /// * [`EvaluateError`]
     fn forward_batch_norm_train<'a>(&self, input: ArrView<'a,U,N>, scale: &C, bias: &C,
-                                estimated_mean: &C, estimated_variance: &C) -> Result<(Arr<U,N>,T,T),EvaluateError>;
+                                estimated_mean: &C, estimated_variance: &C) -> Result<(Arr<U,N>,C,C),EvaluateError>;
     /// Forward propagation calculation in batch
     /// # Arguments
     /// * `input` - input
@@ -81,7 +81,7 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     /// * [`EvaluateError`]
     fn batch_forward_batch_norm_train<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>, scale: &C, bias: &C,
                                       running_mean: &C, running_variance: &C, momentum: U)
-                                      -> Result<(SerializedVec<U,Arr<U,N>>,T,T,Arr<U,N>,Arr<U,N>),TrainingError>;
+                                      -> Result<(SerializedVec<U,Arr<U,N>>,C,C,C,C),TrainingError>;
     /// Error back propagation calculation
     /// # Arguments
     /// * `loss` - loss input
@@ -95,7 +95,7 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn backward_batch_norm<'a>(&self, loss:ArrView<'a,U,N>, input: ArrView<'a,U,N>, scale: &C,
-                           saved_mean: &T, saved_inv_variance: &T) -> Result<(Arr<U,N>,Arr<U,N>,Arr<U,N>), TrainingError>;
+                           saved_mean: &C, saved_inv_variance: &C) -> Result<(Arr<U,N>,C,C), TrainingError>;
     /// Error back propagation calculation in batch
     /// # Arguments
     /// * `loss` - loss input
@@ -109,9 +109,9 @@ pub trait DeviceBatchNorm<U,C,T,const N:usize>
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn batch_backward_batch_norm<'a>(&self, loss:SerializedVecView<'a,U,Arr<U,N>>, input: SerializedVecView<'a,U,Arr<U,N>>,
-                                 scale: &C, saved_mean: &T, saved_inv_variance: &T) -> Result<(SerializedVec<U,Arr<U,N>>,Arr<U,N>,Arr<U,N>), TrainingError>;
+                                 scale: &C, saved_mean: &C, saved_inv_variance: &C) -> Result<(SerializedVec<U,Arr<U,N>>,C,C), TrainingError>;
 }
-impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
+impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,N> for DeviceCpu<U>
     where U: UnitValue<U> {
     #[inline]
     fn forward_batch_norm<'a>(&self, input: &ArrView<'a,U,N>, scale: &Arr<U,N>, bias: &Arr<U,N>,
@@ -292,11 +292,11 @@ impl<U,const N:usize> DeviceBatchNorm<U,Arr<U,N>,Arr<U,N>,N> for DeviceCpu<U>
         Ok((dx,s,b))
     }
 }
-impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> for DeviceGpu<U>
+impl<U,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,N> for DeviceGpu<U>
     where U: UnitValue<U> + DataTypeInfo + AsVoidPtr,
           f64: From<U> {
-    fn forward_batch_norm<'a>(&self, input: &ArrView<'a,U,N>, scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
-                          estimated_mean: &CachedTensor<U,Arr<U,N>>, estimated_variance: &CachedTensor<U,Arr<U,N>>)
+    fn forward_batch_norm<'a>(&self, input: &ArrView<'a,U,N>, scale: &CudaTensor1dPtr<U,N>, bias: &CudaTensor1dPtr<U,N>,
+                          estimated_mean: &CudaTensor1dPtr<U,N>, estimated_variance: &CudaTensor1dPtr<U,N>)
         -> Result<Arr<U,N>,EvaluateError> {
         let len = input.len() as i32;
 
@@ -362,10 +362,10 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
     }
 
     fn forward_batch_norm_train<'a>(&self, input: ArrView<'a,U,N>,
-                                scale: &CachedTensor<U,Arr<U,N>>,
-                                bias: &CachedTensor<U,Arr<U,N>>,
-                                estimated_mean: &CachedTensor<U,Arr<U,N>>,
-                                estimated_variance: &CachedTensor<U,Arr<U,N>>) -> Result<(Arr<U,N>,CudaPtr<U>,CudaPtr<U>),EvaluateError> {
+                                scale: &CudaTensor1dPtr<U,N>,
+                                bias: &CudaTensor1dPtr<U,N>,
+                                estimated_mean: &CudaTensor1dPtr<U,N>,
+                                estimated_variance: &CudaTensor1dPtr<U,N>) -> Result<(Arr<U,N>,CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>),EvaluateError> {
         let len = input.len() as i32;
 
         let mut input_ptr = CudaMemoryPoolPtr::<U>::new(len as usize,&self.memory_pool)?;
@@ -396,11 +396,14 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         let eps = U::from_f64(1e-6).ok_or(
             EvaluateError::TypeCastError(String::from("An error occurred in floating point type conversion.")))?;
 
-        let mut mean = CudaPtr::<U>::new(N)?;
-        let mut inv_variance = CudaPtr::<U>::new(N)?;
+        let mut mean = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut inv_variance = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
 
-        mean.memcpy(estimated_mean.as_ptr(),N)?;
-        inv_variance.memcpy(estimated_variance.iter().map(|&v| U::one() / SqrtNode::new().forward(v + eps)).collect::<Vec<U>>().as_ptr(),N)?;
+        estimated_mean.memcpy_to(mean.deref_mut(),N)?;
+        inv_variance.memcpy(estimated_variance.read_to_vec()?.into_boxed_slice()
+                                                                .iter()
+                                                                .map(|&v| U::one() / SqrtNode::new().forward(v + eps))
+                                                                .collect::<Vec<U>>().as_ptr(),N)?;
 
         let eps = 1e-6;
 
@@ -438,8 +441,8 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         }
     }
 
-    fn batch_forward_batch_norm<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>, scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
-                                estimated_mean: &CachedTensor<U,Arr<U,N>>, estimated_variance: &CachedTensor<U,Arr<U,N>>)
+    fn batch_forward_batch_norm<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>, scale: &CudaTensor1dPtr<U,N>, bias: &CudaTensor1dPtr<U,N>,
+                                estimated_mean: &CudaTensor1dPtr<U,N>, estimated_variance: &CudaTensor1dPtr<U,N>)
         -> Result<SerializedVec<U,Arr<U,N>>, EvaluateError> {
         let len = input.len() as i32;
 
@@ -505,10 +508,11 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
     }
 
     fn batch_forward_batch_norm_train<'a>(&self, input: SerializedVecView<'a,U,Arr<U,N>>,
-                                      scale: &CachedTensor<U,Arr<U,N>>, bias: &CachedTensor<U,Arr<U,N>>,
-                                      running_mean: &CachedTensor<U,Arr<U,N>>, running_variance: &CachedTensor<U,Arr<U,N>>,
+                                      scale: &CudaTensor1dPtr<U,N>, bias: &CudaTensor1dPtr<U,N>,
+                                      running_mean: &CudaTensor1dPtr<U,N>, running_variance: &CudaTensor1dPtr<U,N>,
                                       momentum: U)
-                                      -> Result<(SerializedVec<U,Arr<U,N>>,CudaPtr<U>,CudaPtr<U>,Arr<U,N>,Arr<U,N>), TrainingError> {
+                                      -> Result<(SerializedVec<U,Arr<U,N>>,
+                                                 CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>), TrainingError> {
         let len = input.len() as i32;
 
         let mut input_ptr = CudaMemoryPoolPtr::<U>::new(len as usize * N,&self.memory_pool)?;
@@ -538,14 +542,14 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
 
         let eps = 1e-6;
 
-        let mut running_mean_ptr = CudaPtr::<U>::new(N)?;
-        let mut running_variance_ptr = CudaPtr::<U>::new(N)?;
+        let mut new_running_mean = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut new_running_variance = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
 
-        running_mean_ptr.memcpy(running_mean.as_raw_slice().as_ptr(),N)?;
-        running_variance_ptr.memcpy(running_variance.as_raw_slice().as_ptr(),N)?;
+        running_mean.memcpy_to(new_running_mean.deref_mut(), N)?;
+        running_variance.memcpy_to(new_running_variance.deref_mut(), N)?;
 
-        let mut mean = CudaPtr::<U>::new(N)?;
-        let mut inv_variance = CudaPtr::<U>::new(N)?;
+        let mut mean = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut inv_variance = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
 
         unsafe {
             match cudnnBatchNormalizationForwardTraining(
@@ -561,8 +565,8 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
                 scale.as_void_ptr(),
                 bias.as_void_ptr(),
                 1. - f64::from(momentum),
-                running_mean_ptr.as_mut_void_ptr(),
-                running_variance_ptr.as_mut_void_ptr(),
+                new_running_mean.as_mut_void_ptr(),
+                new_running_variance.as_mut_void_ptr(),
                 eps as f64,
                 mean.as_mut_void_ptr(),
                 inv_variance.as_mut_void_ptr()) {
@@ -570,8 +574,8 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
                     return Ok((output_ptr.read_to_vec()?.try_into()?,
                                mean,
                                inv_variance,
-                               running_mean_ptr.read_to_vec()?.try_into()?,
-                               running_variance_ptr.read_to_vec()?.try_into()?));
+                               new_running_mean,
+                               new_running_variance));
                 },
                 cudnnStatus_t::CUDNN_STATUS_NOT_SUPPORTED => {
                     return Err(TrainingError::CudnnError(rcudnn::Error::NotSupported("The function does not support the provided configuration.")));
@@ -589,8 +593,8 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
     }
 
     fn backward_batch_norm<'a>(&self, loss: ArrView<'a,U,N>, input: ArrView<'a,U,N>,
-                           scale: &CachedTensor<U,Arr<U,N>>, saved_mean: &CudaPtr<U>, saved_inv_variance: &CudaPtr<U>)
-                           -> Result<(Arr<U,N>, Arr<U,N>, Arr<U,N>), TrainingError> {
+                           scale: &CudaTensor1dPtr<U,N>, saved_mean: &CudaTensor1dPtr<U,N>, saved_inv_variance: &CudaTensor1dPtr<U,N>)
+                           -> Result<(Arr<U,N>, CudaTensor1dPtr<U,N>, CudaTensor1dPtr<U,N>), TrainingError> {
         let len = input.len() as i32;
 
         let mut loss_ptr = CudaMemoryPoolPtr::<U>::new(len as usize,&self.memory_pool)?;
@@ -622,8 +626,8 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         let alpha = U::one();
         let beta = U::default();
 
-        let mut result_scale= CudaPtr::<U>::new(N)?;
-        let mut result_bias = CudaPtr::<U>::new(N)?;
+        let mut result_scale= CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut result_bias = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
 
         unsafe {
             match cudnnBatchNormalizationBackward(
@@ -647,7 +651,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
                 saved_mean.as_void_ptr(),
                 saved_inv_variance.as_void_ptr()) {
                 cudnnStatus_t::CUDNN_STATUS_SUCCESS => {
-                    return Ok((output_ptr.read_to_vec()?.try_into()?,result_scale.read_to_vec()?.try_into()?,result_bias.read_to_vec()?.try_into()?));
+                    return Ok((output_ptr.read_to_vec()?.try_into()?,result_scale,result_bias));
                 },
                 cudnnStatus_t::CUDNN_STATUS_NOT_SUPPORTED => {
                     return Err(TrainingError::CudnnError(rcudnn::Error::NotSupported("The function does not support the provided configuration.")));
@@ -666,9 +670,9 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
 
     fn batch_backward_batch_norm<'a>(&self, loss: SerializedVecView<'a,U,Arr<U,N>>,
                                  input: SerializedVecView<'a,U,Arr<U,N>>,
-                                 scale: &CachedTensor<U,Arr<U,N>>,
-                                 saved_mean: &CudaPtr<U>, saved_inv_variance: &CudaPtr<U>)
-                                 -> Result<(SerializedVec<U,Arr<U,N>>, Arr<U,N>, Arr<U,N>), TrainingError> {
+                                 scale: &CudaTensor1dPtr<U,N>,
+                                 saved_mean: &CudaTensor1dPtr<U,N>, saved_inv_variance: &CudaTensor1dPtr<U,N>)
+                                 -> Result<(SerializedVec<U,Arr<U,N>>, CudaTensor1dPtr<U,N>, CudaTensor1dPtr<U,N>), TrainingError> {
         let len = input.len() as i32;
 
         let mut loss_ptr = CudaMemoryPoolPtr::<U>::new(len as usize * N,&self.memory_pool)?;
@@ -700,8 +704,8 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
         let alpha = U::one();
         let beta = U::default();
 
-        let mut result_scale= CudaPtr::<U>::new(N)?;
-        let mut result_bias = CudaPtr::<U>::new(N)?;
+        let mut result_scale= CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut result_bias = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
 
         unsafe {
             match cudnnBatchNormalizationBackward(
@@ -725,7 +729,7 @@ impl<U,const N:usize> DeviceBatchNorm<U,CachedTensor<U,Arr<U,N>>,CudaPtr<U>,N> f
                 saved_mean.as_void_ptr(),
                 saved_inv_variance.as_void_ptr()) {
                 cudnnStatus_t::CUDNN_STATUS_SUCCESS => {
-                    return Ok((output_ptr.read_to_vec()?.try_into()?,result_scale.read_to_vec()?.try_into()?,result_bias.read_to_vec()?.try_into()?));
+                    return Ok((output_ptr.read_to_vec()?.try_into()?,result_scale,result_bias));
                 },
                 cudnnStatus_t::CUDNN_STATUS_NOT_SUPPORTED => {
                     return Err(TrainingError::CudnnError(rcudnn::Error::NotSupported("The function does not support the provided configuration.")));

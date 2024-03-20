@@ -1074,6 +1074,11 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
     pub fn iter<'a>(&'a self) -> impl Iterator<Item=&(usize,T)> {
         self.items.iter()
     }
+
+    /// get item count
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
 }
 impl<T,const N:usize> Mul<T> for DiffArr<T,N>
     where T: Mul<T> + Mul<Output=T> + Clone + Copy + Debug {

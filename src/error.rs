@@ -102,7 +102,9 @@ pub enum ConfigReadError {
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidState(String),
     /// Error when trying to parse a numeric string into numbers
-    ParseFloatError(ParseFloatError)
+    ParseFloatError(ParseFloatError),
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error)
 }
 impl fmt::Display for ConfigReadError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -110,6 +112,7 @@ impl fmt::Display for ConfigReadError {
             ConfigReadError::IOError(_) => write!(f, "Error occurred in file I/O."),
             ConfigReadError::InvalidState(ref s) => write!(f, "Configuration is invalid. ({})",s),
             ConfigReadError::ParseFloatError(_) => write!(f, "An error occurred when converting a string to a double value."),
+            ConfigReadError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
         }
     }
 }
@@ -118,7 +121,8 @@ impl error::Error for ConfigReadError {
         match *self {
             ConfigReadError::IOError(_) => "Error occurred in file I/O.",
             ConfigReadError::InvalidState(_) => "Configuration is invalid.",
-            ConfigReadError::ParseFloatError(_) => "An error occurred when converting a string to a double value."
+            ConfigReadError::ParseFloatError(_) => "An error occurred when converting a string to a double value.",
+            ConfigReadError::CudnnError(_) => "An error occurred during the execution of a process in cudnn."
         }
     }
 
@@ -127,6 +131,7 @@ impl error::Error for ConfigReadError {
             ConfigReadError::IOError(ref e) => Some(e),
             ConfigReadError::InvalidState(_) => None,
             ConfigReadError::ParseFloatError(ref e) => Some(e),
+            ConfigReadError::CudnnError(ref e) => Some(e)
         }
     }
 }
@@ -178,6 +183,11 @@ impl From<io::Error> for ConfigReadError {
 impl From<ParseFloatError> for ConfigReadError {
     fn from(err: ParseFloatError) -> ConfigReadError {
         ConfigReadError::ParseFloatError(err)
+    }
+}
+impl From<rcudnn::Error> for ConfigReadError {
+    fn from(err: rcudnn::Error) -> ConfigReadError {
+        ConfigReadError::CudnnError(err)
     }
 }
 /// Errors caused by generating fixed-length arrays from different size Vecs
@@ -326,22 +336,44 @@ impl From<InvalidStateError> for EvaluateError {
 }
 #[derive(Debug)]
 pub enum PersistenceError {
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error),
+    /// Errors caused by generating fixed-length arrays from different size Vecs
+    SizeMismatchError(SizeMismatchError)
 }
 impl fmt::Display for PersistenceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "An error occurred when saving model information.")
+        match self {
+            PersistenceError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
+            PersistenceError::SizeMismatchError(e) => write!(f, "{}",e),
+        }
     }
 }
 impl error::Error for PersistenceError {
     fn description(&self) -> &str {
-        "An error occurred when saving model information."
+        match *self {
+            PersistenceError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            PersistenceError::SizeMismatchError(_) => "memory size does not match.",
+        }
     }
 
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        None
+        match *self {
+            PersistenceError::CudnnError(ref e) => Some(e),
+            PersistenceError::SizeMismatchError(ref e) => Some(e)
+        }
     }
 }
-
+impl From<rcudnn::Error> for PersistenceError {
+    fn from(err: rcudnn::Error) -> PersistenceError {
+        PersistenceError::CudnnError(err)
+    }
+}
+impl From<SizeMismatchError> for PersistenceError {
+    fn from(err: SizeMismatchError) -> PersistenceError {
+        PersistenceError::SizeMismatchError(err)
+    }
+}
 /// Error in cuda processing
 #[derive(Debug)]
 pub enum CudaError {
@@ -541,13 +573,23 @@ impl CudaRuntimeError {
 #[derive(Debug)]
 pub enum LayerInstantiationError {
     /// Error in cuda processing
-    CudaError(CudaError)
+    CudaError(CudaError),
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error),
+    /// Error in build optimizer processing
+    OptimizerBuildError(OptimizerBuildError)
 }
 impl fmt::Display for LayerInstantiationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             LayerInstantiationError::CudaError(e) => {
                 write!(f,"An unexpected error occurred during layer instantiation ({})",e)
+            },
+            LayerInstantiationError::CudnnError(e) => {
+                write!(f,"An unexpected error occurred during layer instantiation ({})",e)
+            },
+            LayerInstantiationError::OptimizerBuildError(e) => {
+                write!(f,"An unexpected error occurred during build optimizer ({})",e)
             }
         }
     }
@@ -557,6 +599,12 @@ impl error::Error for LayerInstantiationError {
         match self {
             LayerInstantiationError::CudaError(_) => {
                 "An unexpected error occurred during layer instantiation (An error occurred in the process of cudas)."
+            },
+            LayerInstantiationError::CudnnError(_) => {
+                "An unexpected error occurred during layer instantiation (An error occurred in the process of cudnns)."
+            },
+            LayerInstantiationError::OptimizerBuildError(_) => {
+                "An unexpected error occurred during build optimizer (An error occurred in the process of cudas)."
             }
         }
     }
@@ -564,11 +612,72 @@ impl error::Error for LayerInstantiationError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             LayerInstantiationError::CudaError(ref e) => Some(e),
+            LayerInstantiationError::CudnnError(ref e) => Some(e),
+            LayerInstantiationError::OptimizerBuildError(ref e) => Some(e)
         }
     }
 }
 impl From<CudaError> for LayerInstantiationError {
     fn from(err: CudaError) -> LayerInstantiationError {
         LayerInstantiationError::CudaError(err)
+    }
+}
+impl From<rcudnn::Error> for LayerInstantiationError {
+    fn from(err: rcudnn::Error) -> LayerInstantiationError {
+        LayerInstantiationError::CudnnError(err)
+    }
+}
+impl From<OptimizerBuildError> for LayerInstantiationError {
+    fn from(err: OptimizerBuildError) -> LayerInstantiationError {
+        LayerInstantiationError::OptimizerBuildError(err)
+    }
+}
+/// Error when layer instantiation fails
+#[derive(Debug)]
+pub enum OptimizerBuildError {
+    /// Error in cuda processing
+    CudaError(CudaError),
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error),
+}
+impl fmt::Display for OptimizerBuildError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            OptimizerBuildError::CudaError(e) => {
+                write!(f,"An unexpected error occurred during build optimizer ({})",e)
+            },
+            OptimizerBuildError::CudnnError(e) => {
+                write!(f,"An unexpected error occurred during build optimizer ({})",e)
+            }
+        }
+    }
+}
+impl error::Error for OptimizerBuildError {
+    fn description(&self) -> &str {
+        match self {
+            OptimizerBuildError::CudaError(_) => {
+                "An unexpected error occurred during build optimizer (An error occurred in the process of cudas)."
+            },
+            OptimizerBuildError::CudnnError(_) => {
+                "An unexpected error occurred during build optimizer (An error occurred in the process of cudnn)."
+            }
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            OptimizerBuildError::CudaError(ref e) => Some(e),
+            OptimizerBuildError::CudnnError(ref e) => Some(e)
+        }
+    }
+}
+impl From<CudaError> for OptimizerBuildError {
+    fn from(err: CudaError) -> OptimizerBuildError {
+        OptimizerBuildError::CudaError(err)
+    }
+}
+impl From<rcudnn::Error> for OptimizerBuildError {
+    fn from(err: rcudnn::Error) -> OptimizerBuildError {
+        OptimizerBuildError::CudnnError(err)
     }
 }

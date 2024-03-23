@@ -86,7 +86,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for SGD<U,DeviceGpu<U>>
         let mut kernel = kernel::optimizer::SGD::<'_,U>::new();
 
         kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
 
         Ok(())
@@ -249,7 +249,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for MomentumSGD<U,DeviceGpu<U>,CudaMemoryPoolP
         let mut kernel = kernel::optimizer::MomentumSGD::<'_,U>::new();
 
         kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
 
         Ok(())
@@ -374,7 +374,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adagrad<U,DeviceGpu<U>,CudaMemoryPoolPtr<U
         let mut kernel = kernel::optimizer::Adagrad::<'_,U>::new();
 
         kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
 
         Ok(())
@@ -479,7 +479,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for RMSprop<U,DeviceGpu<U>,CudaMemoryPoolPtr<U
         let mut kernel = kernel::optimizer::RMSprop::<'_,U>::new();
 
         kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
 
         Ok(())
@@ -606,7 +606,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adam<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>
         let mut kernel = kernel::optimizer::Adam::<'_,U>::new();
 
         kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
 
         self.b1t = self.b1t * self.b1;

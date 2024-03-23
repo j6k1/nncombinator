@@ -675,7 +675,7 @@ impl<T> private::AsConstKernelPtrBase for CudaHostPtr<T> {
 }
 impl<T> private::AsMutKernelPtrBase for CudaHostPtr<T> {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
-        self.ptr as *mut libc::c_void
+        &mut self.ptr as *mut *mut T as *mut libc::c_void
     }
 }
 impl<T> AsVoidPtr for CudaHostPtr<T> {

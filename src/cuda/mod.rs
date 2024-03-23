@@ -1285,4 +1285,14 @@ pub trait Kernel {
                      shared_mem
         )
     }
+
+    /// Function that waits for the completion of the execution of the process passed to the Cuda kernel
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaRuntimeError`]
+    fn device_synchronize(&self) -> Result<(),CudaRuntimeError> {
+        ffi::device_synchronize()
+    }
 }

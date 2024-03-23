@@ -224,3 +224,18 @@ pub fn launch(func: *const c_void,
                        shared_mem,
                        null_mut())
 }
+/// Function that waits for the completion of the execution of the process passed to the Cuda kernel
+///
+/// # Errors
+///
+/// This function may return the following errors
+/// * [`CudaRuntimeError`]
+pub fn device_synchronize() -> Result<(),CudaRuntimeError> {
+    let cuda_error = unsafe { cuda_runtime_sys::cudaDeviceSynchronize() };
+
+    if cuda_error == cuda_runtime_sys::cudaError::cudaSuccess {
+        Ok(())
+    } else {
+        Err(CudaRuntimeError::new(cuda_error))
+    }
+}

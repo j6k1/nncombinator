@@ -322,7 +322,7 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,NI,N
                                                 .into_iter().flatten().collect::<Vec<f32>>();
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI * input.len())?;
-        output_ptr.memcpy(bias.as_ptr(),NO * input.len())?;
+        output_ptr.memcpy(bias.as_slice().as_ptr(),NO * input.len())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(1.0f32)?;

@@ -517,7 +517,7 @@ __device__ void update_with_rmsprop(T *weight, const T *grad, const size_t size,
     if (index < size) {
         T w = weight[index];
         T _gt = gt[index];
-        const e = grad[index];
+        const T e = grad[index];
 
         _gt = mu * _gt + (1 - mu) * e * e;
         w = w - a * e / (sqrt(_gt) + eps);
@@ -529,14 +529,14 @@ __device__ void update_with_rmsprop(T *weight, const T *grad, const size_t size,
 
 template<typename T>
 
-__device__ void update_with_adam(T *weight, const T *grad, const size_t size, const T a, const T eps, T *mt, T *vt, const T b1, const T b2, T b1t, T : b2t) {
+__device__ void update_with_adam(T *weight, const T *grad, const size_t size, const T a, const T eps, T *mt, T *vt, const T b1, const T b2, T b1t, T b2t) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (index < size) {
         T w = weight[index];
         T _mt = mt[index];
         T _vt = vt[index];
-        const e = grad[index];
+        const T e = grad[index];
 
         _mt = b1 * _mt + (1 - b1) * e;
         _vt = b2 * _vt + (1 - b2) * e * e;
@@ -544,14 +544,14 @@ __device__ void update_with_adam(T *weight, const T *grad, const size_t size, co
         w = w - a * (_mt / (1 - b1t)) / sqrt((_vt / (1 - b2t)) + eps);
 
         weight[index] = w;
-        gt[index] = _gt;
         mt[index] = _mt;
         vt[index] = _vt;
     }
 }
+
 template<typename T>
 
-__device__ void forward_diff_linear(const size_t *indexes, const *T input const *T units, T *output, const size_t output_size, const size_t diff_len) {
+__device__ void forward_diff_linear(const size_t *indexes, const T *input, const T *units, T *output, const size_t output_size, const size_t diff_len) {
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
@@ -764,11 +764,11 @@ extern "C" {
         update_with_adam(weight,grad,size,a,eps,mt,vt,b1,b2,b1t,b2t);
     }
 
-    __global__ void forward_diff_linear_float(const size_t *indexes, const *float input const *float units, float *output, const size_t output_size, const size_t diff_len) {
+    __global__ void forward_diff_linear_float(const size_t *indexes, const float *input, const float *units, float *output, const size_t output_size, const size_t diff_len) {
         forward_diff_linear(indexes,input,units,output,output_size,diff_len);
     }
 
-    __global__ void forward_diff_linear_double(const size_t *indexes, const *double input const *double units, double *output, const size_t output_size, const size_t diff_len) {
+    __global__ void forward_diff_linear_double(const size_t *indexes, const double *input, const double *units, double *output, const size_t output_size, const size_t diff_len) {
         forward_diff_linear(indexes,input,units,output,output_size,diff_len);
     }
 }

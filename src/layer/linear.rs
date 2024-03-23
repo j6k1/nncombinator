@@ -1,7 +1,6 @@
 //! Implementation of all full connected layers
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::Index;
 use std::str::FromStr;
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, SerializedVec, SerializedVecConverter, SerializedVecView};
 use crate::{Cons, Stack};
@@ -1102,7 +1101,6 @@ impl<U,C,BC,P,OP,D,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLay
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          C: Index<(usize,usize),Output=U>,
           for<'a> D: Device<U> + DeviceLinear<U,C,BC,NI,NO> + DeviceDiffLinear<'a,U,C,NI,NO>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,D> {
@@ -1126,7 +1124,6 @@ impl<U,C,BC,P,OP,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLa
     where P: PreTrain<U> + ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          C: Index<(usize,usize),Output=U>,
           for<'a> D: Device<U> + DeviceLinear<U,C,BC,NI,NO> + DeviceDiffLinear<'a,U,C,NI,NO>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,D> {
@@ -1138,14 +1135,7 @@ impl<U,C,BC,P,OP,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLa
         let u = s.map(|input| {
             match input {
                 DiffInput::Diff(d, output) => {
-                    let mut output = output.clone();
-
-                    for &(i, d) in d.iter() {
-                        for (o, j) in output.iter_mut().zip(0..NO) {
-                            *o += self.units[(i, j)] * d;
-                        }
-                    }
-                    Ok(output)
+                    self.device.forward_diff_linear(d,&self.units,output.into())
                 },
                 DiffInput::NotDiff(input) => {
                     self.device.forward_linear(&self.bias,&self.units,input.into())
@@ -1305,7 +1295,6 @@ impl<U,C,BC,P,OP,D,I,const NI:usize,const NO:usize> AskDiffInput<U> for DiffLine
     where P: BackwardAll<U,LossInput=Arr<U,NI>> +
              ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          C: Index<(usize,usize),Output=U>,
           D: Device<U>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,D>,
@@ -1320,7 +1309,6 @@ impl<U,C,BC,P,OP,D,I,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<
     where P: PreTrain<U> + ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              BackwardAll<U,LossInput=Arr<U,NI>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          C: Index<(usize,usize),Output=U>,
           D: Device<U>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,D>,

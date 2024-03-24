@@ -52,7 +52,7 @@ fn test_mnist() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -374,7 +374,7 @@ fn test_mnist_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -2903,7 +2903,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3062,7 +3062,7 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3219,7 +3219,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.0004);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3378,7 +3378,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3535,7 +3535,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3693,7 +3693,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();

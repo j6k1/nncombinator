@@ -36,7 +36,7 @@ fn test_mnist_batch_norm() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder =  MomentumSGDBuilder::new(&device,0.008);
+    let optimizer_builder =  MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -202,7 +202,7 @@ fn test_fashion_mnist_batch_norm() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.008);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -384,7 +384,7 @@ fn test_mnist_batch_norm_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.008);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -550,7 +550,7 @@ fn test_fashion_mnist_batch_norm_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.008);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -734,7 +734,7 @@ fn test_mnist_batch_norm_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.008);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -902,7 +902,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.008);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -1086,7 +1086,7 @@ fn test_mnist_batch_norm_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.008);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -1254,7 +1254,7 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.008);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();

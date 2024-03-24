@@ -5,7 +5,7 @@ use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::{UnitValue};
-use crate::cuda::{CudaMemoryPoolPtr, kernel, Kernel, Memory};
+use crate::cuda::{CudaMemoryPoolPtr, kernel, Kernel};
 use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, MomentumSGDArgs, RMSpropArgs, SGDArgs};
 use crate::error::{OptimizerBuildError, TrainingError};
 

@@ -213,7 +213,7 @@ fn test_mnist_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();

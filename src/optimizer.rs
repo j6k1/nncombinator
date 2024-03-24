@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
-use crate::UnitValue;
+use crate::{UnitValue};
 use crate::cuda::{CudaMemoryPoolPtr, kernel, Kernel, Memory};
 use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, MomentumSGDArgs, RMSpropArgs, SGDArgs};
 use crate::error::{OptimizerBuildError, TrainingError};
@@ -179,7 +179,7 @@ impl<U> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>,Box<[U]>> where
     type InternalType = [U];
 
     #[inline]
-    fn update(&mut self, e: & [U], w: &mut [U]) -> Result<(),TrainingError> {
+    fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
         let a = self.a;
         let mu = self.mu;
 
@@ -201,19 +201,13 @@ impl<U> MomentumSGD<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>> where U: UnitValue<U>, 
     /// * `a` - Learning rate
     pub fn new(device:&DeviceGpu<U>,size:usize,a:U)
         -> Result<MomentumSGD<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>,OptimizerBuildError> {
-        let vt = vec![U::default();size].into_boxed_slice();
-
-        let mut vt_ptr = CudaMemoryPoolPtr::new(size,device.get_memory_pool())?;
-
-        vt_ptr.memcpy(vt.as_ptr(),size)?;
-
         Ok(MomentumSGD {
             d:PhantomData::<DeviceGpu<U>>,
             size:size,
             a:a,
             mu:U::from_f64(0.9).expect("Error in type conversion from f64."),
             lambda:U::default(),
-            vt: vt_ptr
+            vt: CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?
         })
     }
     /// Create an instance of MomentumSGD with additional parameters other than the default values
@@ -244,7 +238,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for MomentumSGD<U,DeviceGpu<U>,CudaMemoryPoolP
     type InternalType = CudaMemoryPoolPtr<U>;
 
     #[inline]
-    fn update(&mut self, e: & CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
+    fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
         let mut args = MomentumSGDArgs::new(w,e,self.size,self.a,self.mu,self.lambda,&mut self.vt);
 
         let mut kernel = kernel::optimizer::MomentumSGD::<'_,U>::new();

@@ -483,8 +483,13 @@ __device__ void update_with_momentum_sgd(T *weight, const T *grad, const size_t 
         T w = weight[index];
         T _vt = vt[index];
 
-        _vt = mu * _vt - a * (grad[index] + lambda * w);
-        w = w + _vt;
+        _vt = mu * _vt;
+        T d = lambda * w;
+        T e = grad[index];
+        e = e + d;
+        e = a * e;
+        _vt = _vt - e;
+        w = w - e;
 
         weight[index] = w;
         vt[index] = _vt;

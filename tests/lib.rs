@@ -33,12 +33,12 @@ use nncombinator::layer::input::InputLayer;
 use nncombinator::layer::linear::{DiffLinearLayerBuilder, LinearLayerBuilder};
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
-use nncombinator::optimizer::{MomentumSGDBuilder};
+use nncombinator::optimizer::{MomentumSGDBuilder, SGDBuilder};
 
 use crate::common::SHARED_MEMORY_POOL;
 
 #[test]
-fn test_mnist() {
+fn test_mnist_for_cpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
@@ -52,7 +52,7 @@ fn test_mnist() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -213,7 +213,7 @@ fn test_mnist_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -374,7 +374,7 @@ fn test_mnist_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();

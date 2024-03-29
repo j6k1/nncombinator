@@ -9,7 +9,7 @@ use libc::c_void;
 use rcudnn::Error;
 use rcudnn::utils::DataType;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t, cudnnDataType_t};
-use crate::cuda::mem::{Alloctype, MemoryPool};
+use crate::cuda::mem::{MemoryPool};
 use crate::error::{CudaError, CudaRuntimeError};
 
 pub mod ffi;
@@ -410,22 +410,11 @@ impl<T: Default + Debug> MemoryMoveTo<T,CudaPtr<T>> for CudaPtr<T> {
 }
 impl<T: Default + Debug> MemoryMoveTo<T,CudaMemoryPoolPtr<T>> for CudaPtr<T> {
     fn memcpy_to(&self, dst: &mut CudaMemoryPoolPtr<T>, len: usize) -> Result<usize, Error> {
-        match dst.get_alloc_type() {
-            Alloctype::Device => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyDeviceToDevice)?;
-                Ok(len)
-            },
-            Alloctype::Host(_) => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyDeviceToHost)?;
-                Ok(len)
-            }
-        }
+        ffi::memcpy(dst.as_mut_ptr(),
+                    self.ptr,
+                    len,
+                    cudaMemcpyKind::cudaMemcpyDeviceToDevice)?;
+        Ok(len)
     }
 }
 impl<T> Drop for CudaPtr<T> {
@@ -597,22 +586,11 @@ impl<T: Default + Debug> MemoryMoveTo<T,CudaPtr<T>> for CudaHostPtr<T> {
 }
 impl<T: Default + Debug> MemoryMoveTo<T,CudaMemoryPoolPtr<T>> for CudaHostPtr<T> {
     fn memcpy_to(&self, dst: &mut CudaMemoryPoolPtr<T>, len: usize) -> Result<usize, Error> {
-        match dst.get_alloc_type() {
-            Alloctype::Device => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyHostToDevice)?;
-                Ok(len)
-            },
-            Alloctype::Host(_) => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyHostToHost)?;
-                Ok(len)
-            }
-        }
+        ffi::memcpy(dst.as_mut_ptr(),
+                    self.ptr,
+                    len,
+                    cudaMemcpyKind::cudaMemcpyHostToDevice)?;
+        Ok(len)
     }
 }
 impl<T: Default + Debug> MemoryMoveToAsync<T,CudaHostPtr<T>> for CudaHostPtr<T> {
@@ -635,22 +613,11 @@ impl<T: Default + Debug> MemoryMoveToAsync<T,CudaPtr<T>> for CudaHostPtr<T> {
 }
 impl<T: Default + Debug> MemoryMoveToAsync<T,CudaMemoryPoolPtr<T>> for CudaHostPtr<T> {
     fn memcpy_to_async(&self, dst: &mut CudaMemoryPoolPtr<T>, len: usize,stream:cudaStream_t) -> Result<usize, Error> {
-        match dst.get_alloc_type() {
-            Alloctype::Device => {
-                ffi::memcpy_async(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyHostToDevice,stream)?;
-                Ok(len)
-            },
-            Alloctype::Host(_) => {
-                ffi::memcpy_async(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyHostToHost,stream)?;
-                Ok(len)
-            }
-        }
+        ffi::memcpy_async(dst.as_mut_ptr(),
+                    self.ptr,
+                    len,
+                    cudaMemcpyKind::cudaMemcpyHostToDevice,stream)?;
+        Ok(len)
     }
 }
 impl<T> Drop for CudaHostPtr<T> {
@@ -692,8 +659,7 @@ impl<T> AsMutVoidPtr for CudaHostPtr<T> {
 pub struct CudaMemoryPoolPtr<T> {
     ptr:*mut T,
     size:usize,
-    memory_pool:Arc<Mutex<MemoryPool>>,
-    alloc_type: Alloctype
+    memory_pool:Arc<Mutex<MemoryPool>>
 }
 impl<T> CudaMemoryPoolPtr<T> {
     /// Create an instance of CudaMemoryPoolPtr
@@ -706,9 +672,9 @@ impl<T> CudaMemoryPoolPtr<T> {
     /// This function may return the following errors
     /// * [`CudaError`]
     pub fn new(size: usize,memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CudaMemoryPoolPtr<T>, CudaError> {
-        let (ptr,alloc_type):(*mut T,Alloctype) = match memory_pool.lock() {
+        let ptr:*mut T = match memory_pool.lock() {
             Ok(mut memory_pool) => {
-                (memory_pool.alloc_device(size)?,memory_pool.get_alloc_type())
+                memory_pool.alloc_device(size)?
             },
             Err(_) => {
                 return Err(CudaError::InvalidState(String::from(
@@ -721,12 +687,7 @@ impl<T> CudaMemoryPoolPtr<T> {
             ptr: ptr,
             size: size,
             memory_pool:Arc::clone(memory_pool),
-            alloc_type: alloc_type
         })
-    }
-
-    pub fn get_alloc_type(&self) -> Alloctype {
-        self.alloc_type
     }
 }
 impl<T> CudaMemoryPoolPtr<T> where T: Default + Debug {
@@ -797,77 +758,29 @@ impl<T: Default + Debug> Memory<T> for CudaMemoryPoolPtr<T> {
 }
 impl<T: Default + Debug> MemoryMoveTo<T,CudaHostPtr<T>> for CudaMemoryPoolPtr<T> {
     fn memcpy_to(&self, dst: &mut CudaHostPtr<T>, len: usize) -> Result<usize, Error> {
-        match self.alloc_type {
-            Alloctype::Device => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyDeviceToHost)?;
-                Ok(len)
-            },
-            Alloctype::Host(_) => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyHostToHost)?;
-                Ok(len)
-
-            }
-        }
+        ffi::memcpy(dst.as_mut_ptr(),
+                    self.ptr,
+                    len,
+                    cudaMemcpyKind::cudaMemcpyDeviceToHost)?;
+        Ok(len)
     }
 }
 impl<T: Default + Debug> MemoryMoveTo<T,CudaPtr<T>> for CudaMemoryPoolPtr<T> {
     fn memcpy_to(&self, dst: &mut CudaPtr<T>, len: usize) -> Result<usize, Error> {
-        match self.alloc_type {
-            Alloctype::Device => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyDeviceToDevice)?;
-                Ok(len)
-            },
-            Alloctype::Host(_) => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyHostToDevice)?;
-                Ok(len)
-            }
-        }
+        ffi::memcpy(dst.as_mut_ptr(),
+                    self.ptr,
+                    len,
+                    cudaMemcpyKind::cudaMemcpyDeviceToDevice)?;
+        Ok(len)
     }
 }
 impl<T: Default + Debug> MemoryMoveTo<T,CudaMemoryPoolPtr<T>> for CudaMemoryPoolPtr<T> {
     fn memcpy_to(&self, dst: &mut CudaMemoryPoolPtr<T>, len: usize) -> Result<usize, Error> {
-        match (self.get_alloc_type(),dst.get_alloc_type()) {
-            (Alloctype::Device,Alloctype::Device) => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyDeviceToDevice)?;
-                Ok(len)
-            },
-            (Alloctype::Host(_),Alloctype::Device) => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyHostToDevice)?;
-                Ok(len)
-            },
-            (Alloctype::Device,Alloctype::Host(_)) => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyDeviceToHost)?;
-                Ok(len)
-            },
-            (Alloctype::Host(_),Alloctype::Host(_)) => {
-                ffi::memcpy(dst.as_mut_ptr(),
-                            self.ptr,
-                            len,
-                            cudaMemcpyKind::cudaMemcpyHostToHost)?;
-                Ok(len)
-            }
-        }
+        ffi::memcpy(dst.as_mut_ptr(),
+                    self.ptr,
+                    len,
+                    cudaMemcpyKind::cudaMemcpyDeviceToDevice)?;
+        Ok(len)
     }
 }
 impl<T> Drop for CudaMemoryPoolPtr<T> {

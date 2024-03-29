@@ -6,7 +6,7 @@ use libc::c_uint;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcublas_sys::{cublasDgemm_v2, cublasDgemv_v2, cublasOperation_t, cublasSgemm_v2, cublasSgemv_v2, cublasStatus_t};
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, SerializedVec, SerializedVecView};
-use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, CudaTensor1dPtr, CudaTensor2dPtr, DataTypeInfo, ffi, Kernel, Memory, MemoryMoveTo};
+use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, CudaTensor1dPtr, CudaTensor2dPtr, DataTypeInfo, Kernel, Memory, MemoryMoveTo};
 use crate::cuda::kernel::device::{DiffLinearForward, DiffLinearForwardArgs};
 use crate::device::{DeviceCpu, DeviceGpu, DeviceMemoryPool, DeviceReduce};
 use crate::error::{EvaluateError, TrainingError};
@@ -289,8 +289,6 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,NI,N
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                ffi::device_synchronize()?;
-
                 Ok(output_ptr)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
@@ -452,8 +450,6 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,NI,N
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                ffi::device_synchronize()?;
-
                 Ok(output_ptr)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
@@ -609,8 +605,6 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,NI,N
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                ffi::device_synchronize()?;
-
                 Ok(output_ptr)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
@@ -773,8 +767,6 @@ impl<const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,NI,N
             )
         } {
             cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
-                ffi::device_synchronize()?;
-
                 Ok(output_ptr)
             },
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {

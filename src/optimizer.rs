@@ -88,7 +88,6 @@ impl<U> Optimizer<U,DeviceGpu<U>> for SGD<U,DeviceGpu<U>>
         kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
-        kernel.device_synchronize()?;
 
         Ok(())
     }
@@ -246,7 +245,6 @@ impl<U> Optimizer<U,DeviceGpu<U>> for MomentumSGD<U,DeviceGpu<U>,CudaMemoryPoolP
         kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
-        kernel.device_synchronize()?;
 
         Ok(())
     }
@@ -372,7 +370,6 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adagrad<U,DeviceGpu<U>,CudaMemoryPoolPtr<U
         kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
-        kernel.device_synchronize()?;
 
         Ok(())
     }
@@ -478,7 +475,6 @@ impl<U> Optimizer<U,DeviceGpu<U>> for RMSprop<U,DeviceGpu<U>,CudaMemoryPoolPtr<U
         kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
-        kernel.device_synchronize()?;
 
         Ok(())
     }
@@ -606,7 +602,6 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adam<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>
         kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
-        kernel.device_synchronize()?;
 
         self.b1t = self.b1t * self.b1;
         self.b2t = self.b2t * self.b2;

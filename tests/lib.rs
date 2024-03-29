@@ -33,7 +33,7 @@ use nncombinator::layer::input::InputLayer;
 use nncombinator::layer::linear::{DiffLinearLayerBuilder, LinearLayerBuilder};
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
-use nncombinator::optimizer::{MomentumSGDBuilder, SGDBuilder};
+use nncombinator::optimizer::{MomentumSGDBuilder};
 
 use crate::common::SHARED_MEMORY_POOL;
 

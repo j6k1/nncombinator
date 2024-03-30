@@ -1,5 +1,6 @@
 //! Definition of various errors
 use std::{error, fmt, io};
+use std::array::TryFromSliceError;
 use std::ffi::CStr;
 use std::fmt::{Debug, Formatter};
 use std::num::ParseFloatError;
@@ -36,7 +37,9 @@ pub enum TrainingError {
     /// Error that occurs when calling a function that is not supported by the specification
     UnsupportedOperationError(UnsupportedOperationError),
     /// Error raised when cast of primitive type fails
-    TypeCastError(String)
+    TypeCastError(String),
+    /// Error raised if cast to fixed-length array fails
+    TryFromSliceError(TryFromSliceError)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -54,6 +57,7 @@ impl fmt::Display for TrainingError {
             TrainingError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e),
             TrainingError::UnsupportedOperationError(e) => write!(f,"unsupported operation. ({})",e),
             TrainingError::TypeCastError(s) => write!(f,"{}",s),
+            TrainingError::TryFromSliceError(e) => write!(f,"{}",e)
         }
     }
 }
@@ -73,6 +77,7 @@ impl error::Error for TrainingError {
             TrainingError::InvalidStateError(_) => "Invalid state.",
             TrainingError::UnsupportedOperationError(_) => "unsupported operation.",
             TrainingError::TypeCastError(_) => "Typecast failed.",
+            TrainingError::TryFromSliceError(_) => "Conversion to fixed-length array failed.",
         }
     }
 
@@ -91,6 +96,7 @@ impl error::Error for TrainingError {
             TrainingError::InvalidStateError(e) => Some(e),
             TrainingError::UnsupportedOperationError(e) => Some(e),
             TrainingError::TypeCastError(_) => None,
+            TrainingError::TryFromSliceError(e) => Some(e)
         }
     }
 }
@@ -190,6 +196,11 @@ impl From<rcudnn::Error> for ConfigReadError {
         ConfigReadError::CudnnError(err)
     }
 }
+impl From<TryFromSliceError> for TrainingError {
+    fn from(err: TryFromSliceError) -> TrainingError {
+        TrainingError::TryFromSliceError(err)
+    }
+}
 /// Errors caused by generating fixed-length arrays from different size Vecs
 #[derive(Debug)]
 pub struct SizeMismatchError(pub usize, pub usize);
@@ -263,7 +274,9 @@ pub enum EvaluateError {
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidStateError(InvalidStateError),
     /// Error raised when cast of primitive type fails
-    TypeCastError(String)
+    TypeCastError(String),
+    /// Error raised if cast to fixed-length array fails
+    TryFromSliceError(TryFromSliceError)
 }
 impl fmt::Display for EvaluateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -275,6 +288,7 @@ impl fmt::Display for EvaluateError {
             EvaluateError::SizeMismatchError(e) => write!(f,"{}",e),
             EvaluateError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e),
             EvaluateError::TypeCastError(s) => write!(f,"{}",s),
+            EvaluateError::TryFromSliceError(e) => write!(f,"{}",e)
         }
     }
 }
@@ -288,6 +302,7 @@ impl error::Error for EvaluateError {
             EvaluateError::SizeMismatchError(_) => "memory size does not match.",
             EvaluateError::InvalidStateError(_) => "Invalid state.",
             EvaluateError::TypeCastError(_) => "Typecast failed.",
+            EvaluateError::TryFromSliceError(_) => "Conversion to fixed-length array failed."
         }
     }
 
@@ -299,8 +314,8 @@ impl error::Error for EvaluateError {
             EvaluateError::CudaRuntimeError(_) => None,
             EvaluateError::SizeMismatchError(e) => Some(e),
             EvaluateError::InvalidStateError(e) => Some(e),
-            EvaluateError::TypeCastError(_) => None
-
+            EvaluateError::TypeCastError(_) => None,
+            EvaluateError::TryFromSliceError(e) => Some(e)
         }
     }
 }
@@ -332,6 +347,11 @@ impl From<SizeMismatchError> for EvaluateError {
 impl From<InvalidStateError> for EvaluateError {
     fn from(err: InvalidStateError) -> EvaluateError {
         EvaluateError::InvalidStateError(err)
+    }
+}
+impl From<TryFromSliceError> for EvaluateError {
+    fn from(err: TryFromSliceError) -> EvaluateError {
+        EvaluateError::TryFromSliceError(err)
     }
 }
 #[derive(Debug)]
@@ -577,7 +597,9 @@ pub enum LayerInstantiationError {
     /// Error in cudnn processing
     CudnnError(rcudnn::Error),
     /// Error in build optimizer processing
-    OptimizerBuildError(OptimizerBuildError)
+    OptimizerBuildError(OptimizerBuildError),
+    /// Errors caused by generating fixed-length arrays from different size Vecs
+    SizeMismatchError(SizeMismatchError),
 }
 impl fmt::Display for LayerInstantiationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -590,6 +612,9 @@ impl fmt::Display for LayerInstantiationError {
             },
             LayerInstantiationError::OptimizerBuildError(e) => {
                 write!(f,"An unexpected error occurred during build optimizer ({})",e)
+            },
+            LayerInstantiationError::SizeMismatchError(e) => {
+                write!(f,"An unexpected error occurred during layer instantiation ({})",e)
             }
         }
     }
@@ -605,6 +630,9 @@ impl error::Error for LayerInstantiationError {
             },
             LayerInstantiationError::OptimizerBuildError(_) => {
                 "An unexpected error occurred during build optimizer (An error occurred in the process of cudas)."
+            },
+            LayerInstantiationError::SizeMismatchError(_) => {
+                "An unexpected error occurred during layer instantiation. (Error during conversion to fixed length array)."
             }
         }
     }
@@ -613,7 +641,8 @@ impl error::Error for LayerInstantiationError {
         match self {
             LayerInstantiationError::CudaError(ref e) => Some(e),
             LayerInstantiationError::CudnnError(ref e) => Some(e),
-            LayerInstantiationError::OptimizerBuildError(ref e) => Some(e)
+            LayerInstantiationError::OptimizerBuildError(ref e) => Some(e),
+            LayerInstantiationError::SizeMismatchError(ref e) => Some(e)
         }
     }
 }
@@ -630,6 +659,11 @@ impl From<rcudnn::Error> for LayerInstantiationError {
 impl From<OptimizerBuildError> for LayerInstantiationError {
     fn from(err: OptimizerBuildError) -> LayerInstantiationError {
         LayerInstantiationError::OptimizerBuildError(err)
+    }
+}
+impl From<SizeMismatchError> for LayerInstantiationError {
+    fn from(err: SizeMismatchError) -> LayerInstantiationError {
+        LayerInstantiationError::SizeMismatchError(err)
     }
 }
 /// Error when layer instantiation fails

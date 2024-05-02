@@ -1145,6 +1145,24 @@ impl TryFrom<f64> for CudaPtr<f64> {
         Ok(ptr)
     }
 }
+impl TryFrom<i32> for CudaPtr<i32> {
+    type Error = CudaError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        let mut ptr:CudaPtr<i32> = CudaPtr::new(1)?;
+        ptr.memcpy(&value as *const i32,1)?;
+        Ok(ptr)
+    }
+}
+impl TryFrom<i64> for CudaPtr<i64> {
+    type Error = CudaError;
+
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        let mut ptr:CudaPtr<i64> = CudaPtr::new(1)?;
+        ptr.memcpy(&value as *const i64,1)?;
+        Ok(ptr)
+    }
+}
 impl TryFrom<f32> for CudaHostPtr<f32> {
     type Error = CudaError;
 
@@ -1160,6 +1178,24 @@ impl TryFrom<f64> for CudaHostPtr<f64> {
     fn try_from(value: f64) -> Result<Self, Self::Error> {
         let mut ptr:CudaHostPtr<f64> = CudaHostPtr::new(1,cudaHostAllocDefault)?;
         ptr.memcpy(&value as *const f64,1)?;
+        Ok(ptr)
+    }
+}
+impl TryFrom<i32> for CudaHostPtr<i32> {
+    type Error = CudaError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        let mut ptr:CudaHostPtr<i32> = CudaHostPtr::new(1,cudaHostAllocDefault)?;
+        ptr.memcpy(&value as *const i32,1)?;
+        Ok(ptr)
+    }
+}
+impl TryFrom<i64> for CudaHostPtr<i64> {
+    type Error = CudaError;
+
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        let mut ptr:CudaHostPtr<i64> = CudaHostPtr::new(1,cudaHostAllocDefault)?;
+        ptr.memcpy(&value as *const i64,1)?;
         Ok(ptr)
     }
 }

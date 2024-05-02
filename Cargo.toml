@@ -35,6 +35,6 @@ lazy_static = "1.4.0"
 image = "0.24.4"
 mnist = "0.5.0"
 [build-dependencies]
-cc = "1.0.73"
+cc = "1.0.95"
 [profile.test]
 opt-level = 3

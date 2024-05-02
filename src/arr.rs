@@ -1294,20 +1294,24 @@ impl<'a,U,T> From<&'a SerializedVecView<'a,U,T>> for SerializedVec<U,T>
         }
     }
 }
-impl<U,const N:usize> TryFrom<Box<[U]>> for SerializedVec<U,Arr<U,N>> where U: Default + Clone + Send {
+impl<U,T> TryFrom<Box<[U]>> for SerializedVec<U,T> 
+    where U: Default + Clone + Send,
+          for<'a> T: SliceSize + MakeView<'a,U> {
     type Error = SizeMismatchError;
 
     fn try_from(arr: Box<[U]>) -> Result<Self, Self::Error> {
-        if arr.len() % N != 0 {
-            Err(SizeMismatchError(arr.len(),N))
+        let n = T::slice_size();
+
+        if arr.len() % n != 0 {
+            Err(SizeMismatchError(arr.len(),n))
         } else {
-            let len = arr.len() / N;
+            let len = arr.len() / n;
 
             Ok(SerializedVec {
                 arr: arr,
                 len: len,
                 u:PhantomData::<U>,
-                t: PhantomData::<Arr<U, N>>
+                t: PhantomData::<T>
             })
         }
     }

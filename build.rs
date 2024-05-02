@@ -28,6 +28,7 @@ fn main() {
 	if cfg!(target_os = "windows") {
 		Command::new("nvcc")
 			.args(&["-O3",
+				"-cudart=shared",
 				"src/kernel.cu",
 				// Output static library (.lib)
 				"-lib",

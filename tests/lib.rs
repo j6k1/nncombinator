@@ -33,7 +33,7 @@ use nncombinator::layer::input::InputLayer;
 use nncombinator::layer::linear::{DiffLinearLayerBuilder, LinearLayerBuilder};
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
-use nncombinator::optimizer::{MomentumSGDBuilder};
+use nncombinator::optimizer::{MomentumSGDBuilder, SGDBuilder};
 
 use crate::common::SHARED_MEMORY_POOL;
 
@@ -43,8 +43,8 @@ fn test_mnist_for_cpu() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/100f32).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(100f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/512f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(256f32).sqrt()).unwrap();
 
     let device = DeviceCpu::new().unwrap();
 
@@ -52,11 +52,11 @@ fn test_mnist_for_cpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = SGDBuilder::new(0.01);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+        LinearLayerBuilder::<{ 28*28 },512>::new().build(l,&device,
              move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
              &optimizer_builder
         ).unwrap()
@@ -64,7 +64,7 @@ fn test_mnist_for_cpu() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device,
+        LinearLayerBuilder::<512,256>::new().build(l,&device,
             move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
@@ -72,7 +72,7 @@ fn test_mnist_for_cpu() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,10>::new().build(l,&device,
+        LinearLayerBuilder::<256,10>::new().build(l,&device,
             move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
@@ -103,16 +103,16 @@ fn test_mnist_for_cpu() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(200) {
-            count += 1;
-
+        for teachers in teachers.chunks(64) {
             let batch_data = teachers.iter().map(|(n, path)| {
+                count += 1;
+
                 let img = image::io::Reader::open(path).unwrap().decode().unwrap();
 
                 let pixels = img.as_bytes();
@@ -142,9 +142,13 @@ fn test_mnist_for_cpu() {
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
+
+            println!("total_loss = {}", total_loss);
+            println!("loss_average = {}", total_loss as f32 / count as f32);    
         }
+
         println!("total_loss = {}", total_loss);
-        println!("loss_average = {}", total_loss as f32 / count as f32);
+        println!("loss_average = {}", total_loss as f32 / count as f32);    
     }
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();
@@ -162,9 +166,9 @@ fn test_mnist_for_cpu() {
 
     tests.shuffle(&mut rng);
 
-    let count = tests.len().min(100);
+    let count = tests.len();
 
-    for (n, path) in tests.iter().take(100) {
+    for (n, path) in tests.iter() {
         let img = image::io::Reader::open(path).unwrap().decode().unwrap();
 
         let pixels = img.as_bytes();
@@ -202,8 +206,8 @@ fn test_mnist_for_gpu() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/100f32).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(100f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/512f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(256f32).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
@@ -213,11 +217,11 @@ fn test_mnist_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = SGDBuilder::new(0.01);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+        LinearLayerBuilder::<{ 28*28 },512>::new().build(l,&device,
             move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
@@ -225,7 +229,7 @@ fn test_mnist_for_gpu() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device,
+        LinearLayerBuilder::<512,256>::new().build(l,&device,
             move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
@@ -233,7 +237,7 @@ fn test_mnist_for_gpu() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,10>::new().build(l,&device,
+        LinearLayerBuilder::<256,10>::new().build(l,&device,
         move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
@@ -264,16 +268,16 @@ fn test_mnist_for_gpu() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(200) {
-            count += 1;
-
+        for teachers in teachers.chunks(64) {
             let batch_data = teachers.iter().map(|(n, path)| {
+                count += 1;
+
                 let img = image::io::Reader::open(path).unwrap().decode().unwrap();
 
                 let pixels = img.as_bytes();
@@ -304,8 +308,9 @@ fn test_mnist_for_gpu() {
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
         }
+
         println!("total_loss = {}", total_loss);
-        println!("loss_average = {}", total_loss as f32 / count as f32);
+        println!("loss_average = {}", total_loss as f32 / count as f32);    
     }
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();
@@ -323,9 +328,9 @@ fn test_mnist_for_gpu() {
 
     tests.shuffle(&mut rng);
 
-    let count = tests.len().min(100);
+    let count = tests.len();
 
-    for (n, path) in tests.iter().take(100) {
+    for (n, path) in tests.iter() {
         let img = image::io::Reader::open(path).unwrap().decode().unwrap();
 
         let pixels = img.as_bytes();
@@ -355,7 +360,7 @@ fn test_mnist_for_gpu() {
 
     println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. > 90.)
 }
 #[test]
 fn test_mnist_for_gpu_double() {
@@ -432,9 +437,9 @@ fn test_mnist_for_gpu_double() {
         teachers.shuffle(&mut rng);
 
         for teachers in teachers.chunks(200) {
-            count += 1;
-
             let batch_data = teachers.iter().map(|(n, path)| {
+                count += 1;
+
                 let img = image::io::Reader::open(path).unwrap().decode().unwrap();
 
                 let pixels = img.as_bytes();
@@ -465,8 +470,9 @@ fn test_mnist_for_gpu_double() {
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
         }
+            
         println!("total_loss = {}", total_loss);
-        println!("loss_average = {}", total_loss as f64 / count as f64);
+        println!("loss_average = {}", total_loss as f64 / count as f64);    
     }
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();

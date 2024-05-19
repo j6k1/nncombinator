@@ -354,7 +354,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Backward<U,&Arr<U,NO>,Res
           PI: Debug + Send + Sync,
           OP: Optimizer<U,D> {
     fn backward(&mut self, input: &Arr<U,NO>) -> Result<Arr<U,NI>,TrainingError> {
-        self.device.backward_linear(&self.units,&input)
+        self.device.backward_linear(&self.units,input.into())
     }
 }
 impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Arr2<U,NI,NO>,Arr<U,NO>,P,DeviceCpu<U>,I,PI,OP,NI,NO>
@@ -380,7 +380,7 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U
         let next_loss = self.backward(&loss)?;
 
         let g = s.map(|o| {
-            self.device.backward_weight_gradient(o.into(),&loss)
+            self.device.backward_weight_gradient(o.into(),(&loss).into())
         })?;
 
         let bg = loss;
@@ -416,7 +416,7 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U
         let next_loss = self.backward(&loss)?;
 
         let g = s.map(|o| {
-            self.device.backward_weight_gradient(o.into(),&loss)
+            self.device.backward_weight_gradient(o.into(),(&loss).into())
         })?;
 
         let mut bg = CudaTensor1dPtr::<U,NO>::new(self.device.get_memory_pool())?;

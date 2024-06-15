@@ -417,6 +417,65 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
 }
 template<typename T>
 
+__device__ void forward_linear_batch(const T *input, const T *units, const T *bias, T *output,
+                                     const size_t input_len, const size_t output_len, const size_t batch_size) {
+    extern __shared__ char smem[];
+    T *sdata = reinterpret_cast<T*>(smem);
+
+    if (blockIdx.x < output_len * batch_size) {
+        size_t batch_index = blockIdx.x / output_len;
+
+        size_t tid = threadIdx.x;
+        size_t out_index = blockIdx.x - output_len * batch_index;
+        size_t i = batch_index * input_len + out_index;
+        size_t j = tid;
+        size_t distance = blockDim.x;
+
+        sdata[tid] = (T)0;
+
+        while (j < input_len) {
+            sdata[tid] += input[i + j] * units[j * output_len + out_index];
+            j += distance;
+        }
+        __syncthreads();
+
+        if (tid < 512) {
+            sdata[tid] += sdata[tid + 512];
+        }
+        __syncthreads();
+
+        if (tid < 256) {
+            sdata[tid] += sdata[tid + 256];
+        }
+        __syncthreads();
+
+        if (tid < 128) {
+            sdata[tid] += sdata[tid + 128];
+        }
+        __syncthreads();
+
+        if (tid < 64) {
+            sdata[tid] += sdata[tid + 64];
+        }
+        __syncthreads();
+
+        if (tid < 32) {
+            sdata[tid] += sdata[tid + 32];
+        }
+
+        __syncthreads();
+
+        if (tid > 0 && tid < 32) {
+            sdata[0] += sdata[tid];
+        }
+
+        if (tid == 0) {
+            output[blockIdx.x] = sdata[0] + bias[blockIdx.x];
+        }
+    }
+}
+template<typename T>
+
 __device__ void loss_linear_batch_by_canonical_link(const T *expected, T *actual, const int nlen, const int batch_size) {
     const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
@@ -697,6 +756,16 @@ extern "C" {
 
     __global__ void reduce_linear_batch_double(const double *input, double *output, const int nlen, const int batch_size) {
         reduce_linear_batch(input,output,nlen,batch_size);
+    }
+
+    __global__ void forward_linear_batch_float(const float *input, const float *units, const float *bias, float *output,
+                                         const size_t input_len, const size_t output_len, const size_t batch_size) {
+        forward_linear_batch(input,units,bias,output,input_len,output_len,batch_size);
+    }
+
+    __global__ void forward_linear_batch_double(const double *input, const double *units, const double *bias, double *output,
+                                         const size_t input_len, const size_t output_len, const size_t batch_size) {
+        forward_linear_batch(input,units,bias,output,input_len,output_len,batch_size);
     }
 
     __global__ void loss_linear_batch_by_canonical_link_float(const float *expected, float *actual, const int nlen, const int batch_size) {

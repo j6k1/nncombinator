@@ -427,7 +427,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
 
         size_t tid = threadIdx.x;
         size_t out_index = blockIdx.x - output_len * batch_index;
-        size_t i = batch_index * input_len + out_index;
+        size_t i = batch_index * input_len;
         size_t j = tid;
         size_t distance = blockDim.x;
 
@@ -465,12 +465,34 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
 
         __syncthreads();
 
-        if (tid > 0 && tid < 32) {
-            sdata[0] += sdata[tid];
+        if (tid < 16) {
+            sdata[tid] += sdata[tid + 16];
+        }
+
+        __syncthreads();
+
+        if (tid < 8) {
+            sdata[tid] += sdata[tid + 8];
+        }
+
+        __syncthreads();
+
+        if (tid < 4) {
+            sdata[tid] += sdata[tid + 4];
+        }
+        __syncthreads();
+
+        if (tid < 2) {
+            sdata[tid] += sdata[tid + 2];
+        }
+        __syncthreads();
+
+        if (tid < 1) {
+            sdata[tid] += sdata[tid + 1];
         }
 
         if (tid == 0) {
-            output[blockIdx.x] = sdata[0] + bias[blockIdx.x];
+            output[blockIdx.x] = sdata[0] + bias[out_index];
         }
     }
 }

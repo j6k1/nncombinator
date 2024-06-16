@@ -134,6 +134,7 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
         if (tid > 0 && tid < 32) {
             alpha_sdata[0] = _fmax(alpha_sdata[tid],alpha_sdata[0]);
         }
+
         __syncthreads();
 
         T alpha = alpha_sdata[0];
@@ -410,6 +411,8 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
             sdata[0] += sdata[tid];
         }
 
+        __syncthreads();
+
         if (tid == 0) {
             output[blockIdx.x] = sdata[0];
         }
@@ -491,6 +494,8 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             sdata[tid] += sdata[tid + 1];
         }
 
+        __syncthreads();
+
         if (tid == 0) {
             output[blockIdx.x] = sdata[0] + bias[out_index];
         }
@@ -518,13 +523,15 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
 
         sdata[tid] = (T)0;
 
+        T g = (T)0;
+
         while (k < batch_size) {
-            const T g = loss[j] * input[i];
-            sdata[tid] += g;
+            g += loss[j] * input[i];
             k += distance;
             i += distance * input_len;
             j += distance * output_len;
         }
+        sdata[tid] = g;
         __syncthreads();
 
         if (tid < 512) {
@@ -545,6 +552,12 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
         if (tid < 64) {
             sdata[tid] += sdata[tid + 64];
         }
+        __syncthreads();
+
+        if (tid < 32) {
+            sdata[tid] += sdata[tid + 32];
+        }
+
         __syncthreads();
 
         if (tid < 32) {
@@ -578,6 +591,8 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
         if (tid < 1) {
             sdata[tid] += sdata[tid + 1];
         }
+
+        __syncthreads();
 
         if (tid == 0) {
             output[blockIdx.x] = sdata[0];
@@ -774,6 +789,8 @@ __device__ void forward_diff_linear(const size_t *indexes, const T *input, const
         if (tid > 0 && tid < 32) {
             sdata[0] += sdata[tid];
         }
+
+        __syncthreads();
 
         if (tid == 0) {
             output[out_index] += sdata[0];

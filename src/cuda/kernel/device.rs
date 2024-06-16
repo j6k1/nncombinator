@@ -276,7 +276,7 @@ impl<'a,const NI:usize,const NO:usize> Kernel for crate::cuda::kernel::device::F
 pub struct LinearGradientBatchArgs<T,const NI:usize,const NO:usize> where T: DataTypeInfo + Debug + Default {
     loss: CudaMemoryPoolPtr<T>,
     input: CudaMemoryPoolPtr<T>,
-    pub output: CudaMemoryPoolPtr<T>,
+    pub output: CudaTensor2dPtr<T,NI,NO>,
     input_len: usize,
     output_len: usize,
     units_size: usize,
@@ -293,7 +293,7 @@ impl<T,const NI:usize,const NO:usize> crate::cuda::kernel::device::LinearGradien
     /// * `batch_len` - batch_count
     pub fn new(loss:CudaMemoryPoolPtr<T>,
                input:CudaMemoryPoolPtr<T>,
-               output:CudaMemoryPoolPtr<T>, batch_size: usize) -> crate::cuda::kernel::device::LinearGradientBatchArgs<T,NI,NO> {
+               output:CudaTensor2dPtr<T,NI,NO>, batch_size: usize) -> crate::cuda::kernel::device::LinearGradientBatchArgs<T,NI,NO> {
         crate::cuda::kernel::device::LinearGradientBatchArgs {
             loss: loss,
             input: input,
@@ -310,7 +310,7 @@ impl<T,const NI:usize,const NO:usize> KernelArgs for crate::cuda::kernel::device
         vec![
             &mut self.loss,
             &mut self.input,
-            &mut self.output,
+            self.output.deref_mut(),
             &mut self.input_len,
             &mut self.output_len,
             &mut self.units_size,

@@ -500,8 +500,8 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
 template<typename T>
 
 __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
-                                const size_t input_len, const size_t output_len,
-                                const size_t units_size, const size_t batch_size) {
+                                      const size_t input_len, const size_t output_len,
+                                      const size_t units_size, const size_t batch_size) {
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
@@ -511,15 +511,16 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
         size_t j = blockIdx.x - output_len * i;
         size_t k = tid;
 
-        i = i + tid * input_len;
-        j = j + tid * output_len;
+        i = i + k * input_len;
+        j = j + k * output_len;
 
         size_t distance = blockDim.x;
 
         sdata[tid] = (T)0;
 
         while (k < batch_size) {
-            sdata[tid] += loss[j] * input[i];
+            const T g = loss[j] * input[i];
+            sdata[tid] += g;
             k += distance;
             i += distance * input_len;
             j += distance * output_len;

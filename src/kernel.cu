@@ -560,12 +560,6 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
 
         __syncthreads();
 
-        if (tid < 32) {
-            sdata[tid] += sdata[tid + 32];
-        }
-
-        __syncthreads();
-
         if (tid < 16) {
             sdata[tid] += sdata[tid + 16];
         }

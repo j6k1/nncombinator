@@ -10,7 +10,9 @@ extern "C" {
     fn reduce_linear_batch_float(input: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
     fn reduce_linear_batch_double(input: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int) -> c_void;
     fn forward_linear_batch_float(input: *const f32, units: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
-    fn forward_linear_batch_double(input: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
+    fn forward_linear_batch_double(input: *const f64, units: *const f32, output: *mut f64, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
+    fn linear_gradient_batch_float(loss: *const f32, input: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, units_size: size_t, batch_size: size_t) -> c_void;
+    fn linear_gradient_batch_double(loss: *const f64, input: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, units_size: size_t, batch_size: size_t) -> c_void;
     fn loss_linear_batch_by_canonical_link_float(expected: *const f32, actual: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
     fn loss_linear_batch_by_canonical_link_double(expected: *const f64, actual: *mut f64, nlen: c_int, batch_size: c_int) -> c_void;
     fn forward_diff_linear_float(indexes: *const size_t, input: *const f32, units: *const f32, bias: *const f32, output: *mut f32, output_size: size_t, diff_len: size_t) -> c_void;
@@ -268,4 +270,75 @@ impl<'a,const NI:usize,const NO:usize> Kernel for crate::cuda::kernel::device::F
 impl<'a,const NI:usize,const NO:usize> Kernel for crate::cuda::kernel::device::ForwardLinearBatch<'a,f64,NI,NO> {
     const FUNC_PTR: *const c_void = forward_linear_batch_double as *const c_void;
     type Args = crate::cuda::kernel::device::ForwardLinearBatchArgs<'a,f64,NI,NO>;
+}
+/// Defines the list that is passed to the cuda kernel function as arguments
+/// for the computation of the amount of update of the linear layer weights.
+pub struct LinearGradientBatchArgs<T,const NI:usize,const NO:usize> where T: DataTypeInfo + Debug + Default {
+    loss: CudaMemoryPoolPtr<T>,
+    input: CudaMemoryPoolPtr<T>,
+    pub output: CudaMemoryPoolPtr<T>,
+    input_len: usize,
+    output_len: usize,
+    units_size: usize,
+    batch_size: usize
+}
+/// Create an instance of an object representing the argument list
+/// for the calculation of the update amount of the linear layer weights.
+impl<T,const NI:usize,const NO:usize> crate::cuda::kernel::device::LinearGradientBatchArgs<T,NI,NO> where T: DataTypeInfo + Debug + Default {
+    /// Create a LinearGradientBatchArgs instance
+    /// # Arguments
+    /// * `loss` - loss
+    /// * `input` - input
+    /// * `output` - output
+    /// * `batch_len` - batch_count
+    pub fn new(loss:CudaMemoryPoolPtr<T>,
+               input:CudaMemoryPoolPtr<T>,
+               output:CudaMemoryPoolPtr<T>, batch_size: usize) -> crate::cuda::kernel::device::LinearGradientBatchArgs<T,NI,NO> {
+        crate::cuda::kernel::device::LinearGradientBatchArgs {
+            loss: loss,
+            input: input,
+            output: output,
+            input_len: NI,
+            output_len: NO,
+            units_size: NI * NO,
+            batch_size: batch_size
+        }
+    }
+}
+impl<T,const NI:usize,const NO:usize> KernelArgs for crate::cuda::kernel::device::LinearGradientBatchArgs<T,NI,NO> where T: DataTypeInfo + Debug + Default {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
+        vec![
+            &mut self.loss,
+            &mut self.input,
+            &mut self.output,
+            &mut self.input_len,
+            &mut self.output_len,
+            &mut self.units_size,
+            &mut self.batch_size
+        ]
+    }
+}
+/// Implementation of gradient calculation for linear layers
+pub struct LinearGradientBatch<T,const NI:usize,const NO:usize> where T: DataTypeInfo + Debug + Default {
+    t:PhantomData<T>,
+    ni:PhantomData<[();NI]>,
+    no:PhantomData<[();NO]>
+}
+impl<T,const NI:usize,const NO:usize> crate::cuda::kernel::device::LinearGradientBatch<T,NI,NO,> where T: DataTypeInfo + Debug + Default {
+    /// Create a LinearGradientBatch instance
+    pub fn new() -> crate::cuda::kernel::device::LinearGradientBatch<T,NI,NO> {
+        crate::cuda::kernel::device::LinearGradientBatch {
+            t: PhantomData::<T>,
+            ni:PhantomData::<[();NI]>,
+            no:PhantomData::<[();NO]>
+        }
+    }
+}
+impl<const NI:usize,const NO:usize> Kernel for crate::cuda::kernel::device::LinearGradientBatch<f32,NI,NO> {
+    const FUNC_PTR: *const c_void = linear_gradient_batch_float as *const c_void;
+    type Args = crate::cuda::kernel::device::LinearGradientBatchArgs<f32,NI,NO>;
+}
+impl<const NI:usize,const NO:usize> Kernel for crate::cuda::kernel::device::LinearGradientBatch<f64,NI,NO> {
+    const FUNC_PTR: *const c_void = linear_gradient_batch_double as *const c_void;
+    type Args = crate::cuda::kernel::device::LinearGradientBatchArgs<f64,NI,NO>;
 }

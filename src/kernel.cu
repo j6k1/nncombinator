@@ -507,7 +507,7 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
 
         size_t tid = threadIdx.x;
         size_t input_index = blockIdx.x - input_len * batch_index;
-        size_t i = batch_index * input_len;
+        size_t i = batch_index * output_len;
         size_t j = tid;
         size_t distance = blockDim.x;
 

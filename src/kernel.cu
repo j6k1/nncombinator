@@ -404,13 +404,11 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
         if (tid < 32) {
             sdata[tid] += sdata[tid + 32];
         }
-
         __syncthreads();
 
         if (tid > 0 && tid < 32) {
             sdata[0] += sdata[tid];
         }
-
         __syncthreads();
 
         if (tid == 0) {
@@ -465,19 +463,16 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
         if (tid < 32) {
             sdata[tid] += sdata[tid + 32];
         }
-
         __syncthreads();
 
         if (tid < 16) {
             sdata[tid] += sdata[tid + 16];
         }
-
         __syncthreads();
 
         if (tid < 8) {
             sdata[tid] += sdata[tid + 8];
         }
-
         __syncthreads();
 
         if (tid < 4) {
@@ -494,8 +489,6 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             sdata[tid] += sdata[tid + 1];
         }
 
-        __syncthreads();
-
         if (tid == 0) {
             output[blockIdx.x] = sdata[0] + bias[out_index];
         }
@@ -504,34 +497,25 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
 
 template<typename T>
 
-__device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
-                                      const size_t input_len, const size_t output_len,
-                                      const size_t units_size, const size_t batch_size) {
+__device__ void backward_linear_batch(const T *loss, const T *units, T *output,
+                                     const size_t input_len, const size_t output_len, const size_t batch_size) {
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
-    if (blockIdx.x < units_size) {
+    if (blockIdx.x < input_len * batch_size) {
+        size_t batch_index = blockIdx.x / input_len;
+
         size_t tid = threadIdx.x;
-        size_t i = blockIdx.x / output_len;
-        size_t j = blockIdx.x - output_len * i;
-        size_t k = tid;
-
-        i = i + k * input_len;
-        j = j + k * output_len;
-
+        size_t i = batch_index * input_len;
+        size_t j = tid;
         size_t distance = blockDim.x;
 
         sdata[tid] = (T)0;
 
-        T g = (T)0;
-
-        while (k < batch_size) {
-            g += loss[j] * input[i];
-            k += distance;
-            i += distance * input_len;
-            j += distance * output_len;
+        while (j < output_len) {
+            sdata[tid] += loss[i + j] * units[i * output_len + j];
+            j += distance;
         }
-        sdata[tid] = g;
         __syncthreads();
 
         if (tid < 512) {
@@ -557,19 +541,16 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
         if (tid < 32) {
             sdata[tid] += sdata[tid + 32];
         }
-
         __syncthreads();
 
         if (tid < 16) {
             sdata[tid] += sdata[tid + 16];
         }
-
         __syncthreads();
 
         if (tid < 8) {
             sdata[tid] += sdata[tid + 8];
         }
-
         __syncthreads();
 
         if (tid < 4) {
@@ -586,6 +567,69 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
             sdata[tid] += sdata[tid + 1];
         }
 
+        if (tid == 0) {
+            output[blockIdx.x] = sdata[0];
+        }
+    }
+}
+
+template<typename T>
+
+__device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
+                                      const size_t input_len, const size_t output_len,
+                                      const size_t units_size, const size_t batch_size) {
+    extern __shared__ char smem[];
+    T *sdata = reinterpret_cast<T*>(smem);
+
+    if (blockIdx.x < units_size) {
+        size_t tid = threadIdx.x;
+        size_t i = blockIdx.x / output_len;
+        size_t j = blockIdx.x - output_len * i;
+        size_t k = tid;
+
+        i = i + k * input_len;
+        j = j + k * output_len;
+
+        size_t distance = blockDim.x;
+
+        sdata[tid] = (T)0;
+
+        while (k < batch_size) {
+            sdata[tid] += loss[j] * input[i];
+            k += distance;
+            i += distance * input_len;
+            j += distance * output_len;
+        }
+        __syncthreads();
+
+        if (tid < 512) {
+            sdata[tid] += sdata[tid + 512];
+        }
+        __syncthreads();
+
+        if (tid < 256) {
+            sdata[tid] += sdata[tid + 256];
+        }
+        __syncthreads();
+
+        if (tid < 128) {
+            sdata[tid] += sdata[tid + 128];
+        }
+        __syncthreads();
+
+        if (tid < 64) {
+            sdata[tid] += sdata[tid + 64];
+        }
+        __syncthreads();
+
+        if (tid < 32) {
+            sdata[tid] += sdata[tid + 32];
+        }
+        __syncthreads();
+
+        if (tid > 0 && tid < 32) {
+            sdata[0] += sdata[tid];
+        }
         __syncthreads();
 
         if (tid == 0) {
@@ -888,6 +932,16 @@ extern "C" {
     __global__ void forward_linear_batch_double(const double *input, const double *units, const double *bias, double *output,
                                          const size_t input_len, const size_t output_len, const size_t batch_size) {
         forward_linear_batch(input,units,bias,output,input_len,output_len,batch_size);
+    }
+
+    __global__ void backward_linear_batch_float(const float *loss, const float *units, float *output,
+                                         const size_t input_len, const size_t output_len, const size_t batch_size) {
+        backward_linear_batch(loss,units,output,input_len,output_len,batch_size);
+    }
+
+    __global__ void backward_linear_batch_double(const double *loss, const double *units, double *output,
+                                         const size_t input_len, const size_t output_len, const size_t batch_size) {
+        backward_linear_batch(loss,units,output,input_len,output_len,batch_size);
     }
 
     __global__ void linear_gradient_batch_float(const float *loss, const float *input, float *output,

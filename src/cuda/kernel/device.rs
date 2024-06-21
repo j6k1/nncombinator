@@ -9,8 +9,10 @@ use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaMemoryPoolPtr, CudaPtr, CudaTen
 extern "C" {
     fn reduce_linear_batch_float(input: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
     fn reduce_linear_batch_double(input: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int) -> c_void;
-    fn forward_linear_batch_float(input: *const f32, units: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
-    fn forward_linear_batch_double(input: *const f64, units: *const f32, output: *mut f64, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
+    fn forward_linear_batch_float(input: *const f32, units: *const f32, bias: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
+    fn forward_linear_batch_double(input: *const f64, units: *const f64, bias: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
+    fn backward_linear_batch_float(loss: *const f32, units: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
+    fn backward_linear_batch_double(loss: *const f64, units: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
     fn linear_gradient_batch_float(loss: *const f32, input: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, units_size: size_t, batch_size: size_t) -> c_void;
     fn linear_gradient_batch_double(loss: *const f64, input: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, units_size: size_t, batch_size: size_t) -> c_void;
     fn loss_linear_batch_by_canonical_link_float(expected: *const f32, actual: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
@@ -213,8 +215,9 @@ pub struct ForwardLinearBatchArgs<'a,T,const NI:usize,const NO:usize> where T: D
 impl<'a,T,const NI:usize,const NO:usize> crate::cuda::kernel::device::ForwardLinearBatchArgs<'a,T,NI,NO> where T: DataTypeInfo + Debug + Default {
     /// Create a ReduceLinearBatchArgs instance
     /// # Arguments
-    /// * `input` - input
+    /// * `input` - input0
     /// * `units` - weight
+    /// * `bias` - bias
     /// * `output` - output
     /// * `batch_len` - batch_count
     pub fn new(input:CudaMemoryPoolPtr<T>,
@@ -270,6 +273,76 @@ impl<'a,const NI:usize,const NO:usize> Kernel for crate::cuda::kernel::device::F
 impl<'a,const NI:usize,const NO:usize> Kernel for crate::cuda::kernel::device::ForwardLinearBatch<'a,f64,NI,NO> {
     const FUNC_PTR: *const c_void = forward_linear_batch_double as *const c_void;
     type Args = crate::cuda::kernel::device::ForwardLinearBatchArgs<'a,f64,NI,NO>;
+}
+/// Defines the list that is passed to the cuda kernel function as arguments for
+/// the computation of the error back propagation of the linear layer.
+pub struct BackwardLinearBatchArgs<'a,T,const NI:usize,const NO:usize> where T: DataTypeInfo + Debug + Default {
+    loss: CudaMemoryPoolPtr<T>,
+    units: CudaConstPtr<'a,CudaTensor2dPtr<T,NI,NO>>,
+    pub output: CudaMemoryPoolPtr<T>,
+    input_len: usize,
+    output_len: usize,
+    batch_size: usize
+}
+/// Create an instance of an object representing the list of arguments during
+/// the computation of the error back propagation of the linear layer.
+impl<'a,T,const NI:usize,const NO:usize> crate::cuda::kernel::device::BackwardLinearBatchArgs<'a,T,NI,NO> where T: DataTypeInfo + Debug + Default {
+    /// Create a ReduceLinearBatchArgs instance
+    /// # Arguments
+    /// * `input` - input
+    /// * `units` - weight
+    /// * `output` - output
+    /// * `batch_len` - batch_count
+    pub fn new(loss:CudaMemoryPoolPtr<T>,
+               units: CudaConstPtr<'a,CudaTensor2dPtr<T,NI,NO>>,
+               output:CudaMemoryPoolPtr<T>, batch_size: usize) -> crate::cuda::kernel::device::BackwardLinearBatchArgs<'a,T,NI,NO> {
+        crate::cuda::kernel::device::BackwardLinearBatchArgs {
+            loss: loss,
+            units: units,
+            output: output,
+            input_len: NI,
+            output_len: NO,
+            batch_size: batch_size
+        }
+    }
+}
+impl<'a,T,const NI:usize,const NO:usize> KernelArgs for crate::cuda::kernel::device::BackwardLinearBatchArgs<'a,T,NI,NO> where T: DataTypeInfo + Debug + Default {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
+        vec![
+            &mut self.loss,
+            &mut self.units,
+            &mut self.output,
+            &mut self.input_len,
+            &mut self.output_len,
+            &mut self.batch_size
+        ]
+    }
+}
+/// Implementation of error back propagation calculations for linear layers
+pub struct BackwardLinearBatch<'a,T,const NI:usize,const NO:usize> where T: DataTypeInfo + Debug + Default {
+    t:PhantomData<T>,
+    ni:PhantomData<[();NI]>,
+    no:PhantomData<[();NO]>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,const NI:usize,const NO:usize> crate::cuda::kernel::device::BackwardLinearBatch<'a,T,NI,NO,> where T: DataTypeInfo + Debug + Default {
+    /// Create a BackwardLinearBatch instance
+    pub fn new() -> crate::cuda::kernel::device::BackwardLinearBatch<'a,T,NI,NO> {
+        crate::cuda::kernel::device::BackwardLinearBatch {
+            t: PhantomData::<T>,
+            ni:PhantomData::<[();NI]>,
+            no:PhantomData::<[();NO]>,
+            l:PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,const NI:usize,const NO:usize> Kernel for crate::cuda::kernel::device::BackwardLinearBatch<'a,f32,NI,NO> {
+    const FUNC_PTR: *const c_void = backward_linear_batch_float as *const c_void;
+    type Args = crate::cuda::kernel::device::BackwardLinearBatchArgs<'a,f32,NI,NO>;
+}
+impl<'a,const NI:usize,const NO:usize> Kernel for crate::cuda::kernel::device::BackwardLinearBatch<'a,f64,NI,NO> {
+    const FUNC_PTR: *const c_void = backward_linear_batch_double as *const c_void;
+    type Args = crate::cuda::kernel::device::BackwardLinearBatchArgs<'a,f64,NI,NO>;
 }
 /// Defines the list that is passed to the cuda kernel function as arguments
 /// for the computation of the amount of update of the linear layer weights.

@@ -406,10 +406,29 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
         }
         __syncthreads();
 
-        if (tid > 0 && tid < 32) {
-            sdata[0] += sdata[tid];
+        if (tid < 16) {
+            sdata[tid] += sdata[tid + 16];
         }
         __syncthreads();
+
+        if (tid < 8) {
+            sdata[tid] += sdata[tid + 8];
+        }
+        __syncthreads();
+
+        if (tid < 4) {
+            sdata[tid] += sdata[tid + 4];
+        }
+        __syncthreads();
+
+        if (tid < 2) {
+            sdata[tid] += sdata[tid + 2];
+        }
+        __syncthreads();
+
+        if (tid < 1) {
+            sdata[tid] += sdata[tid + 1];
+        }
 
         if (tid == 0) {
             output[blockIdx.x] = sdata[0];
@@ -628,10 +647,29 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
         }
         __syncthreads();
 
-        if (tid > 0 && tid < 32) {
-            sdata[0] += sdata[tid];
+        if (tid < 16) {
+            sdata[tid] += sdata[tid + 16];
         }
         __syncthreads();
+
+        if (tid < 8) {
+            sdata[tid] += sdata[tid + 8];
+        }
+        __syncthreads();
+
+        if (tid < 4) {
+            sdata[tid] += sdata[tid + 4];
+        }
+        __syncthreads();
+
+        if (tid < 2) {
+            sdata[tid] += sdata[tid + 2];
+        }
+        __syncthreads();
+
+        if (tid < 1) {
+            sdata[tid] += sdata[tid + 1];
+        }
 
         if (tid == 0) {
             output[blockIdx.x] = sdata[0];

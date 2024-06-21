@@ -142,9 +142,6 @@ fn test_mnist_for_cpu() {
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
-
-            println!("total_loss = {}", total_loss);
-            println!("loss_average = {}", total_loss as f32 / count as f32);    
         }
 
         println!("total_loss = {}", total_loss);

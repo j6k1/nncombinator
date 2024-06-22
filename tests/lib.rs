@@ -365,8 +365,8 @@ fn test_mnist_for_gpu_double() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f64>::new(0.0, (2f64/(28f64*28f64)).sqrt()).unwrap();
-    let n2 = Normal::<f64>::new(0.0, (2f64/100f64).sqrt()).unwrap();
-    let n3 = Normal::<f64>::new(0.0, 1f64/(100f64).sqrt()).unwrap();
+    let n2 = Normal::<f64>::new(0.0, (2f64/512f64).sqrt()).unwrap();
+    let n3 = Normal::<f64>::new(0.0, 1f64/(256f64).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
@@ -380,7 +380,7 @@ fn test_mnist_for_gpu_double() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+        LinearLayerBuilder::<{ 28*28 },512>::new().build(l,&device,
         move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
@@ -388,7 +388,7 @@ fn test_mnist_for_gpu_double() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device,
+        LinearLayerBuilder::<512,256>::new().build(l,&device,
         move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
@@ -396,7 +396,7 @@ fn test_mnist_for_gpu_double() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,10>::new().build(l,&device,
+        LinearLayerBuilder::<256,10>::new().build(l,&device,
         move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
@@ -427,13 +427,13 @@ fn test_mnist_for_gpu_double() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
-    for _ in 0..5 {
+    for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for teachers in teachers.chunks(200) {
+        for teachers in teachers.chunks(64) {
             let batch_data = teachers.iter().map(|(n, path)| {
                 count += 1;
 
@@ -487,9 +487,9 @@ fn test_mnist_for_gpu_double() {
 
     tests.shuffle(&mut rng);
 
-    let count = tests.len().min(100);
+    let count = tests.len();
 
-    for (n, path) in tests.iter().take(100) {
+    for (n, path) in tests.iter() {
         let img = image::io::Reader::open(path).unwrap().decode().unwrap();
 
         let pixels = img.as_bytes();

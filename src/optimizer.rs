@@ -315,11 +315,19 @@ impl<U> Adagrad<U,DeviceCpu<U>,Box<[U]>> where U: UnitValue<U> {
     /// Create an instance of Adagrad
     /// # Arguments
     /// * `size` - input size
-    pub fn new(_:&DeviceCpu<U>,size:usize) -> Adagrad<U,DeviceCpu<U>,Box<[U]>> {
+    pub fn new(device:&DeviceCpu<U>,size:usize) -> Adagrad<U,DeviceCpu<U>,Box<[U]>> {
+        Adagrad::<U,DeviceCpu<U>,_>::with_lr(device,size,U::from_f64(0.01).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of Adagrad with additional parameters other than the default values
+    /// # Arguments
+    /// * `size` - input size
+    /// * `a` - Learning rate
+    pub fn with_lr(_:&DeviceCpu<U>,size:usize,a:U) -> Adagrad<U,DeviceCpu<U>,Box<[U]>> {
         Adagrad {
             d:PhantomData::<DeviceCpu<U>>,
             size:size,
-            a:U::from_f64(0.01).expect("Error in type conversion from f64."),
+            a:a,
             gt:vec![U::default();size].into_boxed_slice(),
             eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
         }
@@ -346,12 +354,20 @@ impl<U> Adagrad<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>> where U: UnitValue<U>, Devi
     /// * `device` - device
     /// * `size` - input size
     pub fn new(device:&DeviceGpu<U>,size:usize) -> Result<Adagrad<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>,OptimizerBuildError> {
+        Adagrad::<U,DeviceGpu<U>,_>::with_lr(device,size,U::from_f64(0.01).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of Adagrad with additional parameters other than the default values
+    /// # Arguments
+    /// * `size` - input size
+    /// * `a` - Learning rate
+    pub fn with_lr(device:&DeviceGpu<U>,size:usize,a:U) -> Result<Adagrad<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>,OptimizerBuildError> {
         Ok(Adagrad {
             d:PhantomData::<DeviceGpu<U>>,
             size:size,
-            a:U::from_f64(0.01).expect("Error in type conversion from f64."),
+            a:a,
             gt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
-            eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
+            eps:U::from_f64(1e-10f64).expect("Error in type conversion from f64.")
         })
     }
 }
@@ -377,12 +393,29 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adagrad<U,DeviceGpu<U>,CudaMemoryPoolPtr<U
 /// Implementation of a builder to generate Adagrad optimizers
 pub struct AdagradBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
+    a:U,
     device:D
 }
 impl<U,D> AdagradBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of Adagrad
+    /// # Arguments
+    /// * `device` - device
     pub fn new(device:&D) -> AdagradBuilder<U,D> {
         AdagradBuilder {
             u:PhantomData::<U>,
+            a:U::from_f64(0.01).expect("Error in type conversion from f64."),
+            device:device.clone()
+        }
+    }
+
+    /// Create an instance of Adagrad with additional parameters other than the default values
+    /// # Arguments
+    /// * `device` - device
+    /// * `a` - Learning rate
+    pub fn with_lr(device:&D,a:U) -> AdagradBuilder<U,D> {
+        AdagradBuilder {
+            u:PhantomData::<U>,
+            a:a,
             device:device.clone()
         }
     }
@@ -392,7 +425,7 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for AdagradBuilder<U,DeviceCpu<U>>
     type Output = Adagrad<U,DeviceCpu<U>,Box<[U]>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Ok(Adagrad::<_,DeviceCpu<U>,_>::new(&self.device,size))
+        Ok(Adagrad::<_,DeviceCpu<U>,_>::with_lr(&self.device,size,self.a))
     }
 }
 impl<U> OptimizerBuilder<U,DeviceGpu<U>> for AdagradBuilder<U,DeviceGpu<U>>
@@ -401,7 +434,7 @@ impl<U> OptimizerBuilder<U,DeviceGpu<U>> for AdagradBuilder<U,DeviceGpu<U>>
     type Output = Adagrad<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Adagrad::<_,DeviceGpu<U>,_>::new(&self.device,size)
+        Adagrad::<_,DeviceGpu<U>,_>::with_lr(&self.device,size,self.a)
     }
 }
 /// RMSprop Implementation
@@ -417,12 +450,29 @@ impl<U> RMSprop<U,DeviceCpu<U>,Box<[U]>> where U: UnitValue<U> {
     /// Create an instance of RMSprop
     /// # Arguments
     /// * `size` - input size
-    pub fn new(_:&DeviceCpu<U>,size:usize) -> RMSprop<U,DeviceCpu<U>,Box<[U]>> {
+    pub fn new(device:&DeviceCpu<U>,size:usize) -> RMSprop<U,DeviceCpu<U>,Box<[U]>> {
+        RMSprop::<U,DeviceCpu<U>,_>::with_lr(device,size,U::from_f64(0.0001f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of RMSprop with Learning rate
+    /// # Arguments
+    /// * `size` - input size
+    /// * `a` - Learning rate
+    pub fn with_lr(device:&DeviceCpu<U>,size:usize,a:U) -> RMSprop<U,DeviceCpu<U>,Box<[U]>> {
+        RMSprop::<U,DeviceCpu<U>,_>::with_params(device,size,a,U::from_f64(0.9f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of RMSprop with additional parameters other than the default values
+    /// # Arguments
+    /// * `size` - input size
+    /// * `a` - Learning rate
+    /// * `mu` - mu
+    pub fn with_params(_:&DeviceCpu<U>,size:usize,a:U,mu:U) -> RMSprop<U,DeviceCpu<U>,Box<[U]>> {
         RMSprop {
             d:PhantomData::<DeviceCpu<U>>,
             size:size,
-            a:U::from_f64(0.0001f64).expect("Error in type conversion from f64."),
-            mu:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+            a:a,
+            mu:mu,
             gt:vec![U::default();size].into_boxed_slice(),
             eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
         }
@@ -449,12 +499,32 @@ impl<U> RMSprop<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>> where U: UnitValue<U>, Devi
     /// # Arguments
     /// * `device` - device
     /// * `size` - input size
-    pub fn new(device:&DeviceGpu<U>,size:usize) -> Result<RMSprop<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>,OptimizerBuildError> {
-       Ok(RMSprop {
+    pub fn new(device:&DeviceGpu<U>,size:usize)
+        -> Result<RMSprop<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>,OptimizerBuildError> {
+        RMSprop::<U,DeviceGpu<U>,_>::with_lr(device,size,U::from_f64(0.0001f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of RMSprop with Learning rate
+    /// # Arguments
+    /// * `size` - input size
+    /// * `a` - Learning rate
+    pub fn with_lr(device:&DeviceGpu<U>,size:usize,a:U)
+        -> Result<RMSprop<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>,OptimizerBuildError> {
+        RMSprop::<U,DeviceGpu<U>,_>::with_params(device,size,a,U::from_f64(0.9f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of RMSprop with additional parameters other than the default values
+    /// # Arguments
+    /// * `size` - input size
+    /// * `a` - Learning rate
+    /// * `mu` - mu
+    pub fn with_params(device:&DeviceGpu<U>,size:usize,a:U,mu:U)
+        -> Result<RMSprop<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>,OptimizerBuildError> {
+        Ok(RMSprop {
             d:PhantomData::<DeviceGpu<U>>,
             size:size,
-            a:U::from_f64(0.0001f64).expect("Error in type conversion from f64."),
-            mu:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+            a:a,
+            mu:mu,
             gt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
             eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
         })
@@ -482,12 +552,36 @@ impl<U> Optimizer<U,DeviceGpu<U>> for RMSprop<U,DeviceGpu<U>,CudaMemoryPoolPtr<U
 /// Implementation of a builder to generate RMSprop optimizers
 pub struct RMSpropBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
+    a:U,
+    mu:U,
     device:D
 }
 impl<U,D> RMSpropBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of RMSpropBuilder
+    /// # Arguments
+    /// * `device` - device
     pub fn new(device:&D) -> RMSpropBuilder<U,D> {
+        RMSpropBuilder::with_lr(device,U::from_f64(0.0001f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of RMSpropBuilder with Learning rate
+    /// # Arguments
+    /// * `device` - device
+    /// * `a` - Learning rate
+    pub fn with_lr(device:&D,a:U) -> RMSpropBuilder<U,D> {
+        RMSpropBuilder::with_params(device,a,U::from_f64(0.9f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of RMSpropBuilder with additional parameters other than the default values
+    /// # Arguments
+    /// * `device` - device
+    /// * `a` - Learning rate
+    /// * `mu` - mu
+    pub fn with_params(device:&D,a:U,mu:U) -> RMSpropBuilder<U,D> {
         RMSpropBuilder {
             u:PhantomData::<U>,
+            a:a,
+            mu:mu,
             device:device.clone()
         }
     }
@@ -497,7 +591,7 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for RMSpropBuilder<U,DeviceCpu<U>>
     type Output = RMSprop<U,DeviceCpu<U>,Box<[U]>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Ok(RMSprop::<_,DeviceCpu<U>,_>::new(&self.device,size))
+        Ok(RMSprop::<_,DeviceCpu<U>,_>::with_params(&self.device,size,self.a,self.mu))
     }
 }
 impl<U> OptimizerBuilder<U,DeviceGpu<U>> for RMSpropBuilder<U,DeviceGpu<U>>
@@ -506,7 +600,7 @@ impl<U> OptimizerBuilder<U,DeviceGpu<U>> for RMSpropBuilder<U,DeviceGpu<U>>
     type Output = RMSprop<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        RMSprop::<_,DeviceGpu<U>,_>::new(&self.device,size)
+        RMSprop::<_,DeviceGpu<U>,_>::with_params(&self.device,size,self.a,self.mu)
     }
 }
 /// Adam Implementation
@@ -526,17 +620,37 @@ impl<U> Adam<U,DeviceCpu<U>,Box<[U]>> where U: UnitValue<U> {
     /// Create an instance of Adam
     /// # Arguments
     /// * `size` - input size
-    pub fn new(_:&DeviceCpu<U>,size:usize) -> Adam<U,DeviceCpu<U>,Box<[U]>> {
+    pub fn new(device:&DeviceCpu<U>,size:usize) -> Adam<U,DeviceCpu<U>,Box<[U]>> {
+        Adam::<U,DeviceCpu<U>,_>::with_lr(device,size,U::from_f64(0.001f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of Adam with Learning rate
+    /// # Arguments
+    /// * `size` - input size
+    /// * `a` - Learning rate
+    pub fn with_lr(device:&DeviceCpu<U>,size:usize,a:U) -> Adam<U,DeviceCpu<U>,Box<[U]>> {
+        Adam::<U,DeviceCpu<U>,_>::with_params(device,size,a,
+                          U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+                          U::from_f64(0.999f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of Adam with additional parameters other than the default values
+    /// # Arguments
+    /// * `size` - input size
+    /// * `a` - Learning rate
+    /// * `b1` - beta1
+    /// * `b2` - beta2
+    pub fn with_params(_:&DeviceCpu<U>,size:usize,a:U,b1:U,b2:U) -> Adam<U,DeviceCpu<U>,Box<[U]>> {
         Adam {
             d:PhantomData::<DeviceCpu<U>>,
             size:size,
-            a:U::from_f64(0.001f64).expect("Error in type conversion from f64."),
+            a:a,
             mt:vec![U::default();size].into_boxed_slice(),
             vt:vec![U::default();size].into_boxed_slice(),
-            b1:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
-            b2:U::from_f64(0.999f64).expect("Error in type conversion from f64."),
-            b1t:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
-            b2t:U::from_f64(0.999f64).expect("Error in type conversion from f64."),
+            b1:b1,
+            b2:b2,
+            b1t:b1,
+            b2t:b2,
             eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
         }
     }
@@ -571,16 +685,39 @@ impl<U> Adam<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>> where U: UnitValue<U>, DeviceG
     /// * `device` - device
     /// * `size` - input size
     pub fn new(device:&DeviceGpu<U>,size:usize) ->Result<Adam<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>,OptimizerBuildError> {
+        Adam::<U,DeviceGpu<U>,_>::with_lr(device,size,U::from_f64(0.001f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of Adam with Learning rate
+    /// # Arguments
+    /// * `device` - device
+    /// * `size` - input size
+    /// * `a` - Learning rate
+    pub fn with_lr(device:&DeviceGpu<U>,size:usize,a:U) ->Result<Adam<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>,OptimizerBuildError> {
+        Adam::<U,DeviceGpu<U>,_>::with_params(device,size,a,
+                          U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+                          U::from_f64(0.999f64).expect("Error in type conversion from f64.")
+        )
+    }
+
+    /// Create an instance of Adam with additional parameters other than the default values
+    /// # Arguments
+    /// * `device` - device
+    /// * `size` - input size
+    /// * `a` - Learning rate
+    /// * `b1` - beta1
+    /// * `b2` - beta2
+    pub fn with_params(device:&DeviceGpu<U>,size:usize,a:U,b1:U,b2:U) ->Result<Adam<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>,OptimizerBuildError> {
         Ok(Adam {
             d:PhantomData::<DeviceGpu<U>>,
             size:size,
-            a:U::from_f64(0.001f64).expect("Error in type conversion from f64."),
+            a:a,
             mt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
             vt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
-            b1:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
-            b2:U::from_f64(0.999f64).expect("Error in type conversion from f64."),
-            b1t:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
-            b2t:U::from_f64(0.999f64).expect("Error in type conversion from f64."),
+            b1:b1,
+            b2:b2,
+            b1t:b1,
+            b2t:b2,
             eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
         })
     }
@@ -612,12 +749,40 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adam<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>
 /// Implementation of a builder to generate Adam optimizers
 pub struct AdamBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
+    a:U,
+    b1:U,
+    b2:U,
     device:D
 }
 impl<U,D> AdamBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of AdamBuilder
+    /// # Arguments
+    /// * `device` - device
     pub fn new(device:&D) -> AdamBuilder<U,D> {
+        AdamBuilder::with_lr(device,U::from_f64(0.001f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of AdamBuilder
+    /// # Arguments
+    /// * `device` - device
+    /// * `a` - Learning rate
+    pub fn with_lr(device:&D,a:U) -> AdamBuilder<U,D> {
+        AdamBuilder::with_params(device,a,U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+                                 U::from_f64(0.999f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of AdamBuilder with additional parameters other than the default values
+    /// # Arguments
+    /// * `device` - device
+    /// * `a` - Learning rate
+    /// * `b1` - beta1
+    /// * `b2` - beta2
+    pub fn with_params(device:&D,a:U,b1:U,b2:U) -> AdamBuilder<U,D> {
         AdamBuilder {
             u:PhantomData::<U>,
+            a:a,
+            b1:b1,
+            b2:b2,
             device:device.clone()
         }
     }
@@ -627,7 +792,7 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for AdamBuilder<U,DeviceCpu<U>>
     type Output = Adam<U,DeviceCpu<U>,Box<[U]>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Ok(Adam::<_,DeviceCpu<U>,_>::new(&self.device,size))
+        Ok(Adam::<_,DeviceCpu<U>,_>::with_params(&self.device,size,self.a,self.b1,self.b2))
     }
 }
 impl<U> OptimizerBuilder<U,DeviceGpu<U>> for AdamBuilder<U,DeviceGpu<U>>
@@ -636,6 +801,6 @@ impl<U> OptimizerBuilder<U,DeviceGpu<U>> for AdamBuilder<U,DeviceGpu<U>>
     type Output = Adam<U,DeviceGpu<U>,CudaMemoryPoolPtr<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Adam::<_,DeviceGpu<U>,_>::new(&self.device,size)
+        Adam::<_,DeviceGpu<U>,_>::with_params(&self.device,size,self.a,self.b1,self.b2)
     }
 }

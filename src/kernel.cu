@@ -15,6 +15,15 @@ __device__ float _fmax(float a, float b) {
 __device__ double _fmax(double a, double b) {
     return std::fmax(a,b);
 }
+
+__device__ float _sqrt(float x) {
+    return __fsqrt_rn(x);
+}
+
+__device__ double _sqrt(double x) {
+    return __dsqrt_rn(x);
+}
+
 #define BLOCK_SHARED 1024
 
 template<typename T>
@@ -769,7 +778,7 @@ __device__ void update_with_adagrad(T *weight, const T *grad, const size_t size,
         const T e = grad[index];
 
         _gt += e * e;
-        w = w - a * e / (sqrt(_gt) + eps);
+        w = w - a * (e / (_sqrt(_gt) + eps));
 
         weight[index] = w;
         gt[index] = _gt;
@@ -787,7 +796,7 @@ __device__ void update_with_rmsprop(T *weight, const T *grad, const size_t size,
         const T e = grad[index];
 
         _gt = mu * _gt + (1 - mu) * e * e;
-        w = w - a * e / (sqrt(_gt) + eps);
+        w = w - a * e / (_sqrt(_gt) + eps);
 
         weight[index] = w;
         gt[index] = _gt;
@@ -808,7 +817,7 @@ __device__ void update_with_adam(T *weight, const T *grad, const size_t size, co
         _mt = b1 * _mt + (1 - b1) * e;
         _vt = b2 * _vt + (1 - b2) * e * e;
 
-        w = w - a * (_mt / (1 - b1t)) / sqrt((_vt / (1 - b2t)) + eps);
+        w = w - a * (_mt / (1 - b1t)) / _sqrt((_vt / (1 - b2t)) + eps);
 
         weight[index] = w;
         mt[index] = _mt;

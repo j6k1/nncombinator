@@ -173,8 +173,6 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
         kernel.launch(dim3 { x: NO as c_uint, y: 1, z: 1},
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * 2 * mem::size_of::<U>())?;
 
-        kernel.device_synchronize()?;
-
         Ok(args.output.read_to_vec()?.try_into()?)
     }
 
@@ -243,8 +241,6 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
         kernel.launch(dim3 { x: (NO * n) as c_uint, y: 1, z: 1},
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * 2 * mem::size_of::<U>())?;
 
-        kernel.device_synchronize()?;
-
         Ok(args.output.read_to_vec()?.try_into()?)
     }
 
@@ -292,8 +288,6 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
 
         kernel.launch(dim3 { x: (NI * NO) as c_uint, y: 1, z: 1},
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
-
-        kernel.device_synchronize()?;
 
         Ok(args.output)
     }

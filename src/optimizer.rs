@@ -246,6 +246,8 @@ impl<U> Optimizer<U,DeviceGpu<U>> for MomentumSGD<U,DeviceGpu<U>,CudaMemoryPoolP
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
 
+        kernel.device_synchronize()?;
+
         Ok(())
     }
 }
@@ -329,7 +331,7 @@ impl<U> Adagrad<U,DeviceCpu<U>,Box<[U]>> where U: UnitValue<U> {
             size:size,
             a:a,
             gt:vec![U::default();size].into_boxed_slice(),
-            eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
+            eps:U::from_f64(1e-10f64).expect("Error in type conversion from f64.")
         }
     }
 }
@@ -342,7 +344,7 @@ impl<U> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>,Box<[U]>> where U: 
 
         for ((w,&e),gt) in w.iter_mut().zip(e.iter()).zip(self.gt.iter_mut()) {
             *gt += e * e;
-            *w = *w - a * e / (gt.sqrt() + self.eps);
+            *w = *w - a * (e / (gt.sqrt() + self.eps));
         }
 
         Ok(())
@@ -387,6 +389,8 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adagrad<U,DeviceGpu<U>,CudaMemoryPoolPtr<U
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0)?;
 
+        kernel.device_synchronize()?;
+
         Ok(())
     }
 }
@@ -401,11 +405,7 @@ impl<U,D> AdagradBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
     /// # Arguments
     /// * `device` - device
     pub fn new(device:&D) -> AdagradBuilder<U,D> {
-        AdagradBuilder {
-            u:PhantomData::<U>,
-            a:U::from_f64(0.01).expect("Error in type conversion from f64."),
-            device:device.clone()
-        }
+        AdagradBuilder::with_lr(device,U::from_f64(0.01).expect("Error in type conversion from f64."))
     }
 
     /// Create an instance of Adagrad with additional parameters other than the default values

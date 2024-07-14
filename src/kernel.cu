@@ -17,11 +17,27 @@ __device__ double _fmax(double a, double b) {
 }
 
 __device__ float _sqrt(float x) {
-    return __fsqrt_rn(x);
+    return sqrtf(x);
 }
 
 __device__ double _sqrt(double x) {
-    return __dsqrt_rn(x);
+    return sqrt(x);
+}
+
+__device__ float _add(float x, float y) {
+    return __fadd_rn(x,y);
+}
+
+__device__ double _add(double x, double y) {
+    return __dadd_rn(x,y);
+}
+
+__device__ float _fma(float x, float y, float z) {
+    return fmaf(x,y,z);
+}
+
+__device__ double _fma(double x, double y, double z) {
+    return fma(x,y,z);
 }
 
 #define BLOCK_SHARED 1024
@@ -244,13 +260,9 @@ __device__ void relu_backward(const T *o, const T *u, T *loss, const size_t unit
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        T x = 0.0;
-
-        if (u[i] > 0.0) {
-            x = 1.0;
+        if (!(u[i] > 0.0)) {
+            loss[i] = 0.0;
         }
-
-        loss[i] = x * loss[i];
     }
 }
 template<typename T>
@@ -449,7 +461,9 @@ template<typename T>
 __device__ void forward_linear_batch(const T *input, const T *units, const T *bias, T *output,
                                      const size_t input_len, const size_t output_len, const size_t batch_size) {
     extern __shared__ char smem[];
-    T *sdata = reinterpret_cast<T*>(smem);
+
+    T *sdata_sum = reinterpret_cast<T*>(&smem[0]);
+    T *sdata_c = reinterpret_cast<T*>(&smem[BLOCK_SHARED * sizeof(T)]);
 
     if (blockIdx.x < output_len * batch_size) {
         size_t batch_index = blockIdx.x / output_len;
@@ -460,65 +474,121 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
         size_t j = tid;
         size_t distance = blockDim.x;
 
-        sdata[tid] = (T)0;
+        sdata_sum[tid] = 0.0;
+        sdata_c[tid] = 0.0;
 
+        T acc = 0.0;
+
+        T c = 0.0;
+
+        /**
+         * Kahan summation algorithm
+         */
         while (j < input_len) {
-            sdata[tid] += input[i + j] * units[j * output_len + out_index];
+            const T y = input[i + j] * units[j * output_len + out_index] - c;
+            const T t = acc + y;
+            c = (t - acc) - y;
+            sdata_c[tid] = c;
+            acc = t;
             j += distance;
         }
+
+        sdata_sum[tid] = acc;
+
         __syncthreads();
 
-        if (tid < 512) {
-            sdata[tid] += sdata[tid + 512];
+        if (tid < 512 && tid + 512 < input_len) {
+            const T y = sdata_sum[tid + 512] - sdata_c[tid] - sdata_c[tid + 512];
+            const T t = sdata_sum[tid] + y;
+            c = (t - sdata_sum[tid]) - y;
+            sdata_c[tid] = c;
+            sdata_sum[tid] = t;
         }
         __syncthreads();
 
-        if (tid < 256) {
-            sdata[tid] += sdata[tid + 256];
+        if (tid < 256 && tid + 256 < input_len) {
+            const T y = sdata_sum[tid + 256] - sdata_c[tid] - sdata_c[tid + 256];
+            const T t = sdata_sum[tid] + y;
+            c = (t - sdata_sum[tid]) - y;
+            sdata_c[tid] = c;
+            sdata_sum[tid] = t;
         }
         __syncthreads();
 
-        if (tid < 128) {
-            sdata[tid] += sdata[tid + 128];
+        if (tid < 128 && tid + 128 < input_len) {
+            const T y = sdata_sum[tid + 128] - sdata_c[tid] - sdata_c[tid + 128];
+            const T t = sdata_sum[tid] + y;
+            c = (t - sdata_sum[tid]) - y;
+            sdata_c[tid] = c;
+            sdata_sum[tid] = t;
         }
         __syncthreads();
 
-        if (tid < 64) {
-            sdata[tid] += sdata[tid + 64];
+        if (tid < 64 && tid + 64 < input_len) {
+            const T y = sdata_sum[tid + 64] - sdata_c[tid] - sdata_c[tid + 64];
+            const T t = sdata_sum[tid] + y;
+            c = (t - sdata_sum[tid]) - y;
+            sdata_c[tid] = c;
+            sdata_sum[tid] = t;
         }
         __syncthreads();
 
-        if (tid < 32) {
-            sdata[tid] += sdata[tid + 32];
+        if (tid < 32 && tid + 32 < input_len) {
+            const T y = sdata_sum[tid + 32] - sdata_c[tid] - sdata_c[tid + 32];
+            const T t = sdata_sum[tid] + y;
+            c = (t - sdata_sum[tid]) - y;
+            sdata_c[tid] = c;
+            sdata_sum[tid] = t;
         }
         __syncthreads();
 
-        if (tid < 16) {
-            sdata[tid] += sdata[tid + 16];
+        if (tid < 16 && tid + 16 < input_len) {
+            const T y = sdata_sum[tid + 16] - sdata_c[tid] - sdata_c[tid + 16];
+            const T t = sdata_sum[tid] + y;
+            c = (t - sdata_sum[tid]) - y;
+            sdata_c[tid] = c;
+            sdata_sum[tid] = t;
         }
         __syncthreads();
 
-        if (tid < 8) {
-            sdata[tid] += sdata[tid + 8];
+        if (tid < 8 && tid + 8 < input_len) {
+            const T y = sdata_sum[tid + 8] - sdata_c[tid] - sdata_c[tid + 8];
+            const T t = sdata_sum[tid] + y;
+            c = (t - sdata_sum[tid]) - y;
+            sdata_c[tid] = c;
+            sdata_sum[tid] = t;
         }
         __syncthreads();
 
-        if (tid < 4) {
-            sdata[tid] += sdata[tid + 4];
+        if (tid < 4 && tid + 4 < input_len) {
+            const T y = sdata_sum[tid + 4] - sdata_c[tid] - sdata_c[tid + 4];
+            const T t = sdata_sum[tid] + y;
+            c = (t - sdata_sum[tid]) - y;
+            sdata_c[tid] = c;
+            sdata_sum[tid] = t;
         }
         __syncthreads();
 
-        if (tid < 2) {
-            sdata[tid] += sdata[tid + 2];
+        if (tid < 2 && tid + 2 < input_len) {
+            const T y = sdata_sum[tid + 2] - sdata_c[tid] - sdata_c[tid + 2];
+            const T t = sdata_sum[tid] + y;
+            c = (t - sdata_sum[tid]) - y;
+            sdata_c[tid] = c;
+            sdata_sum[tid] = t;
         }
         __syncthreads();
 
-        if (tid < 1) {
-            sdata[tid] += sdata[tid + 1];
+        if (tid < 1 && tid + 1 < input_len) {
+            const T y = sdata_sum[tid + 1] - sdata_c[tid] - sdata_c[tid + 1];
+            const T t = sdata_sum[tid] + y;
+            c = (t - sdata_sum[tid]) - y;
+            sdata_sum[tid] = t;
         }
 
         if (tid == 0) {
-            output[blockIdx.x] = sdata[0] + bias[out_index];
+            const T y = bias[out_index] - c;
+            const T t = sdata_sum[0] + y;
+            output[blockIdx.x] = t;
         }
     }
 }
@@ -753,14 +823,11 @@ __device__ void update_with_momentum_sgd(T *weight, const T *grad, const size_t 
     if (index < size) {
         T w = weight[index];
         T _vt = vt[index];
-
-        _vt = mu * _vt;
-        T d = lambda * w;
         T e = grad[index];
-        e = e + d;
-        e = a * e;
-        _vt = _vt - e;
-        w = w - e;
+
+        _vt = mu * _vt - (a * (e + lambda * w));
+
+        w = w + _vt;
 
         weight[index] = w;
         vt[index] = _vt;
@@ -777,7 +844,8 @@ __device__ void update_with_adagrad(T *weight, const T *grad, const size_t size,
         T _gt = gt[index];
         const T e = grad[index];
 
-        _gt += e * e;
+        _gt = _gt + e * e;
+
         w = w - a * (e / (_sqrt(_gt) + eps));
 
         weight[index] = w;

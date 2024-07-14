@@ -171,7 +171,9 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
         let mut kernel = ForwardLinearBatch::<U,NI,NO>::new();
 
         kernel.launch(dim3 { x: NO as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * 2 * mem::size_of::<U>())?;
+
+        kernel.device_synchronize()?;
 
         Ok(args.output.read_to_vec()?.try_into()?)
     }
@@ -239,7 +241,9 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
         let mut kernel = ForwardLinearBatch::<U,NI,NO>::new();
 
         kernel.launch(dim3 { x: (NO * n) as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * 2 * mem::size_of::<U>())?;
+
+        kernel.device_synchronize()?;
 
         Ok(args.output.read_to_vec()?.try_into()?)
     }
@@ -274,7 +278,6 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
         let mut input_ptr = CudaMemoryPoolPtr::new(NI*n,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO*n,&self.memory_pool)?;
         let output = CudaTensor2dPtr::<U,NI,NO>::new(&self.memory_pool)?;
-
         input_ptr.memcpy(o.as_raw_slice().as_ptr(),NI*n)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO*n)?;
 
@@ -289,6 +292,8 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
 
         kernel.launch(dim3 { x: (NI * NO) as c_uint, y: 1, z: 1},
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
+
+        kernel.device_synchronize()?;
 
         Ok(args.output)
     }

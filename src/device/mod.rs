@@ -350,6 +350,8 @@ impl<'a,U,const N:usize> DeviceReduce<SerializedVecView<'a,U,Arr<U,N>>,CudaTenso
         kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1},
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
 
+        kernel.device_synchronize()?;
+
         Ok(args.output)
     }
 }

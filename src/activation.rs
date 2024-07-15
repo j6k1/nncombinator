@@ -538,11 +538,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceC
           I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| {
-            if i > U::default() || i.is_nan() {
-                i
-            } else {
-                U::default()
-            }
+            i.max(&U::default())
         }).collect::<Vec<U>>().try_into()?)
     }
 

@@ -67,13 +67,9 @@ __device__ void relu_forward(T *input_output, const size_t units_len, const size
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        T x = 0.0;
-
-        if (input_output[i] > 0.0 || isnan(input_output[i])) {
-            x = 1.0;
+        if (!(input_output[i] > 0.0)) {
+            input_output[i] = 0.0;
         }
-
-        input_output[i] = input_output[i] * x;
     }
 }
 template<typename T>

@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::c_uint;
 use cuda_runtime_sys::dim3;
-use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::UnitValue;
 use crate::arr::*;
 use crate::cuda::{CudaPtr, DataTypeInfo, Kernel, Memory};
@@ -103,7 +103,7 @@ impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
-    where U: UnitValue<U>, I: IndexedParallelIterator<Item=U> + IntoParallelIterator + Clone {
+    where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().collect::<Vec<U>>().try_into()?)
@@ -236,11 +236,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -251,11 +251,11 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -264,9 +264,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: UnitValue<U>,
-          I: IndexedParallelIterator<Item=U> + Clone,
-          <I as IntoParallelIterator>::Iter: IndexedParallelIterator<Item=U>{
-
+          I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| U::one() / (U::one() + (-i).exp())).collect::<Vec<U>>().try_into()?)
     }
@@ -375,13 +373,13 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
@@ -391,7 +389,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
@@ -399,7 +397,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
                     loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
         -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
@@ -509,11 +507,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,De
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -524,11 +522,11 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -537,8 +535,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
     where U: UnitValue<U>,
-          I: IndexedParallelIterator<Item=U> + Clone,
-          <I as IntoParallelIterator>::Iter: IndexedParallelIterator<Item=U> {
+          I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| {
             if i > U::default() || i.is_nan() {
@@ -661,13 +658,13 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
@@ -677,7 +674,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
@@ -685,7 +682,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
                     loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
         -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
@@ -797,11 +794,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,D
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -812,11 +809,11 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -825,9 +822,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: UnitValue<U>,
-          I: IndexedParallelIterator<Item=U> + Clone,
-          <I as IntoParallelIterator>::Iter: IndexedParallelIterator<Item=U> {
-
+          I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| i * (U::one() / (U::one() + (-i).exp()))).collect::<Vec<U>>().try_into()?)
     }
@@ -938,13 +933,13 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
@@ -954,7 +949,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
@@ -962,7 +957,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
                     loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
         -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
@@ -1072,11 +1067,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Tanh<U,De
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -1087,11 +1082,11 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -1100,9 +1095,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
     where U: UnitValue<U>,
-          I: IndexedParallelIterator<Item=U> + Clone,
-          <I as IntoParallelIterator>::Iter: IndexedParallelIterator<Item=U> {
-
+          I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| i.tanh()).collect::<Vec<U>>().try_into()?)
     }
@@ -1213,13 +1206,13 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
@@ -1229,7 +1222,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
@@ -1237,7 +1230,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
                     loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
         -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
@@ -1352,11 +1345,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for SoftMax<U
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -1367,11 +1360,11 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -1380,14 +1373,12 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
     where U: UnitValue<U>,
-          I: IndexedParallelIterator<Item=U> + Clone,
-          <I as IntoParallelIterator>::Iter: IndexedParallelIterator<Item=U> {
-
+          I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
-        let alpha = input.clone().reduce(|| U::initial_max_value(), |m,v| {
+        let alpha = input.clone().fold(U::initial_max_value(), |m,v| {
             v.max(&m)
         });
-        let sum = input.clone().map(|x| (x - alpha).exp()).reduce(|| U::default(),
+        let sum = input.clone().map(|x| (x - alpha).exp()).fold(U::default(),
             |acc,x| {
             acc + x
         });
@@ -1402,7 +1393,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,Devi
 
         let sum = loss.clone().zip(o.clone()).map(|(l,o)| {
             (l * -o) * scale
-        }).reduce(|| U::default(), |acc,x| {
+        }).fold(U::default(), |acc,x| {
             acc + x
         }) / scale;
 
@@ -1515,13 +1506,13 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
@@ -1531,7 +1522,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVecView<'a,U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
@@ -1539,7 +1530,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
                     loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
         -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }

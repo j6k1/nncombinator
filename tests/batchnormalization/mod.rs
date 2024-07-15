@@ -18,7 +18,7 @@ use nncombinator::layer::input::InputLayer;
 use nncombinator::layer::linear::LinearLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
-use nncombinator::optimizer::{AdagradBuilder, MomentumSGDBuilder};
+use nncombinator::optimizer::{MomentumSGDBuilder};
 use crate::common::SHARED_MEMORY_POOL;
 
 #[test]
@@ -202,8 +202,7 @@ fn test_fashion_mnist_batch_norm() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = AdagradBuilder::with_lr(&device,0.001);
-
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.01);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -534,8 +533,7 @@ fn test_fashion_mnist_batch_norm_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = AdagradBuilder::with_lr(&device,0.001);
-
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.01);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -870,7 +868,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = AdagradBuilder::with_lr(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.01);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -1205,7 +1203,7 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = AdagradBuilder::with_lr(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,0.01);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();

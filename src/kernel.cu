@@ -484,106 +484,106 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             const T y = input[i + j] * units[j * output_len + out_index] - c;
             const T t = acc + y;
             c = (t - acc) - y;
-            sdata_c[tid] = c;
             acc = t;
             j += distance;
         }
 
+        sdata_c[tid] = c;
         sdata_sum[tid] = acc;
 
         __syncthreads();
 
         if (tid < 512 && tid + 512 < input_len) {
-            const T y = sdata_sum[tid + 512] - sdata_c[tid] - sdata_c[tid + 512];
-            const T t = sdata_sum[tid] + y;
-            c = (t - sdata_sum[tid]) - y;
+            const T y = sdata_sum[tid + 512] - c - sdata_c[tid + 512];
+            const T t = acc + y;
+            c = (t - acc) - y;
             sdata_c[tid] = c;
-            sdata_sum[tid] = t;
+            sdata_sum[tid] = acc = t;
         }
         __syncthreads();
 
         if (tid < 256 && tid + 256 < input_len) {
-            const T y = sdata_sum[tid + 256] - sdata_c[tid] - sdata_c[tid + 256];
-            const T t = sdata_sum[tid] + y;
+            const T y = sdata_sum[tid + 256] - c - sdata_c[tid + 256];
+            const T t = c + y;
             c = (t - sdata_sum[tid]) - y;
             sdata_c[tid] = c;
-            sdata_sum[tid] = t;
+            sdata_sum[tid] = acc = t;
         }
         __syncthreads();
 
         if (tid < 128 && tid + 128 < input_len) {
-            const T y = sdata_sum[tid + 128] - sdata_c[tid] - sdata_c[tid + 128];
-            const T t = sdata_sum[tid] + y;
-            c = (t - sdata_sum[tid]) - y;
+            const T y = sdata_sum[tid + 128] - c - sdata_c[tid + 128];
+            const T t = acc + y;
+            c = (t - acc) - y;
             sdata_c[tid] = c;
-            sdata_sum[tid] = t;
+            sdata_sum[tid] = acc = t;
         }
         __syncthreads();
 
         if (tid < 64 && tid + 64 < input_len) {
-            const T y = sdata_sum[tid + 64] - sdata_c[tid] - sdata_c[tid + 64];
-            const T t = sdata_sum[tid] + y;
-            c = (t - sdata_sum[tid]) - y;
+            const T y = sdata_sum[tid + 64] - c - sdata_c[tid + 64];
+            const T t = acc + y;
+            c = (t - acc) - y;
             sdata_c[tid] = c;
-            sdata_sum[tid] = t;
+            sdata_sum[tid] = acc = t;
         }
         __syncthreads();
 
         if (tid < 32 && tid + 32 < input_len) {
-            const T y = sdata_sum[tid + 32] - sdata_c[tid] - sdata_c[tid + 32];
-            const T t = sdata_sum[tid] + y;
-            c = (t - sdata_sum[tid]) - y;
+            const T y = sdata_sum[tid + 32] - c - sdata_c[tid + 32];
+            const T t = acc + y;
+            c = (t - acc) - y;
             sdata_c[tid] = c;
-            sdata_sum[tid] = t;
+            sdata_sum[tid] = acc = t;
         }
         __syncthreads();
 
         if (tid < 16 && tid + 16 < input_len) {
-            const T y = sdata_sum[tid + 16] - sdata_c[tid] - sdata_c[tid + 16];
-            const T t = sdata_sum[tid] + y;
-            c = (t - sdata_sum[tid]) - y;
+            const T y = sdata_sum[tid + 16] - c - sdata_c[tid + 16];
+            const T t = acc + y;
+            c = (t - acc) - y;
             sdata_c[tid] = c;
-            sdata_sum[tid] = t;
+            sdata_sum[tid] = acc = t;
         }
         __syncthreads();
 
         if (tid < 8 && tid + 8 < input_len) {
-            const T y = sdata_sum[tid + 8] - sdata_c[tid] - sdata_c[tid + 8];
-            const T t = sdata_sum[tid] + y;
-            c = (t - sdata_sum[tid]) - y;
+            const T y = sdata_sum[tid + 8] - c - sdata_c[tid + 8];
+            const T t = acc + y;
+            c = (t - acc) - y;
             sdata_c[tid] = c;
-            sdata_sum[tid] = t;
+            sdata_sum[tid] = acc = t;
         }
         __syncthreads();
 
         if (tid < 4 && tid + 4 < input_len) {
-            const T y = sdata_sum[tid + 4] - sdata_c[tid] - sdata_c[tid + 4];
-            const T t = sdata_sum[tid] + y;
-            c = (t - sdata_sum[tid]) - y;
+            const T y = sdata_sum[tid + 4] - c - sdata_c[tid + 4];
+            const T t = acc + y;
+            c = (t - acc) - y;
             sdata_c[tid] = c;
-            sdata_sum[tid] = t;
+            sdata_sum[tid] = acc = t;
         }
         __syncthreads();
 
         if (tid < 2 && tid + 2 < input_len) {
-            const T y = sdata_sum[tid + 2] - sdata_c[tid] - sdata_c[tid + 2];
-            const T t = sdata_sum[tid] + y;
-            c = (t - sdata_sum[tid]) - y;
+            const T y = sdata_sum[tid + 2] - c - sdata_c[tid + 2];
+            const T t = acc + y;
+            c = (t - acc) - y;
             sdata_c[tid] = c;
-            sdata_sum[tid] = t;
+            sdata_sum[tid] = acc = t;
         }
         __syncthreads();
 
         if (tid < 1 && tid + 1 < input_len) {
-            const T y = sdata_sum[tid + 1] - sdata_c[tid] - sdata_c[tid + 1];
-            const T t = sdata_sum[tid] + y;
-            c = (t - sdata_sum[tid]) - y;
-            sdata_sum[tid] = t;
+            const T y = sdata_sum[tid + 1] - c - sdata_c[tid + 1];
+            const T t = acc + y;
+            c = (t - acc) - y;
+            sdata_sum[tid] = acc = t;
         }
 
         if (tid == 0) {
             const T y = bias[out_index] - c;
-            const T t = sdata_sum[0] + y;
+            const T t = acc + y;
             output[blockIdx.x] = t;
         }
     }

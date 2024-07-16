@@ -628,6 +628,7 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
         size_t batch_index = blockIdx.x / input_len;
 
         size_t tid = threadIdx.x;
+        size_t tid_warp = tid % 32;
         size_t input_index = blockIdx.x - input_len * batch_index;
         size_t i = batch_index * output_len;
         size_t j = tid;
@@ -635,63 +636,86 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
 
         sdata[tid] = (T)0;
 
+        T acc = 0.0;
+
         while (j < output_len) {
-            sdata[tid] += loss[i + j] * units[input_index * output_len + j];
+            acc += loss[i + j] * units[input_index * output_len + j];
             j += distance;
         }
-        __syncthreads();
 
-        if (tid < 512) {
-            sdata[tid] += sdata[tid + 512];
+        T dacc = 0.0;
+
+        dacc = __shfl_down_sync(0xffffffff,acc,16);
+
+        if (tid_warp < 16) {
+            acc += dacc;
         }
-        __syncthreads();
 
-        if (tid < 256) {
-            sdata[tid] += sdata[tid + 256];
+        dacc = __shfl_down_sync(0xffffffff,acc,8);
+
+        if (tid_warp < 8) {
+            acc += dacc;
         }
-        __syncthreads();
 
-        if (tid < 128) {
-            sdata[tid] += sdata[tid + 128];
+        dacc = __shfl_down_sync(0xffffffff,acc,4);
+
+        if (tid_warp < 4) {
+            acc += dacc;
         }
-        __syncthreads();
 
-        if (tid < 64) {
-            sdata[tid] += sdata[tid + 64];
+        dacc = __shfl_down_sync(0xffffffff,acc,2);
+
+        if (tid_warp < 2) {
+            acc += dacc;
+        }
+
+        dacc = __shfl_down_sync(0xffffffff,acc,1);
+
+        if (tid_warp < 1) {
+            acc += dacc;
+        }
+
+        if (tid_warp == 0) {
+            sdata[tid / 32] = acc;
         }
         __syncthreads();
 
         if (tid < 32) {
-            sdata[tid] += sdata[tid + 32];
-        }
-        __syncthreads();
+            acc = sdata[tid];
 
-        if (tid < 16) {
-            sdata[tid] += sdata[tid + 16];
-        }
-        __syncthreads();
+            dacc = __shfl_down_sync(0xffffffff,acc,16);
 
-        if (tid < 8) {
-            sdata[tid] += sdata[tid + 8];
-        }
-        __syncthreads();
+            if (tid_warp < 16) {
+                acc += dacc;
+            }
 
-        if (tid < 4) {
-            sdata[tid] += sdata[tid + 4];
-        }
-        __syncthreads();
+            dacc = __shfl_down_sync(0xffffffff,acc,8);
 
-        if (tid < 2) {
-            sdata[tid] += sdata[tid + 2];
-        }
-        __syncthreads();
+            if (tid_warp < 8) {
+                acc += dacc;
+            }
 
-        if (tid < 1) {
-            sdata[tid] += sdata[tid + 1];
+            dacc = __shfl_down_sync(0xffffffff,acc,4);
+
+            if (tid_warp < 4) {
+                acc += dacc;
+            }
+
+            dacc = __shfl_down_sync(0xffffffff,acc,2);
+
+            if (tid_warp < 2) {
+                acc += dacc;
+            }
+
+            dacc = __shfl_down_sync(0xffffffff,acc,1);
+
+            if (tid_warp < 1) {
+                acc += dacc;
+            }
         }
 
         if (tid == 0) {
-            output[blockIdx.x] = sdata[0];
+            output[blockIdx.x] = acc;
         }
     }
 }
@@ -706,6 +730,7 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
 
     if (blockIdx.x < units_size) {
         size_t tid = threadIdx.x;
+        size_t tid_warp = tid % 32;
         size_t i = blockIdx.x / output_len;
         size_t j = blockIdx.x - output_len * i;
         size_t k = tid;
@@ -717,65 +742,88 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
 
         sdata[tid] = (T)0;
 
+        T acc = 0.0;
+
         while (k < batch_size) {
-            sdata[tid] += loss[j] * input[i];
+            acc += loss[j] * input[i];
             k += distance;
             i += distance * input_len;
             j += distance * output_len;
         }
-        __syncthreads();
 
-        if (tid < 512) {
-            sdata[tid] += sdata[tid + 512];
+        T dacc = 0.0;
+
+        dacc = __shfl_down_sync(0xffffffff,acc,16);
+
+        if (tid_warp < 16) {
+            acc += dacc;
         }
-        __syncthreads();
 
-        if (tid < 256) {
-            sdata[tid] += sdata[tid + 256];
+        dacc = __shfl_down_sync(0xffffffff,acc,8);
+
+        if (tid_warp < 8) {
+            acc += dacc;
         }
-        __syncthreads();
 
-        if (tid < 128) {
-            sdata[tid] += sdata[tid + 128];
+        dacc = __shfl_down_sync(0xffffffff,acc,4);
+
+        if (tid_warp < 4) {
+            acc += dacc;
         }
-        __syncthreads();
 
-        if (tid < 64) {
-            sdata[tid] += sdata[tid + 64];
+        dacc = __shfl_down_sync(0xffffffff,acc,2);
+
+        if (tid_warp < 2) {
+            acc += dacc;
+        }
+
+        dacc = __shfl_down_sync(0xffffffff,acc,1);
+
+        if (tid_warp < 1) {
+            acc += dacc;
+        }
+
+        if (tid_warp == 0) {
+            sdata[tid / 32] = acc;
         }
         __syncthreads();
 
         if (tid < 32) {
-            sdata[tid] += sdata[tid + 32];
-        }
-        __syncthreads();
+            acc = sdata[tid];
 
-        if (tid < 16) {
-            sdata[tid] += sdata[tid + 16];
-        }
-        __syncthreads();
+            dacc = __shfl_down_sync(0xffffffff,acc,16);
 
-        if (tid < 8) {
-            sdata[tid] += sdata[tid + 8];
-        }
-        __syncthreads();
+            if (tid_warp < 16) {
+                acc += dacc;
+            }
 
-        if (tid < 4) {
-            sdata[tid] += sdata[tid + 4];
-        }
-        __syncthreads();
+            dacc = __shfl_down_sync(0xffffffff,acc,8);
 
-        if (tid < 2) {
-            sdata[tid] += sdata[tid + 2];
-        }
-        __syncthreads();
+            if (tid_warp < 8) {
+                acc += dacc;
+            }
 
-        if (tid < 1) {
-            sdata[tid] += sdata[tid + 1];
+            dacc = __shfl_down_sync(0xffffffff,acc,4);
+
+            if (tid_warp < 4) {
+                acc += dacc;
+            }
+
+            dacc = __shfl_down_sync(0xffffffff,acc,2);
+
+            if (tid_warp < 2) {
+                acc += dacc;
+            }
+
+            dacc = __shfl_down_sync(0xffffffff,acc,1);
+
+            if (tid_warp < 1) {
+                acc += dacc;
+            }
         }
 
         if (tid == 0) {
-            output[blockIdx.x] = sdata[0];
+            output[blockIdx.x] = acc;
         }
     }
 }

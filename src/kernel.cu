@@ -41,7 +41,7 @@ __device__ double _fma(double x, double y, double z) {
 }
 
 #define BLOCK_SHARED 1024
-
+#define BLOCK_SHARED_SMALL 32
 template<typename T>
 
 __device__ void sigmoid_forward(T *input_output, const size_t units_len, const size_t batch_len) {
@@ -468,13 +468,13 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
         size_t out_index = blockIdx.x - output_len * batch_index;
         size_t i = batch_index * input_len;
         size_t j = tid;
+        size_t tid_warp = tid % 32;
         size_t distance = blockDim.x;
 
         sdata_sum[tid] = 0.0;
         sdata_c[tid] = 0.0;
 
         T acc = 0.0;
-
         T c = 0.0;
 
         /**
@@ -488,97 +488,125 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             j += distance;
         }
 
-        sdata_c[tid] = c;
-        sdata_sum[tid] = acc;
+        {
+            T dc = 0.0;
+            T dacc = 0.0;
 
-        __syncthreads();
+            dc = __shfl_down_sync(0xffffffff,c,16);
+            dacc = __shfl_down_sync(0xffffffff,acc,16);
 
-        if (tid < 512 && tid + 512 < input_len) {
-            const T y = sdata_sum[tid + 512] - c - sdata_c[tid + 512];
-            const T t = acc + y;
-            c = (t - acc) - y;
-            sdata_c[tid] = c;
-            sdata_sum[tid] = acc = t;
+            if (tid_warp < 16 && tid + 16 < input_len) {
+                const T y = dacc - c - dc;
+                const T t = acc + y;
+                c = (t - acc) - y;
+                acc = t;
+            }
+
+            dc = __shfl_down_sync(0xffffffff,c,8);
+            dacc = __shfl_down_sync(0xffffffff,acc,8);
+
+            if (tid_warp < 8 && tid + 8 < input_len) {
+                const T y = dacc - c - dc;
+                const T t = acc + y;
+                c = (t - acc) - y;
+                acc = t;
+            }
+
+            dc = __shfl_down_sync(0xffffffff,c,4);
+            dacc = __shfl_down_sync(0xffffffff,acc,4);
+
+            if (tid_warp < 4 && tid + 4 < input_len) {
+                const T y = dacc - c - dc;
+                const T t = acc + y;
+                c = (t - acc) - y;
+                acc = t;
+            }
+
+            dc = __shfl_down_sync(0xffffffff,c,2);
+            dacc = __shfl_down_sync(0xffffffff,acc,2);
+
+            if (tid_warp < 2 && tid + 2 < input_len) {
+                const T y = dacc - c - dc;
+                const T t = acc + y;
+                c = (t - acc) - y;
+                acc = t;
+            }
+
+            dc = __shfl_down_sync(0xffffffff,c,1);
+            dacc = __shfl_down_sync(0xffffffff,acc,1);
+
+            if (tid_warp < 1 && tid + 1 < input_len) {
+                const T y = dacc - c - dc;
+                const T t = acc + y;
+                c = (t - acc) - y;
+                acc = t;
+            }
+        }
+
+        if (tid_warp == 0) {
+            sdata_c[tid / 32] = c;
+            sdata_sum[tid / 32] = acc;
         }
         __syncthreads();
 
-        if (tid < 256 && tid + 256 < input_len) {
-            const T y = sdata_sum[tid + 256] - c - sdata_c[tid + 256];
-            const T t = c + y;
-            c = (t - sdata_sum[tid]) - y;
-            sdata_c[tid] = c;
-            sdata_sum[tid] = acc = t;
-        }
-        __syncthreads();
+        if (tid < 32) {
+            c = sdata_c[tid];
+            acc = sdata_sum[tid];
 
-        if (tid < 128 && tid + 128 < input_len) {
-            const T y = sdata_sum[tid + 128] - c - sdata_c[tid + 128];
-            const T t = acc + y;
-            c = (t - acc) - y;
-            sdata_c[tid] = c;
-            sdata_sum[tid] = acc = t;
-        }
-        __syncthreads();
+            const size_t org_index = tid * 32;
 
-        if (tid < 64 && tid + 64 < input_len) {
-            const T y = sdata_sum[tid + 64] - c - sdata_c[tid + 64];
-            const T t = acc + y;
-            c = (t - acc) - y;
-            sdata_c[tid] = c;
-            sdata_sum[tid] = acc = t;
-        }
-        __syncthreads();
+            T dc = 0.0;
+            T dacc = 0.0;
 
-        if (tid < 32 && tid + 32 < input_len) {
-            const T y = sdata_sum[tid + 32] - c - sdata_c[tid + 32];
-            const T t = acc + y;
-            c = (t - acc) - y;
-            sdata_c[tid] = c;
-            sdata_sum[tid] = acc = t;
-        }
-        __syncthreads();
+            dc = __shfl_down_sync(0xffffffff,c,16);
+            dacc = __shfl_down_sync(0xffffffff,acc,16);
 
-        if (tid < 16 && tid + 16 < input_len) {
-            const T y = sdata_sum[tid + 16] - c - sdata_c[tid + 16];
-            const T t = acc + y;
-            c = (t - acc) - y;
-            sdata_c[tid] = c;
-            sdata_sum[tid] = acc = t;
-        }
-        __syncthreads();
+            if (tid_warp < 16 && org_index + 16 * 32 < input_len) {
+                const T y = dacc - c - dc;
+                const T t = acc + y;
+                c = (t - acc) - y;
+                acc = t;
+            }
 
-        if (tid < 8 && tid + 8 < input_len) {
-            const T y = sdata_sum[tid + 8] - c - sdata_c[tid + 8];
-            const T t = acc + y;
-            c = (t - acc) - y;
-            sdata_c[tid] = c;
-            sdata_sum[tid] = acc = t;
-        }
-        __syncthreads();
+            dc = __shfl_down_sync(0xffffffff,c,8);
+            dacc = __shfl_down_sync(0xffffffff,acc,8);
 
-        if (tid < 4 && tid + 4 < input_len) {
-            const T y = sdata_sum[tid + 4] - c - sdata_c[tid + 4];
-            const T t = acc + y;
-            c = (t - acc) - y;
-            sdata_c[tid] = c;
-            sdata_sum[tid] = acc = t;
-        }
-        __syncthreads();
+            if (tid_warp < 8 && org_index + 8 * 32 < input_len) {
+                const T y = dacc - c - dc;
+                const T t = acc + y;
+                c = (t - acc) - y;
+                acc = t;
+            }
 
-        if (tid < 2 && tid + 2 < input_len) {
-            const T y = sdata_sum[tid + 2] - c - sdata_c[tid + 2];
-            const T t = acc + y;
-            c = (t - acc) - y;
-            sdata_c[tid] = c;
-            sdata_sum[tid] = acc = t;
-        }
-        __syncthreads();
+            dc = __shfl_down_sync(0xffffffff,c,4);
+            dacc = __shfl_down_sync(0xffffffff,acc,4);
 
-        if (tid < 1 && tid + 1 < input_len) {
-            const T y = sdata_sum[tid + 1] - c - sdata_c[tid + 1];
-            const T t = acc + y;
-            c = (t - acc) - y;
-            sdata_sum[tid] = acc = t;
+            if (tid_warp < 4 && org_index + 4 * 32 < input_len) {
+                const T y = dacc - c - dc;
+                const T t = acc + y;
+                c = (t - acc) - y;
+                acc = t;
+            }
+
+            dc = __shfl_down_sync(0xffffffff,c,2);
+            dacc = __shfl_down_sync(0xffffffff,acc,2);
+
+            if (tid_warp < 2 && org_index + 2 * 32 < input_len) {
+                const T y = dacc - c - dc;
+                const T t = acc + y;
+                c = (t - acc) - y;
+                acc = t;
+            }
+
+            dc = __shfl_down_sync(0xffffffff,c,1);
+            dacc = __shfl_down_sync(0xffffffff,acc,1);
+
+            if (tid_warp < 1 && org_index + 1 * 32 < input_len) {
+                const T y = dacc - c - dc;
+                const T t = acc + y;
+                c = (t - acc) - y;
+                acc = t;
+            }
         }
 
         if (tid == 0) {

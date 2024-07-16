@@ -205,8 +205,8 @@ fn test_fashion_mnist_for_cpu() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/1200f32).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(1200f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/2000f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(1800f32).sqrt()).unwrap();
 
     let device = DeviceCpu::new().unwrap();
 
@@ -218,7 +218,7 @@ fn test_fashion_mnist_for_cpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },1200>::new().build(l,&device,
+        LinearLayerBuilder::<{ 28*28 },2000>::new().build(l,&device,
                                                           move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                           &optimizer_builder
         ).unwrap()
@@ -226,7 +226,7 @@ fn test_fashion_mnist_for_cpu() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device,
+        LinearLayerBuilder::<2000,2000>::new().build(l,&device,
                                                      move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                      &optimizer_builder
         ).unwrap()
@@ -234,7 +234,7 @@ fn test_fashion_mnist_for_cpu() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device,
+        LinearLayerBuilder::<2000,1800>::new().build(l,&device,
                                                      move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                      &optimizer_builder
         ).unwrap()
@@ -242,7 +242,7 @@ fn test_fashion_mnist_for_cpu() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,10>::new().build(l,&device,
+        LinearLayerBuilder::<1800,10>::new().build(l,&device,
                                                    move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                    &optimizer_builder
         ).unwrap()
@@ -688,8 +688,8 @@ fn test_fashion_mnist_for_gpu() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/1000f32).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(1000f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/2000f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(1800f32).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
@@ -703,7 +703,7 @@ fn test_fashion_mnist_for_gpu() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },1000>::new().build(l,&device,
+        LinearLayerBuilder::<{ 28*28 },2000>::new().build(l,&device,
                                                           move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                           &optimizer_builder
         ).unwrap()
@@ -711,7 +711,7 @@ fn test_fashion_mnist_for_gpu() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1000,1000>::new().build(l,&device,
+        LinearLayerBuilder::<2000,2000>::new().build(l,&device,
                                                      move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                      &optimizer_builder
         ).unwrap()
@@ -719,7 +719,7 @@ fn test_fashion_mnist_for_gpu() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1000,1000>::new().build(l,&device,
+        LinearLayerBuilder::<2000,1800>::new().build(l,&device,
                                                      move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                      &optimizer_builder
         ).unwrap()
@@ -727,7 +727,7 @@ fn test_fashion_mnist_for_gpu() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1000,10>::new().build(l,&device,
+        LinearLayerBuilder::<1800,10>::new().build(l,&device,
                                                    move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                    &optimizer_builder
         ).unwrap()
@@ -849,8 +849,8 @@ fn test_fashion_mnist_for_gpu_double() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f64>::new(0.0, (2f64/(28f64*28f64)).sqrt()).unwrap();
-    let n2 = Normal::<f64>::new(0.0, (2f64/1200f64).sqrt()).unwrap();
-    let n3 = Normal::<f64>::new(0.0, 1f64/(1000f64).sqrt()).unwrap();
+    let n2 = Normal::<f64>::new(0.0, (2f64/2000f64).sqrt()).unwrap();
+    let n3 = Normal::<f64>::new(0.0, 1f64/(1800f64).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
@@ -864,7 +864,7 @@ fn test_fashion_mnist_for_gpu_double() {
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },1200>::new().build(l,&device,
+        LinearLayerBuilder::<{ 28*28 },2000>::new().build(l,&device,
                                                           move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                           &optimizer_builder
         ).unwrap()
@@ -872,7 +872,7 @@ fn test_fashion_mnist_for_gpu_double() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device,
+        LinearLayerBuilder::<2000,2000>::new().build(l,&device,
                                                      move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                      &optimizer_builder
         ).unwrap()
@@ -880,7 +880,7 @@ fn test_fashion_mnist_for_gpu_double() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1000>::new().build(l,&device,
+        LinearLayerBuilder::<2000,1800>::new().build(l,&device,
                                                      move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                      &optimizer_builder
         ).unwrap()
@@ -888,7 +888,7 @@ fn test_fashion_mnist_for_gpu_double() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1000,10>::new().build(l,&device,
+        LinearLayerBuilder::<1800,10>::new().build(l,&device,
                                                    move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                    &optimizer_builder
         ).unwrap()

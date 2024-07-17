@@ -392,63 +392,38 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
 
         sdata[tid] = (T)0;
 
+        T acc = 0.0;
+
         while (i < n) {
-            sdata[tid] += input[i];
+            acc += input[i];
             i += distance;
         }
         __syncthreads();
 
-        if (tid < 512) {
-            sdata[tid] += sdata[tid + 512];
-        }
-        __syncthreads();
 
-        if (tid < 256) {
-            sdata[tid] += sdata[tid + 256];
-        }
-        __syncthreads();
+        acc += __shfl_down_sync(0xffffffff,acc,16);
+        acc += __shfl_down_sync(0xffffffff,acc,8);
+        acc += __shfl_down_sync(0xffffffff,acc,4);
+        acc += __shfl_down_sync(0xffffffff,acc,2);
+        acc += __shfl_down_sync(0xffffffff,acc,1);
 
-        if (tid < 128) {
-            sdata[tid] += sdata[tid + 128];
-        }
-        __syncthreads();
-
-        if (tid < 64) {
-            sdata[tid] += sdata[tid + 64];
+        if (tid % 32 == 0) {
+            sdata[tid / 32] = acc;
         }
         __syncthreads();
 
         if (tid < 32) {
-            sdata[tid] += sdata[tid + 32];
-        }
-        __syncthreads();
+            acc = sdata[tid];
 
-        if (tid < 16) {
-            sdata[tid] += sdata[tid + 16];
-        }
-        __syncthreads();
-
-        if (tid < 8) {
-            sdata[tid] += sdata[tid + 8];
-        }
-        __syncthreads();
-
-        if (tid < 4) {
-            sdata[tid] += sdata[tid + 4];
-        }
-        __syncthreads();
-
-        if (tid < 2) {
-            sdata[tid] += sdata[tid + 2];
-        }
-        __syncthreads();
-
-        if (tid < 1) {
-            sdata[tid] += sdata[tid + 1];
+            acc += __shfl_down_sync(0xffffffff,acc,16);
+            acc += __shfl_down_sync(0xffffffff,acc,8);
+            acc += __shfl_down_sync(0xffffffff,acc,4);
+            acc += __shfl_down_sync(0xffffffff,acc,2);
+            acc += __shfl_down_sync(0xffffffff,acc,1);
         }
 
         if (tid == 0) {
-            output[blockIdx.x] = sdata[0];
+            output[blockIdx.x] = acc;
         }
     }
 }
@@ -495,7 +470,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dc = __shfl_down_sync(0xffffffff,c,16);
             dacc = __shfl_down_sync(0xffffffff,acc,16);
 
-            if (tid_warp < 16 && tid + 16 < input_len) {
+            {
                 const T y = dacc - c - dc;
                 const T t = acc + y;
                 c = (t - acc) - y;
@@ -505,7 +480,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dc = __shfl_down_sync(0xffffffff,c,8);
             dacc = __shfl_down_sync(0xffffffff,acc,8);
 
-            if (tid_warp < 8 && tid + 8 < input_len) {
+            {
                 const T y = dacc - c - dc;
                 const T t = acc + y;
                 c = (t - acc) - y;
@@ -515,7 +490,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dc = __shfl_down_sync(0xffffffff,c,4);
             dacc = __shfl_down_sync(0xffffffff,acc,4);
 
-            if (tid_warp < 4 && tid + 4 < input_len) {
+            {
                 const T y = dacc - c - dc;
                 const T t = acc + y;
                 c = (t - acc) - y;
@@ -525,7 +500,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dc = __shfl_down_sync(0xffffffff,c,2);
             dacc = __shfl_down_sync(0xffffffff,acc,2);
 
-            if (tid_warp < 2 && tid + 2 < input_len) {
+            {
                 const T y = dacc - c - dc;
                 const T t = acc + y;
                 c = (t - acc) - y;
@@ -535,7 +510,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dc = __shfl_down_sync(0xffffffff,c,1);
             dacc = __shfl_down_sync(0xffffffff,acc,1);
 
-            if (tid_warp < 1 && tid + 1 < input_len) {
+            {
                 const T y = dacc - c - dc;
                 const T t = acc + y;
                 c = (t - acc) - y;
@@ -561,7 +536,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dc = __shfl_down_sync(0xffffffff,c,16);
             dacc = __shfl_down_sync(0xffffffff,acc,16);
 
-            if (tid_warp < 16 && org_index + 16 * 32 < input_len) {
+            {
                 const T y = dacc - c - dc;
                 const T t = acc + y;
                 c = (t - acc) - y;
@@ -571,7 +546,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dc = __shfl_down_sync(0xffffffff,c,8);
             dacc = __shfl_down_sync(0xffffffff,acc,8);
 
-            if (tid_warp < 8 && org_index + 8 * 32 < input_len) {
+            {
                 const T y = dacc - c - dc;
                 const T t = acc + y;
                 c = (t - acc) - y;
@@ -581,7 +556,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dc = __shfl_down_sync(0xffffffff,c,4);
             dacc = __shfl_down_sync(0xffffffff,acc,4);
 
-            if (tid_warp < 4 && org_index + 4 * 32 < input_len) {
+            {
                 const T y = dacc - c - dc;
                 const T t = acc + y;
                 c = (t - acc) - y;
@@ -591,7 +566,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dc = __shfl_down_sync(0xffffffff,c,2);
             dacc = __shfl_down_sync(0xffffffff,acc,2);
 
-            if (tid_warp < 2 && org_index + 2 * 32 < input_len) {
+            {
                 const T y = dacc - c - dc;
                 const T t = acc + y;
                 c = (t - acc) - y;
@@ -601,7 +576,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dc = __shfl_down_sync(0xffffffff,c,1);
             dacc = __shfl_down_sync(0xffffffff,acc,1);
 
-            if (tid_warp < 1 && org_index + 1 * 32 < input_len) {
+            {
                 const T y = dacc - c - dc;
                 const T t = acc + y;
                 c = (t - acc) - y;
@@ -643,37 +618,11 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
             j += distance;
         }
 
-        T dacc = 0.0;
-
-        dacc = __shfl_down_sync(0xffffffff,acc,16);
-
-        if (tid_warp < 16) {
-            acc += dacc;
-        }
-
-        dacc = __shfl_down_sync(0xffffffff,acc,8);
-
-        if (tid_warp < 8) {
-            acc += dacc;
-        }
-
-        dacc = __shfl_down_sync(0xffffffff,acc,4);
-
-        if (tid_warp < 4) {
-            acc += dacc;
-        }
-
-        dacc = __shfl_down_sync(0xffffffff,acc,2);
-
-        if (tid_warp < 2) {
-            acc += dacc;
-        }
-
-        dacc = __shfl_down_sync(0xffffffff,acc,1);
-
-        if (tid_warp < 1) {
-            acc += dacc;
-        }
+        acc += __shfl_down_sync(0xffffffff,acc,16);
+        acc += __shfl_down_sync(0xffffffff,acc,8);
+        acc += __shfl_down_sync(0xffffffff,acc,4);
+        acc += __shfl_down_sync(0xffffffff,acc,2);
+        acc += __shfl_down_sync(0xffffffff,acc,1);
 
         if (tid_warp == 0) {
             sdata[tid / 32] = acc;
@@ -683,35 +632,11 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
         if (tid < 32) {
             acc = sdata[tid];
 
-            dacc = __shfl_down_sync(0xffffffff,acc,16);
-
-            if (tid_warp < 16) {
-                acc += dacc;
-            }
-
-            dacc = __shfl_down_sync(0xffffffff,acc,8);
-
-            if (tid_warp < 8) {
-                acc += dacc;
-            }
-
-            dacc = __shfl_down_sync(0xffffffff,acc,4);
-
-            if (tid_warp < 4) {
-                acc += dacc;
-            }
-
-            dacc = __shfl_down_sync(0xffffffff,acc,2);
-
-            if (tid_warp < 2) {
-                acc += dacc;
-            }
-
-            dacc = __shfl_down_sync(0xffffffff,acc,1);
-
-            if (tid_warp < 1) {
-                acc += dacc;
-            }
+            acc += __shfl_down_sync(0xffffffff,acc,16);
+            acc += __shfl_down_sync(0xffffffff,acc,8);
+            acc += __shfl_down_sync(0xffffffff,acc,4);
+            acc += __shfl_down_sync(0xffffffff,acc,2);
+            acc += __shfl_down_sync(0xffffffff,acc,1);
         }
 
         if (tid == 0) {
@@ -751,37 +676,11 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
             j += distance * output_len;
         }
 
-        T dacc = 0.0;
-
-        dacc = __shfl_down_sync(0xffffffff,acc,16);
-
-        if (tid_warp < 16) {
-            acc += dacc;
-        }
-
-        dacc = __shfl_down_sync(0xffffffff,acc,8);
-
-        if (tid_warp < 8) {
-            acc += dacc;
-        }
-
-        dacc = __shfl_down_sync(0xffffffff,acc,4);
-
-        if (tid_warp < 4) {
-            acc += dacc;
-        }
-
-        dacc = __shfl_down_sync(0xffffffff,acc,2);
-
-        if (tid_warp < 2) {
-            acc += dacc;
-        }
-
-        dacc = __shfl_down_sync(0xffffffff,acc,1);
-
-        if (tid_warp < 1) {
-            acc += dacc;
-        }
+        acc += __shfl_down_sync(0xffffffff,acc,16);
+        acc += __shfl_down_sync(0xffffffff,acc,8);
+        acc += __shfl_down_sync(0xffffffff,acc,4);
+        acc += __shfl_down_sync(0xffffffff,acc,2);
+        acc += __shfl_down_sync(0xffffffff,acc,1);
 
         if (tid_warp == 0) {
             sdata[tid / 32] = acc;
@@ -791,35 +690,11 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
         if (tid < 32) {
             acc = sdata[tid];
 
-            dacc = __shfl_down_sync(0xffffffff,acc,16);
-
-            if (tid_warp < 16) {
-                acc += dacc;
-            }
-
-            dacc = __shfl_down_sync(0xffffffff,acc,8);
-
-            if (tid_warp < 8) {
-                acc += dacc;
-            }
-
-            dacc = __shfl_down_sync(0xffffffff,acc,4);
-
-            if (tid_warp < 4) {
-                acc += dacc;
-            }
-
-            dacc = __shfl_down_sync(0xffffffff,acc,2);
-
-            if (tid_warp < 2) {
-                acc += dacc;
-            }
-
-            dacc = __shfl_down_sync(0xffffffff,acc,1);
-
-            if (tid_warp < 1) {
-                acc += dacc;
-            }
+            acc += __shfl_down_sync(0xffffffff,acc,16);
+            acc += __shfl_down_sync(0xffffffff,acc,8);
+            acc += __shfl_down_sync(0xffffffff,acc,4);
+            acc += __shfl_down_sync(0xffffffff,acc,2);
+            acc += __shfl_down_sync(0xffffffff,acc,1);
         }
 
         if (tid == 0) {

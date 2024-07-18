@@ -1226,12 +1226,53 @@ pub trait Kernel {
     /// * [`CudaRuntimeError`]
     fn launch(&mut self,grid_dim:dim3,block_dim:dim3,args:&mut Self::Args,shared_mem:usize) -> Result<(),CudaRuntimeError> {
         ffi::launch(Self::FUNC_PTR,
-                     grid_dim,
-                     block_dim,
-                     &mut args.as_vec().into_iter()
-                         .map(|p| p.as_kernel_ptr())
-                         .collect::<Vec<*mut c_void>>().as_mut_slice(),
-                     shared_mem
+                    grid_dim,
+                    block_dim,
+                    &mut args.as_vec().into_iter()
+                        .map(|p| p.as_kernel_ptr())
+                        .collect::<Vec<*mut c_void>>().as_mut_slice(),
+                    shared_mem
+        )
+    }
+
+    /// Function that waits for the completion of the execution of the process passed to the Cuda kernel
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaRuntimeError`]
+    fn device_synchronize(&self) -> Result<(),CudaRuntimeError> {
+        ffi::device_synchronize()
+    }
+}
+/// Trait defining cuda cooperative kernel functions
+pub trait CooperativeKernel {
+    /// Object to be converted into a list of arguments to be passed to the cuda kernel function
+    type Args: KernelArgs;
+
+    /// Pointer to cuda kernel function
+    const FUNC_PTR: *const c_void;
+
+    /// cuda kernel startup function
+    /// Launches a device function where thread blocks can cooperate and synchronize as they execute.
+    /// # Arguments
+    /// * `grid_dim` - Number of dims in grid
+    /// * `block_dim` - Number of blocks in grid
+    /// * `args` - List of arguments passed to cuda kernel functions
+    /// * `shared_mem` - Size (in bytes) of shared memory to allocate for use within cuda kernel functions.
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`CudaRuntimeError`]
+    fn launch(&mut self,grid_dim:dim3,block_dim:dim3,args:&mut Self::Args,shared_mem:usize) -> Result<(),CudaRuntimeError> {
+        ffi::launch_cooperative(Self::FUNC_PTR,
+                    grid_dim,
+                    block_dim,
+                    &mut args.as_vec().into_iter()
+                        .map(|p| p.as_kernel_ptr())
+                        .collect::<Vec<*mut c_void>>().as_mut_slice(),
+                    shared_mem
         )
     }
 

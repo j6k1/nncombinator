@@ -213,9 +213,9 @@ pub struct ForwardLinearBatchArgs<'a,T,const NI:usize,const NO:usize> where T: D
 /// Create an instance of an object representing the argument list during
 /// the forward propagation calculation of the linear layer.
 impl<'a,T,const NI:usize,const NO:usize> crate::cuda::kernel::device::ForwardLinearBatchArgs<'a,T,NI,NO> where T: DataTypeInfo + Debug + Default {
-    /// Create a ReduceLinearBatchArgs instance
+    /// Create a ForwardLinearBatchArgs instance
     /// # Arguments
-    /// * `input` - input0
+    /// * `input` - input
     /// * `units` - weight
     /// * `bias` - bias
     /// * `output` - output (All elements must be initialized to zero.)
@@ -287,7 +287,7 @@ pub struct BackwardLinearBatchArgs<'a,T,const NI:usize,const NO:usize> where T: 
 /// Create an instance of an object representing the list of arguments during
 /// the computation of the error back propagation of the linear layer.
 impl<'a,T,const NI:usize,const NO:usize> crate::cuda::kernel::device::BackwardLinearBatchArgs<'a,T,NI,NO> where T: DataTypeInfo + Debug + Default {
-    /// Create a ReduceLinearBatchArgs instance
+    /// Create a BackwardLinearBatchArgs instance
     /// # Arguments
     /// * `input` - input
     /// * `units` - weight

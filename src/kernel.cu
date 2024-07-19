@@ -109,120 +109,88 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
 
     T *alpha_sdata = &sdata[0];
 
-    T *sum_sdata = &sdata[BLOCK_SHARED];
+    T *sum_sdata = &sdata[BLOCK_SHARED_SMALL];
 
     size_t tid = threadIdx.x;
+    size_t tid_warp = tid % 32;
+
     size_t batch_index = blockIdx.x;
 
     if (tid < units_len && batch_index < batch_len) {
         size_t end_block = batch_index * units_len + units_len;
         size_t distance = blockDim.x;
 
-        sum_sdata[tid] = 0;
-        alpha_sdata[tid] = 0.0/0.0;
+        if (tid < 32) {
+            sum_sdata[tid] = 0;
+            alpha_sdata[tid] = 0.0/0.0;
+        }
+        __syncthreads();
+
+        T alpha = 0.0;
 
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],input_output[i]);
+            alpha = _fmax(alpha,input_output[i]);
         }
 
-        __syncthreads();
+        alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,16));
+        alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,8));
+        alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,4));
+        alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,2));
+        alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,1));
 
-        if (tid < 512) {
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 512]);
-        }
-        __syncthreads();
-
-        if (tid < 256) {
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 256]);
-        }
-        __syncthreads();
-
-        if (tid < 128) {
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 128]);
-        }
-        __syncthreads();
-
-        if (tid < 64) {
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 64]);
+        if (tid_warp == 0) {
+            alpha_sdata[tid / 32] = alpha;
         }
         __syncthreads();
 
         if (tid < 32) {
-            alpha_sdata[tid] = _fmax(alpha_sdata[tid],alpha_sdata[tid + 32]);
+            alpha = alpha_sdata[tid];
+
+            alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,16));
+            alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,8));
+            alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,4));
+            alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,2));
+            alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,1));
+        }
+
+        if (tid == 0) {
+            alpha_sdata[0] = alpha;
         }
         __syncthreads();
 
-        if (tid > 0 && tid < 32) {
-            alpha_sdata[0] = _fmax(alpha_sdata[tid],alpha_sdata[0]);
-        }
-
-        __syncthreads();
-
-        T alpha = alpha_sdata[0];
+        T sum = 0.0;
 
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
-            sum_sdata[tid] += _exp(input_output[i] - alpha);
+            sum += _exp(input_output[i] - alpha);
         }
-        __syncthreads();
 
-        if (tid < 512) {
-            sum_sdata[tid] += sum_sdata[tid + 512];
-        }
-        __syncthreads();
+        sum += __shfl_down_sync(0xffffffff,sum,16);
+        sum += __shfl_down_sync(0xffffffff,sum,8);
+        sum += __shfl_down_sync(0xffffffff,sum,4);
+        sum += __shfl_down_sync(0xffffffff,sum,2);
+        sum += __shfl_down_sync(0xffffffff,sum,1);
 
-        if (tid < 256) {
-            sum_sdata[tid] += sum_sdata[tid + 256];
-        }
-        __syncthreads();
-
-        if (tid < 128) {
-            sum_sdata[tid] += sum_sdata[tid + 128];
-        }
-        __syncthreads();
-
-        if (tid < 64) {
-            sum_sdata[tid] += sum_sdata[tid + 64];
+        if (tid_warp == 0) {
+            sum_sdata[tid / 32] = sum;
         }
         __syncthreads();
 
         if (tid < 32) {
-            sum_sdata[tid] += sum_sdata[tid + 32];
+            sum = sum_sdata[tid];
+
+            sum += __shfl_down_sync(0xffffffff,sum,16);
+            sum += __shfl_down_sync(0xffffffff,sum,8);
+            sum += __shfl_down_sync(0xffffffff,sum,4);
+            sum += __shfl_down_sync(0xffffffff,sum,2);
+            sum += __shfl_down_sync(0xffffffff,sum,1);
+        }
+
+        if (tid == 0) {
+            sum_sdata[0] = sum;
         }
         __syncthreads();
 
-        if (tid < 32) {
-            sum_sdata[tid] += sum_sdata[tid + 32];
-        }
-        __syncthreads();
-
-        if (tid < 16) {
-            sum_sdata[tid] += sum_sdata[tid + 16];
-        }
-        __syncthreads();
-
-        if (tid < 8) {
-            sum_sdata[tid] += sum_sdata[tid + 8];
-        }
-        __syncthreads();
-
-
-        if (tid < 4) {
-            sum_sdata[tid] += sum_sdata[tid + 4];
-        }
-        __syncthreads();
-
-
-        if (tid < 2) {
-            sum_sdata[tid] += sum_sdata[tid + 2];
-        }
-        __syncthreads();
-
-        if (tid < 1) {
-            sum_sdata[tid] += sum_sdata[tid + 1];
-        }
-        __syncthreads();
-        
-        T sum = sum_sdata[0];
+        sum = sum_sdata[0];
 
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
             T number = _exp(input_output[i] - alpha);
@@ -384,22 +352,20 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
-    if (blockIdx.x < nlen) {
+    if (blockIdx.x < nlen && blockDim.x * blockIdx.z + threadIdx.x < batch_size) {
         unsigned int tid = threadIdx.x;
         unsigned int i = blockIdx.x + tid * nlen;
         unsigned int n = nlen * batch_size;
         unsigned int distance = blockDim.x * nlen;
 
-        sdata[tid] = (T)0;
-
-        T acc = 0.0;
-
-        while (i < n) {
-            acc += input[i];
-            i += distance;
+        if (tid < 32) {
+            sdata[tid] = (T)0;
         }
         __syncthreads();
 
+        T acc = 0.0;
+
+        acc += input[i + blockIdx.z * distance];
 
         acc += __shfl_down_sync(0xffffffff,acc,16);
         acc += __shfl_down_sync(0xffffffff,acc,8);
@@ -423,7 +389,7 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
         }
 
         if (tid == 0) {
-            output[blockIdx.x] = acc;
+            atomicAdd(&output[blockIdx.x],acc);
         }
     }
 }
@@ -434,9 +400,9 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
     extern __shared__ char smem[];
 
     T *sdata_sum = reinterpret_cast<T*>(&smem[0]);
-    T *sdata_c = reinterpret_cast<T*>(&smem[BLOCK_SHARED * sizeof(T)]);
+    T *sdata_c = reinterpret_cast<T*>(&smem[BLOCK_SHARED_SMALL * sizeof(T)]);
 
-    if (blockIdx.x < output_len * batch_size) {
+    if (blockIdx.x < output_len * batch_size && blockIdx.z * blockDim.x + threadIdx.x < input_len) {
         size_t batch_index = blockIdx.x / output_len;
 
         size_t tid = threadIdx.x;
@@ -446,23 +412,22 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
         size_t tid_warp = tid % 32;
         size_t distance = blockDim.x;
 
-        sdata_sum[tid] = 0.0;
-        sdata_c[tid] = 0.0;
+        if (tid < 32) {
+            sdata_sum[tid] = 0.0;
+            sdata_c[tid] = 0.0;
+        }
+        __syncthreads();
 
         T acc = 0.0;
         T c = 0.0;
 
+        j += blockIdx.z * distance;
+
+        acc = input[i + j] * units[j * output_len + out_index] - c;
+
         /**
          * Kahan summation algorithm
          */
-        while (j < input_len) {
-            const T y = input[i + j] * units[j * output_len + out_index] - c;
-            const T t = acc + y;
-            c = (t - acc) - y;
-            acc = t;
-            j += distance;
-        }
-
         {
             T dc = 0.0;
             T dacc = 0.0;
@@ -528,8 +493,6 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             c = sdata_c[tid];
             acc = sdata_sum[tid];
 
-            const size_t org_index = tid * 32;
-
             T dc = 0.0;
             T dacc = 0.0;
 
@@ -587,7 +550,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
         if (tid == 0) {
             const T y = bias[out_index] - c;
             const T t = acc + y;
-            output[blockIdx.x] = t;
+            atomicAdd(&output[blockIdx.x], t);
         }
     }
 }
@@ -599,7 +562,7 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
-    if (blockIdx.x < input_len * batch_size) {
+    if (blockIdx.x < input_len * batch_size && blockDim.x * blockIdx.z + threadIdx.x < output_len) {
         size_t batch_index = blockIdx.x / input_len;
 
         size_t tid = threadIdx.x;
@@ -609,14 +572,16 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
         size_t j = tid;
         size_t distance = blockDim.x;
 
-        sdata[tid] = (T)0;
+        if (tid < 32) {
+            sdata[tid] = (T)0;
+        }
+        __syncthreads();
 
         T acc = 0.0;
 
-        while (j < output_len) {
-            acc += loss[i + j] * units[input_index * output_len + j];
-            j += distance;
-        }
+        j += distance * blockIdx.z;
+
+        acc += loss[i + j] * units[input_index * output_len + j];
 
         acc += __shfl_down_sync(0xffffffff,acc,16);
         acc += __shfl_down_sync(0xffffffff,acc,8);
@@ -640,7 +605,7 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
         }
 
         if (tid == 0) {
-            output[blockIdx.x] = acc;
+            atomicAdd(&output[blockIdx.x],acc);
         }
     }
 }
@@ -653,7 +618,7 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
-    if (blockIdx.x < units_size) {
+    if (blockIdx.x < units_size && blockDim.x * blockIdx.z + threadIdx.x < batch_size) {
         size_t tid = threadIdx.x;
         size_t tid_warp = tid % 32;
         size_t i = blockIdx.x / output_len;
@@ -665,16 +630,14 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
 
         size_t distance = blockDim.x;
 
-        sdata[tid] = (T)0;
+        if (tid < 32) {
+            sdata[tid] = (T)0;
+        }
+        __syncthreads();
 
         T acc = 0.0;
 
-        while (k < batch_size) {
-            acc += loss[j] * input[i];
-            k += distance;
-            i += distance * input_len;
-            j += distance * output_len;
-        }
+        acc += loss[j + distance * output_len * blockIdx.z] * input[i + distance * input_len * blockIdx.z];
 
         acc += __shfl_down_sync(0xffffffff,acc,16);
         acc += __shfl_down_sync(0xffffffff,acc,8);
@@ -698,7 +661,7 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
         }
 
         if (tid == 0) {
-            output[blockIdx.x] = acc;
+            atomicAdd(&output[blockIdx.x],acc);
         }
     }
 }

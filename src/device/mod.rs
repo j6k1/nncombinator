@@ -339,16 +339,16 @@ impl<'a,U,const N:usize> DeviceReduce<SerializedVecView<'a,U,Arr<U,N>>,CudaTenso
           ReduceLinearBatch::<U,N>: Kernel<Args=ReduceLinearBatchArgs<U,N>> {
     #[inline]
     fn reduce(&self, input: SerializedVecView<'a, U, Arr<U, N>>) -> Result<CudaTensor1dPtr<U, N>, TrainingError> {
-        let mut loss_ptr = CudaPtr::new(input.len() * N).unwrap();
-        loss_ptr.memcpy(input.as_raw_slice().as_ptr(),input.len() * N).unwrap();
-        let output_ptr = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool()).unwrap();
+        let mut loss_ptr = CudaPtr::new(input.len() * N)?;
+        loss_ptr.memcpy(input.as_raw_slice().as_ptr(),input.len() * N)?;
+        let output_ptr = CudaTensor1dPtr::<U,N>::with_initializer(&self.memory_pool,Default::default)?;
 
         let mut args = ReduceLinearBatchArgs::new(loss_ptr,output_ptr,N,input.len());
 
         let mut kernel = ReduceLinearBatch::<U,N>::new();
 
-        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
+        kernel.launch(dim3 { x: N as c_uint, y: 1, z: (input.len() as c_uint + 1023) / 1024 },
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
 
         Ok(args.output)
     }

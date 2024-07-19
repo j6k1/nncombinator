@@ -1419,7 +1419,7 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U
 
         kernel.launch(dim3 { x: 1, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
+                      &mut args, 32 * mem::size_of::<U>() * 2)?;
 
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
@@ -1466,7 +1466,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceGpu<U>> for
 
         kernel.launch(dim3 { x: 1, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
+                      &mut args, 32 * mem::size_of::<U>() * 2)?;
 
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
@@ -1547,7 +1547,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U
 
         kernel.launch(dim3 { x: input.len() as c_uint, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
+                      &mut args, 32 * mem::size_of::<U>() * 2)?;
 
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }
@@ -1590,7 +1590,7 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
 
         kernel.launch(dim3 { x: input.len() as c_uint, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
+                      &mut args, 32 * mem::size_of::<U>() * 2)?;
 
         Ok(args.input_output.read_to_vec()?.try_into()?)
     }

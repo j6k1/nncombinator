@@ -158,7 +158,7 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
     fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<U,NO>, units: &CudaTensor2dPtr<U,NI,NO>, input: ArrView<'a,U,NI>)
                           -> Result<Arr<U, NO>, EvaluateError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
-        let output = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
+        let output = CudaMemoryPoolPtr::with_initializer(NO,&self.memory_pool,Default::default)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI)?;
 
@@ -170,8 +170,8 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
 
         let mut kernel = ForwardLinearBatch::<U,NI,NO>::new();
 
-        kernel.launch(dim3 { x: NO as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * 2 * mem::size_of::<U>())?;
+        kernel.launch(dim3 { x: NO as c_uint, y: 1, z: (NI as c_uint + 1023) / 1024 },
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * 2 * mem::size_of::<U>())?;
 
         Ok(args.output.read_to_vec()?.try_into()?)
     }
@@ -179,7 +179,7 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
     #[inline]
     fn backward_linear<'a>(&self, units: &CudaTensor2dPtr<U,NI,NO>, input: ArrView<'a,U,NO>) -> Result<Arr<U, NI>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
-        let output = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
+        let output = CudaMemoryPoolPtr::with_initializer(NI,&self.memory_pool,Default::default)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO)?;
 
@@ -190,8 +190,8 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
 
         let mut kernel = BackwardLinearBatch::<U,NI,NO>::new();
 
-        kernel.launch(dim3 { x: NI as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
+        kernel.launch(dim3 { x: NI as c_uint, y: 1, z: (NO as c_uint + 1023) / 1024 },
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
 
         Ok(args.output.read_to_vec()?.try_into()?)
     }
@@ -200,7 +200,7 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
     fn backward_weight_gradient<'a>(&self, o: ArrView<'a,U,NI>, loss: ArrView<'a,U,NO>) -> Result<CudaTensor2dPtr<U, NI,NO>, TrainingError> {
         let mut input_ptr = CudaMemoryPoolPtr::new(NI,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO,&self.memory_pool)?;
-        let output = CudaTensor2dPtr::<U,NI,NO>::new(&self.memory_pool)?;
+        let output = CudaTensor2dPtr::<U,NI,NO>::with_initializer(&self.memory_pool,Default::default)?;
 
         input_ptr.memcpy(o.as_raw_slice().as_ptr(),NI)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO)?;
@@ -214,8 +214,8 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
 
         let mut kernel = LinearGradientBatch::<U,NI,NO>::new();
 
-        kernel.launch(dim3 { x: (NI * NO) as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
+        kernel.launch(dim3 { x: (NI * NO) as c_uint, y: 1, z: 1 },
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
 
         Ok(args.output)
     }
@@ -226,7 +226,7 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
         let n = input.len();
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NI*n,&self.memory_pool)?;
-        let output = CudaMemoryPoolPtr::new(NO*n,&self.memory_pool)?;
+        let output = CudaMemoryPoolPtr::with_initializer(NO*n,&self.memory_pool,Default::default)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NI*n)?;
 
@@ -238,8 +238,8 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
 
         let mut kernel = ForwardLinearBatch::<U,NI,NO>::new();
 
-        kernel.launch(dim3 { x: (NO * n) as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * 2 * mem::size_of::<U>())?;
+        kernel.launch(dim3 { x: (NO * n) as c_uint, y: 1, z: (NI as c_uint + 1023) / 1024 },
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * 2 * mem::size_of::<U>())?;
 
         Ok(args.output.read_to_vec()?.try_into()?)
     }
@@ -249,7 +249,7 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
         let n = input.len();
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NO*n,&self.memory_pool)?;
-        let output = CudaMemoryPoolPtr::new(NI*n,&self.memory_pool)?;
+        let output = CudaMemoryPoolPtr::with_initializer(NI*n,&self.memory_pool,Default::default)?;
 
         input_ptr.memcpy(input.as_raw_slice().as_ptr(),NO*n)?;
 
@@ -260,8 +260,8 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
 
         let mut kernel = BackwardLinearBatch::<U,NI,NO>::new();
 
-        kernel.launch(dim3 { x: (NI * n) as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
+        kernel.launch(dim3 { x: (NI * n) as c_uint, y: 1, z: (NO as c_uint + 1023) / 1024 },
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
 
         Ok(args.output.read_to_vec()?.try_into()?)
     }
@@ -273,7 +273,7 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
 
         let mut input_ptr = CudaMemoryPoolPtr::new(NI*n,&self.memory_pool)?;
         let mut loss_ptr = CudaMemoryPoolPtr::new(NO*n,&self.memory_pool)?;
-        let output = CudaTensor2dPtr::<U,NI,NO>::new(&self.memory_pool)?;
+        let output = CudaTensor2dPtr::<U,NI,NO>::with_initializer(&self.memory_pool,Default::default)?;
         input_ptr.memcpy(o.as_raw_slice().as_ptr(),NI*n)?;
         loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),NO*n)?;
 
@@ -286,8 +286,8 @@ impl<U,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>
 
         let mut kernel = LinearGradientBatch::<U,NI,NO>::new();
 
-        kernel.launch(dim3 { x: (NI * NO) as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<U>())?;
+        kernel.launch(dim3 { x: (NI * NO) as c_uint, y: 1, z: (n as c_uint + 1023) / 1024 },
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
 
         Ok(args.output)
     }

@@ -33,7 +33,7 @@ impl<T,const N:usize> ReduceLinearBatchArgs<T,N> where T: DataTypeInfo + Debug +
     /// Create a ReduceLinearBatchArgs instance
     /// # Arguments
     /// * `input` - input
-    /// * `output` - output
+    /// * `output` - output (All elements must be initialized to zero.)
     /// * `out_len` - Number of scalar values in output
     /// * `batch_len` - batch_count
     pub fn new(input:CudaPtr<T>,output:CudaTensor1dPtr<T,N>,out_len:usize,batch_len:usize) -> ReduceLinearBatchArgs<T,N> {
@@ -218,7 +218,7 @@ impl<'a,T,const NI:usize,const NO:usize> crate::cuda::kernel::device::ForwardLin
     /// * `input` - input0
     /// * `units` - weight
     /// * `bias` - bias
-    /// * `output` - output
+    /// * `output` - output (All elements must be initialized to zero.)
     /// * `batch_len` - batch_count
     pub fn new(input:CudaMemoryPoolPtr<T>,
                units: CudaConstPtr<'a,CudaTensor2dPtr<T,NI,NO>>,
@@ -291,7 +291,7 @@ impl<'a,T,const NI:usize,const NO:usize> crate::cuda::kernel::device::BackwardLi
     /// # Arguments
     /// * `input` - input
     /// * `units` - weight
-    /// * `output` - output
+    /// * `output` - output (All elements must be initialized to zero.)
     /// * `batch_len` - batch_count
     pub fn new(loss:CudaMemoryPoolPtr<T>,
                units: CudaConstPtr<'a,CudaTensor2dPtr<T,NI,NO>>,
@@ -362,7 +362,7 @@ impl<T,const NI:usize,const NO:usize> crate::cuda::kernel::device::LinearGradien
     /// # Arguments
     /// * `loss` - loss
     /// * `input` - input
-    /// * `output` - output
+    /// * `output` - output (All elements must be initialized to zero.)
     /// * `batch_len` - batch_count
     pub fn new(loss:CudaMemoryPoolPtr<T>,
                input:CudaMemoryPoolPtr<T>,

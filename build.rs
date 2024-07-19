@@ -31,6 +31,7 @@ fn main() {
 				"--prec-div=true",
 				"--fmad=true",
 				"-cudart=shared",
+				"-arch=sm_60",
 				"src/kernel.cu",
 				// Output static library (.lib)
 				"-lib",

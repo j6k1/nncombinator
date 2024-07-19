@@ -355,7 +355,6 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
     if (blockIdx.x < nlen && blockDim.x * blockIdx.z + threadIdx.x < batch_size) {
         unsigned int tid = threadIdx.x;
         unsigned int i = blockIdx.x + tid * nlen;
-        unsigned int n = nlen * batch_size;
         unsigned int distance = blockDim.x * nlen;
 
         if (tid < 32) {

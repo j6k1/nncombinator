@@ -29,6 +29,9 @@ pub enum DiffInput<T,U,const NI:usize,const NO:usize>
 pub trait BatchDataType {
     type Type;
 }
+impl BatchDataType for () {
+    type Type = ();
+}
 /// Trait that defines the ability to get the size of a batch
 pub trait BatchSize {
     fn size(&self) -> usize;

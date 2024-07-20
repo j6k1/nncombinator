@@ -810,7 +810,8 @@ impl<'a,T,const N:usize> Arr2Iter<'a,T,N> {
         N
     }
 }
-impl<'a,T,const N:usize> Iterator for Arr2Iter<'a,T,N> {
+impl<'a,T,const N:usize> Iterator for Arr2Iter<'a,T,N>
+    where T: Default + Clone + Send {
     type Item = ArrView<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -825,6 +826,26 @@ impl<'a,T,const N:usize> Iterator for Arr2Iter<'a,T,N> {
             Some(ArrView {
                 arr:l
             })
+        }
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+        if slice.is_empty() {
+            None
+        } else if n == 0 {
+            let (l,r) = slice.split_at(self.element_size());
+
+            self.0 = r;
+
+            Some(l.try_into().expect("An error occurred in the conversion from Slice to ArrView. The sizes do not match."))
+        } else {
+            let (_,r) = slice.split_at(self.element_size() * n);
+            let (l,r) = r.split_at(self.element_size());
+
+            self.0 = r;
+
+            Some(l.try_into().expect("An error occurred in the conversion from Slice to ArrView. The sizes do not match."))
         }
     }
 }
@@ -866,7 +887,8 @@ impl<'a,T,const N:usize> Arr2IterMut<'a,T,N> {
         N
     }
 }
-impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N> {
+impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N>
+    where T: Default + Clone + Send {
     type Item = ArrViewMut<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -881,6 +903,26 @@ impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N> {
             Some(ArrViewMut {
                 arr:l
             })
+        }
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+        if slice.is_empty() {
+            None
+        } else if n == 0 {
+            let (l,r) = slice.split_at_mut(self.element_size());
+
+            self.0 = r;
+
+            Some(l.try_into().expect("An error occurred in the conversion from Slice to ArrView. The sizes do not match."))
+        } else {
+            let (_,r) = slice.split_at_mut(self.element_size() * n);
+            let (l,r) = r.split_at_mut(self.element_size());
+
+            self.0 = r;
+
+            Some(l.try_into().expect("An error occurred in the conversion from Slice to ArrView. The sizes do not match."))
         }
     }
 }

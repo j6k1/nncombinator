@@ -32,34 +32,34 @@ pub struct SGD<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>,
     size: usize,
     /// Learning rate
-    a:U,
+    lr:U,
     /// Weight decay
-    lambda:U
+    weight_decay:U
 }
 impl<U,D> SGD<U,D> where U: UnitValue<U>, D: Device<U> {
     /// Create an instance of SGD
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
-    pub fn new(size: usize,a:U) -> SGD<U,D> {
+    /// * `lr` - Learning rate
+    pub fn new(size: usize,lr:U) -> SGD<U,D> {
         SGD {
             d:PhantomData::<D>,
             size:size,
-            a:a,
-            lambda:U::default()
+            lr:lr,
+            weight_decay:U::default()
         }
     }
     /// Create an instance of SGD
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
-    /// * `lambda` - Weight decay
-    pub fn with_lambda(size: usize,a:U,lambda:U) -> SGD<U,D> {
+    /// * `lr` - Learning rate
+    /// * `weight_decay` - Weight decay
+    pub fn with_params(size: usize,lr:U,weight_decay:U) -> SGD<U,D> {
         SGD {
             d:PhantomData::<D>,
             size:size,
-            a:a,
-            lambda:lambda,
+            lr:lr,
+            weight_decay:weight_decay,
         }
     }
 }
@@ -68,11 +68,11 @@ impl<U> Optimizer<U,DeviceCpu<U>> for SGD<U,DeviceCpu<U>> where U: UnitValue<U>,
 
     #[inline]
     fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
-        let a = self.a;
-        let lambda = self.lambda;
+        let a = self.lr;
+        let weight_decay = self.weight_decay;
 
         for (w,&e) in w.iter_mut().zip(e.iter()) {
-            *w = *w - a * (e + lambda * *w);
+            *w = *w - a * (e + weight_decay * *w);
         }
 
         Ok(())
@@ -85,7 +85,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for SGD<U,DeviceGpu<U>>
 
     #[inline]
     fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
-        let mut args = SGDArgs::new(w,e,self.size,self.a,self.lambda);
+        let mut args = SGDArgs::new(w,e,self.size,self.lr,self.weight_decay);
 
         let mut kernel = kernel::optimizer::SGD::<'_,U>::new();
 
@@ -100,31 +100,41 @@ impl<U> Optimizer<U,DeviceGpu<U>> for SGD<U,DeviceGpu<U>>
 pub struct SGDBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
     d:PhantomData<D>,
     /// Learning rate
-    a:U,
+    lr:U,
     /// Weight decay
-    lambda:U
+    weight_decay:U
 }
 impl<U,D> SGDBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
-    /// Create an instance of SGD
+    /// Create an instance of SGDBuilder
     /// # Arguments
-    /// * `a` - Learning rate
-    pub fn new(a:U) -> SGDBuilder<U,D> {
+    /// * `device` - device
+    pub fn new(_:&D) -> SGDBuilder<U,D> {
         SGDBuilder {
             d:PhantomData::<D>,
-            a:a,
-            lambda:U::default()
+            lr:U::from_f64(0.001).expect("Error in type conversion from f64."),
+            weight_decay:U::default()
         }
     }
 
-    /// Create an instance of SGD
+    /// Replaces the value of field lr in SGDBuilder with the passed value and returns it.
     /// # Arguments
-    /// * `a` - Learning rate
-    /// * `lambda` - Weight decay
-    pub fn with_lambda(a:U,lambda:U) -> SGDBuilder<U,D> {
+    /// * `lr` - Learning rate
+    pub fn lr(self,lr:U) -> SGDBuilder<U,D> {
         SGDBuilder {
             d:PhantomData::<D>,
-            a:a,
-            lambda:lambda,
+            lr:lr,
+            weight_decay:self.weight_decay,
+        }
+    }
+
+    /// Replaces the value of field weight_decay in SGDBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `weight_decay` - Weight Decay
+    pub fn weight_decay(self,weight_decay:U) -> SGDBuilder<U,D> {
+        SGDBuilder {
+            d:PhantomData::<D>,
+            lr:self.lr,
+            weight_decay:weight_decay,
         }
     }
 }
@@ -132,7 +142,7 @@ impl<U,D> OptimizerBuilder<U,D> for SGDBuilder<U,D> where U: UnitValue<U>, D: De
     type Output = SGD<U,D>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Ok(SGD::with_lambda(size,self.a,self.lambda))
+        Ok(SGD::with_params(size,self.lr,self.weight_decay))
     }
 }
 /// MomentumSGD Implementation
@@ -141,41 +151,41 @@ pub struct MomentumSGD<U,D>
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
     size:usize,
-    a:U,
+    lr:U,
     mu:U,
-    lambda:U,
+    weight_decay:U,
     vt:<Self as OptimizerState<U,D>>::Type
 }
 impl<U> MomentumSGD<U,DeviceCpu<U>> where U: UnitValue<U> {
     /// Create an instance of MomentumSGD
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
-    pub fn new(_:&DeviceCpu<U>,size:usize,a:U) -> MomentumSGD<U,DeviceCpu<U>> {
+    /// * `lr` - Learning rate
+    pub fn new(_:&DeviceCpu<U>,size:usize,lr:U) -> MomentumSGD<U,DeviceCpu<U>> {
         MomentumSGD {
             d:PhantomData::<DeviceCpu<U>>,
             size:size,
-            a:a,
+            lr:lr,
             mu:U::from_f64(0.9).expect("Error in type conversion from f64."),
-            lambda:U::default(),
+            weight_decay:U::default(),
             vt:vec![U::default();size].into_boxed_slice()
         }
     }
     /// Create an instance of MomentumSGD with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
+    /// * `lr` - Learning rate
     /// * `mu` - mu
-    /// * `lambda` - Weight decay
+    /// * `weight_decay` - Weight decay
     ///
-    /// note: See the mu and lambda sections of the MomentumSGD algorithm formula.
-    pub fn with_params(_:&DeviceCpu<U>,size:usize,a:U,mu:U,lambda:U) -> MomentumSGD<U,DeviceCpu<U>> {
+    /// note: See the mu and weight_decay sections of the MomentumSGD algorithm formula.
+    pub fn with_params(_:&DeviceCpu<U>,size:usize,lr:U,mu:U,weight_decay:U) -> MomentumSGD<U,DeviceCpu<U>> {
         MomentumSGD {
             d:PhantomData::<DeviceCpu<U>>,
             size:size,
-            a:a,
+            lr:lr,
             mu:mu,
-            lambda:lambda,
+            weight_decay:weight_decay,
             vt:vec![U::default();size].into_boxed_slice()
         }
     }
@@ -185,13 +195,13 @@ impl<U> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>> where U: UnitV
 
     #[inline]
     fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
-        let a = self.a;
+        let a = self.lr;
         let mu = self.mu;
 
-        let lambda = self.lambda;
+        let weight_decay = self.weight_decay;
 
         for ((w,&e),vt) in w.iter_mut().zip(e.iter()).zip(self.vt.iter_mut()) {
-            *vt = mu * *vt - a * (e + lambda * *w);
+            *vt = mu * *vt - a * (e + weight_decay * *w);
             *w = *w + *vt;
         }
 
@@ -203,15 +213,15 @@ impl<U> MomentumSGD<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<
     /// # Arguments
     /// * `device` - device
     /// * `size` - input size
-    /// * `a` - Learning rate
-    pub fn new(device:&DeviceGpu<U>,size:usize,a:U)
+    /// * `lr` - Learning rate
+    pub fn new(device:&DeviceGpu<U>,size:usize,lr:U)
         -> Result<MomentumSGD<U,DeviceGpu<U>>,OptimizerBuildError> {
         Ok(MomentumSGD {
             d:PhantomData::<DeviceGpu<U>>,
             size:size,
-            a:a,
+            lr:lr,
             mu:U::from_f64(0.9).expect("Error in type conversion from f64."),
-            lambda:U::default(),
+            weight_decay:U::default(),
             vt: CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?
         })
     }
@@ -219,19 +229,19 @@ impl<U> MomentumSGD<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<
     /// # Arguments
     /// * `device` - device
     /// * `size` - input size
-    /// * `a` - Learning rate
+    /// * `lr` - Learning rate
     /// * `mu` - mu
-    /// * `lambda` - Weight decay
+    /// * `weight_decay` - Weight decay
     ///
-    /// note: See the mu and lambda sections of the MomentumSGD algorithm formula.
-    pub fn with_params(device:&DeviceGpu<U>,size:usize,a:U,mu:U,lambda:U)
+    /// note: See the mu and weight_decay sections of the MomentumSGD algorithm formula.
+    pub fn with_params(device:&DeviceGpu<U>,size:usize,lr:U,mu:U,weight_decay:U)
         -> Result<MomentumSGD<U,DeviceGpu<U>>,OptimizerBuildError> {
         Ok(MomentumSGD {
             d:PhantomData::<DeviceGpu<U>>,
             size:size,
-            a:a,
+            lr:lr,
             mu:mu,
-            lambda:lambda,
+            weight_decay:weight_decay,
             vt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?
         })
     }
@@ -244,7 +254,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for MomentumSGD<U,DeviceGpu<U>>
 
     #[inline]
     fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
-        let mut args = MomentumSGDArgs::new(w,e,self.size,self.a,self.mu,self.lambda,&mut self.vt);
+        let mut args = MomentumSGDArgs::new(w,e,self.size,self.lr,self.mu,self.weight_decay,&mut self.vt);
 
         let mut kernel = kernel::optimizer::MomentumSGD::<'_,U>::new();
 
@@ -268,37 +278,56 @@ impl<U> OptimizerState<U,DeviceGpu<U>> for MomentumSGD<U,DeviceGpu<U>>
 /// Implementation of a builder to generate MomentumSGD optimizers
 pub struct MomentumSGDBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
     device:D,
-    a:U,
+    lr:U,
     mu:U,
-    lambda:U
+    weight_decay:U
 }
 impl<U,D> MomentumSGDBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
-    /// Create an instance of MomentumSGD
+    /// Create an instance of MomentumSGDBuilder
     /// # Arguments
     /// * `device` - device
-    /// * `a` - Learning rate
-    pub fn new(device:&D,a:U) -> MomentumSGDBuilder<U,D> {
+    pub fn new(device:&D) -> MomentumSGDBuilder<U,D> {
         MomentumSGDBuilder {
             device:device.clone(),
-            a:a,
+            lr:U::from_f64(0.001).expect("Error in type conversion from f64."),
             mu:U::from_f64(0.9).expect("Error in type conversion from f64."),
-            lambda:U::default()
+            weight_decay:U::default()
         }
     }
-    /// Create an instance of MomentumSGD with additional parameters other than the default values
+
+    /// Replaces the value of field lr in MomentumSGDBuilder with the passed value and returns it.
     /// # Arguments
-    /// * `device` - device
-    /// * `a` - Learning rate
-    /// * `mu` - mu
-    /// * `lambda` - Weight decay
-    ///
-    /// note: See the mu and lambda sections of the MomentumSGD algorithm formula.
-    pub fn with_params(device:&D,a:U,mu:U,lambda:U) -> MomentumSGDBuilder<U,D> {
+    /// * `lr` - Learning rate
+    pub fn lr(self,lr:U) -> MomentumSGDBuilder<U,D> {
         MomentumSGDBuilder {
-            device:device.clone(),
-            a:a,
+            device:self.device,
+            lr:lr,
+            mu:self.mu,
+            weight_decay:self.weight_decay,
+        }
+    }
+
+    /// Replaces the value of field weight_decay in MomentumSGDBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `weight_decay` - Learning rate
+    pub fn weight_decay(self,weight_decay:U) -> MomentumSGDBuilder<U,D> {
+        MomentumSGDBuilder {
+            device:self.device,
+            lr:self.lr,
+            mu:self.mu,
+            weight_decay:weight_decay
+        }
+    }
+
+    /// Replaces the value of field mu in MomentumSGDBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `mu` - momentum
+    pub fn mu(self,mu:U) -> MomentumSGDBuilder<U,D> {
+        MomentumSGDBuilder {
+            device:self.device,
+            lr:self.lr,
             mu:mu,
-            lambda:lambda
+            weight_decay:self.weight_decay,
         }
     }
 }
@@ -307,7 +336,7 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for MomentumSGDBuilder<U,DeviceCpu<U>>
     type Output = MomentumSGD<U,DeviceCpu<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Ok(MomentumSGD::<_,DeviceCpu<U>>::with_params(&self.device,size,self.a,self.mu,self.lambda))
+        Ok(MomentumSGD::<_,DeviceCpu<U>>::with_params(&self.device,size,self.lr,self.mu,self.weight_decay))
     }
 }
 impl<U> OptimizerBuilder<U,DeviceGpu<U>> for MomentumSGDBuilder<U,DeviceGpu<U>>
@@ -316,7 +345,7 @@ impl<U> OptimizerBuilder<U,DeviceGpu<U>> for MomentumSGDBuilder<U,DeviceGpu<U>>
     type Output = MomentumSGD<U,DeviceGpu<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        MomentumSGD::<_,DeviceGpu<U>>::with_params(&self.device,size,self.a,self.mu,self.lambda)
+        MomentumSGD::<_,DeviceGpu<U>>::with_params(&self.device,size,self.lr,self.mu,self.weight_decay)
     }
 }
 /// Adagrad Implementation
@@ -325,28 +354,35 @@ pub struct Adagrad<U,D>
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
     size:usize,
-    a:U,
+    lr:U,
     gt:<Self as OptimizerState<U,D>>::Type,
+    weight_decay:U,
     eps:U
 }
 impl<U> Adagrad<U,DeviceCpu<U>> where U: UnitValue<U> {
     /// Create an instance of Adagrad
     /// # Arguments
+    /// * `device` - device
     /// * `size` - input size
     pub fn new(device:&DeviceCpu<U>,size:usize) -> Adagrad<U,DeviceCpu<U>> {
-        Adagrad::<U,DeviceCpu<U>>::with_lr(device,size,U::from_f64(0.01).expect("Error in type conversion from f64."))
+        Adagrad::<U,DeviceCpu<U>>::with_params(
+            device,size,
+            U::from_f64(0.01).expect("Error in type conversion from f64."),
+            U::default()
+        )
     }
 
     /// Create an instance of Adagrad with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
-    pub fn with_lr(_:&DeviceCpu<U>,size:usize,a:U) -> Adagrad<U,DeviceCpu<U>> {
+    /// * `lr` - Learning rate
+    pub fn with_params(_:&DeviceCpu<U>,size:usize,lr:U,weight_decay:U) -> Adagrad<U,DeviceCpu<U>> {
         Adagrad {
             d:PhantomData::<DeviceCpu<U>>,
             size:size,
-            a:a,
+            lr:lr,
             gt:vec![U::default();size].into_boxed_slice(),
+            weight_decay: weight_decay,
             eps:U::from_f64(1e-10f64).expect("Error in type conversion from f64.")
         }
     }
@@ -356,9 +392,12 @@ impl<U> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>> where U: UnitValue
 
     #[inline]
     fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
-        let a = self.a;
+        let a = self.lr;
+        let weight_decay = self.weight_decay;
 
         for ((w,&e),gt) in w.iter_mut().zip(e.iter()).zip(self.gt.iter_mut()) {
+            let e = e + weight_decay * *w;
+
             *gt += e * e;
             *w = *w - a * (e / (gt.sqrt() + self.eps));
         }
@@ -372,19 +411,24 @@ impl<U> Adagrad<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
     /// * `device` - device
     /// * `size` - input size
     pub fn new(device:&DeviceGpu<U>,size:usize) -> Result<Adagrad<U,DeviceGpu<U>>,OptimizerBuildError> {
-        Adagrad::<U,DeviceGpu<U>>::with_lr(device,size,U::from_f64(0.01).expect("Error in type conversion from f64."))
+        Adagrad::<U,DeviceGpu<U>>::with_params(
+            device,size,
+            U::from_f64(0.01).expect("Error in type conversion from f64."),
+            U::default()
+        )
     }
 
     /// Create an instance of Adagrad with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
-    pub fn with_lr(device:&DeviceGpu<U>,size:usize,a:U) -> Result<Adagrad<U,DeviceGpu<U>>,OptimizerBuildError> {
+    /// * `lr` - Learning rate
+    pub fn with_params(device:&DeviceGpu<U>,size:usize,lr:U,weight_decay:U) -> Result<Adagrad<U,DeviceGpu<U>>,OptimizerBuildError> {
         Ok(Adagrad {
             d:PhantomData::<DeviceGpu<U>>,
             size:size,
-            a:a,
+            lr:lr,
             gt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
+            weight_decay:weight_decay,
             eps:U::from_f64(1e-10f64).expect("Error in type conversion from f64.")
         })
     }
@@ -397,7 +441,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adagrad<U,DeviceGpu<U>>
 
     #[inline]
     fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
-        let mut args = AdagradArgs::new(w,e,self.size,self.a,self.eps,&mut self.gt);
+        let mut args = AdagradArgs::new(w,e,self.size,self.lr,self.weight_decay,self.eps,&mut self.gt);
 
         let mut kernel = kernel::optimizer::Adagrad::<'_,U>::new();
 
@@ -420,27 +464,41 @@ impl<U> OptimizerState<U,DeviceGpu<U>> for Adagrad<U,DeviceGpu<U>>
 }
 /// Implementation of a builder to generate Adagrad optimizers
 pub struct AdagradBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
-    u:PhantomData<U>,
-    a:U,
+    lr:U,
+    weight_decay:U,
     device:D
 }
 impl<U,D> AdagradBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
-    /// Create an instance of Adagrad
+    /// Create an instance of AdagradBuilder
     /// # Arguments
     /// * `device` - device
     pub fn new(device:&D) -> AdagradBuilder<U,D> {
-        AdagradBuilder::with_lr(device,U::from_f64(0.01).expect("Error in type conversion from f64."))
+        AdagradBuilder {
+            lr:U::from_f64(0.01).expect("Error in type conversion from f64."),
+            weight_decay:U::default(),
+            device:device.clone()
+        }
     }
 
-    /// Create an instance of Adagrad with additional parameters other than the default values
+    /// Replaces the value of field lr in AdagradBuilder with the passed value and returns it.
     /// # Arguments
-    /// * `device` - device
-    /// * `a` - Learning rate
-    pub fn with_lr(device:&D,a:U) -> AdagradBuilder<U,D> {
+    /// * `lr` - Learning rate
+    pub fn lr(self,lr:U) -> AdagradBuilder<U,D> {
         AdagradBuilder {
-            u:PhantomData::<U>,
-            a:a,
-            device:device.clone()
+            lr:lr,
+            weight_decay:self.weight_decay,
+            device:self.device
+        }
+    }
+
+    /// Replaces the value of field weight_decay in AdagradBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `weight_decay` - Learning rate
+    pub fn weight_decay(self,weight_decay:U) -> AdagradBuilder<U,D> {
+        AdagradBuilder {
+            lr:self.lr,
+            weight_decay:weight_decay,
+            device:self.device
         }
     }
 }
@@ -449,7 +507,7 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for AdagradBuilder<U,DeviceCpu<U>>
     type Output = Adagrad<U,DeviceCpu<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Ok(Adagrad::<_,DeviceCpu<U>>::with_lr(&self.device,size,self.a))
+        Ok(Adagrad::<_,DeviceCpu<U>>::with_params(&self.device,size,self.lr,self.weight_decay))
     }
 }
 impl<U> OptimizerBuilder<U,DeviceGpu<U>> for AdagradBuilder<U,DeviceGpu<U>>
@@ -458,7 +516,7 @@ impl<U> OptimizerBuilder<U,DeviceGpu<U>> for AdagradBuilder<U,DeviceGpu<U>>
     type Output = Adagrad<U,DeviceGpu<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Adagrad::<_,DeviceGpu<U>>::with_lr(&self.device,size,self.a)
+        Adagrad::<_,DeviceGpu<U>>::with_params(&self.device,size,self.lr,self.weight_decay)
     }
 }
 /// RMSprop Implementation
@@ -467,9 +525,12 @@ pub struct RMSprop<U,D>
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
     size:usize,
-    a:U,
+    lr:U,
+    weight_decay:U,
+    alpha:U,
     mu:U,
     gt:<Self as OptimizerState<U,D>>::Type,
+    bt:<Self as OptimizerState<U,D>>::Type,
     eps:U
 }
 impl<U> RMSprop<U,DeviceCpu<U>> where U: UnitValue<U> {
@@ -483,23 +544,32 @@ impl<U> RMSprop<U,DeviceCpu<U>> where U: UnitValue<U> {
     /// Create an instance of RMSprop with Learning rate
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
-    pub fn with_lr(device:&DeviceCpu<U>,size:usize,a:U) -> RMSprop<U,DeviceCpu<U>> {
-        RMSprop::<U,DeviceCpu<U>>::with_params(device,size,a,U::from_f64(0.9f64).expect("Error in type conversion from f64."))
+    /// * `lr` - Learning rate
+    pub fn with_lr(device:&DeviceCpu<U>,size:usize,lr:U) -> RMSprop<U,DeviceCpu<U>> {
+        RMSprop::<U,DeviceCpu<U>>::with_params(
+            device,size,lr,
+            U::default(),
+            U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+            U::default(),
+        )
     }
 
     /// Create an instance of RMSprop with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
-    /// * `mu` - mu
-    pub fn with_params(_:&DeviceCpu<U>,size:usize,a:U,mu:U) -> RMSprop<U,DeviceCpu<U>> {
+    /// * `lr` - Learning rate
+    /// * `alpha` - alpha
+    /// * `mu` - momentum
+    pub fn with_params(_:&DeviceCpu<U>,size:usize,lr:U,weight_decay:U,alpha:U,mu:U) -> RMSprop<U,DeviceCpu<U>> {
         RMSprop {
             d:PhantomData::<DeviceCpu<U>>,
             size:size,
-            a:a,
+            lr:lr,
+            weight_decay:weight_decay,
+            alpha:alpha,
             mu:mu,
             gt:vec![U::default();size].into_boxed_slice(),
+            bt:vec![U::default();size].into_boxed_slice(),
             eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
         }
     }
@@ -509,12 +579,19 @@ impl<U> Optimizer<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>> where U: UnitValue
 
     #[inline]
     fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
-        let a = self.a;
+        let a = self.lr;
+        let weight_decay = self.weight_decay;
+        let alpha = self.alpha;
         let mu = self.mu;
 
-        for ((w,&e),gt) in w.iter_mut().zip(e.iter()).zip(self.gt.iter_mut()) {
-            *gt = mu * *gt + (U::one() - mu) * e * e;
-            *w = *w - a * e / (gt.sqrt() + self.eps);
+        for ((w,&e),(gt,bt)) in w.iter_mut().zip(e.iter())
+                                                            .zip(self.gt.iter_mut().zip(self.bt.iter_mut())) {
+            let e = e + weight_decay * *w;
+
+            *gt = alpha * *gt + (U::one() - alpha) * e * e;
+            *bt = mu * *bt + e / (gt.sqrt() + self.eps);
+
+            *w = *w - a * *bt;
         }
 
         Ok(())
@@ -533,25 +610,36 @@ impl<U> RMSprop<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
     /// Create an instance of RMSprop with Learning rate
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
-    pub fn with_lr(device:&DeviceGpu<U>,size:usize,a:U)
+    /// * `lr` - Learning rate
+    pub fn with_lr(device:&DeviceGpu<U>,size:usize,lr:U)
         -> Result<RMSprop<U,DeviceGpu<U>>,OptimizerBuildError> {
-        RMSprop::<U,DeviceGpu<U>>::with_params(device,size,a,U::from_f64(0.9f64).expect("Error in type conversion from f64."))
+        RMSprop::<U,DeviceGpu<U>>::with_params(
+            device,size,
+            lr,
+            U::default(),
+            U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+            U::default()
+        )
     }
 
     /// Create an instance of RMSprop with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
+    /// * `lr` - Learning rate
+    /// * `weight_decay` - Weight Decay
+    /// * `alpha` - alpha
     /// * `mu` - mu
-    pub fn with_params(device:&DeviceGpu<U>,size:usize,a:U,mu:U)
+    pub fn with_params(device:&DeviceGpu<U>,size:usize,lr:U,weight_decay:U,alpha:U,mu:U)
         -> Result<RMSprop<U,DeviceGpu<U>>,OptimizerBuildError> {
         Ok(RMSprop {
             d:PhantomData::<DeviceGpu<U>>,
             size:size,
-            a:a,
+            lr:lr,
+            weight_decay:weight_decay,
+            alpha:alpha,
             mu:mu,
             gt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
+            bt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
             eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
         })
     }
@@ -564,7 +652,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for RMSprop<U,DeviceGpu<U>>
 
     #[inline]
     fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
-        let mut args = RMSpropArgs::new(w,e,self.size,self.a,self.mu,self.eps,&mut self.gt);
+        let mut args = RMSpropArgs::new(w,e,self.size,self.lr,self.weight_decay,self.alpha,self.mu,self.eps,&mut self.gt, &mut self.bt);
 
         let mut kernel = kernel::optimizer::RMSprop::<'_,U>::new();
 
@@ -587,38 +675,75 @@ impl<U> OptimizerState<U,DeviceGpu<U>> for RMSprop<U,DeviceGpu<U>>
 }
 /// Implementation of a builder to generate RMSprop optimizers
 pub struct RMSpropBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
-    u:PhantomData<U>,
-    a:U,
+    lr:U,
+    weight_decay:U,
+    alpha:U,
     mu:U,
     device:D
 }
 impl<U,D> RMSpropBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
-    /// Create an instance of RMSpropBuilder
-    /// # Arguments
-    /// * `device` - device
-    pub fn new(device:&D) -> RMSpropBuilder<U,D> {
-        RMSpropBuilder::with_lr(device,U::from_f64(0.0001f64).expect("Error in type conversion from f64."))
-    }
-
-    /// Create an instance of RMSpropBuilder with Learning rate
-    /// # Arguments
-    /// * `device` - device
-    /// * `a` - Learning rate
-    pub fn with_lr(device:&D,a:U) -> RMSpropBuilder<U,D> {
-        RMSpropBuilder::with_params(device,a,U::from_f64(0.9f64).expect("Error in type conversion from f64."))
-    }
-
     /// Create an instance of RMSpropBuilder with additional parameters other than the default values
     /// # Arguments
     /// * `device` - device
-    /// * `a` - Learning rate
-    /// * `mu` - mu
-    pub fn with_params(device:&D,a:U,mu:U) -> RMSpropBuilder<U,D> {
+    pub fn new(device:&D) -> RMSpropBuilder<U,D> {
         RMSpropBuilder {
-            u:PhantomData::<U>,
-            a:a,
-            mu:mu,
+            lr:U::from_f64(0.0001f64).expect("Error in type conversion from f64."),
+            weight_decay:U::default(),
+            alpha:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+            mu:U::default(),
             device:device.clone()
+        }
+    }
+
+    /// Replaces the value of field lr in RMSpropBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `lr` - Learning rate
+    pub fn lr(self,lr:U) -> RMSpropBuilder<U,D> {
+        RMSpropBuilder {
+            device:self.device,
+            lr:lr,
+            weight_decay:self.weight_decay,
+            alpha:self.alpha,
+            mu:self.mu
+        }
+    }
+
+    /// Replaces the value of field weight_decay in MomentumSGDBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `weight_decay` - Learning rate
+    pub fn weight_decay(self,weight_decay:U) -> RMSpropBuilder<U,D> {
+        RMSpropBuilder {
+            device:self.device,
+            lr:self.lr,
+            weight_decay:weight_decay,
+            alpha:self.alpha,
+            mu:self.mu,
+        }
+    }
+
+    /// Replaces the value of field alpha in RMSpropBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `alpha` - alpha
+    pub fn alpha(self,alpha:U) -> RMSpropBuilder<U,D> {
+        RMSpropBuilder {
+            device:self.device,
+            lr:self.lr,
+            weight_decay:self.weight_decay,
+            alpha:alpha,
+            mu:self.mu,
+        }
+    }
+
+    /// Replaces the value of field mu in RMSpropBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `mu` - momentum
+    pub fn mu(self,mu:U) -> RMSpropBuilder<U,D> {
+        RMSpropBuilder {
+            device:self.device,
+            lr:self.lr,
+            weight_decay:self.weight_decay,
+            alpha:self.alpha,
+            mu:mu,
         }
     }
 }
@@ -627,7 +752,7 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for RMSpropBuilder<U,DeviceCpu<U>>
     type Output = RMSprop<U,DeviceCpu<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Ok(RMSprop::<_,DeviceCpu<U>>::with_params(&self.device,size,self.a,self.mu))
+        Ok(RMSprop::<_,DeviceCpu<U>>::with_params(&self.device,size,self.lr,self.weight_decay,self.alpha,self.mu))
     }
 }
 impl<U> OptimizerBuilder<U,DeviceGpu<U>> for RMSpropBuilder<U,DeviceGpu<U>>
@@ -636,7 +761,7 @@ impl<U> OptimizerBuilder<U,DeviceGpu<U>> for RMSpropBuilder<U,DeviceGpu<U>>
     type Output = RMSprop<U,DeviceGpu<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        RMSprop::<_,DeviceGpu<U>>::with_params(&self.device,size,self.a,self.mu)
+        RMSprop::<_,DeviceGpu<U>>::with_params(&self.device,size,self.lr,self.weight_decay,self.alpha,self.mu)
     }
 }
 /// Adam Implementation
@@ -645,7 +770,8 @@ pub struct Adam<U,D>
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
     size:usize,
-    a:U,
+    lr:U,
+    weight_decay:U,
     mt:<Self as OptimizerState<U,D>>::Type,
     vt:<Self as OptimizerState<U,D>>::Type,
     b1:U,
@@ -665,9 +791,11 @@ impl<U> Adam<U,DeviceCpu<U>> where U: UnitValue<U> {
     /// Create an instance of Adam with Learning rate
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
-    pub fn with_lr(device:&DeviceCpu<U>,size:usize,a:U) -> Adam<U,DeviceCpu<U>> {
-        Adam::<U,DeviceCpu<U>>::with_params(device,size,a,
+    /// * `lr` - Learning rate
+    pub fn with_lr(device:&DeviceCpu<U>,size:usize,lr:U) -> Adam<U,DeviceCpu<U>> {
+        Adam::<U,DeviceCpu<U>>::with_params(device,size,
+                          lr,
+                          U::default(),
                           U::from_f64(0.9f64).expect("Error in type conversion from f64."),
                           U::from_f64(0.999f64).expect("Error in type conversion from f64."))
     }
@@ -675,14 +803,15 @@ impl<U> Adam<U,DeviceCpu<U>> where U: UnitValue<U> {
     /// Create an instance of Adam with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
-    /// * `a` - Learning rate
+    /// * `lr` - Learning rate
     /// * `b1` - beta1
     /// * `b2` - beta2
-    pub fn with_params(_:&DeviceCpu<U>,size:usize,a:U,b1:U,b2:U) -> Adam<U,DeviceCpu<U>> {
+    pub fn with_params(_:&DeviceCpu<U>,size:usize,lr:U,weight_decay:U,b1:U,b2:U) -> Adam<U,DeviceCpu<U>> {
         Adam {
             d:PhantomData::<DeviceCpu<U>>,
             size:size,
-            a:a,
+            lr:lr,
+            weight_decay:weight_decay,
             mt:vec![U::default();size].into_boxed_slice(),
             vt:vec![U::default();size].into_boxed_slice(),
             b1:b1,
@@ -698,13 +827,16 @@ impl<U> Optimizer<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>> where U: UnitValue<U>
 
     #[inline]
     fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
-        let a = self.a;
+        let a = self.lr;
+        let weight_decay = self.weight_decay;
         let b1 = self.b1;
         let b2 = self.b2;
         let b1t = self.b1t;
         let b2t = self.b2t;
 
         for ((w,&e),(mt,vt)) in w.iter_mut().zip(e.iter()).zip(self.mt.iter_mut().zip(self.vt.iter_mut())) {
+            let e = e + weight_decay * *w;
+
             *mt = b1 * *mt + (U::one() - self.b1) * e;
             *vt = b2 * *vt + (U::one() - self.b2) * e * e;
 
@@ -722,7 +854,7 @@ impl<U> Adam<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
     /// # Arguments
     /// * `device` - device
     /// * `size` - input size
-    pub fn new(device:&DeviceGpu<U>,size:usize) ->Result<Adam<U,DeviceGpu<U>>,OptimizerBuildError> {
+    pub fn new(device:&DeviceGpu<U>,size:usize) -> Result<Adam<U,DeviceGpu<U>>,OptimizerBuildError> {
         Adam::<U,DeviceGpu<U>>::with_lr(device,size,U::from_f64(0.001f64).expect("Error in type conversion from f64."))
     }
 
@@ -730,9 +862,10 @@ impl<U> Adam<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
     /// # Arguments
     /// * `device` - device
     /// * `size` - input size
-    /// * `a` - Learning rate
-    pub fn with_lr(device:&DeviceGpu<U>,size:usize,a:U) ->Result<Adam<U,DeviceGpu<U>>,OptimizerBuildError> {
-        Adam::<U,DeviceGpu<U>>::with_params(device,size,a,
+    /// * `lr` - Learning rate
+    pub fn with_lr(device:&DeviceGpu<U>,size:usize,lr:U) ->Result<Adam<U,DeviceGpu<U>>,OptimizerBuildError> {
+        Adam::<U,DeviceGpu<U>>::with_params(device,size,lr,
+                          U::default(),
                           U::from_f64(0.9f64).expect("Error in type conversion from f64."),
                           U::from_f64(0.999f64).expect("Error in type conversion from f64.")
         )
@@ -742,14 +875,15 @@ impl<U> Adam<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
     /// # Arguments
     /// * `device` - device
     /// * `size` - input size
-    /// * `a` - Learning rate
+    /// * `lr` - Learning rate
     /// * `b1` - beta1
     /// * `b2` - beta2
-    pub fn with_params(device:&DeviceGpu<U>,size:usize,a:U,b1:U,b2:U) ->Result<Adam<U,DeviceGpu<U>>,OptimizerBuildError> {
+    pub fn with_params(device:&DeviceGpu<U>,size:usize,lr:U,weight_decay:U,b1:U,b2:U) ->Result<Adam<U,DeviceGpu<U>>,OptimizerBuildError> {
         Ok(Adam {
             d:PhantomData::<DeviceGpu<U>>,
             size:size,
-            a:a,
+            lr:lr,
+            weight_decay:weight_decay,
             mt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
             vt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
             b1:b1,
@@ -768,7 +902,7 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adam<U,DeviceGpu<U>>
 
     #[inline]
     fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
-        let mut args = AdamArgs::new(w,e,self.size,self.a,self.eps,
+        let mut args = AdamArgs::new(w,e,self.size,self.lr,self.weight_decay,self.eps,
                                                  &mut self.mt,&mut self.vt,
                                                  self.b1,self.b2,self.b1t,self.b2t);
 
@@ -796,42 +930,75 @@ impl<U> OptimizerState<U,DeviceGpu<U>> for Adam<U,DeviceGpu<U>>
 }
 /// Implementation of a builder to generate Adam optimizers
 pub struct AdamBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
-    u:PhantomData<U>,
-    a:U,
+    lr:U,
+    weight_decay:U,
     b1:U,
     b2:U,
     device:D
 }
 impl<U,D> AdamBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
-    /// Create an instance of AdamBuilder
-    /// # Arguments
-    /// * `device` - device
-    pub fn new(device:&D) -> AdamBuilder<U,D> {
-        AdamBuilder::with_lr(device,U::from_f64(0.001f64).expect("Error in type conversion from f64."))
-    }
-
-    /// Create an instance of AdamBuilder
-    /// # Arguments
-    /// * `device` - device
-    /// * `a` - Learning rate
-    pub fn with_lr(device:&D,a:U) -> AdamBuilder<U,D> {
-        AdamBuilder::with_params(device,a,U::from_f64(0.9f64).expect("Error in type conversion from f64."),
-                                 U::from_f64(0.999f64).expect("Error in type conversion from f64."))
-    }
-
     /// Create an instance of AdamBuilder with additional parameters other than the default values
     /// # Arguments
     /// * `device` - device
-    /// * `a` - Learning rate
-    /// * `b1` - beta1
-    /// * `b2` - beta2
-    pub fn with_params(device:&D,a:U,b1:U,b2:U) -> AdamBuilder<U,D> {
+    pub fn new(device:&D) -> AdamBuilder<U,D> {
         AdamBuilder {
-            u:PhantomData::<U>,
-            a:a,
-            b1:b1,
-            b2:b2,
+            lr:U::from_f64(0.001f64).expect("Error in type conversion from f64."),
+            weight_decay:U::default(),
+            b1:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+            b2:U::from_f64(0.999f64).expect("Error in type conversion from f64."),
             device:device.clone()
+        }
+    }
+
+    /// Replaces the value of field lr in AdamBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `lr` - Learning rate
+    pub fn lr(self,lr:U) -> AdamBuilder<U,D> {
+        AdamBuilder {
+            device:self.device,
+            lr:lr,
+            weight_decay:self.weight_decay,
+            b1:self.b1,
+            b2:self.b2
+        }
+    }
+
+    /// Replaces the value of field weight_decay in AdamBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `weight_decay` - Learning rate
+    pub fn weight_decay(self,weight_decay:U) -> AdamBuilder<U,D> {
+        AdamBuilder {
+            device:self.device,
+            lr:self.lr,
+            weight_decay:weight_decay,
+            b1:self.b1,
+            b2:self.b2
+        }
+    }
+
+    /// Replaces the value of field b1 in AdamBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `b1` - b1
+    pub fn b1(self,b1:U) -> AdamBuilder<U,D> {
+        AdamBuilder {
+            device:self.device,
+            lr:self.lr,
+            weight_decay:self.weight_decay,
+            b1:b1,
+            b2:self.b2
+        }
+    }
+
+    /// Replaces the value of field b2 in AdamBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `b2` - b2
+    pub fn b2(self,b2:U) -> AdamBuilder<U,D> {
+        AdamBuilder {
+            device:self.device,
+            lr:self.lr,
+            weight_decay:self.weight_decay,
+            b1:self.b1,
+            b2:b2
         }
     }
 }
@@ -840,7 +1007,7 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for AdamBuilder<U,DeviceCpu<U>>
     type Output = Adam<U,DeviceCpu<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Ok(Adam::<_,DeviceCpu<U>>::with_params(&self.device,size,self.a,self.b1,self.b2))
+        Ok(Adam::<_,DeviceCpu<U>>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2))
     }
 }
 impl<U> OptimizerBuilder<U,DeviceGpu<U>> for AdamBuilder<U,DeviceGpu<U>>
@@ -849,6 +1016,6 @@ impl<U> OptimizerBuilder<U,DeviceGpu<U>> for AdamBuilder<U,DeviceGpu<U>>
     type Output = Adam<U,DeviceGpu<U>>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Adam::<_,DeviceGpu<U>>::with_params(&self.device,size,self.a,self.b1,self.b2)
+        Adam::<_,DeviceGpu<U>>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2)
     }
 }

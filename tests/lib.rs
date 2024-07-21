@@ -54,7 +54,7 @@ fn test_mnist_for_cpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = SGDBuilder::new(0.01);
+    let optimizer_builder = SGDBuilder::new(&device).lr(0.01);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -214,7 +214,7 @@ fn test_fashion_mnist_for_cpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = AdagradBuilder::with_lr(&device,0.001);
+    let optimizer_builder = AdagradBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -375,7 +375,7 @@ fn test_mnist_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = SGDBuilder::new(0.01);
+    let optimizer_builder = SGDBuilder::new(&device).lr(0.01);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -537,7 +537,7 @@ fn test_mnist_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.004);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.004);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -699,7 +699,7 @@ fn test_fashion_mnist_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = AdagradBuilder::with_lr(&device,0.001);
+    let optimizer_builder = AdagradBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -860,7 +860,7 @@ fn test_fashion_mnist_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = AdagradBuilder::with_lr(&device,0.001);
+    let optimizer_builder = AdagradBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -1018,7 +1018,7 @@ fn test_weather() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -1182,7 +1182,7 @@ fn test_weather_by_forward_diff() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -1364,7 +1364,7 @@ fn test_diff_learn_error() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -1424,7 +1424,7 @@ fn test_diff_learn_error_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -1483,7 +1483,7 @@ fn test_weather_batch_train() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -1670,7 +1670,7 @@ fn test_weather_batch_train_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -1857,7 +1857,7 @@ fn test_weather_batch_train_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -2041,7 +2041,7 @@ fn test_penguins() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -2259,7 +2259,7 @@ fn test_penguins_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -2476,7 +2476,7 @@ fn test_weather_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -2640,7 +2640,7 @@ fn test_weather_by_forward_diff_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -2824,7 +2824,7 @@ fn test_penguins_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3041,7 +3041,7 @@ fn test_weather_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3205,7 +3205,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3389,7 +3389,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3548,7 +3548,7 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3705,7 +3705,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -3864,7 +3864,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -4021,7 +4021,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device,).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
@@ -4179,7 +4179,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = MomentumSGDBuilder::new(&device,0.001);
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();

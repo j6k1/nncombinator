@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use crate::activation::{Activation, BatchActivation};
-use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecConverter, SerializedVecView};
+use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::{Cons, Stack};
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
@@ -223,7 +223,8 @@ impl<U,P,A,I,PI,D,const N:usize> BatchForward for ActivationLayer<U,P,A,I,PI,D,N
           <I as BatchDataType>::Type: Debug,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError> {
+          SerializedVec<U,Arr<U,N>>: IntoConverter,
+          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError> {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
@@ -256,7 +257,8 @@ impl<U,P,A,I,PI,D,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,PI
           <I as BatchDataType>::Type: Debug,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError> {
+          SerializedVec<U,Arr<U,N>>: IntoConverter,
+          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError> {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let r = self.parent.batch_pre_train(input)?;
 
@@ -278,7 +280,8 @@ impl<U,P,A,I,PI,D,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,PI
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError> {
+          SerializedVec<U,Arr<U,N>>: IntoConverter,
+          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError> {
     type BatchLossInput = SerializedVec<U,PI>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
@@ -304,7 +307,8 @@ impl<U,P,A,I,PI,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,PI,D,N
           <I as BatchDataType>::Type: Debug,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,N>>,Error=SizeMismatchError> {
+          SerializedVec<U,Arr<U,N>>: IntoConverter,
+          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError> {
     fn batch_loss<L: LossFunction<U>>(&self, loss: Self::BatchLossInput, _: &L, stack: Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
         let (s,o) = stack.pop();
 

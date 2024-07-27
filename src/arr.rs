@@ -1161,6 +1161,13 @@ pub struct SerializedVecConverter<U,T>
     u:PhantomData<U>,
     t:PhantomData<T>
 }
+/// Trait that implements the ability to convert to a converter type
+/// for conversion to a destination type.
+pub trait IntoConverter {
+    type Converter;
+
+    fn into_converter(self) -> Self::Converter;
+}
 /// Implementation of fixed-length arrays whose size is not specified by a type parameter
 #[derive(Debug,Eq,PartialEq,Clone)]
 pub struct SerializedVec<U,T> {
@@ -1221,20 +1228,25 @@ impl<U,T> SerializedVec<U,T>
 impl<U,T> SerializedVec<U,T>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
-    /// Conversion to converter to SerializedVec with different internal types
-    pub fn into_converter(self) -> SerializedVecConverter<U,T> {
-        SerializedVecConverter {
-            arr:self.arr,
-            len:self.len,
-            u:PhantomData::<U>,
-            t:PhantomData::<T>,
-        }
-    }
-
     /// Obtaining a mutable iterator
     pub fn iter_mut(&mut self) -> SerializedVecIterMut<U,T> {
         SerializedVecIterMut {
             arr:&mut self.arr,
+            u:PhantomData::<U>,
+            t:PhantomData::<T>,
+        }
+    }
+}
+impl<U,T> IntoConverter for SerializedVec<U,T>
+    where U: Default + Clone + Copy + Send,
+    for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+    type Converter = SerializedVecConverter<U,T>;
+
+    #[inline]
+    fn into_converter(self) -> Self::Converter {
+        SerializedVecConverter {
+            arr:self.arr,
+            len:self.len,
             u:PhantomData::<U>,
             t:PhantomData::<T>,
         }

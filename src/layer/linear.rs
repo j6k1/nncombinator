@@ -2,7 +2,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use crate::arr::{Arr, Arr2, ArrView, DiffArr, SerializedVec, SerializedVecConverter, SerializedVecView};
+use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaTensor1dPtr, CudaTensor2dPtr, Memory};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
@@ -610,7 +610,8 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer
           <I as BatchDataType>::Type: Debug,
           for<'a> ArrView<'a,U,NI>: From<&'a PI>,
           for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,NI>>,Error=SizeMismatchError>,
+          SerializedVec<U,Arr<U,NI>>: IntoConverter,
+          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=SizeMismatchError>,
           DeviceCpu<U>: DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO>,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr2<U,NI,NO>>,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,NO>>,
@@ -635,7 +636,7 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer
 
         let (
             s,loss
-        ) = self.parent.batch_loss(next_loss.into_converter().try_into()?,lossf,s)?;
+        ) = self.parent.batch_loss(next_loss,lossf,s)?;
 
         let (l,s) = self.parent.batch_backward(loss, s, lossf)?;
 
@@ -654,7 +655,8 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer
           <I as BatchDataType>::Type: Debug,
           for<'a> ArrView<'a,U,NI>: From<&'a PI>,
           for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,NI>>,Error=SizeMismatchError>,
+          SerializedVec<U,Arr<U,NI>>: IntoConverter,
+          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=SizeMismatchError>,
           DeviceGpu<U>: Device<U> + DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,NI,NO>,
           for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,NO>>,
           for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor2dPtr<U,NI,NO>>,
@@ -680,7 +682,7 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer
         let (
             s,
             loss
-        ) = self.parent.batch_loss(next_loss.into_converter().try_into()?,lossf,s)?;
+        ) = self.parent.batch_loss(next_loss,lossf,s)?;
 
         let (l,s) = self.parent.batch_backward(loss, s, lossf)?;
 
@@ -699,7 +701,8 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,A
           <I as BatchDataType>::Type: Debug,
           for<'a> ArrView<'a,U,NI>: From<&'a PI>,
           for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,NI>>,Error=SizeMismatchError>,
+          SerializedVec<U,Arr<U,NI>>: IntoConverter,
+          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=SizeMismatchError>,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr2<U,NI,NO>>,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,NO>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr2<U,NI,NO>>,
@@ -717,7 +720,8 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,C
           <I as BatchDataType>::Type: Debug,
           for<'a> ArrView<'a,U,NI>: From<&'a PI>,
           for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,Arr<U,NI>>,Error=SizeMismatchError>,
+          SerializedVec<U,Arr<U,NI>>: IntoConverter,
+          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=SizeMismatchError>,
           DeviceGpu<U>: Device<U>,
           Self: Loss<U> + BatchBackward<U> {
 }

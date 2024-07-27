@@ -2,7 +2,7 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use crate::arr::{MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SliceSize};
+use crate::arr::{IntoConverter, MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SliceSize};
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, SizeMismatchError, TrainingError};
 use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PreTrain, UpdateWeight};
@@ -202,7 +202,8 @@ impl<U,P,I,PI,CI,D> BatchBackward<U> for BridgeLayer<U,P,I,PI,CI,D>
           for<'a> CI: Debug + Send + Sync + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,CI>,Error=SizeMismatchError> {
+          SerializedVec<U,CI>: IntoConverter,
+          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,CI> as IntoConverter>::Converter,Error=SizeMismatchError> {
     type BatchLossInput = SerializedVec<U,CI>;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)

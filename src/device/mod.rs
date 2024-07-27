@@ -2,6 +2,7 @@
 pub mod linear;
 pub mod batchnormalization;
 pub mod bias;
+pub mod activation;
 
 use std::marker::PhantomData;
 use std::{mem};

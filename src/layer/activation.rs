@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use crate::activation::{Activation, BatchActivation};
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::{Cons, Stack};
+use crate::device::activation::DeviceActivation;
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
 use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
@@ -17,6 +18,7 @@ pub struct ActivationLayer<U,P,A,I,PI,D,const N:usize> where P: ForwardAll<Input
                                                U: UnitValue<U>,
                                                D: Device<U>,
                                                for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+                                               for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
                                                PI: Debug + Send + Sync + 'static,
                                                I: Debug + Send + Sync {
     parent:P,
@@ -31,6 +33,7 @@ impl<U,P,A,I,PI,D,const N:usize> ActivationLayer<U,P,A,I,PI,D,N>
           U: UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     /// Create and return an instance of ActivationLayer
@@ -55,6 +58,7 @@ impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence<U>,Specialize
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
@@ -72,6 +76,7 @@ impl<T,U,P,A,I,PI,D,const N:usize> Persistence<U,T,Linear> for ActivationLayer<U
           U: UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
@@ -87,6 +92,7 @@ impl<U,P,A,I,PI,D,const N:usize> ForwardAll for ActivationLayer<U,P,A,I,PI,D,N>
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
@@ -103,11 +109,12 @@ impl<U,P,A,I,PI,D,const N:usize> Forward<PI,Result<PI,EvaluateError>> for Activa
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
     fn forward(&self, input: &PI) -> Result<PI,EvaluateError> {
-        self.f.apply(&self.device, &input.into()).map(|o| o.into())
+        self.device.apply(&self.f, &input.into()).map(|o| o.into())
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,PI,D,N>
@@ -116,6 +123,7 @@ impl<U,P,A,I,PI,D,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,PI,D,N>
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>>,
           I: Debug + Send + Sync,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
@@ -134,6 +142,7 @@ impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>>,
           I: Debug + Send + Sync,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
@@ -156,6 +165,7 @@ impl<U,P,A,I,PI,D,const N:usize> UpdateWeight<U> for ActivationLayer<U,P,A,I,PI,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>>,
           I: Debug + Send + Sync {
     type GradientStack = <P as UpdateWeight<U>>::GradientStack;
@@ -170,6 +180,7 @@ impl<U,P,A,I,PI,D,const N:usize> AskDiffInput<U> for ActivationLayer<U,P,A,I,PI,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>>,
           I: Debug + Send + Sync,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
@@ -185,13 +196,14 @@ impl<U,P,A,I,PI,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,PI,D,N>
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>>,
           I: Debug + Send + Sync,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
     fn loss<L: LossFunction<U>>(&mut self, loss: Self::LossInput, _:&L, stack: Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         let (s,o) = stack.pop();
 
-        let r = s.map(|u| self.f.derive(&self.device, &(&o).into(), &(&loss).into(), &u.into()))?;
+        let r = s.map(|u| self.device.derive(&self.f, &(&o).into(), &(&loss).into(), &u.into()))?;
 
         Ok((Cons(s,o),r.into()))
     }
@@ -204,6 +216,8 @@ impl<U,P,A,I,PI,D,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,PI
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> A: BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
@@ -220,6 +234,7 @@ impl<U,P,A,I,PI,D,const N:usize> BatchForward for ActivationLayer<U,P,A,I,PI,D,N
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
           for<'a> A: BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
@@ -231,7 +246,7 @@ impl<U,P,A,I,PI,D,const N:usize> BatchForward for ActivationLayer<U,P,A,I,PI,D,N
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        Ok(self.f.batch_apply(&self.device,&(&input).try_into()?)?.into_converter().try_into()?)
+        Ok(self.device.batch_apply(&self.f,&(&input).try_into()?)?.into_converter().try_into()?)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchPreTrainBase<U> for ActivationLayer<U,P,A,I,PI,D,N>
@@ -242,6 +257,8 @@ impl<U,P,A,I,PI,D,const N:usize> BatchPreTrainBase<U> for ActivationLayer<U,P,A,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> A: BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
@@ -258,6 +275,7 @@ impl<U,P,A,I,PI,D,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,PI
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
           for<'a> A: BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
@@ -270,7 +288,7 @@ impl<U,P,A,I,PI,D,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,PI
         let r = self.parent.batch_pre_train(input)?;
 
         let u = r.map(|input| {
-            self.f.batch_apply(&self.device,&input.try_into()?)
+            self.device.batch_apply(&self.f,&input.try_into()?)
         })?;
 
         Ok(Cons(r,u.into_converter().try_into()?))
@@ -284,6 +302,8 @@ impl<U,P,A,I,PI,D,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,PI
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
+          for<'a> A: BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
@@ -310,7 +330,8 @@ impl<U,P,A,I,PI,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,PI,D,N
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
-          for<'a> A: BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,D> + Activation<U,Arr<U,N>,Arr<U,N>,D>,
+          for<'a> A: BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,D>,
+          for<'a> D: DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A>,
           PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
@@ -323,7 +344,7 @@ impl<U,P,A,I,PI,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,PI,D,N
         let (s,o) = stack.pop();
 
         let r = s.map(|u| {
-            self.f.batch_derive(&self.device,
+            self.device.batch_derive(&self.f,
                                 &(&o).try_into()?,
                                 &(&loss).try_into()?,
                                 &u.try_into()?).map(|r| r.into_converter().try_into())

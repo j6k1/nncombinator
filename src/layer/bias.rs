@@ -381,30 +381,33 @@ impl<U,P,OP,I,PI,const N:usize> Loss<U> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,O
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchForwardBase for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>>,
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + Send + Sync,
+          PI: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,D>,
           Self: ForwardAll {
     type BatchInput = <I as BatchDataType>::Type;
-    type BatchOutput = SerializedVec<U,PI>;
+    type BatchOutput = <PI as BatchDataType>::Type;
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchForward for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward,
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           D: Device<U> + DeviceBias<U,C,N>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
+          PI: BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,D>,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
-          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
+          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
           for<'a> PI: Debug + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError> {
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=SizeMismatchError> {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
@@ -413,12 +416,13 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchForward for BiasLayer<U,C,P,OP,D,I,PI,N
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrainBase<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + Send + Sync,
+          PI: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,D>,
           Self: PreTrain<U> {
@@ -426,18 +430,20 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrainBase<U> for BiasLayer<U,C,P,OP,
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBias<U,C,N>,
           I: Debug + Send + Sync + BatchDataType,
+          PI: BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,D>,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
-          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
+          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
           for<'a> PI: Debug + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError> {
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=SizeMismatchError> {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let r = self.parent.batch_pre_train(input)?;
 
@@ -448,23 +454,25 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain<U> for BiasLayer<U,C,P,OP,D,I,
 }
 impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
+          PI: BatchDataType,
+          <PI as BatchDataType>::Type: Debug + IntoConverter,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,DeviceCpu<U>>,
           for<'a> PI: Debug + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=SizeMismatchError>,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
-          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: IntoConverter,
-          SerializedVec<U,Arr<U,N>>: TryFrom<<SerializedVec<U,PI> as IntoConverter>::Converter,Error=SizeMismatchError>,
+          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
+          <PI as BatchDataType>::Type: IntoConverter,
+          SerializedVec<U,Arr<U,N>>: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=SizeMismatchError>,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
-    type BatchLossInput = SerializedVec<U,PI>;
+    type BatchLossInput = <PI as BatchDataType>::Type;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
@@ -488,24 +496,26 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,Arr<U,N>,P,OP,D
 }
 impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
+          PI: BatchDataType,
+          <PI as BatchDataType>::Type: Debug + IntoConverter,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,DeviceGpu<U>>,
           for<'a> PI: Debug + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=SizeMismatchError>,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
-          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: IntoConverter,
-          SerializedVec<U,Arr<U,N>>: TryFrom<<SerializedVec<U,PI> as IntoConverter>::Converter,Error=SizeMismatchError>,
+          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
+          <PI as BatchDataType>::Type: IntoConverter,
+          SerializedVec<U,Arr<U,N>>: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=SizeMismatchError>,
           DeviceGpu<U>: Device<U> + DeviceBias<U,CudaTensor1dPtr<U,N>,N>,
           for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
-    type BatchLossInput = SerializedVec<U,Arr<U,N>>;
+    type BatchLossInput = <PI as BatchDataType>::Type;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
@@ -516,7 +526,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,CudaTensor1dPtr
 
         let g = self.device.batch_backward_bias_weight_gradient((&loss).try_into()?)?;
 
-        let next_loss = self.device.batch_backward_bias(loss)?;
+        let next_loss = self.device.batch_backward_bias(loss.into_converter().try_into()?)?;
 
         let (
             s,
@@ -530,41 +540,45 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,CudaTensor1dPtr
 }
 impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
+          PI: BatchDataType,
+          <PI as BatchDataType>::Type: Debug + IntoConverter,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,DeviceCpu<U>>,
           Arr<U,N>: From<PI>,
           for<'a> PI: Debug + Clone + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>> + 'static,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=SizeMismatchError>,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
-          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: IntoConverter,
-          SerializedVec<U,Arr<U,N>>: TryFrom<<SerializedVec<U,PI> as IntoConverter>::Converter,Error=SizeMismatchError>,
+          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
+          <PI as BatchDataType>::Type: IntoConverter,
+          SerializedVec<U,Arr<U,N>>: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=SizeMismatchError>,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
 }
 impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=SerializedVec<U,PI>> + BatchForward +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U> + BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
+          PI: BatchDataType,
+          <PI as BatchDataType>::Type: Debug + IntoConverter,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,DeviceGpu<U>>,
           Arr<U,N>: From<PI>,
           for<'a> PI: Debug + Clone + Send + Sync + SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> + From<Arr<U,N>>,
           for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a SerializedVec<U,PI>,Error=SizeMismatchError>,
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=SizeMismatchError>,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
-          SerializedVec<U,PI>: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
-          SerializedVec<U,PI>: IntoConverter,
-          SerializedVec<U,Arr<U,N>>: TryFrom<<SerializedVec<U,PI> as IntoConverter>::Converter,Error=SizeMismatchError>,
+          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=SizeMismatchError>,
+          <PI as BatchDataType>::Type: IntoConverter,
+          SerializedVec<U,Arr<U,N>>: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=SizeMismatchError>,
           DeviceGpu<U>: Device<U>,
           for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>>,

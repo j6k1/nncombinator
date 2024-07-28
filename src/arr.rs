@@ -6,10 +6,12 @@ use std::ops::{Add, AddAssign, Deref, DerefMut, Div, Index, IndexMut, Mul, Neg, 
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
-use crate::error::{IndexOutBoundError, SizeMismatchError};
+use crate::cuda::{CudaTensor1dPtr, Memory, ToCuda};
+use crate::device::{DeviceGpu, DeviceMemoryPool};
+use crate::error::{EvaluateError, IndexOutBoundError, SizeMismatchError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
-use crate::ope::{Product, Sum};
+use crate::ope::{Product, Sum, UnitValue};
 
 /// Trait that returns the number of elements in the slice held by itself
 pub trait SliceSize {
@@ -154,6 +156,30 @@ impl<'a,T,const N:usize> From<&'a Arr<T,N>> for &'a [T] where T: Default + Clone
 impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for &'a mut [T] where T: Default + Clone + Send {
     fn from(arr: &'a mut Arr<T, N>) -> Self {
         &mut arr.arr
+    }
+}
+impl<T,const N:usize> ToCuda<T> for Arr<T,N>
+    where T: UnitValue<T> {
+    type Output = CudaTensor1dPtr<T,N>;
+
+    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
+        let mut ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
+
+        ptr.memcpy(self.as_ptr(),N)?;
+
+        Ok(ptr)
+    }
+}
+impl<'a,T,const N:usize> ToCuda<T> for &'a Arr<T,N>
+    where T: UnitValue<T> {
+    type Output = CudaTensor1dPtr<T,N>;
+
+    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
+        let mut ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
+
+        ptr.memcpy(self.as_ptr(),N)?;
+
+        Ok(ptr)
     }
 }
 impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Send {

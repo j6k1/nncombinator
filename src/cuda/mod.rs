@@ -958,6 +958,14 @@ impl<'a,T,const N:usize> From<&'a CudaTensor1dPtr<T,N>> for CudaTensor1dPtrView<
         }
     }
 }
+impl<'a,T,const N:usize> From<&'a CudaTensor1dPtrView<'a,T,N>> for CudaTensor1dPtrView<'a,T,N>
+    where T: Default + Debug {
+    fn from(value: &'a CudaTensor1dPtrView<'a,T,N>) -> Self {
+        CudaTensor1dPtrView {
+            ptr:&value.ptr
+        }
+    }
+}
 /// Cuda memory object representing a 2D array with dimension number as type parameter
 #[derive(Debug)]
 pub struct CudaTensor2dPtr<T,const N1:usize,const N2:usize> where T: Default + Debug {
@@ -1058,6 +1066,14 @@ impl<'a,T,const N1:usize,const N2:usize> Deref for CudaTensor2dPtrView<'a,T,N1,N
 impl<'a,T,const N1:usize,const N2:usize> From<&'a CudaTensor2dPtr<T,N1,N2>> for CudaTensor2dPtrView<'a,T,N1,N2>
     where T: Default + Debug {
     fn from(value: &'a CudaTensor2dPtr<T,N1,N2>) -> Self {
+        CudaTensor2dPtrView {
+            ptr:&value.ptr
+        }
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> From<&'a CudaTensor2dPtrView<'a,T,N1,N2>> for CudaTensor2dPtrView<'a,T,N1,N2>
+    where T: Default + Debug {
+    fn from(value: &'a CudaTensor2dPtrView<'a,T,N1,N2>) -> Self {
         CudaTensor2dPtrView {
             ptr:&value.ptr
         }
@@ -1168,6 +1184,14 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> From<&'a CudaTensor3dPtr
         }
     }
 }
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> From<&'a CudaTensor3dPtrView<'a,T,N1,N2,N3>> for CudaTensor3dPtrView<'a,T,N1,N2,N3>
+    where T: Default + Debug {
+    fn from(value: &'a CudaTensor3dPtrView<'a,T,N1,N2,N3>) -> Self {
+        CudaTensor3dPtrView {
+            ptr:&value.ptr
+        }
+    }
+}
 /// Cuda memory object representing a 4D array with dimension number as type parameter
 #[derive(Debug)]
 pub struct CudaTensor4dPtr<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> where T: Default + Debug {
@@ -1271,6 +1295,15 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> From<&'a 
     for CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>
     where T: Default + Debug {
     fn from(value: &'a CudaTensor4dPtr<T,N1,N2,N3,N4>) -> Self {
+        CudaTensor4dPtrView {
+            ptr:&value.ptr
+        }
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> From<&'a CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>>
+    for CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>
+    where T: Default + Debug {
+    fn from(value: &'a CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>) -> Self {
         CudaTensor4dPtrView {
             ptr:&value.ptr
         }
@@ -1537,10 +1570,105 @@ pub trait ToCuda<T> where T: UnitValue<T> {
 }
 impl<'a,T,const N:usize> ToCuda<T> for &'a CudaTensor1dPtr<T,N>
     where T :UnitValue<T> {
-    type Output = &'a CudaTensor1dPtr<T,N>;
+    type Output = CudaTensor1dPtrView<'a,T,N>;
 
     fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
-        Ok(self)
+        Ok(self.into())
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> ToCuda<T> for &'a CudaTensor2dPtr<T,N1,N2>
+    where T :UnitValue<T> {
+    type Output = CudaTensor2dPtrView<'a,T,N1,N2>;
+
+    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
+        Ok(self.into())
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> ToCuda<T> for &'a CudaTensor3dPtr<T,N1,N2,N3>
+    where T :UnitValue<T> {
+    type Output = CudaTensor3dPtrView<'a,T,N1,N2,N3>;
+
+    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
+        Ok(self.into())
+    }
+}
+/// Trait that defines the ability to get a reference to a cuda smart pointer
+pub trait AsCudaPtrRef {
+    /// Returned Cuda smart pointer type
+    type Pointer: AsConstKernelPtr;
+
+    fn as_cuda_ptr_ref(&self) -> &Self::Pointer;
+}
+impl<'a,T,const N:usize> AsCudaPtrRef for &'a CudaTensor1dPtr<T,N>
+    where T: Default + Debug {
+    type Pointer = CudaMemoryPoolPtr<T>;
+
+    fn as_cuda_ptr_ref(&self) -> &Self::Pointer {
+        &self.ptr
+    }
+}
+impl<'a,T,const N:usize> AsCudaPtrRef for CudaTensor1dPtrView<'a,T,N>
+    where T: Default + Debug {
+    type Pointer = CudaMemoryPoolPtr<T>;
+
+    fn as_cuda_ptr_ref(&self) -> &Self::Pointer {
+        self.ptr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> AsCudaPtrRef for &'a CudaTensor2dPtr<T,N1,N2>
+    where T: Default + Debug {
+    type Pointer = CudaMemoryPoolPtr<T>;
+
+    fn as_cuda_ptr_ref(&self) -> &Self::Pointer {
+        &self.ptr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> AsCudaPtrRef for CudaTensor2dPtrView<'a,T,N1,N2>
+    where T: Default + Debug {
+    type Pointer = CudaMemoryPoolPtr<T>;
+
+    fn as_cuda_ptr_ref(&self) -> &Self::Pointer {
+        self.ptr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsCudaPtrRef for &'a CudaTensor3dPtr<T,N1,N2,N3>
+    where T: Default + Debug {
+    type Pointer = CudaMemoryPoolPtr<T>;
+
+    fn as_cuda_ptr_ref(&self) -> &Self::Pointer {
+        &self.ptr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsCudaPtrRef for CudaTensor3dPtrView<'a,T,N1,N2,N3>
+    where T: Default + Debug {
+    type Pointer = CudaMemoryPoolPtr<T>;
+
+    fn as_cuda_ptr_ref(&self) -> &Self::Pointer {
+        self.ptr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaPtrRef for &'a CudaTensor4dPtr<T,N1,N2,N3,N4>
+    where T: Default + Debug {
+    type Pointer = CudaMemoryPoolPtr<T>;
+
+    fn as_cuda_ptr_ref(&self) -> &Self::Pointer {
+        &self.ptr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaPtrRef for CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>
+    where T: Default + Debug {
+    type Pointer = CudaMemoryPoolPtr<T>;
+
+    fn as_cuda_ptr_ref(&self) -> &Self::Pointer {
+        self.ptr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<T> for &'a CudaTensor4dPtr<T,N1,N2,N3,N4>
+    where T :UnitValue<T> {
+    type Output = CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>;
+
+    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
+        Ok(self.into())
     }
 }
 /// Trait that defines arguments passed to cuda kernel functions

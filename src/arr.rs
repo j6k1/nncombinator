@@ -1194,6 +1194,20 @@ pub trait IntoConverter {
 
     fn into_converter(self) -> Self::Converter;
 }
+impl<U,T> From<SerializedVecConverter<U,T>> for Box<[U]>
+    where U: Default + Clone + Copy + Send,
+          for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+    fn from(value: SerializedVecConverter<U,T>) -> Self {
+        value.arr
+    }
+}
+impl<U,T> BatchSize for SerializedVecConverter<U,T>
+    where U: Default + Clone + Copy + Send,
+          for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+    fn size(&self) -> usize {
+        self.len
+    }
+}
 /// Implementation of fixed-length arrays whose size is not specified by a type parameter
 #[derive(Debug,Eq,PartialEq,Clone)]
 pub struct SerializedVec<U,T> {
@@ -1349,9 +1363,11 @@ impl<U,T,R> TryFrom<SerializedVecConverter<U,T>> for SerializedVec<U,R>
         if T::slice_size() != R::slice_size() {
             Err(SizeMismatchError(T::slice_size(),R::slice_size()))
         } else {
+            let len = s.size();
+
             Ok(SerializedVec {
-                arr: s.arr,
-                len: s.len,
+                len: len,
+                arr: s.into(),
                 u:PhantomData::<U>,
                 t: PhantomData::<R>
             })

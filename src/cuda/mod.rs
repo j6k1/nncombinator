@@ -1280,6 +1280,9 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> From<&'a 
 pub trait MemorySize {
     fn size() -> usize;
 }
+pub trait AsCudaPtr {
+
+}
 pub struct CudaVec<U,T>
     where U: UnitValue<U>,
           T: AsConstKernelPtr + AsKernelPtr + MemorySize {
@@ -1391,6 +1394,20 @@ impl<U,T> IntoConverter for CudaVec<U,T>
         }
     }
 }
+impl<U,T> BatchSize for CudaVecConverter<U,T>
+    where U: UnitValue<U> + Default + Clone + Send,
+          T: MemorySize + AsKernelPtr + AsConstKernelPtr {
+    fn size(&self) -> usize {
+        self.len
+    }
+}
+impl<U,T> From<CudaVecConverter<U,T>> for CudaMemoryPoolPtr<U> 
+    where U: UnitValue<U> + Default + Clone + Send,
+          T: MemorySize + AsKernelPtr + AsConstKernelPtr {
+    fn from(value: CudaVecConverter<U, T>) -> Self {
+        value.ptr
+    }
+}
 impl<'a,U,T,R> TryFrom<CudaVecConverter<U,T>> for CudaVec<U,R>
     where U: UnitValue<U> + Default + Clone + Send,
           T: MemorySize + AsKernelPtr + AsConstKernelPtr,
@@ -1401,9 +1418,11 @@ impl<'a,U,T,R> TryFrom<CudaVecConverter<U,T>> for CudaVec<U,R>
         if T::size() != R::size() {
             Err(EvaluateError::SizeMismatchError(SizeMismatchError(T::size(),R::size())))
         } else {
+            let len = value.size();
+
             Ok(CudaVec {
-                len:value.len,
-                ptr: value.ptr,
+                len:len,
+                ptr: value.into(),
                 u:PhantomData::<U>,
                 t:PhantomData::<R>
             })

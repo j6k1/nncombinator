@@ -158,23 +158,11 @@ impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for &'a mut [T] where T: Default
         &mut arr.arr
     }
 }
-impl<T,const N:usize> ToCuda<T> for Arr<T,N>
+impl<'a,T,const N:usize> ToCuda<'a,T> for Arr<T,N>
     where T: UnitValue<T> {
     type Output = CudaTensor1dPtr<T,N>;
 
-    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
-        let mut ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
-
-        ptr.memcpy(self.as_ptr(),N)?;
-
-        Ok(ptr)
-    }
-}
-impl<'a,T,const N:usize> ToCuda<T> for &'a Arr<T,N>
-    where T: UnitValue<T> {
-    type Output = CudaTensor1dPtr<T,N>;
-
-    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
+    fn to_cuda(&'a self, device: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
         let mut ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
 
         ptr.memcpy(self.as_ptr(),N)?;

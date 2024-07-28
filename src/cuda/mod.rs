@@ -1328,24 +1328,24 @@ impl<U,T> DerefMut for CudaVec<U,T>
         &mut self.ptr
     }
 }
-impl<'a,U,T> ToCuda<U> for &'a SerializedVec<U,T>
+impl<'a,U,T> ToCuda<'a,U> for SerializedVec<U,T>
     where U: UnitValue<U> + Default + Clone + Send,
-          T: SliceSize + ToCuda<U>,
-          <T as ToCuda<U>>::Output: AsConstKernelPtr + AsKernelPtr + MemorySize {
-    type Output = CudaVec<U,<T as ToCuda<U>>::Output>;
-    fn to_cuda(self,device: &DeviceGpu<U>) -> Result<CudaVec<U,<T as ToCuda<U>>::Output>,EvaluateError> {
-        if T::slice_size() != <T as ToCuda<U>>::Output::size() {
-            Err(EvaluateError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U>>::Output::size())))
+          T: SliceSize + ToCuda<'a,U>,
+          <T as ToCuda<'a,U>>::Output: AsConstKernelPtr + AsKernelPtr + MemorySize {
+    type Output = CudaVec<U,<T as ToCuda<'a,U>>::Output>;
+    fn to_cuda(&'a self,device: &DeviceGpu<U>) -> Result<CudaVec<U,<T as ToCuda<'a,U>>::Output>,EvaluateError> {
+        if T::slice_size() != <T as ToCuda<'a,U>>::Output::size() {
+            Err(EvaluateError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<'a,U>>::Output::size())))
         } else {
             let mut ptr = CudaMemoryPoolPtr::new(self.len(),device.get_memory_pool())?;
 
-            ptr.memcpy(self.as_raw_slice().as_ptr(),self.len() * <T as ToCuda<U>>::Output::size())?;
+            ptr.memcpy(self.as_raw_slice().as_ptr(),self.len() * <T as ToCuda<'a,U>>::Output::size())?;
 
             Ok(CudaVec {
                 len: self.len(),
                 ptr: ptr,
                 u:PhantomData::<U>,
-                t:PhantomData::<<T as ToCuda<U>>::Output>
+                t:PhantomData::<<T as ToCuda<'a,U>>::Output>
             })
         }
     }
@@ -1530,16 +1530,16 @@ impl<'a,U,T,R> TryFrom<&'a CudaVec<U,T>> for CudaVecView<'a,U,R>
     }
 }
 /// Trait to convert value to Cuda smart pointer type
-pub trait ToCuda<T> where T: UnitValue<T> {
+pub trait ToCuda<'a,T> where T: UnitValue<T> {
     type Output;
 
-    fn to_cuda(self,device:&DeviceGpu<T>) -> Result<Self::Output,EvaluateError>;
+    fn to_cuda(&'a self,device:&DeviceGpu<T>) -> Result<Self::Output,EvaluateError>;
 }
-impl<'a,T,const N:usize> ToCuda<T> for &'a CudaTensor1dPtr<T,N>
+impl<'a,T,const N:usize> ToCuda<'a,T> for CudaTensor1dPtr<T,N>
     where T :UnitValue<T> {
     type Output = &'a CudaTensor1dPtr<T,N>;
 
-    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
+    fn to_cuda(&'a self, _: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
         Ok(self)
     }
 }

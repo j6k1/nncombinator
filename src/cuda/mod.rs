@@ -1245,7 +1245,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> From<&'a 
         &mut value.ptr
     }
 }
-/// View into a Cuda memory object representing a 3D array with dimension number as a type parameter
+/// View into a Cuda memory object representing a 4D array with dimension number as a type parameter
 #[derive(Debug)]
 pub struct CudaTensor4dPtrView<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize>
     where T: Default + Debug {

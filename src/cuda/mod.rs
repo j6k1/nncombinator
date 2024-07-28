@@ -930,6 +930,36 @@ impl<T,const N:usize> MemorySize for CudaTensor1dPtr<T,N>
         N
     }
 }
+/// View into a Cuda memory object representing a 1D array with dimension number as a type parameter
+#[derive(Debug)]
+pub struct CudaTensor1dPtrView<'a,T,const N:usize>
+    where T: Default + Debug {
+    ptr:&'a CudaMemoryPoolPtr<T>
+}
+impl<'a,T,const N:usize> private::AsConstKernelPtrBase for CudaTensor1dPtrView<'a,T,N>
+    where T: Default + Debug {
+    fn as_const_kernel_ptr(&self) -> *mut c_void {
+        self.ptr.as_const_kernel_ptr()
+    }
+}
+impl<'a,T,const N:usize> Deref for CudaTensor1dPtrView<'a,T,N>
+    where T: Default + Debug {
+    type Target = CudaMemoryPoolPtr<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ptr
+    }
+}
+impl<'a,T,const N:usize> TryFrom<&'a CudaTensor1dPtr<T,N>> for CudaTensor1dPtrView<'a,T,N>
+    where T: Default + Debug {
+    type Error = EvaluateError;
+
+    fn try_from(value: &'a CudaTensor1dPtr<T, N>) -> Result<Self, Self::Error> {
+        Ok(CudaTensor1dPtrView {
+            ptr:&value.ptr
+        })
+    }
+}
 /// Cuda memory object representing a 2D array with dimension number as type parameter
 #[derive(Debug)]
 pub struct CudaTensor2dPtr<T,const N1:usize,const N2:usize> where T: Default + Debug {
@@ -1005,6 +1035,36 @@ impl<T,const N1:usize,const N2:usize> MemorySize for CudaTensor2dPtr<T,N1,N2>
     #[inline]
     fn size() -> usize {
         N1 * N2
+    }
+}
+/// View into a Cuda memory object representing a 2D array with dimension number as a type parameter
+#[derive(Debug)]
+pub struct CudaTensor2dPtrView<'a,T,const N1:usize,const N2:usize>
+    where T: Default + Debug {
+    ptr:&'a CudaMemoryPoolPtr<T>
+}
+impl<'a,T,const N1:usize,const N2:usize> private::AsConstKernelPtrBase for CudaTensor2dPtrView<'a,T,N1,N2>
+    where T: Default + Debug {
+    fn as_const_kernel_ptr(&self) -> *mut c_void {
+        self.ptr.as_const_kernel_ptr()
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> Deref for CudaTensor2dPtrView<'a,T,N1,N2>
+    where T: Default + Debug {
+    type Target = CudaMemoryPoolPtr<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ptr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> TryFrom<&'a CudaTensor2dPtr<T,N1,N2>> for CudaTensor2dPtrView<'a,T,N1,N2>
+    where T: Default + Debug {
+    type Error = EvaluateError;
+
+    fn try_from(value: &'a CudaTensor2dPtr<T,N1,N2>) -> Result<Self, Self::Error> {
+        Ok(CudaTensor2dPtrView {
+            ptr:&value.ptr
+        })
     }
 }
 /// Cuda memory object representing a 3D array with dimension number as type parameter
@@ -1084,6 +1144,36 @@ impl<T,const N1:usize,const N2:usize,const N3:usize> MemorySize for CudaTensor3d
         N1 * N2 * N3
     }
 }
+/// View into a Cuda memory object representing a 3D array with dimension number as a type parameter
+#[derive(Debug)]
+pub struct CudaTensor3dPtrView<'a,T,const N1:usize,const N2:usize,const N3:usize>
+    where T: Default + Debug {
+    ptr:&'a CudaMemoryPoolPtr<T>
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> private::AsConstKernelPtrBase for CudaTensor3dPtrView<'a,T,N1,N2,N3>
+    where T: Default + Debug {
+    fn as_const_kernel_ptr(&self) -> *mut c_void {
+        self.ptr.as_const_kernel_ptr()
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Deref for CudaTensor3dPtrView<'a,T,N1,N2,N3>
+    where T: Default + Debug {
+    type Target = CudaMemoryPoolPtr<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ptr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> TryFrom<&'a CudaTensor3dPtr<T,N1,N2,N3>> for CudaTensor3dPtrView<'a,T,N1,N2,N3>
+    where T: Default + Debug {
+    type Error = EvaluateError;
+
+    fn try_from(value: &'a CudaTensor3dPtr<T,N1,N2,N3>) -> Result<Self, Self::Error> {
+        Ok(CudaTensor3dPtrView {
+            ptr:&value.ptr
+        })
+    }
+}
 /// Cuda memory object representing a 4D array with dimension number as type parameter
 #[derive(Debug)]
 pub struct CudaTensor4dPtr<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> where T: Default + Debug {
@@ -1159,6 +1249,39 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> From<&'a 
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> From<&'a mut CudaTensor4dPtr<T,N1,N2,N3,N4>> for &'a mut CudaMemoryPoolPtr<T> where T: Default + Debug {
     fn from(value: &'a mut CudaTensor4dPtr<T,N1,N2,N3,N4>) -> Self {
         &mut value.ptr
+    }
+}
+/// View into a Cuda memory object representing a 3D array with dimension number as a type parameter
+#[derive(Debug)]
+pub struct CudaTensor4dPtrView<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize>
+    where T: Default + Debug {
+    ptr:&'a CudaMemoryPoolPtr<T>
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> private::AsConstKernelPtrBase
+    for CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>
+    where T: Default + Debug {
+    fn as_const_kernel_ptr(&self) -> *mut c_void {
+        self.ptr.as_const_kernel_ptr()
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> Deref
+    for CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>
+    where T: Default + Debug {
+    type Target = CudaMemoryPoolPtr<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ptr
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> TryFrom<&'a CudaTensor4dPtr<T,N1,N2,N3,N4>>
+    for CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>
+    where T: Default + Debug {
+    type Error = EvaluateError;
+
+    fn try_from(value: &'a CudaTensor4dPtr<T,N1,N2,N3,N4>) -> Result<Self, Self::Error> {
+        Ok(CudaTensor4dPtrView {
+            ptr:&value.ptr
+        })
     }
 }
 /// Trait that returns the size of Cuda smart point type memory (returns the number of elements)

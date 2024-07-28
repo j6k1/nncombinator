@@ -10,7 +10,7 @@ use libc::c_void;
 use rcudnn::Error;
 use rcudnn::utils::DataType;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t, cudnnDataType_t};
-use crate::arr::{SerializedVec, SliceSize};
+use crate::arr::{IntoConverter, SerializedVec, SliceSize};
 use crate::cuda::mem::{MemoryPool};
 use crate::device::{DeviceGpu, DeviceMemoryPool};
 use crate::error::{CudaError, CudaRuntimeError, EvaluateError, SizeMismatchError};
@@ -1252,6 +1252,47 @@ impl<'a,U,T> private::AsConstKernelPtrBase for CudaVecView<'a,U,T>
           T: AsConstKernelPtr + MemorySize {
     fn as_const_kernel_ptr(&self) -> *mut libc::c_void {
         self.ptr.as_const_kernel_ptr()
+    }
+}
+pub struct CudaVecConverter<U,T>
+    where U: UnitValue<U> + Default + Clone + Send,
+          T: MemorySize + AsKernelPtr + AsConstKernelPtr {
+    len:usize,
+    ptr:CudaMemoryPoolPtr<U>,
+    u:PhantomData<U>,
+    t:PhantomData<T>
+}
+impl<U,T> IntoConverter for CudaVec<U,T>
+    where U: UnitValue<U> + Default + Clone + Send,
+          T: MemorySize + AsKernelPtr + AsConstKernelPtr {
+    type Converter = CudaVecConverter<U,T>;
+
+    fn into_converter(self) -> Self::Converter {
+        CudaVecConverter {
+            len:self.len,
+            ptr:self.ptr,
+            u:PhantomData::<U>,
+            t:PhantomData::<T>
+        }
+    }
+}
+impl<'a,U,T,R> TryFrom<CudaVecConverter<U,T>> for CudaVec<U,R>
+    where U: UnitValue<U> + Default + Clone + Send,
+          T: MemorySize + AsKernelPtr + AsConstKernelPtr,
+          R: MemorySize + AsKernelPtr + AsConstKernelPtr + TryFrom<T> {
+    type Error = EvaluateError;
+
+    fn try_from(value: CudaVecConverter<U,T>) -> Result<Self, Self::Error> {
+        if T::size() != R::size() {
+            Err(EvaluateError::SizeMismatchError(SizeMismatchError(T::size(),R::size())))
+        } else {
+            Ok(CudaVec {
+                len:value.len,
+                ptr: value.ptr,
+                u:PhantomData::<U>,
+                t:PhantomData::<R>
+            })
+        }
     }
 }
 impl<'a,U,T> Deref for CudaVecView<'a,U,T>

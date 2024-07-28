@@ -950,14 +950,12 @@ impl<'a,T,const N:usize> Deref for CudaTensor1dPtrView<'a,T,N>
         &self.ptr
     }
 }
-impl<'a,T,const N:usize> TryFrom<&'a CudaTensor1dPtr<T,N>> for CudaTensor1dPtrView<'a,T,N>
+impl<'a,T,const N:usize> From<&'a CudaTensor1dPtr<T,N>> for CudaTensor1dPtrView<'a,T,N>
     where T: Default + Debug {
-    type Error = EvaluateError;
-
-    fn try_from(value: &'a CudaTensor1dPtr<T, N>) -> Result<Self, Self::Error> {
-        Ok(CudaTensor1dPtrView {
+    fn from(value: &'a CudaTensor1dPtr<T, N>) -> Self {
+        CudaTensor1dPtrView {
             ptr:&value.ptr
-        })
+        }
     }
 }
 /// Cuda memory object representing a 2D array with dimension number as type parameter
@@ -1057,14 +1055,12 @@ impl<'a,T,const N1:usize,const N2:usize> Deref for CudaTensor2dPtrView<'a,T,N1,N
         &self.ptr
     }
 }
-impl<'a,T,const N1:usize,const N2:usize> TryFrom<&'a CudaTensor2dPtr<T,N1,N2>> for CudaTensor2dPtrView<'a,T,N1,N2>
+impl<'a,T,const N1:usize,const N2:usize> From<&'a CudaTensor2dPtr<T,N1,N2>> for CudaTensor2dPtrView<'a,T,N1,N2>
     where T: Default + Debug {
-    type Error = EvaluateError;
-
-    fn try_from(value: &'a CudaTensor2dPtr<T,N1,N2>) -> Result<Self, Self::Error> {
-        Ok(CudaTensor2dPtrView {
+    fn from(value: &'a CudaTensor2dPtr<T,N1,N2>) -> Self {
+        CudaTensor2dPtrView {
             ptr:&value.ptr
-        })
+        }
     }
 }
 /// Cuda memory object representing a 3D array with dimension number as type parameter
@@ -1164,14 +1160,12 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Deref for CudaTensor3dPt
         &self.ptr
     }
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize> TryFrom<&'a CudaTensor3dPtr<T,N1,N2,N3>> for CudaTensor3dPtrView<'a,T,N1,N2,N3>
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> From<&'a CudaTensor3dPtr<T,N1,N2,N3>> for CudaTensor3dPtrView<'a,T,N1,N2,N3>
     where T: Default + Debug {
-    type Error = EvaluateError;
-
-    fn try_from(value: &'a CudaTensor3dPtr<T,N1,N2,N3>) -> Result<Self, Self::Error> {
-        Ok(CudaTensor3dPtrView {
+    fn from(value: &'a CudaTensor3dPtr<T,N1,N2,N3>) -> Self {
+        CudaTensor3dPtrView {
             ptr:&value.ptr
-        })
+        }
     }
 }
 /// Cuda memory object representing a 4D array with dimension number as type parameter
@@ -1273,15 +1267,13 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> Deref
         &self.ptr
     }
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> TryFrom<&'a CudaTensor4dPtr<T,N1,N2,N3,N4>>
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> From<&'a CudaTensor4dPtr<T,N1,N2,N3,N4>>
     for CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>
     where T: Default + Debug {
-    type Error = EvaluateError;
-
-    fn try_from(value: &'a CudaTensor4dPtr<T,N1,N2,N3,N4>) -> Result<Self, Self::Error> {
-        Ok(CudaTensor4dPtrView {
+    fn from(value: &'a CudaTensor4dPtr<T,N1,N2,N3,N4>) -> Self {
+        CudaTensor4dPtrView {
             ptr:&value.ptr
-        })
+        }
     }
 }
 /// Trait that returns the size of Cuda smart point type memory (returns the number of elements)

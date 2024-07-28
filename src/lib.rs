@@ -49,6 +49,10 @@ pub trait Stack {
     /// # Arguments
     /// * `f` - Applicable callbacks
     fn take_map<F: FnOnce(Self::Head) -> Result<(Self::Head, O),E>, O,E>(self, f: F) -> Result<(Self, O),E> where Self: Sized;
+    /// Pass a mutable reference to the top element of the stack to the callback function and return the result of executing it
+    /// # Arguments
+    /// * `f` - Applicable callbacks
+    fn map_mut<F: FnOnce(&mut Self::Head) -> O,O>(&mut self,f:F) -> O;
 }
 /// Stack containing elements
 #[derive(Debug,Clone)]
@@ -107,6 +111,10 @@ impl<R,T> Stack for Cons<R,T> where R: Stack {
 
         Ok((Cons(s,h),r))
     }
+    #[inline]
+    fn map_mut<F: FnOnce(&mut Self::Head) -> O, O>(&mut self, f: F) -> O {
+        f(&mut self.1)
+    }
 }
 /// Empty stack, containing no elements
 #[derive(Debug,Clone)]
@@ -138,6 +146,10 @@ impl Stack for Nil {
         let (_,r) = f(())?;
 
         Ok((Nil,r))
+    }
+    #[inline]
+    fn map_mut<F: FnOnce(&mut Self::Head) -> O, O>(&mut self, f: F) -> O {
+        f(&mut ())
     }
 }
 

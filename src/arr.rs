@@ -8,7 +8,7 @@ use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallel
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::cuda::{CudaTensor1dPtr, Memory, ToCuda};
 use crate::device::{DeviceGpu, DeviceMemoryPool};
-use crate::error::{EvaluateError, IndexOutBoundError, SizeMismatchError};
+use crate::error::{IndexOutBoundError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::{Product, Sum, UnitValue};
@@ -118,13 +118,13 @@ impl<'data,U,const N:usize> From<ArrView<'data,U,N>> for Arr<U,N> where U: Defau
     }
 }
 impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(v: Vec<T>) -> Result<Self, Self::Error> {
         let s = v.into_boxed_slice();
 
         if s.len() != N {
-            Err(SizeMismatchError(s.len(),N))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(s.len(),N)))
         } else {
             Ok(Arr {
                 arr: s
@@ -133,11 +133,11 @@ impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Se
     }
 }
 impl<T,const N:usize> TryFrom<Box<[T]>> for Arr<T,N> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(arr: Box<[T]>) -> Result<Self, Self::Error> {
         if arr.len() != N {
-            Err(SizeMismatchError(arr.len(),N))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(arr.len(),N)))
         } else {
             Ok(Arr { arr: arr })
         }
@@ -162,7 +162,7 @@ impl<T,const N:usize> ToCuda<T> for Arr<T,N>
     where T: UnitValue<T> {
     type Output = CudaTensor1dPtr<T,N>;
 
-    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
+    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
         let mut ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
 
         ptr.memcpy(self.as_ptr(),N)?;
@@ -174,7 +174,7 @@ impl<'a,T,const N:usize> ToCuda<T> for &'a Arr<T,N>
     where T: UnitValue<T> {
     type Output = CudaTensor1dPtr<T,N>;
 
-    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,EvaluateError> {
+    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
         let mut ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
 
         ptr.memcpy(self.as_ptr(),N)?;
@@ -301,6 +301,26 @@ impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for Arr<T,N> where T: Default + Clo
 impl<T,const N:usize> BatchDataType for Arr<T,N> where T: Default + Clone + Send {
     type Type = SerializedVec<T,Arr<T,N>>;
 }
+impl<'a,T,const N:usize> BatchDataType for &'a Arr<T,N> where T: Default + Clone + Send {
+    type Type = &'a SerializedVec<T,Arr<T,N>>;
+}
+impl<'a,T,const N1:usize, const N2:usize> Product<&'a Arr2<T,N1,N2>> for &'a Arr<T,N1>
+    where T: Add<Output=T> + AddAssign + Mul<Output=T> + Default + Clone + Copy + Send {
+    type Output = Arr<T,N2>;
+
+    #[inline]
+    fn product(self, rhs: &'a Arr2<T, N1, N2>) -> Self::Output {
+        let mut o = Arr::new();
+
+        for (&l,r) in self.iter().zip(rhs.iter()) {
+            for (o,&r) in o.iter_mut().zip(r.iter()) {
+                *o += l * r;
+            }
+        }
+
+        o
+    }
+}
 /// Fixed-length 2D array implementation
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr2<T,const N1:usize, const N2:usize> where T: Default {
@@ -367,11 +387,11 @@ impl<'a,T,const N1:usize, const N2:usize> AsRawMutSlice<'a,T> for Arr2<T,N1,N2> 
     }
 }
 impl<T,const N1:usize, const N2: usize> TryFrom<Vec<T>> for Arr2<T,N1,N2> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(v: Vec<T>) -> Result<Self, Self::Error> {
         if v.len() != N1 * N2 {
-            Err(SizeMismatchError(v.len(),N1 * N2))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(v.len(),N1 * N2)))
         } else {
             let arr = v.into_boxed_slice();
 
@@ -382,11 +402,11 @@ impl<T,const N1:usize, const N2: usize> TryFrom<Vec<T>> for Arr2<T,N1,N2> where 
     }
 }
 impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(v: Vec<Arr<T,N2>>) -> Result<Self, Self::Error> {
         if v.len() != N1 {
-            Err(SizeMismatchError(v.len(),N1))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(v.len(),N1)))
         } else {
             let mut buffer = Vec::with_capacity(N1 * N2);
 
@@ -472,11 +492,11 @@ impl<T,const N1:usize, const N2:usize, const N3:usize> IndexMut<(usize,usize,usi
     }
 }
 impl<T,const N1:usize, const N2: usize, const N3:usize> TryFrom<Vec<Arr2<T,N2,N3>>> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(v: Vec<Arr2<T,N2,N3>>) -> Result<Self, Self::Error> {
         if v.len() != N1 {
-            Err(SizeMismatchError(v.len(),N1))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(v.len(),N1)))
         } else {
             let mut buffer = Vec::with_capacity(N1 * N2 * N3);
 
@@ -570,11 +590,11 @@ impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> IndexMut<
 }
 impl<T,const N1:usize, const N2: usize, const N3:usize, const N4:usize> TryFrom<Vec<Arr3<T,N2,N3,N4>>>
     for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(v: Vec<Arr3<T,N2,N3,N4>>) -> Result<Self, Self::Error> {
         if v.len() != N1 {
-            Err(SizeMismatchError(v.len(),N1))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(v.len(),N1)))
         } else {
             let mut buffer = Vec::with_capacity(N1 * N2 * N3 * N4);
 
@@ -628,11 +648,11 @@ impl<'a,T,const N:usize> From<&'a Arr<T,N>> for ArrView<'a,T,N> where T: Default
     }
 }
 impl<'a,T,const N:usize> TryFrom<&'a [T]> for ArrView<'a,T,N> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(arr: &'a [T]) -> Result<Self, Self::Error> {
         if arr.len() != N {
-            Err(SizeMismatchError(arr.len(),N))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(arr.len(),N)))
         } else {
             Ok(ArrView { arr: arr })
         }
@@ -786,11 +806,11 @@ impl<'a,T,const N:usize> DerefMut for ArrViewMut<'a,T,N> {
     }
 }
 impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(arr: &'a mut [T]) -> Result<Self, Self::Error> {
         if arr.len() != N {
-            Err(SizeMismatchError(arr.len(),N))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(arr.len(),N)))
         } else {
             Ok(ArrViewMut { arr: arr })
         }
@@ -1228,6 +1248,12 @@ impl<U,T> BatchSize for SerializedVec<U,T> {
         self.len
     }
 }
+impl<'a,U,T> BatchSize for &'a SerializedVec<U,T> {
+    /// get the number of element
+    fn size(&self) -> usize {
+        self.len
+    }
+}
 impl<U,T> SerializedVec<U,T>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + MakeView<'a,U> {
@@ -1336,11 +1362,11 @@ impl<'data,U,const N:usize> From<Vec<ArrView<'data,U,N>>> for SerializedVec<U,Ar
     }
 }
 impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
-    fn try_from(items: Vec<U>) -> Result<Self,SizeMismatchError> {
+    fn try_from(items: Vec<U>) -> Result<Self,TypeConvertError> {
         if items.len() % N != 0 {
-            Err(SizeMismatchError(items.len(),N))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(items.len(),N)))
         } else {
             let len = items.len() / N;
 
@@ -1357,11 +1383,11 @@ impl<U,T,R> TryFrom<SerializedVecConverter<U,T>> for SerializedVec<U,R>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U>,
           for<'b> R: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
-    fn try_from(s: SerializedVecConverter<U,T>) -> Result<Self,SizeMismatchError> {
+    fn try_from(s: SerializedVecConverter<U,T>) -> Result<Self,TypeConvertError> {
         if T::slice_size() != R::slice_size() {
-            Err(SizeMismatchError(T::slice_size(),R::slice_size()))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),R::slice_size())))
         } else {
             let len = s.size();
 
@@ -1393,13 +1419,13 @@ impl<'a,U,T> From<&'a SerializedVecView<'a,U,T>> for SerializedVec<U,T>
 impl<U,T> TryFrom<Box<[U]>> for SerializedVec<U,T> 
     where U: Default + Clone + Send,
           for<'a> T: SliceSize + MakeView<'a,U> {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(arr: Box<[U]>) -> Result<Self, Self::Error> {
         let n = T::slice_size();
 
         if arr.len() % n != 0 {
-            Err(SizeMismatchError(arr.len(),n))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(arr.len(),n)))
         } else {
             let len = arr.len() / n;
 
@@ -1638,15 +1664,20 @@ impl<'a,U,T> AsRawSlice<U> for SerializedVecView<'a,U,T>
         &self.arr
     }
 }
+impl<'a,U,T> BatchSize for SerializedVecView<'a,U,T> {
+    fn size(&self) -> usize {
+        self.len
+    }
+}
 impl<'a,U,T,R> TryFrom<&'a SerializedVec<U,T>> for SerializedVecView<'a,U,R>
     where U: Default + Clone + Copy + Send,
           T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U>,
           R: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
-    fn try_from(s: &'a SerializedVec<U,T>) -> Result<Self, SizeMismatchError> {
+    fn try_from(s: &'a SerializedVec<U,T>) -> Result<Self, TypeConvertError> {
         if T::slice_size() != R::slice_size() {
-            Err(SizeMismatchError(T::slice_size(), R::slice_size()))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(), R::slice_size())))
         } else {
             Ok(SerializedVecView {
                 arr: &*s.arr,

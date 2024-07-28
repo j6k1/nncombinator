@@ -48,7 +48,7 @@ pub trait ForwardAll {
     /// Input to this layer of the neural network
     type Input: Debug;
     /// Output from this layer of the neural network
-    type Output: Debug + Send + Sync + 'static;
+    type Output: Debug + 'static;
     /// Forward propagation
     /// # Arguments
     /// * `input` - input
@@ -146,7 +146,10 @@ pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
     fn forward_diff(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError>;
 }
 /// Trait that defines the learning process of a neural network.
-pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
+pub trait Train<U,L>: PreTrain<U>
+    where U: UnitValue<U>,
+          L: LossFunction<U> {
+    type ExpectedInput: Debug;
     /// Train neural networks.
     /// # Arguments
     /// * `expected` - expected value
@@ -157,7 +160,7 @@ pub trait Train<U>: PreTrain<U> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn train<L: LossFunction<U>>(&mut self, expected:Self::Output, input:Self::Input, lossf:&L) -> Result<U, TrainingError>;
+    fn train(&mut self, expected:Self::ExpectedInput, input:Self::Input, lossf:&L) -> Result<U, TrainingError>;
 }
 /// Trait that defines the function to query information to calculate the difference when applying the difference of neural networks.
 pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
@@ -245,7 +248,10 @@ pub trait BatchPreTrain<U>: BatchPreTrainBase<U> + BatchForwardBase + BatchForwa
     fn batch_pre_train(&self, input:Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError>;
 }
 /// Trait that defines the implementation of neural network training by batch processing.
-pub trait BatchTrain<U,D>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + PreTrain<U> where U: UnitValue<U>, D: Device<U> {
+pub trait BatchTrain<U,D,L>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + PreTrain<U>
+    where U: UnitValue<U>, D: Device<U>,
+          L: LossFunction<U> {
+    type BatchExpectedInput: Debug;
     /// Train neural networks.
     /// # Arguments
     /// * `expected` - expected value
@@ -256,7 +262,7 @@ pub trait BatchTrain<U,D>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackwa
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_train<L: BatchLossFunction<U,D>>(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, lossf:&L) -> Result<U, TrainingError>;
+    fn batch_train(&mut self, expected:Self::BatchExpectedInput, input:Self::BatchInput, lossf:&L) -> Result<U, TrainingError>;
 }
 /// Trait that defines the ability to add layers to a neural network.
 pub trait AddLayer: ForwardAll where Self: Sized {
@@ -266,19 +272,21 @@ pub trait AddLayer: ForwardAll where Self: Sized {
     fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
 }
 /// Trait that defines the ability to add a layer with learning capabilities to a neural network.
-pub trait AddLayerTrain<U>: PreTrain<U> where Self: Sized, U: UnitValue<U> {
+pub trait AddLayerTrain<U,L>: PreTrain<U>
+    where Self: Sized, U: UnitValue<U>, L: LossFunction<U> {
     /// Adding Layers
     /// # Arguments
     /// * `f` - Callback that takes itself and returns an object with an internally generated layer added
-    fn add_layer_train<C,F>(self,f:F) -> C where C: Train<U>, F: FnOnce(Self) -> C;
+    fn add_layer_train<C,F>(self,f:F) -> C where C: Train<U,L>, F: FnOnce(Self) -> C;
 }
 impl<T> AddLayer for T where T: ForwardAll + Sized {
     fn add_layer<C, F>(self, f: F) -> C where C: ForwardAll, F: FnOnce(Self) -> C {
         f(self)
     }
 }
-impl<T,U> AddLayerTrain<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
-    fn add_layer_train<C, F>(self, f: F) -> C where C: Train<U>, F: FnOnce(Self) -> C {
+impl<T,U,L> AddLayerTrain<U,L> for T
+    where T: PreTrain<U> + Sized, U: UnitValue<U>, L: LossFunction<U> {
+    fn add_layer_train<C,F>(self, f: F) -> C where C: Train<U,L>, F: FnOnce(Self) -> C {
         f(self)
     }
 }
@@ -295,7 +303,8 @@ pub trait TryAddLayer: ForwardAll where Self: Sized {
     fn try_add_layer<C,F,E>(self,f:F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E>;
 }
 /// Trait that defines a function that seeks to add a learnable layer to a neural network
-pub trait TryAddLayerTrain<U>: PreTrain<U> where Self: Sized, U: UnitValue<U> {
+pub trait TryAddLayerTrain<U,L>: PreTrain<U>
+    where Self: Sized, U: UnitValue<U>, L: LossFunction<U> {
     /// Adding Layers
     /// # Arguments
     /// * `f` - Callback that takes itself and returns an object of type Result with an internally generated layer added
@@ -304,15 +313,16 @@ pub trait TryAddLayerTrain<U>: PreTrain<U> where Self: Sized, U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`DeviceError`]
-    fn try_add_layer_train<C,F>(self,f:F) -> Result<C,DeviceError> where C: Train<U>, F: FnOnce(Self) -> Result<C,DeviceError>;
+    fn try_add_layer_train<C,F>(self,f:F) -> Result<C,DeviceError> where C: Train<U,L>, F: FnOnce(Self) -> Result<C,DeviceError>;
 }
 impl<T> TryAddLayer for T where T: ForwardAll + Sized {
     fn try_add_layer<C,F,E>(self, f: F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E> {
         f(self)
     }
 }
-impl<T,U> TryAddLayerTrain<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
-    fn try_add_layer_train<C, F>(self, f: F) -> Result<C,DeviceError> where C: Train<U>, F: FnOnce(Self) -> Result<C,DeviceError> {
+impl<T,U,L> TryAddLayerTrain<U,L> for T
+    where T: PreTrain<U> + Sized, U: UnitValue<U>, L: LossFunction<U> {
+    fn try_add_layer_train<C, F>(self, f: F) -> Result<C,DeviceError> where C: Train<U,L>, F: FnOnce(Self) -> Result<C,DeviceError> {
         f(self)
     }
 }

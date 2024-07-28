@@ -667,46 +667,46 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
 
 template<typename T>
 
-__device__ void loss_linear_batch_by_canonical_link(const T *expected, T *actual, const int nlen, const int batch_size) {
+__device__ void loss_linear_batch_by_canonical_link(const T *expected, const T *actual,T *output, const int nlen, const int batch_size) {
     const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        actual[i] = (actual[i] - expected[i]) / batch_size;
+        output[i] = (actual[i] - expected[i]) / batch_size;
     }
 }
 template<typename T>
 
-__device__ void loss_linear_batch_mse_derive(const T *t, T *r, const int nlen, const int batch_size) {
+__device__ void loss_linear_batch_mse_derive(const T *t, const T *r, T* output, const int nlen, const int batch_size) {
     const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        r[i] = (r[i] - t[i]) / batch_size;
+        output[i] = (r[i] - t[i]) / batch_size;
     }
 }
 template<typename T>
 
-__device__ void loss_linear_batch_cross_entropy_derive(const T *t, T *r, const int nlen, const int batch_size) {
+__device__ void loss_linear_batch_cross_entropy_derive(const T *t, const T *r, T* output, const int nlen, const int batch_size) {
     const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        r[i] = -((r[i] / (t[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i])) / batch_size;
+        output[i] = -((r[i] / (t[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i])) / batch_size;
     }
 }
 template<typename T>
 
-__device__ void loss_linear_batch_cross_entropy_multiclass_derive(const T *t, T *r, const int nlen, const int batch_size) {
+__device__ void loss_linear_batch_cross_entropy_multiclass_derive(const T *t, const T *r, T* output, const int nlen, const int batch_size) {
     const size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
     const size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        r[i] = -(t[i] / r[i]) / batch_size;
+        output[i] = -(t[i] / r[i]) / batch_size;
     }
 }
 
@@ -997,36 +997,36 @@ extern "C" {
         linear_gradient_batch(loss,input,output,input_len,output_len,units_size,batch_size);
     }
 
-    __global__ void loss_linear_batch_by_canonical_link_float(const float *expected, float *actual, const int nlen, const int batch_size) {
-        loss_linear_batch_by_canonical_link(expected,actual,nlen,batch_size);
+    __global__ void loss_linear_batch_by_canonical_link_float(const float *expected, const float *actual, float *output, const int nlen, const int batch_size) {
+        loss_linear_batch_by_canonical_link(expected,actual,output,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_by_canonical_link_double(const double *expected, double *actual, const int nlen, const int batch_size) {
-        loss_linear_batch_by_canonical_link(expected,actual,nlen,batch_size);
+    __global__ void loss_linear_batch_by_canonical_link_double(const double *expected, const double *actual, double *output, const int nlen, const int batch_size) {
+        loss_linear_batch_by_canonical_link(expected,actual,output,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_mse_derive_float(const float *t, float *r, const int nlen, const int batch_size) {
-        loss_linear_batch_mse_derive(t,r,nlen,batch_size);
+    __global__ void loss_linear_batch_mse_derive_float(const float *t, const float *r, float* output, const int nlen, const int batch_size) {
+        loss_linear_batch_mse_derive(t,r,output,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_mse_derive_double(const double *t, double *r, const int nlen, const int batch_size) {
-        loss_linear_batch_mse_derive(t,r,nlen,batch_size);
+    __global__ void loss_linear_batch_mse_derive_double(const double *t, const double *r, double *output, const int nlen, const int batch_size) {
+        loss_linear_batch_mse_derive(t,r,output,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_cross_entropy_derive_float(const float *t, float *r, const int nlen, const int batch_size) {
-        loss_linear_batch_cross_entropy_derive(t,r,nlen,batch_size);
+    __global__ void loss_linear_batch_cross_entropy_derive_float(const float *t, const float *r, float* output, const int nlen, const int batch_size) {
+        loss_linear_batch_cross_entropy_derive(t,r,output,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_cross_entropy_derive_double(const double *t, double *r, const int nlen, const int batch_size) {
-        loss_linear_batch_cross_entropy_derive(t,r,nlen,batch_size);
+    __global__ void loss_linear_batch_cross_entropy_derive_double(const double *t, const double *r, double *output, const int nlen, const int batch_size) {
+        loss_linear_batch_cross_entropy_derive(t,r,output,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_cross_entropy_multiclass_derive_float(const float *t, float *r, const int nlen, const int batch_size) {
-        loss_linear_batch_cross_entropy_multiclass_derive(t,r,nlen,batch_size);
+    __global__ void loss_linear_batch_cross_entropy_multiclass_derive_float(const float *t, const float *r, float* output, const int nlen, const int batch_size) {
+        loss_linear_batch_cross_entropy_multiclass_derive(t,r,output,nlen,batch_size);
     }
 
-    __global__ void loss_linear_batch_cross_entropy_multiclass_derive_double(const double *t, double *r, const int nlen, const int batch_size) {
-        loss_linear_batch_cross_entropy_multiclass_derive(t,r,nlen,batch_size);
+    __global__ void loss_linear_batch_cross_entropy_multiclass_derive_double(const double *t, const double *r, double *output, const int nlen, const int batch_size) {
+        loss_linear_batch_cross_entropy_multiclass_derive(t,r,output,nlen,batch_size);
     }
     __global__ void update_with_sgd_float(float *weight, const float *grad, const size_t size, const float a, const float weight_decay) {
         update_with_sgd(weight,grad,size,a,weight_decay);

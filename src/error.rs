@@ -15,7 +15,7 @@ pub enum TrainingError {
     /// Errors occurring within the launched external thread
     /// (this error is currently not used within crate)
     ThreadError(String),
-    /// Errors caused by generating fixed-length arrays from different size Vecs
+    /// Error generating fixed-length collections from collections of different sizes
     SizeMismatchError(SizeMismatchError),
     /// Illegal input value
     InvalidInputError(String),
@@ -38,6 +38,8 @@ pub enum TrainingError {
     UnsupportedOperationError(UnsupportedOperationError),
     /// Error raised when cast of primitive type fails
     TypeCastError(String),
+    /// Error generated when type conversion fails
+    TypeConvertError(TypeConvertError),
     /// Error raised if cast to fixed-length array fails
     TryFromSliceError(TryFromSliceError)
 }
@@ -57,6 +59,7 @@ impl fmt::Display for TrainingError {
             TrainingError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e),
             TrainingError::UnsupportedOperationError(e) => write!(f,"unsupported operation. ({})",e),
             TrainingError::TypeCastError(s) => write!(f,"{}",s),
+            TrainingError::TypeConvertError(e) => write!(f,"{}",e),
             TrainingError::TryFromSliceError(e) => write!(f,"{}",e)
         }
     }
@@ -77,6 +80,7 @@ impl error::Error for TrainingError {
             TrainingError::InvalidStateError(_) => "Invalid state.",
             TrainingError::UnsupportedOperationError(_) => "unsupported operation.",
             TrainingError::TypeCastError(_) => "Typecast failed.",
+            TrainingError::TypeConvertError(_) => "Type convert failed.",
             TrainingError::TryFromSliceError(_) => "Conversion to fixed-length array failed.",
         }
     }
@@ -96,6 +100,7 @@ impl error::Error for TrainingError {
             TrainingError::InvalidStateError(e) => Some(e),
             TrainingError::UnsupportedOperationError(e) => Some(e),
             TrainingError::TypeCastError(_) => None,
+            TrainingError::TypeConvertError(e) => Some(e),
             TrainingError::TryFromSliceError(e) => Some(e)
         }
     }
@@ -144,6 +149,11 @@ impl error::Error for ConfigReadError {
 impl From<SizeMismatchError> for TrainingError {
     fn from(err: SizeMismatchError) -> TrainingError {
         TrainingError::SizeMismatchError(err)
+    }
+}
+impl From<TypeConvertError> for TrainingError {
+    fn from(err: TypeConvertError) -> TrainingError {
+        TrainingError::TypeConvertError(err)
     }
 }
 impl From<EvaluateError> for TrainingError {
@@ -201,7 +211,7 @@ impl From<TryFromSliceError> for TrainingError {
         TrainingError::TryFromSliceError(err)
     }
 }
-/// Errors caused by generating fixed-length arrays from different size Vecs
+/// Error generating fixed-length collections from collections of different sizes
 #[derive(Debug)]
 pub struct SizeMismatchError(pub usize, pub usize);
 impl fmt::Display for SizeMismatchError {
@@ -220,6 +230,56 @@ impl error::Error for SizeMismatchError {
 
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         None
+    }
+}
+#[derive(Debug)]
+pub enum TypeConvertError {
+    /// Error generating fixed-length collections from collections of different sizes
+    SizeMismatchError(SizeMismatchError),
+    /// Error in cuda processing
+    CudaError(CudaError),
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error),
+}
+impl fmt::Display for TypeConvertError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TypeConvertError::SizeMismatchError(e) => write!(f,"{}",e),
+            TypeConvertError::CudaError(e) => write!(f, "An error occurred in the process of cuda. ({})",e),
+            TypeConvertError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
+        }
+    }
+}
+impl error::Error for TypeConvertError {
+    fn description(&self) -> &str {
+        match *self {
+            TypeConvertError::SizeMismatchError(_) => "memory size does not match.",
+            TypeConvertError::CudaError(_) => "An error occurred in the process of cuda.",
+            TypeConvertError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            TypeConvertError::SizeMismatchError(e) => Some(e),
+            TypeConvertError::CudaError(e) => Some(e),
+            TypeConvertError::CudnnError(e) => Some(e)
+        }
+    }
+}
+impl From<SizeMismatchError> for TypeConvertError {
+    fn from(err: SizeMismatchError) -> TypeConvertError {
+        TypeConvertError::SizeMismatchError(err)
+    }
+}
+impl From<CudaError> for TypeConvertError {
+    fn from(err: CudaError) -> TypeConvertError {
+        TypeConvertError::CudaError(err)
+    }
+}
+impl From<rcudnn::Error> for TypeConvertError {
+    fn from(err: rcudnn::Error) -> TypeConvertError {
+        TypeConvertError::CudnnError(err)
     }
 }
 /// Error when accessing array out of range
@@ -269,12 +329,14 @@ pub enum EvaluateError {
     CudnnError(rcudnn::Error),
     /// Error in cuda runtime
     CudaRuntimeError(CudaRuntimeError),
-    /// Errors caused by generating fixed-length arrays from different size Vecs
+    /// Error generating fixed-length collections from collections of different sizes
     SizeMismatchError(SizeMismatchError),
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidStateError(InvalidStateError),
     /// Error raised when cast of primitive type fails
     TypeCastError(String),
+    /// Error generated when type conversion fails
+    TypeConvertError(TypeConvertError),
     /// Error raised if cast to fixed-length array fails
     TryFromSliceError(TryFromSliceError)
 }
@@ -288,6 +350,7 @@ impl fmt::Display for EvaluateError {
             EvaluateError::SizeMismatchError(e) => write!(f,"{}",e),
             EvaluateError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e),
             EvaluateError::TypeCastError(s) => write!(f,"{}",s),
+            EvaluateError::TypeConvertError(e) => write!(f,"{}",e),
             EvaluateError::TryFromSliceError(e) => write!(f,"{}",e)
         }
     }
@@ -302,6 +365,7 @@ impl error::Error for EvaluateError {
             EvaluateError::SizeMismatchError(_) => "memory size does not match.",
             EvaluateError::InvalidStateError(_) => "Invalid state.",
             EvaluateError::TypeCastError(_) => "Typecast failed.",
+            EvaluateError::TypeConvertError(_) => "Type covert failed.",
             EvaluateError::TryFromSliceError(_) => "Conversion to fixed-length array failed."
         }
     }
@@ -315,6 +379,7 @@ impl error::Error for EvaluateError {
             EvaluateError::SizeMismatchError(e) => Some(e),
             EvaluateError::InvalidStateError(e) => Some(e),
             EvaluateError::TypeCastError(_) => None,
+            EvaluateError::TypeConvertError(e) => Some(e),
             EvaluateError::TryFromSliceError(e) => Some(e)
         }
     }
@@ -344,6 +409,11 @@ impl From<SizeMismatchError> for EvaluateError {
         EvaluateError::SizeMismatchError(err)
     }
 }
+impl From<TypeConvertError> for EvaluateError {
+    fn from(err: TypeConvertError) -> EvaluateError {
+        EvaluateError::TypeConvertError(err)
+    }
+}
 impl From<InvalidStateError> for EvaluateError {
     fn from(err: InvalidStateError) -> EvaluateError {
         EvaluateError::InvalidStateError(err)
@@ -359,13 +429,16 @@ pub enum PersistenceError {
     /// Error in cudnn processing
     CudnnError(rcudnn::Error),
     /// Errors caused by generating fixed-length arrays from different size Vecs
-    SizeMismatchError(SizeMismatchError)
+    SizeMismatchError(SizeMismatchError),
+    /// Error generated when type conversion fails
+    TypeConvertError(TypeConvertError),
 }
 impl fmt::Display for PersistenceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             PersistenceError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
             PersistenceError::SizeMismatchError(e) => write!(f, "{}",e),
+            PersistenceError::TypeConvertError(e) => write!(f,"{}",e),
         }
     }
 }
@@ -374,13 +447,15 @@ impl error::Error for PersistenceError {
         match *self {
             PersistenceError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
             PersistenceError::SizeMismatchError(_) => "memory size does not match.",
+            PersistenceError::TypeConvertError(_) => "Type convert failed.",
         }
     }
 
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
             PersistenceError::CudnnError(ref e) => Some(e),
-            PersistenceError::SizeMismatchError(ref e) => Some(e)
+            PersistenceError::SizeMismatchError(ref e) => Some(e),
+            PersistenceError::TypeConvertError(ref e) => Some(e),
         }
     }
 }
@@ -392,6 +467,11 @@ impl From<rcudnn::Error> for PersistenceError {
 impl From<SizeMismatchError> for PersistenceError {
     fn from(err: SizeMismatchError) -> PersistenceError {
         PersistenceError::SizeMismatchError(err)
+    }
+}
+impl From<TypeConvertError> for PersistenceError {
+    fn from(err: TypeConvertError) -> PersistenceError {
+        PersistenceError::TypeConvertError(err)
     }
 }
 /// Error in cuda processing

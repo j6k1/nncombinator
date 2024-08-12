@@ -44,66 +44,64 @@ __device__ double _fma(double x, double y, double z) {
 #define BLOCK_SHARED_SMALL 32
 template<typename T>
 
-__device__ void sigmoid_forward(T *input_output, const size_t units_len, const size_t batch_len) {
+__device__ void sigmoid_forward(const T *input, T *output, const size_t units_len, const size_t batch_len) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        T x = input_output[i];
+        T x = input[i];
 
         x = 1.0 / (1.0 + _exp(-x));
 
-        input_output[i] = x;
+        output[i] = x;
     }
 }
 template<typename T>
 
-__device__ void relu_forward(T *input_output, const size_t units_len, const size_t batch_len) {
+__device__ void relu_forward(const T *input, T *output, const size_t units_len, const size_t batch_len) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        if (!(input_output[i] > 0.0)) {
-            input_output[i] = 0.0;
-        }
+        output = _fmax(input[i],0.0);
     }
 }
 template<typename T>
 
-__device__ void swish_forward(T *input_output, const size_t units_len, const size_t batch_len) {
+__device__ void swish_forward(const T *input, T *output, const size_t units_len, const size_t batch_len) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        T x = input_output[i];
+        T x = input[i];
 
         x = x * (1.0 / (1.0 + _exp(-x)));
-        input_output[i] = x;
+        output[i] = x;
     }
 }
 template<typename T>
 
-__device__ void tanh_forward(T *input_output, const size_t units_len, const size_t batch_len) {
+__device__ void tanh_forward(const T *input, T *output, const size_t units_len, const size_t batch_len) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        T x = input_output[i];
+        T x = input[i];
 
-        input_output[i] = (_exp(x) - _exp(-x)) / (_exp(x) + _exp(-x));
+        output[i] = (_exp(x) - _exp(-x)) / (_exp(x) + _exp(-x));
     }
 }
 template<typename T>
 
-__device__ void softmax_forward(T *input_output, const size_t units_len, const size_t batch_len) {
+__device__ void softmax_forward(const T *input, T *output, const size_t units_len, const size_t batch_len) {
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
@@ -129,7 +127,7 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
         T alpha = 0.0;
 
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
-            alpha = _fmax(alpha,input_output[i]);
+            alpha = _fmax(alpha,input[i]);
         }
 
         alpha = _fmax(alpha,__shfl_down_sync(0xffffffff,alpha,16));
@@ -161,7 +159,7 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
         T sum = 0.0;
 
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
-            sum += _exp(input_output[i] - alpha);
+            sum += _exp(input[i] - alpha);
         }
 
         sum += __shfl_down_sync(0xffffffff,sum,16);
@@ -196,13 +194,13 @@ __device__ void softmax_forward(T *input_output, const size_t units_len, const s
             T number = _exp(input_output[i] - alpha);
             T x = number / sum;
 
-            input_output[i] = x;
+            output[i] = x;
         }
     }
 }
 template<typename T>
 
-__device__ void sigmoid_backward(const T *o, const T *u, T *loss, const size_t units_len, const size_t batch_len) {
+__device__ void sigmoid_backward(const T *o, const T *u, const T *loss, T *output, const size_t units_len, const size_t batch_len) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -212,12 +210,12 @@ __device__ void sigmoid_backward(const T *o, const T *u, T *loss, const size_t u
         T x = o[i];
         x = x * (1.0 - x);
 
-        loss[i] = x * loss[i];
+        output[i] = x * loss[i];
     }
 }
 template<typename T>
 
-__device__ void relu_backward(const T *o, const T *u, T *loss, const size_t units_len, const size_t batch_len) {
+__device__ void relu_backward(const T *o, const T *u, const T *loss, T *output, const size_t units_len, const size_t batch_len) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -225,13 +223,15 @@ __device__ void relu_backward(const T *o, const T *u, T *loss, const size_t unit
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
         if (!(u[i] > 0.0)) {
-            loss[i] = 0.0;
+            output[i] = 0.0;
+        } else {
+            output = loss[i];
         }
     }
 }
 template<typename T>
 
-__device__ void swish_backward(const T *o, const T *u, T *loss, const size_t units_len, const size_t batch_len) {
+__device__ void swish_backward(const T *o, const T *u, const T *loss, T *output, const size_t units_len, const size_t batch_len) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -241,12 +241,12 @@ __device__ void swish_backward(const T *o, const T *u, T *loss, const size_t uni
         T x = o[i];
         x = x + 1.0 / (1.0 + _exp(-u[i])) * (1.0 - x);
 
-        loss[i] = x * loss[i];
+        output[i] = x * loss[i];
     }
 }
 template<typename T>
 
-__device__ void tanh_backward(const T *o, const T *u, T *loss, const size_t units_len, const size_t batch_len) {
+__device__ void tanh_backward(const T *o, const T *u, const T *loss, T *output, const size_t units_len, const size_t batch_len) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
@@ -256,12 +256,12 @@ __device__ void tanh_backward(const T *o, const T *u, T *loss, const size_t unit
         T x = o[i];
         x = 1.0 - x * x;
 
-        loss[i] = x * loss[i];
+        output[i] = x * loss[i];
     }
 }
 template<typename T>
 
-__device__ void softmax_backward(const T *o, const T *u, T *loss, const size_t units_len, const size_t batch_len) {
+__device__ void softmax_backward(const T *o, const T *u, const T *loss, T *output, const size_t units_len, const size_t batch_len) {
     extern __shared__ char smem[];
     T *sum_sdata = reinterpret_cast<T*>(smem);
 
@@ -342,7 +342,7 @@ __device__ void softmax_backward(const T *o, const T *u, T *loss, const size_t u
         for (size_t i = batch_index * units_len + tid; i < end_block; i += distance) {
             T yk = o[i];
             T l = loss[i];
-            loss[i] = sum * yk + l * (yk * yk + (yk * (1.0 - yk)));
+            output[i] = sum * yk + l * (yk * yk + (yk * (1.0 - yk)));
         }
     }
 }
@@ -878,83 +878,83 @@ __device__ void forward_diff_linear(const size_t *indexes, const T *input, const
 }
 
 extern "C" {
-	__global__ void sigmoid_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
-        sigmoid_forward(input_output,units_len,batch_len);
+	__global__ void sigmoid_forward_float(const float *input, float *output, const size_t units_len, const size_t batch_len) {
+        sigmoid_forward(input,output,units_len,batch_len);
 	}
 
-	__global__ void relu_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
-        relu_forward(input_output,units_len,batch_len);
+	__global__ void relu_forward_float(const float *input, float *output, const size_t units_len, const size_t batch_len) {
+        relu_forward(input,output,units_len,batch_len);
     }
 
-	__global__ void swish_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
-        swish_forward(input_output,units_len,batch_len);
+	__global__ void swish_forward_float(const float *input, float *output, const size_t units_len, const size_t batch_len) {
+        swish_forward(input,output,units_len,batch_len);
     }
 
-	__global__ void tanh_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
-        tanh_forward(input_output,units_len,batch_len);
+	__global__ void tanh_forward_float(const float *input, float *output, const size_t units_len, const size_t batch_len) {
+        tanh_forward(input,output,units_len,batch_len);
     }
 
-	__global__ void softmax_forward_float(float *input_output, const size_t units_len, const size_t batch_len) {
-        softmax_forward(input_output,units_len,batch_len);
+	__global__ void softmax_forward_float(const float *input, float *output, const size_t units_len, const size_t batch_len) {
+        softmax_forward(input,output,units_len,batch_len);
     }
 
-	__global__ void sigmoid_backward_float(const float * o, const float *u, float *loss, const size_t units_len, const size_t batch_len) {
-        sigmoid_backward(o,u,loss,units_len,batch_len);
+	__global__ void sigmoid_backward_float(const float * o, const float *u, const float *loss, float *output, const size_t units_len, const size_t batch_len) {
+        sigmoid_backward(o,u,loss,output,units_len,batch_len);
     }
 
-	__global__ void relu_backward_float(const float *o, const float *u, float *loss, const size_t units_len, const size_t batch_len) {
-        relu_backward(o,u,loss,units_len,batch_len);
+	__global__ void relu_backward_float(const float *o, const float *u, const float *loss, float *output, const size_t units_len, const size_t batch_len) {
+        relu_backward(o,u,loss,output,units_len,batch_len);
     }
 
-	__global__ void swish_backward_float(const float *o, const float *u, float *loss, const size_t units_len, const size_t batch_len) {
-        swish_backward(o,u,loss,units_len,batch_len);
+	__global__ void swish_backward_float(const float *o, const float *u, const float *loss, float *output, const size_t units_len, const size_t batch_len) {
+        swish_backward(o,u,loss,output,units_len,batch_len);
     }
 
-	__global__ void tanh_backward_float(const float *o, const float *u, float *loss, const size_t units_len, const size_t batch_len) {
-        tanh_backward(o,u,loss,units_len,batch_len);
+	__global__ void tanh_backward_float(const float *o, const float *u, const float *loss, float *output, const size_t units_len, const size_t batch_len) {
+        tanh_backward(o,u,loss,output,units_len,batch_len);
     }
 
-	__global__ void softmax_backward_float(const float *o, const float *u, float *loss, const size_t units_len, const size_t batch_len) {
-        softmax_backward(o,u,loss,units_len,batch_len);
+	__global__ void softmax_backward_float(const float *o, const float *u, const float *loss, float *output, const size_t units_len, const size_t batch_len) {
+        softmax_backward(o,u,loss,output,units_len,batch_len);
     }
-	__global__ void sigmoid_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
-        sigmoid_forward(input_output,units_len,batch_len);
+	__global__ void sigmoid_forward_double(const double *input, double *output, const size_t units_len, const size_t batch_len) {
+        sigmoid_forward(input,output,units_len,batch_len);
 	}
 
-	__global__ void relu_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
-        relu_forward(input_output,units_len,batch_len);
+	__global__ void relu_forward_double(const double *input, double *output, const size_t units_len, const size_t batch_len) {
+        relu_forward(input,output,units_len,batch_len);
     }
 
-	__global__ void swish_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
-        swish_forward(input_output,units_len,batch_len);
+	__global__ void swish_forward_double(const double *input, double *output, const size_t units_len, const size_t batch_len) {
+        swish_forward(input,output,units_len,batch_len);
     }
 
-	__global__ void tanh_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
-        tanh_forward(input_output,units_len,batch_len);
+	__global__ void tanh_forward_double(const double *input, double *output, const size_t units_len, const size_t batch_len) {
+        tanh_forward(input,output,units_len,batch_len);
     }
 
-	__global__ void softmax_forward_double(double *input_output, const size_t units_len, const size_t batch_len) {
-        softmax_forward(input_output,units_len,batch_len);
+	__global__ void softmax_forward_double(const double *input, double *output, const size_t units_len, const size_t batch_len) {
+        softmax_forward(input,output,units_len,batch_len);
     }
 
-	__global__ void sigmoid_backward_double(const double *o, const double *u, double *loss, const size_t units_len, const size_t batch_len) {
-        sigmoid_backward(o,u,loss,units_len,batch_len);
+	__global__ void sigmoid_backward_double(const double *o, const double *u, const double *loss, double *output, const size_t units_len, const size_t batch_len) {
+        sigmoid_backward(o,u,loss,output,units_len,batch_len);
     }
 
-	__global__ void relu_backward_double(const double *o, const double *u, double *loss, const size_t units_len, const size_t batch_len) {
-        relu_backward(o,u,loss,units_len,batch_len);
+	__global__ void relu_backward_double(const double *o, const double *u, const double *loss, double *output, const size_t units_len, const size_t batch_len) {
+        relu_backward(o,u,loss,output,units_len,batch_len);
     }
 
-	__global__ void swish_backward_double(const double *o, const double *u, double *loss, const size_t units_len, const size_t batch_len) {
-        swish_backward(o,u,loss,units_len,batch_len);
+	__global__ void swish_backward_double(const double *o, const double *u, const double *loss, double *output, const size_t units_len, const size_t batch_len) {
+        swish_backward(o,u,loss,output,units_len,batch_len);
     }
 
-	__global__ void tanh_backward_double(const double *o, const double *u, double *loss, const size_t units_len, const size_t batch_len) {
-        tanh_backward(o,u,loss,units_len,batch_len);
+	__global__ void tanh_backward_double(const double *o, const double *u, const double *loss, double *output, const size_t units_len, const size_t batch_len) {
+        tanh_backward(o,u,loss,output,units_len,batch_len);
     }
 
-	__global__ void softmax_backward_double(const double * o, const double *u, double *loss, const size_t units_len, const size_t batch_len) {
-        softmax_backward(o,u,loss,units_len,batch_len);
+	__global__ void softmax_backward_double(const double * o, const double *u, const double *loss, double *output, const size_t units_len, const size_t batch_len) {
+        softmax_backward(o,u,loss,output,units_len,batch_len);
     }
 
     __global__ void reduce_linear_batch_float(const float *input, float *output, const int nlen, const int batch_size) {

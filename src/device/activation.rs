@@ -1,12 +1,16 @@
 use crate::activation::{Activation, BatchActivation};
-use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
+use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
+use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView};
 use crate::device::{Device, DeviceCpu, DeviceGpu};
-use crate::error::{EvaluateError, TrainingError};
+use crate::error::{EvaluateError, TrainingError, TypeConvertError};
+use crate::layer::BatchDataType;
+use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 
 /// Trait that defines the implementation of various calculation processes in the activation layer
-pub trait DeviceActivation<U,C,T,R,A>: Device<U>
-    where U: UnitValue<U> {
+pub trait DeviceActivation<U,I,A,const N:usize>: Device<U>
+    where U: UnitValue<U>,
+          I: BatchDataType {
     /// Apply the activation function
     /// # Arguments
     /// * `f` - Activation function object
@@ -16,7 +20,7 @@ pub trait DeviceActivation<U,C,T,R,A>: Device<U>
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn apply(&self, f:&A, input:&T) -> Result<R, EvaluateError>;
+    fn apply(&self, f:&A, input:&I) -> Result<I, EvaluateError>;
     /// Apply derivatives of the activation function
     /// # Arguments
     /// * `f` - Activation function object
@@ -28,7 +32,7 @@ pub trait DeviceActivation<U,C,T,R,A>: Device<U>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn derive(&self, f:&A, o:&T, loss:&T, u:&T) -> Result<R, TrainingError>;
+    fn derive(&self, f:&A, o:&I, loss:&I, u:&I) -> Result<I, TrainingError>;
     /// Apply the activation function
     /// # Arguments
     /// * `f` - Activation function object
@@ -38,7 +42,7 @@ pub trait DeviceActivation<U,C,T,R,A>: Device<U>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_apply(&self, f:&A, input:&C) -> Result<SerializedVec<U,R>, TrainingError>;
+    fn batch_apply(&self, f:&A, input:&<I as BatchDataType>::Type) -> Result<<I as BatchDataType>::Type, TrainingError>;
     /// Apply derivatives of the activation function
     /// # Arguments
     /// * `f` - Activation function object
@@ -50,54 +54,82 @@ pub trait DeviceActivation<U,C,T,R,A>: Device<U>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_derive(&self, f:&A, o:&C, loss:&C, u:&C) -> Result<SerializedVec<U,R>, TrainingError>;
+    fn batch_derive(&self, f:&A, o:&<I as BatchDataType>::Type, loss:&<I as BatchDataType>::Type, u:&<I as BatchDataType>::Type)
+        -> Result<<I as BatchDataType>::Type, TrainingError>;
+    /// Returns whether or not the canonical linkage function can be used.
+    /// # Arguments
+    /// * `l` - loss function
+    fn is_canonical_link<L: LossFunction<U>>(&self,f:&A,l:&L) -> bool;
 }
-impl<'a,U,A,const N:usize> DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A> for DeviceCpu<U>
+impl<'a,U,I,A,const N:usize> DeviceActivation<U,I,A,N> for DeviceCpu<U>
     where U: UnitValue<U>,
-          A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,Self>,
-          A: BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,Self> {
+          I: BatchDataType,
+          I: From<Arr<U,N>>,
+          SerializedVec<U,Arr<U,N>>: IntoConverter,
+          <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          for<'b> A: Activation<U,ArrView<'b,U,N>,Arr<U,N>,Self>,
+          for<'b> A: BatchActivation<U,SerializedVecView<'b,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,Self>,
+          for<'b> ArrView<'b,U,N>: From<&'b I>,
+          for<'b> SerializedVecView<'b,U,Arr<U,N>>: TryFrom<&'b <I as BatchDataType>::Type,Error=TypeConvertError> {
     #[inline]
-    fn apply(&self, f: &A, input: &ArrView<'a, U, N>) -> Result<Arr<U, N>, EvaluateError> {
-        f.apply(self, input)
+    fn apply(&self, f: &A, input: &I) -> Result<I, EvaluateError> {
+        Ok(f.apply(self, &input.into())?.into())
     }
 
     #[inline]
-    fn derive(&self, f: &A, o: &ArrView<'a, U, N>, loss: &ArrView<'a, U, N>, u: &ArrView<'a, U, N>) -> Result<Arr<U, N>, TrainingError> {
-        f.derive(self, o, loss, u)
+    fn derive(&self, f: &A, o: &I, loss: &I, u: &I) -> Result<I, TrainingError> {
+        Ok(f.derive(self, &o.into(), &loss.into(), &u.into())?.into())
     }
 
     #[inline]
-    fn batch_apply(&self, f: &A, input: &SerializedVecView<'a, U, Arr<U, N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        f.batch_apply(self, input)
+    fn batch_apply(&self, f: &A, input: &<I as BatchDataType>::Type) -> Result<<I as BatchDataType>::Type, TrainingError> {
+        Ok(f.batch_apply(self, &input.try_into()?)?.into_converter().try_into()?)
     }
 
     #[inline]
-    fn batch_derive(&self, f: &A, o: &SerializedVecView<'a, U, Arr<U, N>>, loss: &SerializedVecView<'a, U, Arr<U, N>>, u: &SerializedVecView<'a, U, Arr<U, N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        f.batch_derive(self, o, loss, u)
+    fn batch_derive(&self, f: &A, o: &<I as BatchDataType>::Type, loss: &<I as BatchDataType>::Type, u: &<I as BatchDataType>::Type)
+        -> Result<<I as BatchDataType>::Type, TrainingError> {
+        Ok(f.batch_derive(self, &o.try_into()?, &loss.try_into()?, &u.try_into()?).unwrap().into_converter().try_into()?)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, f: &A, l: &L) -> bool {
+        f.is_canonical_link(l)
     }
 }
-impl<'a,U,A,const N:usize> DeviceActivation<U,SerializedVecView<'a,U,Arr<U,N>>,ArrView<'a,U,N>,Arr<U,N>,A> for DeviceGpu<U>
+impl<'a,U,I,A,const N:usize> DeviceActivation<U,I,A,N> for DeviceGpu<U>
     where U: UnitValue<U>,
-          A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,Self>,
-          A: BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,Self>,
-          DeviceGpu<U>: Device<U> {
+          I: BatchDataType,
+          I: From<CudaTensor1dPtr<U,N>>,
+          DeviceGpu<U>: Device<U>,
+          CudaTensor1dPtr<U,N>: From<I>,
+          CudaVec<U,CudaTensor1dPtr<U,N>>: IntoConverter,
+          <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          for<'b> A: Activation<U,CudaTensor1dPtrView<'b,U,N>,CudaTensor1dPtr<U,N>,Self>,
+          for<'b> A: BatchActivation<U,CudaVecView<'b,U,CudaTensor1dPtr<U,N>>,CudaVec<U,CudaTensor1dPtr<U,N>>,Self>,
+          for<'b> CudaTensor1dPtrView<'b,U,N>: From<&'b I>,
+          for<'b> CudaVecView<'b,U,CudaTensor1dPtr<U,N>>: TryFrom<&'b <I as BatchDataType>::Type,Error=TypeConvertError> {
     #[inline]
-    fn apply(&self, f: &A, input: &ArrView<'a, U, N>) -> Result<Arr<U, N>, EvaluateError> {
-        f.apply(self,input)
+    fn apply(&self, f: &A, input: &I) -> Result<I, EvaluateError> {
+        Ok(f.apply(self, &input.into())?.into())
     }
 
     #[inline]
-    fn derive(&self, f: &A, o: &ArrView<'a, U, N>, loss: &ArrView<'a, U, N>, u: &ArrView<'a, U, N>) -> Result<Arr<U, N>, TrainingError> {
-        f.derive(self,o,loss,u)
+    fn derive(&self, f: &A, o: &I, loss: &I, u: &I) -> Result<I, TrainingError> {
+        Ok(f.derive(self, &o.into(), &loss.into(), &u.into())?.into())
     }
 
     #[inline]
-    fn batch_apply(&self, f: &A, input: &SerializedVecView<'a, U, Arr<U, N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        f.batch_apply(self,input)
+    fn batch_apply(&self, f: &A, input: &<I as BatchDataType>::Type) -> Result<<I as BatchDataType>::Type, TrainingError> {
+        Ok(f.batch_apply(self, &input.try_into()?)?.into_converter().try_into()?)
     }
 
     #[inline]
-    fn batch_derive(&self, f: &A, o: &SerializedVecView<'a, U, Arr<U, N>>, loss: &SerializedVecView<'a, U, Arr<U, N>>, u: &SerializedVecView<'a, U, Arr<U, N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        f.batch_derive(self,o,loss,u)
+    fn batch_derive(&self, f: &A, o: &<I as BatchDataType>::Type, loss: &<I as BatchDataType>::Type, u: &<I as BatchDataType>::Type)
+                    -> Result<<I as BatchDataType>::Type, TrainingError> {
+        Ok(f.batch_derive(self, &o.try_into()?, &loss.try_into()?, &u.try_into()?).unwrap().into_converter().try_into()?)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, f: &A, l: &L) -> bool {
+        f.is_canonical_link(l)
     }
 }

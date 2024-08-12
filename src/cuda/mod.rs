@@ -13,7 +13,7 @@ use rcudnn_sys::{cudaMemcpyKind, cudaStream_t, cudnnDataType_t};
 use crate::arr::{IntoConverter, MakeView, MakeViewMut, SerializedVec, SliceSize};
 use crate::cuda::mem::{MemoryPool};
 use crate::device::{DeviceGpu};
-use crate::error::{CudaError, CudaRuntimeError, EvaluateError, SizeMismatchError, TypeConvertError};
+use crate::error::{CudaError, CudaRuntimeError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
@@ -101,6 +101,11 @@ pub trait AsPtr<T> {
 /// Obtaining an mutable pointer
 pub trait AsMutPtr<T> {
     fn as_mut_ptr(&mut self) -> *mut T;
+}
+pub trait TryClone: Sized {
+    type Error;
+
+    fn try_clone(&self) -> Result<Self,Self::Error>;
 }
 impl AsVoidPtr for i32 {
     fn as_void_ptr(&self) -> *const libc::c_void {
@@ -910,6 +915,18 @@ impl<U,const N:usize> private::AsMutKernelPtrBase for CudaTensor1dPtr<U,N>
         self.ptr.as_mut_kernel_ptr()
     }
 }
+impl<T,const N:usize> TryClone for CudaTensor1dPtr<T,N> where T: Default + Debug {
+    type Error = CudaError;
+    fn try_clone(&self) -> Result<Self,CudaError> {
+        let mut dst = CudaMemoryPoolPtr::new(N,&self.ptr.memory_pool)?;
+
+        self.memcpy_to(&mut dst,N)?;
+
+        Ok(CudaTensor1dPtr {
+            ptr: dst
+        })
+    }
+}
 impl<T,const N:usize> Deref for CudaTensor1dPtr<T,N> where T: Default + Debug {
     type Target = CudaMemoryPoolPtr<T>;
 
@@ -975,6 +992,18 @@ impl<'a,T,const N:usize> From<&'a CudaTensor1dPtrView<'a,T,N>> for CudaTensor1dP
         }
     }
 }
+impl<'a,T,const N:usize> TryFrom<&'a CudaTensor1dPtrView<'a,T,N>> for CudaTensor1dPtr<T,N> where T: Default + Debug {
+    type Error = CudaError;
+    fn try_from(value: &'a CudaTensor1dPtrView<'a,T,N>) -> Result<CudaTensor1dPtr<T,N>,CudaError> {
+        let mut dst = CudaMemoryPoolPtr::new(N,&value.ptr.memory_pool)?;
+
+        value.memcpy_to(&mut dst,N)?;
+
+        Ok(CudaTensor1dPtr {
+            ptr: dst
+        })
+    }
+}
 /// Cuda memory object representing a 2D array with dimension number as type parameter
 #[derive(Debug)]
 pub struct CudaTensor2dPtr<T,const N1:usize,const N2:usize> where T: Default + Debug {
@@ -1031,6 +1060,18 @@ impl<U,const N1:usize,const N2:usize> private::AsMutKernelPtrBase for CudaTensor
     where U: UnitValue<U> {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         self.ptr.as_mut_kernel_ptr()
+    }
+}
+impl<T,const N1:usize,const N2:usize> TryClone for CudaTensor2dPtr<T,N1,N2> where T: Default + Debug {
+    type Error = CudaError;
+    fn try_clone(&self) -> Result<Self,CudaError> {
+        let mut dst = CudaMemoryPoolPtr::new(N1*N2,&self.ptr.memory_pool)?;
+
+        self.memcpy_to(&mut dst,N1*N2)?;
+
+        Ok(CudaTensor2dPtr {
+            ptr: dst
+        })
     }
 }
 impl<T,const N1:usize,const N2:usize> Deref for CudaTensor2dPtr<T,N1,N2> where T: Default + Debug {
@@ -1098,6 +1139,19 @@ impl<'a,T,const N1:usize,const N2:usize> From<&'a CudaTensor2dPtrView<'a,T,N1,N2
         }
     }
 }
+impl<'a,T,const N1:usize,const N2:usize> TryFrom<&'a CudaTensor2dPtrView<'a,T,N1,N2>> for CudaTensor2dPtr<T,N1,N2>
+    where T: Default + Debug {
+    type Error = CudaError;
+    fn try_from(value: &'a CudaTensor2dPtrView<'a,T,N1,N2>) -> Result<CudaTensor2dPtr<T,N1,N2>,CudaError> {
+        let mut dst = CudaMemoryPoolPtr::new(N1*N2,&value.ptr.memory_pool)?;
+
+        value.memcpy_to(&mut dst,N1*N2)?;
+
+        Ok(CudaTensor2dPtr {
+            ptr: dst
+        })
+    }
+}
 /// Cuda memory object representing a 3D array with dimension number as type parameter
 #[derive(Debug)]
 pub struct CudaTensor3dPtr<T,const N1:usize,const N2:usize,const N3:usize> where T: Default + Debug {
@@ -1154,6 +1208,18 @@ impl<U,const N1:usize,const N2:usize,const N3:usize> private::AsMutKernelPtrBase
     where U: UnitValue<U> {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         self.ptr.as_mut_kernel_ptr()
+    }
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize> TryClone for CudaTensor3dPtr<T,N1,N2,N3> where T: Default + Debug {
+    type Error = CudaError;
+    fn try_clone(&self) -> Result<Self,CudaError> {
+        let mut dst = CudaMemoryPoolPtr::new(N1*N2*N3,&self.ptr.memory_pool)?;
+
+        self.memcpy_to(&mut dst,N1*N2*N3)?;
+
+        Ok(CudaTensor3dPtr {
+            ptr: dst
+        })
     }
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize> Deref for CudaTensor3dPtr<T,N1,N2,N3> where T: Default + Debug {
@@ -1221,6 +1287,19 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> From<&'a CudaTensor3dPtr
         }
     }
 }
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> TryFrom<&'a CudaTensor3dPtrView<'a,T,N1,N2,N3>> for CudaTensor3dPtr<T,N1,N2,N3>
+    where T: Default + Debug {
+    type Error = CudaError;
+    fn try_from(value: &'a CudaTensor3dPtrView<'a,T,N1,N2,N3>) -> Result<CudaTensor3dPtr<T,N1,N2,N3>,CudaError> {
+        let mut dst = CudaMemoryPoolPtr::new(N1*N2*N3,&value.ptr.memory_pool)?;
+
+        value.memcpy_to(&mut dst,N1*N2*N3)?;
+
+        Ok(CudaTensor3dPtr {
+            ptr: dst
+        })
+    }
+}
 /// Cuda memory object representing a 4D array with dimension number as type parameter
 #[derive(Debug)]
 pub struct CudaTensor4dPtr<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> where T: Default + Debug {
@@ -1286,6 +1365,19 @@ impl<U,const N1:usize,const N2:usize,const N3:usize,const N4:usize> private::AsM
         self.ptr.as_mut_kernel_ptr()
     }
 }
+impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> TryClone for CudaTensor4dPtr<T,N1,N2,N3,N4>
+    where T: Default + Debug {
+    type Error = CudaError;
+    fn try_clone(&self) -> Result<Self,CudaError> {
+        let mut dst = CudaMemoryPoolPtr::new(N1*N2*N3*N4,&self.ptr.memory_pool)?;
+
+        self.memcpy_to(&mut dst,N1*N2*N3*N4)?;
+
+        Ok(CudaTensor4dPtr {
+            ptr: dst
+        })
+    }
+}
 impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> Deref for CudaTensor4dPtr<T,N1,N2,N3,N4> where T: Default + Debug {
     type Target = CudaMemoryPoolPtr<T>;
 
@@ -1346,6 +1438,21 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> From<&'a 
         CudaTensor4dPtrView {
             ptr:&value.ptr
         }
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> TryFrom<&'a CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>>
+    for CudaTensor4dPtr<T,N1,N2,N3,N4>
+    where T: Default + Debug {
+    type Error = CudaError;
+
+    fn try_from(value: &'a CudaTensor4dPtrView<'a, T, N1, N2, N3, N4>) -> Result<Self, CudaError> {
+        let mut dst = CudaMemoryPoolPtr::new(N1*N2*N3*N4,&value.ptr.memory_pool)?;
+
+        value.memcpy_to(&mut dst,N1*N2*N3*N4)?;
+
+        Ok(CudaTensor4dPtr {
+            ptr: dst
+        })
     }
 }
 /// Trait that returns the size of Cuda smart point type memory (returns the number of elements)
@@ -1429,6 +1536,22 @@ impl<U,T> private::AsMutKernelPtrBase for CudaVec<U,T>
           T: AsConstKernelPtr + AsKernelPtr + MemorySize {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         self.ptr.as_mut_kernel_ptr()
+    }
+}
+impl<U,T> TryClone for CudaVec<U,T>
+    where U: UnitValue<U>,
+          T: AsConstKernelPtr + AsKernelPtr + MemorySize {
+    type Error = CudaError;
+    fn try_clone(&self) -> Result<Self,CudaError> {
+        let mut dst = CudaMemoryPoolPtr::new(self.len * T::size(),&self.ptr.memory_pool)?;
+
+        self.memcpy_to(&mut dst,self.len * T::size())?;
+
+        Ok(CudaVec {
+            len: self.len,
+            ptr: dst,
+            t:PhantomData::<T>
+        })
     }
 }
 impl<U,T> Deref for CudaVec<U,T>
@@ -1546,6 +1669,23 @@ impl<'a,U,T,R> TryFrom<CudaVecViewConverter<'a,U,T>> for CudaVecView<'a,U,R>
         }
     }
 }
+impl<'a,U,T> TryFrom<&'a CudaVecView<'a,U,T>> for CudaVec<U,T>
+    where U: UnitValue<U> + Default + Clone + Send,
+          T: MemorySize + AsConstKernelPtr + AsKernelPtr {
+    type Error = CudaError;
+
+    fn try_from(value: &'a CudaVecView<'a, U, T>) -> Result<Self, Self::Error> {
+        let mut dst = CudaMemoryPoolPtr::new(value.size() * T::size(),&value.ptr.memory_pool)?;
+
+        value.memcpy_to(&mut dst,value.size() * T::size())?;
+
+        Ok(CudaVec {
+            len: value.size(),
+            ptr: dst,
+            t:PhantomData::<T>
+        })
+    }
+}
 pub struct CudaVecConverter<U,T>
     where U: UnitValue<U> + Default + Clone + Send,
           T: MemorySize + AsKernelPtr + AsConstKernelPtr {
@@ -1607,7 +1747,7 @@ impl<U,T,R> TryFrom<CudaVecConverter<U,T>> for SerializedVec<U,R>
     where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
           for<'a> T: MemorySize + AsKernelPtr + AsConstKernelPtr + Memory<U>,
           for<'b> R: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> {
-    type Error = EvaluateError;
+    type Error = TypeConvertError;
     #[inline]
     fn try_from(value: CudaVecConverter<U,T>) -> Result<Self, Self::Error> {
         Ok(value.ptr.read_to_vec()?.into_boxed_slice().try_into()?)

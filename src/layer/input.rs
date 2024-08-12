@@ -52,7 +52,8 @@ impl<U,O,LI> ForwardAll for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug +
     }
 }
 impl<U,O,LI> PreTrain<U> for InputLayer<U,O,LI> where U: UnitValue<U>, O: Debug + Send + Sync + 'static, LI: Debug {
-    type OutStack = Cons<Nil,Self::Output>;
+    type PreOutput = O;
+    type OutStack = Cons<Nil,Self::PreOutput>;
 
     fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError> {
         Ok(Cons(Nil,input))
@@ -95,6 +96,7 @@ impl<U,O,LI> BatchPreTrainBase<U> for InputLayer<U,O,LI>
     where U: UnitValue<U>, O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug,
           <O as BatchDataType>::Type: Debug {
+    type BatchPreOutput = <O as BatchDataType>::Type;
     type BatchOutStack = Cons<Nil,<O as BatchDataType>::Type>;
 }
 impl<U,O,LI> BatchPreTrain<U> for InputLayer<U,O,LI>

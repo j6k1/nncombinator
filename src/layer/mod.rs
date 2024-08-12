@@ -107,8 +107,10 @@ pub trait Backward<U,I,O> where U: UnitValue<U> {
 }
 /// Trait that defines the process of forward propagation performed prior to the process of error back propagation.
 pub trait PreTrain<U>: ForwardAll where U: UnitValue<U> {
+    /// The type of output that is piled on the stack during the error back propagation process.
+    type PreOutput: Debug + 'static;
     /// Type of object to keep the results of forward propagation needed to perform error back propagation.
-    type OutStack: Stack<Head=Self::Output> + Debug + Sized;
+    type OutStack: Stack<Head=Self::PreOutput> + Debug + Sized;
     /// Perform forward propagation required to perform error back propagation
     /// # Arguments
     /// * `input` - input
@@ -149,7 +151,6 @@ pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
 pub trait Train<U,L>: PreTrain<U>
     where U: UnitValue<U>,
           L: LossFunction<U> {
-    type ExpectedInput: Debug;
     /// Train neural networks.
     /// # Arguments
     /// * `expected` - expected value
@@ -160,7 +161,7 @@ pub trait Train<U,L>: PreTrain<U>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn train(&mut self, expected:Self::ExpectedInput, input:Self::Input, lossf:&L) -> Result<U, TrainingError>;
+    fn train(&mut self, expected:Self::Output, input:Self::Input, lossf:&L) -> Result<U, TrainingError>;
 }
 /// Trait that defines the function to query information to calculate the difference when applying the difference of neural networks.
 pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
@@ -229,9 +230,11 @@ pub trait BatchLoss<U>: BatchBackward<U> + Loss<U> where U: UnitValue<U> {
 /// calculates the results of forward propagation prior to processing
 /// the error back propagation of the neural network by batch processing.
 pub trait BatchPreTrainBase<U>: BatchForwardBase + PreTrain<U> where U: UnitValue<U> {
+    /// The type of output that is piled on the stack during the back-propagation process for errors in a batch run.
+    type BatchPreOutput: Debug + 'static;
     /// Type of object to keep the results of forward propagation
     /// needed to perform error back propagation for batch execution.
-    type BatchOutStack: Stack<Head=Self::BatchOutput> + Sized + Debug;
+    type BatchOutStack: Stack<Head=Self::BatchPreOutput> + Sized + Debug;
 }
 /// Trait that defines an implementation that calculates
 /// the results of forward propagation prior to
@@ -251,7 +254,6 @@ pub trait BatchPreTrain<U>: BatchPreTrainBase<U> + BatchForwardBase + BatchForwa
 pub trait BatchTrain<U,D,L>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + PreTrain<U>
     where U: UnitValue<U>, D: Device<U>,
           L: LossFunction<U> {
-    type BatchExpectedInput: Debug;
     /// Train neural networks.
     /// # Arguments
     /// * `expected` - expected value
@@ -262,7 +264,7 @@ pub trait BatchTrain<U,D,L>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBack
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_train(&mut self, expected:Self::BatchExpectedInput, input:Self::BatchInput, lossf:&L) -> Result<U, TrainingError>;
+    fn batch_train(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, lossf:&L) -> Result<U, TrainingError>;
 }
 /// Trait that defines the ability to add layers to a neural network.
 pub trait AddLayer: ForwardAll where Self: Sized {

@@ -88,7 +88,7 @@ impl<T,U,P,A,I,PI,D,const N:usize> Persistence<U,T,Linear> for ActivationLayer<U
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> ForwardAll for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
@@ -105,7 +105,7 @@ impl<U,P,A,I,PI,D,const N:usize> ForwardAll for ActivationLayer<U,P,A,I,PI,D,N>
 }
 impl<U,P,A,I,PI,D,const N:usize> Forward<PI,Result<PI,EvaluateError>> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U>,
+             PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
@@ -118,8 +118,8 @@ impl<U,P,A,I,PI,D,const N:usize> Forward<PI,Result<PI,EvaluateError>> for Activa
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
@@ -127,7 +127,8 @@ impl<U,P,A,I,PI,D,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,PI,D,N>
           PI: Debug + Send + Sync + From<Arr<U,N>>,
           I: Debug + Send + Sync,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
-    type OutStack = Cons<<P as PreTrain<U>>::OutStack, Self::Output>;
+    type PreOutput = PI;
+    type OutStack = Cons<<P as PreTrain<U>>::OutStack, Self::PreOutput>;
 
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
         let r = self.parent.pre_train(input)?;
@@ -138,7 +139,7 @@ impl<U,P,A,I,PI,D,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,PI,D,N>
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
@@ -161,7 +162,7 @@ impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> UpdateWeight<U> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> + UpdateWeight<U>,
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
@@ -175,7 +176,7 @@ impl<U,P,A,I,PI,D,const N:usize> UpdateWeight<U> for ActivationLayer<U,P,A,I,PI,
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> AskDiffInput<U> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + Loss<U> + AskDiffInput<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
@@ -191,7 +192,7 @@ impl<U,P,A,I,PI,D,const N:usize> AskDiffInput<U> for ActivationLayer<U,P,A,I,PI,
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
@@ -209,9 +210,9 @@ impl<U,P,A,I,PI,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,PI,D,N>
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase<U> + BatchBackward<U> +
+             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> +
              BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
@@ -227,9 +228,9 @@ impl<U,P,A,I,PI,D,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,PI
     type BatchOutput = <PI as BatchDataType>::Type;
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchForward for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           for<'a> A: Activation<U,ArrView<'a,U,N>,Arr<U,N>,D>,
@@ -250,9 +251,9 @@ impl<U,P,A,I,PI,D,const N:usize> BatchForward for ActivationLayer<U,P,A,I,PI,D,N
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchPreTrainBase<U> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> +
+             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> + BatchBackward<U> +
              BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
@@ -264,12 +265,13 @@ impl<U,P,A,I,PI,D,const N:usize> BatchPreTrainBase<U> for ActivationLayer<U,P,A,
           <PI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
           for<'a> ArrView<'a,U,N>: From<&'a PI> {
-    type BatchOutStack = Cons<<P as BatchPreTrainBase<U>>::BatchOutStack, Self::BatchOutput>;
+    type BatchPreOutput = <PI as BatchDataType>::Type;
+    type BatchOutStack = Cons<<P as BatchPreTrainBase<U>>::BatchOutStack, Self::BatchPreOutput>;
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> +
+             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> + BatchBackward<U> +
              BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
@@ -295,9 +297,9 @@ impl<U,P,A,I,PI,D,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,PI
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> +
+             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> + BatchBackward<U> +
              BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
@@ -322,10 +324,10 @@ impl<U,P,A,I,PI,D,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,PI
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> +
+             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,

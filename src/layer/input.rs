@@ -19,12 +19,12 @@ pub struct InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
 }
 impl<U,O,LI,D> InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
     /// Create an instance of InputLayer
-    pub fn new(device:D) -> InputLayer<U,O,LI,D> {
+    pub fn new(device:&D) -> InputLayer<U,O,LI,D> {
         InputLayer {
             u:PhantomData::<U>,
             o:PhantomData::<O>,
             l:PhantomData::<LI>,
-            device:device
+            device:device.clone()
         }
     }
 }

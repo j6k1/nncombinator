@@ -2,12 +2,12 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use crate::arr::{Arr, ArrView, IntoConverter, MakeView, MakeViewMut, SerializedVec, SerializedVecView, SliceSize};
+use crate::arr::{Arr};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaPtr, CudaTensor1dPtr, Memory};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::batchnormalization::DeviceBatchNorm;
-use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
+use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
@@ -458,43 +458,44 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear>
         Ok(())
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> Forward<ArrView<'_,U,N>,Result<Arr<U,N>,EvaluateError>> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,S,const N:usize> Forward<PI,Result<PI,EvaluateError>> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
           S: Debug + Sized + 'static,
-          OP: Optimizer<U,D> {
-    fn forward(&self,input:&ArrView<'_,U,N>) -> Result<Arr<U,N>,EvaluateError> {
+          OP: Optimizer<U,D>,
+          <PI as BatchDataType>::Type: Debug + 'static {
+    fn forward(&self,input:&PI) -> Result<PI,EvaluateError> {
         self.device.forward_batch_norm(input,&self.scale,&self.bias,&self.running_mean,&self.running_variance)
     }
 }
 impl<U,C,P,OP,D,I,PI,S,const N:usize> ForwardAll for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
           S: Debug + Sized + 'static,
           OP: Optimizer<U,D>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static {
+          <PI as BatchDataType>::Type: Debug + 'static {
     type Input = I;
     type Output = PI;
     fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
-        Ok(self.forward(&(&self.parent.forward_all(input)?).into()).map(|r| r.into())?)
+        Ok(self.forward(&self.parent.forward_all(input)?)?)
     }
 }
 impl<U,C,P,OP,D,I,PI,S,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
           S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+          <PI as BatchDataType>::Type: Debug + 'static {
     type PreOutput = PI;
     type OutStack = Cons<Cons<<P as PreTrain<U>>::OutStack,(C,C)>,Self::PreOutput>;
 
@@ -502,28 +503,30 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,
         let s = self.parent.pre_train(input)?;
 
         let (u,m,iv) = s.map(|i| {
-            self.device.forward_batch_norm_train(i.into(),
-                                                     &self.scale,
-                                                     &self.bias,
-                                                     &self.running_mean,
-                                                     &self.running_variance)
+            self.device.forward_batch_norm_train(i,
+                                                 &self.scale,
+                                                 &self.bias,
+                                                 &self.running_mean,
+                                                 &self.running_variance)
         })?;
 
-        Ok(s.push((m,iv)).push(u.into()))
+        Ok(s.push((m,iv)).push(u))
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> Backward<U,(ArrView<'_,U,N>,ArrView<'_,U,N>,&C,&C),Result<(Arr<U,N>,C,C),TrainingError>>
+impl<U,C,P,OP,D,I,PI,S,const N:usize> Backward<U,(&PI,&PI,&C,&C),Result<(PI,C,C),TrainingError>>
     for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
 
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
           S: Debug + Sized + 'static,
           C: Debug,
-          OP: Optimizer<U,D> {
-    fn backward(&mut self, (loss,input,saved_mean,saved_inv_variance): (ArrView<'_,U,N>,ArrView<'_,U,N>,&C,&C))
-        -> Result<(Arr<U,N>,C,C),TrainingError> {
+          OP: Optimizer<U,D>,
+          <PI as BatchDataType>::Type: Debug + 'static {
+    fn backward(&mut self, (loss,input,saved_mean,saved_inv_variance): (&PI,&PI,&C,&C))
+        -> Result<(PI,C,C),TrainingError> {
         self.device.backward_batch_norm(loss,
                                         input,
                                         &self.scale,
@@ -535,10 +538,10 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
           OP: Optimizer<U,DeviceCpu<U>>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
+          DeviceCpu<U>: Device<U> + DeviceBatchNorm<U,Arr<U,N>,PI,N>,
+          <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
     type LossInput = PI;
@@ -553,12 +556,12 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr
         let loss = input;
 
         let (loss,scale,bias) = s.map(|input| {
-            self.backward(((&loss).into(),input.into(),&m,&iv))
+            self.backward((&loss,input,&m,&iv))
         })?;
 
-        let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
+        let (s,loss) = self.parent.loss(loss,lossf,s)?;
 
-        let (l,s) = self.parent.backward_all(loss.into(), s, lossf)?;
+        let (l,s) = self.parent.backward_all(loss, s, lossf)?;
 
         Ok((l,Cons(s,(scale,bias,None))))
     }
@@ -567,11 +570,10 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Cud
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
           OP: Optimizer<U,DeviceGpu<U>>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,N>,
+          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,PI,N>,
+          <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
     type LossInput = PI;
@@ -586,12 +588,12 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Cud
         let loss = input;
 
         let (loss,scale,bias) = s.map(|input| {
-            self.backward(((&loss).into(),input.into(),&m,&iv))
+            self.backward((&loss,input,&m,&iv))
         })?;
 
-        let (s,loss) = self.parent.loss(loss.into(),lossf,s)?;
+        let (s,loss) = self.parent.loss(loss,lossf,s)?;
 
-        let (l,s) = self.parent.backward_all(loss.into(), s, lossf)?;
+        let (l,s) = self.parent.backward_all(loss, s, lossf)?;
 
         Ok((l,Cons(s,(scale,bias,None))))
     }
@@ -600,7 +602,9 @@ impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,Ar
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
           OP: Optimizer<U,DeviceCpu<U>>,
+          <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
     type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr<U,N>,Arr<U,N>,Option<(Arr<U,N>,Arr<U,N>)>)>;
@@ -628,8 +632,10 @@ impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,Cu
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
           OP: Optimizer<U,DeviceGpu<U>>,
           DeviceGpu<U>: Device<U>,
+          <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
     type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>,Option<(CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>)>)>;
@@ -653,9 +659,11 @@ impl<U,P,OP,C,I,PI,S,const N:usize> AskDiffInput<U> for BatchNormalizationLayer<
              PreTrain<U,OutStack = <<<Self as PreTrain<U>>::OutStack as Stack>::Remaining as Stack>::Remaining> + Loss<U> + AskDiffInput<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
           S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,DeviceCpu<U>>,
+          <PI as BatchDataType>::Type: Debug + 'static,
           Self: PreTrain<U,PreOutput=PI> {
     type DiffInput = P::DiffInput;
 
@@ -667,10 +675,10 @@ impl<U,P,OP,I,PI,const N:usize> Loss<U> for BatchNormalizationLayer<U,Arr<U,N>,P
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
           OP: Optimizer<U,DeviceCpu<U>>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
+          DeviceCpu<U>: Device<U> + DeviceBatchNorm<U,Arr<U,N>,PI,N>,
+          <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
 }
@@ -679,10 +687,9 @@ impl<U,P,OP,I,PI,const N:usize> Loss<U> for BatchNormalizationLayer<U,CudaTensor
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,DeviceGpu<U>>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,N>,
+          PI: From<Arr<U,N>> + Debug + BatchDataType + Send + Sync + 'static,
+          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,PI,N>,
+          <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
 }
@@ -690,19 +697,14 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchForwardBase for BatchNormalizationLay
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
+          PI: BatchDataType + Debug + 'static,
           S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          PI: From<Arr<U,N>> + BatchDataType + Debug + Send + Sync + 'static,
-          <PI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          <PI as BatchDataType>::Type: Debug + 'static,
           Self: ForwardAll {
     type BatchInput = <I as BatchDataType>::Type;
     type BatchOutput = <PI as BatchDataType>::Type;
@@ -711,25 +713,18 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchForward for BatchNormalizationLayer<U
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,N>,
-          PI: BatchDataType,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
+          PI: BatchDataType + Debug + 'static,
           S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          <PI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> PI: From<Arr<U,N>> + Debug + Send + Sync + 'static,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError> {
+          <PI as BatchDataType>::Type: Debug + 'static {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        Ok(self.device.batch_forward_batch_norm((&input).try_into()?,&self.scale,&self.bias,
-                                                &self.running_mean,&self.running_variance)?.into_converter().try_into()?)
+        Ok(self.device.batch_forward_batch_norm(&input,&self.scale,&self.bias,&self.running_mean,&self.running_variance)?)
     }
 }
 impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
@@ -737,19 +732,14 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizatio
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
           S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + BatchDataType + Debug + Send + Sync + 'static,
-          <PI as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
           Self: PreTrain<U,PreOutput=PI> {
     type BatchPreOutput = <PI as BatchDataType>::Type;
     type BatchOutStack = Cons<Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,MeanAndVariance<C>>,Self::BatchPreOutput>;
@@ -759,25 +749,20 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLay
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U>,
           U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
-          D: Device<U> + DeviceBatchNorm<U,C,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
           S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + BatchDataType + Debug + Send + Sync + 'static,
-          <PI as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
           Self: PreTrain<U,PreOutput=PI> {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let s = self.parent.batch_pre_train(input)?;
 
         let (u,mean,inv_variance,running_mean,running_variance) = s.map(|input| {
-            self.device.batch_forward_batch_norm_train(input.try_into()?,&self.scale,&self.bias,
+            self.device.batch_forward_batch_norm_train(input,&self.scale,&self.bias,
                                                        &self.running_mean,&self.running_variance,self.momentum)
         })?;
 
@@ -786,7 +771,7 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLay
             running_variance: running_variance,
             saved_mean: mean,
             saved_inv_variance: inv_variance
-        }).push(u.into_converter().try_into()?))
+        }).push(u))
     }
 }
 impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>
@@ -796,15 +781,11 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
           OP: Optimizer<U,DeviceCpu<U>>,
           PI: From<Arr<U,N>> + BatchDataType + Debug + Send + Sync + 'static,
-          <PI as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          DeviceCpu<U>: Device<U> + DeviceBatchNorm<U,Arr<U,N>,PI,N>,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
     type BatchLossInput = <PI as BatchDataType>::Type;
@@ -812,7 +793,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
 
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-        let loss = (&input).try_into()?;
+        let loss = input;
 
         let (s, _) = stack.pop();
 
@@ -824,12 +805,12 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
         }) = s.pop();
 
         let (loss,scale,bias) = s.map(|input| {
-            self.device.batch_backward_batch_norm(loss,input.try_into()?,&self.scale,&saved_mean,&saved_inv_variance)
+            self.device.batch_backward_batch_norm(&loss,input,&self.scale,&saved_mean,&saved_inv_variance)
         })?;
 
         let (s,
              loss
-        ) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
+        ) = self.parent.batch_loss(loss,lossf,s)?;
 
         let (l,s) = self.parent.batch_backward(loss, s, lossf)?;
 
@@ -844,15 +825,10 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,C
           U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,DeviceGpu<U>>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + BatchDataType + Debug + Send + Sync + 'static,
-          <PI as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,N>,
+          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,PI,N>,
           for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
     type BatchLossInput = <PI as BatchDataType>::Type;
@@ -860,7 +836,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,C
 
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-        let loss = (&input).try_into()?;
+        let loss = input;
 
         let (s, _) = stack.pop();
 
@@ -872,12 +848,12 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,C
         }) = s.pop();
 
         let (loss,scale,bias) = s.map(|input| {
-            self.device.batch_backward_batch_norm(loss,input.try_into()?,&self.scale,&saved_mean,&saved_inv_variance)
+            self.device.batch_backward_batch_norm(&loss,input,&self.scale,&saved_mean,&saved_inv_variance)
         })?;
 
         let (s,
             loss
-        ) = self.parent.batch_loss(loss.into_converter().try_into()?,lossf,s)?;
+        ) = self.parent.batch_loss(loss,lossf,s)?;
 
         let (l,s) = self.parent.batch_backward(loss, s, lossf)?;
 
@@ -892,14 +868,10 @@ impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Arr<U
           U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,DeviceCpu<U>>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + BatchDataType + Debug + Send + Sync + 'static,
-          <PI as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          DeviceCpu<U>: Device<U> + DeviceBatchNorm<U,Arr<U,N>,PI,N>,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a mut Arr<U,N>> {
 }
@@ -911,15 +883,10 @@ impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,CudaT
           U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,DeviceGpu<U>>,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
           PI: From<Arr<U,N>> + BatchDataType + Debug + Send + Sync + 'static,
-          <PI as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          for<'a> PI: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,N>,
+          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,PI,N>,
           for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,N>> {
 }

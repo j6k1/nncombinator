@@ -58,6 +58,7 @@ pub trait DeviceActivation<U,I,A,const N:usize>: Device<U>
         -> Result<<I as BatchDataType>::Type, TrainingError>;
     /// Returns whether or not the canonical linkage function can be used.
     /// # Arguments
+    /// * `f` - Activation function object
     /// * `l` - loss function
     fn is_canonical_link<L: LossFunction<U>>(&self,f:&A,l:&L) -> bool;
 }

@@ -4,6 +4,7 @@ pub mod batchnormalization;
 pub mod bias;
 pub mod activation;
 pub mod output;
+pub mod input;
 
 use std::marker::PhantomData;
 use std::{mem};

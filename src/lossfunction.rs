@@ -8,8 +8,8 @@ use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
 use crate::cuda::{CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel};
 use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs, LinearCrossEntropy, LinearCrossEntropyArgs, LinearCrossEntropyMulticlass, LinearCrossEntropyMulticlassArgs, LinearMse, LinearMseArgs};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
-use crate::error::{CudaError, TrainingError};
-use crate::layer::{BatchSize};
+use crate::error::{CudaError, TrainingError, TypeConvertError};
+use crate::layer::{BatchDataType, BatchSize};
 use crate::UnitValue;
 
 /// Trait that defines the implementation of the loss function used in neural networks during training.
@@ -28,34 +28,37 @@ pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy + UnitVal
     fn name(&self) -> &'static str;
 }
 /// A property that defines the implementation of the loss function used in the linear layer when training a neural network.
-pub trait LossFunctionLinear<'a,U,D,const N:usize>: LossFunction<U> + Send + Sync + 'static
+pub trait LossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Send + Sync + 'static
     where U: Clone + Copy + UnitValue<U>, D: Device<U> {
-    type Input;
     type Output;
     /// Differentiation of loss functions
     /// # Arguments
     /// * `actual` - actual value
     /// * `expected` - expected value
-    fn linear_derive<'b>(&self,device:&D,actual:&'b Self::Input,expected:&'b Self::Input) -> Result<Self::Output,TrainingError>;
+    fn linear_derive<'b>(&self,device:&D,actual:&'b I,expected:&'b I) -> Result<Self::Output,TrainingError>;
 }
 /// Trait defining the implementation of a linear layer loss function with batch processing
-pub trait BatchLossFunctionLinear<'a,U,D,const N:usize>: LossFunction<U> + Send + Sync + 'static
-    where U: Clone + Copy + UnitValue<U>, D: Device<U> {
-    type Input: BatchSize;
+pub trait BatchLossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Send + Sync + 'static
+    where U: Clone + Copy + UnitValue<U>,
+          D: Device<U> {
     type Output: BatchSize;
     /// Differentiation of loss functions
     /// # Arguments
     /// * `expected` - expected value
     /// * `actual` - actual value
-    fn batch_linear_derive<'b>(&self,_: &D,expected: &'b Self::Input, actual: &'b Self::Input) -> Result<Self::Output, TrainingError>;
+    fn batch_linear_derive<'b>(&self,_: &D,expected: &'b I, actual: &'b I)
+        -> Result<Self::Output, TrainingError>;
 }
-impl<'a,T,U,const N:usize> LossFunctionLinear<'a,U,DeviceCpu<U>,N> for T
+impl<'a,T,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for T
     where T: LossFunction<U>,
-          U: UnitValue<U> {
-    type Input = ArrView<'a,U,N>;
+          U: UnitValue<U>,
+          for<'b> ArrView<'b,U,N>: From<&'b I> {
     type Output = Arr<U,N>;
-    fn linear_derive<'b>(&self,_:&DeviceCpu<U>,actual: &'b ArrView<'b,U,N>, expected: &'b ArrView<'b,U,N>)
+    fn linear_derive<'b>(&self,_:&DeviceCpu<U>,actual: &'b I, expected: &'b I)
         -> Result<Arr<U,N>,TrainingError> {
+        let actual = ArrView::<'b,U,N>::from(actual);
+        let expected = ArrView::<'b,U,N>::from(expected);
+
         let mut loss = Arr::new();
 
         for (loss,(&a, &e))in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
@@ -65,14 +68,18 @@ impl<'a,T,U,const N:usize> LossFunctionLinear<'a,U,DeviceCpu<U>,N> for T
         Ok(loss)
     }
 }
-impl<'a,T,U,const N:usize> BatchLossFunctionLinear<'a,U,DeviceCpu<U>,N> for T
+impl<'a,T,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for T
     where T: LossFunction<U>,
-          U: UnitValue<U> {
-    type Input = SerializedVecView<'a,U,Arr<U,N>>;
+          U: UnitValue<U>,
+          I: BatchSize,
+          for<'b> SerializedVecView<'b,U,Arr<U,N>>: TryFrom<&'b I,Error=TypeConvertError> {
     type Output = SerializedVec<U,Arr<U,N>>;
-    fn batch_linear_derive<'b>(&self,_: &DeviceCpu<U>,expected: &'b SerializedVecView<'b,U,Arr<U, N>>,
-                               actual: &'b SerializedVecView<'b,U,Arr<U, N>>)
+    fn batch_linear_derive<'b>(&self,_: &DeviceCpu<U>,expected: &'b I,
+                               actual: &'b I)
         -> Result<SerializedVec<U,Arr<U, N>>, TrainingError> {
+        let actual = SerializedVecView::<'b,U,Arr<U,N>>::try_from(actual)?;
+        let expected = SerializedVecView::<'b,U,Arr<U,N>>::try_from(expected)?;
+
         let n = U::from_usize(actual.len()).ok_or(TrainingError::TypeCastError(
             String::from("An error occurred when casting the batch size data type to U.")
         ))?;
@@ -112,18 +119,21 @@ impl<U> LossFunction<U> for Mse<U> where U: Clone + Copy + UnitValue<U> {
         "mse"
     }
 }
-impl<'a,U,const N:usize> LossFunctionLinear<'a,U,DeviceGpu<U>,N> for Mse<U>
+impl<'a,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for Mse<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
+          for<'b> CudaTensor1dPtrView<'b,U,N>: From<&'b I>,
           for<'b> LinearMse<'b,U,N>: Kernel<Args=LinearMseArgs<'b,U,N>> {
-    type Input = CudaTensor1dPtrView<'a,U,N>;
     type Output = CudaTensor1dPtr<U,N>;
 
-    fn linear_derive<'b>(&self,device:&DeviceGpu<U>,actual: &'b CudaTensor1dPtrView<'b,U,N>, expected: &'b CudaTensor1dPtrView<'b,U,N>)
+    fn linear_derive<'b>(&self,device:&DeviceGpu<U>,actual: &'b I, expected: &'b I)
         -> Result<Self::Output,TrainingError> {
+        let actual = CudaTensor1dPtrView::<'b,U,N>::from(actual);
+        let expected = CudaTensor1dPtrView::<'b,U,N>::from(expected);
+
         let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut args = LinearMseArgs::new(expected, actual, output, N);
+        let mut args = LinearMseArgs::new(&expected, &actual, output, N);
 
         let mut kernel = LinearMse::<'a,U,N>::new();
 
@@ -133,18 +143,21 @@ impl<'a,U,const N:usize> LossFunctionLinear<'a,U,DeviceGpu<U>,N> for Mse<U>
         Ok(args.output)
     }
 }
-impl<'a,U,const N:usize> BatchLossFunctionLinear<'a,U,DeviceGpu<U>,N> for Mse<U>
+impl<'a,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for Mse<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
-             DeviceGpu<U>:  Device<U>,
-             for<'b> LinearBatchMse<'b,U,N>: Kernel<Args=LinearBatchMseArgs<'b,U,N>> {
-    type Input = CudaVecView<'a,U,CudaTensor1dPtr<U,N>>;
+          DeviceGpu<U>:  Device<U>,
+          for<'b> CudaVecView<'b,U,CudaTensor1dPtr<U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
+          for<'b> LinearBatchMse<'b,U,N>: Kernel<Args=LinearBatchMseArgs<'b,U,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,N>>;
-    fn batch_linear_derive<'b>(&self, device: &DeviceGpu<U>, expected: &'b CudaVecView<'b,U,CudaTensor1dPtr<U,N>>,
-                                      actual: &'b CudaVecView<'b,U,CudaTensor1dPtr<U,N>>)
+    fn batch_linear_derive<'b>(&self, device: &DeviceGpu<U>, expected: &'b I,
+                                      actual: &'b I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let actual = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(actual)?;
+        let expected = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(expected)?;
+
         let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(expected.size(),device.get_memory_pool())?;
 
-        let mut args = LinearBatchMseArgs::new(expected, actual, output, N, expected.size());
+        let mut args = LinearBatchMseArgs::new(&expected, &actual, output, N, expected.size());
 
         let mut kernel = LinearBatchMse::<'a,U,N>::new();
 
@@ -180,19 +193,20 @@ impl<U> LossFunction<U> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U>
         "crossentropy"
     }
 }
-impl<'a,U,const N:usize> LossFunctionLinear<'a,U,DeviceGpu<U>,N> for CrossEntropy<U>
+impl<'a,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for CrossEntropy<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
+          for<'b> CudaTensor1dPtrView<'b,U,N>: From<&'b I>,
           for<'b> LinearCrossEntropy<'b,U,N>: Kernel<Args=LinearCrossEntropyArgs<'b,U,N>> {
-    type Input = CudaTensor1dPtrView<'a,U,N>;
     type Output = CudaTensor1dPtr<U,N>;
 
-    fn linear_derive<'b>(&self,device:&DeviceGpu<U>,actual: &'b CudaTensor1dPtrView<'b,U,N>,
-                         expected: &'b CudaTensor1dPtrView<'a,U,N>)
-        -> Result<Self::Output,TrainingError> {
+    fn linear_derive<'b>(&self,device:&DeviceGpu<U>,actual: &'b I, expected: &'b I) -> Result<Self::Output,TrainingError> {
+        let actual = CudaTensor1dPtrView::<'b,U,N>::from(actual);
+        let expected = CudaTensor1dPtrView::<'b,U,N>::from(expected);
+
         let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut args = LinearCrossEntropyArgs::new(expected, actual, output, N);
+        let mut args = LinearCrossEntropyArgs::new(&expected, &actual, output, N);
 
         let mut kernel = LinearCrossEntropy::<'a,U,N>::new();
 
@@ -202,18 +216,21 @@ impl<'a,U,const N:usize> LossFunctionLinear<'a,U,DeviceGpu<U>,N> for CrossEntrop
         Ok(args.output)
     }
 }
-impl<'a,U,const N:usize> BatchLossFunctionLinear<'a,U,DeviceGpu<U>,N> for CrossEntropy<U>
+impl<'a,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for CrossEntropy<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>:  Device<U>,
+          for<'b> CudaVecView<'b,U,CudaTensor1dPtr<U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchCrossEntropy<'b,U,N>: Kernel<Args=LinearBatchCrossEntropyArgs<'b,U,N>> {
-    type Input = CudaVecView<'a,U,CudaTensor1dPtr<U,N>>;
     type Output = CudaVec<U,CudaTensor1dPtr<U,N>>;
-    fn batch_linear_derive<'b>(&self, device: &DeviceGpu<U>, expected: &'b CudaVecView<'b,U,CudaTensor1dPtr<U,N>>,
-                                      actual: &'b CudaVecView<'b,U,CudaTensor1dPtr<U,N>>)
+    fn batch_linear_derive<'b>(&self, device: &DeviceGpu<U>, expected: &'b I,
+                                      actual: &'b I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let actual = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(actual)?;
+        let expected = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(expected)?;
+
         let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(expected.size(),device.get_memory_pool())?;
 
-        let mut args = LinearBatchCrossEntropyArgs::new(expected, actual, output, N, expected.size());
+        let mut args = LinearBatchCrossEntropyArgs::new(&expected, &actual, output, N, expected.size());
 
         let mut kernel = LinearBatchCrossEntropy::<'_,U,N>::new();
 
@@ -249,19 +266,20 @@ impl<U> LossFunction<U> for CrossEntropyMulticlass<U> where U: Clone + Copy + Un
         "crossentropymulticlass"
     }
 }
-impl<'a,U,const N:usize> LossFunctionLinear<'a,U,DeviceGpu<U>,N> for CrossEntropyMulticlass<U>
+impl<'a,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for CrossEntropyMulticlass<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
+          for<'b> CudaTensor1dPtrView<'b,U,N>: From<&'b I>,
           for<'b> LinearCrossEntropyMulticlass<'b,U,N>: Kernel<Args=LinearCrossEntropyMulticlassArgs<'b,U,N>> {
-    type Input = CudaTensor1dPtrView<'a,U,N>;
     type Output = CudaTensor1dPtr<U,N>;
 
-    fn linear_derive<'b>(&self,device:&DeviceGpu<U>,actual: &'b CudaTensor1dPtrView<'b,U,N>,
-                         expected: &'b CudaTensor1dPtrView<'b,U,N>)
-        -> Result<Self::Output,TrainingError> {
+    fn linear_derive<'b>(&self,device:&DeviceGpu<U>,actual: &'b I,expected: &'b I) -> Result<Self::Output,TrainingError> {
+        let actual = CudaTensor1dPtrView::<'b,U,N>::from(actual);
+        let expected = CudaTensor1dPtrView::<'b,U,N>::from(expected);
+
         let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut args = LinearCrossEntropyMulticlassArgs::new(expected, actual, output, N);
+        let mut args = LinearCrossEntropyMulticlassArgs::new(&expected, &actual, output, N);
 
         let mut kernel = LinearCrossEntropyMulticlass::<'a,U,N>::new();
 
@@ -271,19 +289,22 @@ impl<'a,U,const N:usize> LossFunctionLinear<'a,U,DeviceGpu<U>,N> for CrossEntrop
         Ok(args.output)
     }
 }
-impl<'a,U,const N:usize> BatchLossFunctionLinear<'a,U,DeviceGpu<U>,N> for CrossEntropyMulticlass<U>
+impl<'a,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for CrossEntropyMulticlass<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
-             DeviceGpu<U>:  Device<U>,
-             CudaPtr<U>: TryFrom<U,Error=CudaError>,
-             for<'b> LinearBatchCrossEntropyMulticlass<'b,U,N>: Kernel<Args=LinearBatchCrossEntropyMulticlassArgs<'b,U,N>> {
-    type Input = CudaVecView<'a,U,CudaTensor1dPtr<U,N>>;
+          DeviceGpu<U>:  Device<U>,
+          CudaPtr<U>: TryFrom<U,Error=CudaError>,
+          for<'b> CudaVecView<'b,U,CudaTensor1dPtr<U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
+          for<'b> LinearBatchCrossEntropyMulticlass<'b,U,N>: Kernel<Args=LinearBatchCrossEntropyMulticlassArgs<'b,U,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,N>>;
-    fn batch_linear_derive<'b>(&self, device: &DeviceGpu<U>, expected: &'b CudaVecView<'b,U,CudaTensor1dPtr<U,N>>,
-                               actual: &'b CudaVecView<'b,U,CudaTensor1dPtr<U,N>>)
+    fn batch_linear_derive<'b>(&self, device: &DeviceGpu<U>, expected: &'b I,
+                               actual: &'b I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let actual = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(actual)?;
+        let expected = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(expected)?;
+
         let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(expected.size(),device.get_memory_pool())?;
 
-        let mut args = LinearBatchCrossEntropyMulticlassArgs::new(expected, actual, output, N, expected.size());
+        let mut args = LinearBatchCrossEntropyMulticlassArgs::new(&expected, &actual, output, N, expected.size());
 
         let mut kernel = LinearBatchCrossEntropyMulticlass::<'_,U,N>::new();
 

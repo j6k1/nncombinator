@@ -16,7 +16,7 @@ use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLin
 use crate::ope::UnitValue;
 
 /// Trait that defines the implementation of various calculation processes in the linear output layer
-pub trait DeviceLinearOutput<U,const N:usize>: Device<U>
+pub trait DeviceLinearOutput<'a,U,const N:usize>: Device<U>
     where U: UnitValue<U> {
     type IO: BatchDataType;
     type BatchIO: BatchSize;
@@ -25,20 +25,19 @@ pub trait DeviceLinearOutput<U,const N:usize>: Device<U>
     /// * `expected` - expected value
     /// * `actual` - actual value
     /// * `lossf` - loss function
-    fn loss_linear<'a,L>(&self, expected: &'a Arr<U,N>, actual: &'a Self::IO, lossf: &L) -> Result<Self::IO,TrainingError>
-        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,Self,N,Output=Self::IO>,
-              for<'b> <L as LossFunctionLinear<'b,U,Self,N>>::Input: From<&'b Self::IO>;
+    fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a Self::IO, lossf: &L) -> Result<Self::IO,TrainingError>
+        where L: LossFunction<U> + LossFunctionLinear<'a,U,Self::IO,Self,N,Output=Self::IO>;
     /// Calculation of Losses by canonical link
     /// # Arguments
     /// * `expected` - expected value
     /// * `actual` - actual value
-    fn loss_linear_by_canonical_link<'a>(&self, expected: &'a Arr<U,N>, actual: &'a Self::IO) -> Result<Self::IO,TrainingError>;
+    fn loss_linear_by_canonical_link(&self, expected: &'a Arr<U,N>, actual: &'a Self::IO) -> Result<Self::IO,TrainingError>;
     /// Calculation of total Losses
     /// # Arguments
     /// * `expected` - expected value
     /// * `actual` - actual value
     /// * `lossf` - loss function
-    fn loss_linear_total<'a,L: LossFunction<U>>(&self, exptected:&'a Arr<U,N>, actual:&'a Self::IO, lossf:&L) -> Result<U,TrainingError>;
+    fn loss_linear_total<L: LossFunction<U>>(&self, exptected:&'a Arr<U,N>, actual:&'a Self::IO, lossf:&L) -> Result<U,TrainingError>;
     /// Calculation of loss during batch execution by canonical link
     /// # Arguments
     /// * `expected` - expected value
@@ -48,7 +47,7 @@ pub trait DeviceLinearOutput<U,const N:usize>: Device<U>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn loss_linear_batch_by_canonical_link<'a>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
+    fn loss_linear_batch_by_canonical_link(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
                                                actual: &'a Self::BatchIO)
                                                -> Result<Self::BatchIO, TrainingError> where f64: From<U>;
     /// Calculation of Losses (all batch)
@@ -56,31 +55,29 @@ pub trait DeviceLinearOutput<U,const N:usize>: Device<U>
     /// * `expected` - expected value
     /// * `actual` - actual value
     /// * `lossf` - loss function
-    fn batch_loss_linear<'a,L>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
+    fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
                                actual: &'a Self::BatchIO, lossf: &L)
                                -> Result<Self::BatchIO,TrainingError>
-        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self,N,Output=Self::BatchIO>,
-              for<'b> <L as BatchLossFunctionLinear<'b,U,Self,N>>::Input: TryFrom<&'b Self::BatchIO,Error=TypeConvertError>;
+        where L: LossFunction<U> + BatchLossFunctionLinear<'a,U,Self::BatchIO,Self,N,Output=Self::BatchIO>;
     /// Calculation of total Losses (all batch)
     /// # Arguments
     /// * `expected` - expected value
     /// * `actual` - actual value
     /// * `lossf` - loss function
-    fn batch_loss_linear_total<'a,L: LossFunction<U>>(&self, exptected:&'a SerializedVec<U,Arr<U,N>>,
+    fn batch_loss_linear_total<L: LossFunction<U>>(&self, exptected:&'a SerializedVec<U,Arr<U,N>>,
                                                       actual:&'a Self::BatchIO, lossf:&L)
         -> Result<U,TrainingError> where f64: From<U> + FromPrimitive, f64: FromPrimitive;
 }
-impl<U,const N:usize> DeviceLinearOutput<U,N> for DeviceCpu<U>
+impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
     where U: UnitValue<U> {
     type IO = Arr<U,N>;
     type BatchIO = SerializedVec<U,Arr<U,N>>;
-    fn loss_linear<'a,L>(&self, expected: &'a Arr<U,N>, actual: &'a Arr<U,N>, lossf: &L) -> Result<Arr<U,N>,TrainingError>
-        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,DeviceCpu<U>,N,Output=Arr<U,N>>,
-              for<'b> <L as LossFunctionLinear<'b,U,DeviceCpu<U>,N>>::Input: From<&'b Arr<U,N>> {
-        Ok(lossf.linear_derive(self,&actual.into(),&expected.into())?)
+    fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a Arr<U,N>, lossf: &L) -> Result<Arr<U,N>,TrainingError>
+        where L: LossFunction<U> + LossFunctionLinear<'a,U,Arr<U,N>,DeviceCpu<U>,N,Output=Arr<U,N>> {
+        Ok(lossf.linear_derive(self,actual,expected)?)
     }
 
-    fn loss_linear_by_canonical_link<'a>(&self, expected: &'a Arr<U,N>, actual: &'a Arr<U,N>) -> Result<Arr<U,N>,TrainingError> {
+    fn loss_linear_by_canonical_link(&self, expected: &'a Arr<U,N>, actual: &'a Arr<U,N>) -> Result<Arr<U,N>,TrainingError> {
         let mut loss = Arr::new();
 
         for (l, (a, e)) in loss.iter_mut().zip(ArrView::<'a,U,N>::from(actual).iter().zip(expected.iter())) {
@@ -90,7 +87,7 @@ impl<U,const N:usize> DeviceLinearOutput<U,N> for DeviceCpu<U>
         Ok(loss)
     }
 
-    fn loss_linear_total<'a,L: LossFunction<U>>(&self, exptected: &'a Arr<U,N>, actual: &'a Arr<U,N>, lossf: &L)
+    fn loss_linear_total<L: LossFunction<U>>(&self, exptected: &'a Arr<U,N>, actual: &'a Arr<U,N>, lossf: &L)
         -> Result<U,TrainingError> {
 
         Ok(ArrView::<'a,U,N>::from(actual).iter().zip(exptected.iter()).fold(U::default(),| mut acc,(&a,&e) | {
@@ -99,7 +96,7 @@ impl<U,const N:usize> DeviceLinearOutput<U,N> for DeviceCpu<U>
         }))
     }
 
-    fn loss_linear_batch_by_canonical_link<'a>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
+    fn loss_linear_batch_by_canonical_link(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
                                                actual: &'a SerializedVec<U,Arr<U,N>>)
         -> Result<SerializedVec<U,Arr<U, N>>, TrainingError> where f64: From<U> {
         let n = U::from_usize(actual.size()).ok_or(TrainingError::TypeCastError(
@@ -112,15 +109,14 @@ impl<U,const N:usize> DeviceLinearOutput<U,N> for DeviceCpu<U>
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 
-    fn batch_loss_linear<'a,L>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
+    fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
                                actual: &'a SerializedVec<U,Arr<U,N>>, lossf: &L)
-        -> Result<<Arr<U,N> as BatchDataType>::Type, TrainingError>
-        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,DeviceCpu<U>,N,Output=Self::BatchIO>,
-              for<'b> <L as BatchLossFunctionLinear<'b,U,DeviceCpu<U>,N>>::Input: TryFrom<&'b SerializedVec<U,Arr<U,N>>,Error=TypeConvertError> {
-        lossf.batch_linear_derive(self,&expected.try_into()?,&actual.try_into()?)
+        -> Result<SerializedVec<U,Arr<U,N>>, TrainingError>
+        where L: LossFunction<U> + BatchLossFunctionLinear<'a,U,Self::BatchIO,DeviceCpu<U>,N,Output=Self::BatchIO> {
+        lossf.batch_linear_derive(self,expected,actual)
     }
 
-    fn batch_loss_linear_total<'a,L: LossFunction<U>>(&self, exptected: &'a SerializedVec<U,Arr<U,N>>,
+    fn batch_loss_linear_total<L: LossFunction<U>>(&self, exptected: &'a SerializedVec<U,Arr<U,N>>,
                                                       actual: &'a SerializedVec<U,Arr<U,N>>, lossf: &L)
         -> Result<U, TrainingError> where f64: From<U> + FromPrimitive, f64: FromPrimitive {
 
@@ -141,25 +137,22 @@ impl<U,const N:usize> DeviceLinearOutput<U,N> for DeviceCpu<U>
         ))
     }
 }
-impl<U,const N:usize> DeviceLinearOutput<U,N> for DeviceGpu<U>
+impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U>
     where U: DataTypeInfo + UnitValue<U>,
           DeviceGpu<U>: Device<U>,
           f64: From<U>,
-          for<'a> &'a SerializedVec<U,Arr<U,N>>: ToCuda<U,Output=CudaVec<U,CudaTensor1dPtr<U,N>>>,
-          for<'a> LossLinearBatchByCanonicalLink<'a,U,N>: Kernel<Args=LossLinearBatchByCanonicalLinkArgs<'a,U,N>>,
-          for<'a> LossLinearByCanonicalLink<'a,U,N>: Kernel<Args=LossLinearByCanonicalLinkArgs<'a,U,N>> {
+          for<'b> &'b SerializedVec<U,Arr<U,N>>: ToCuda<U,Output=CudaVec<U,CudaTensor1dPtr<U,N>>>,
+          for<'b> LossLinearBatchByCanonicalLink<'b,U,N>: Kernel<Args=LossLinearBatchByCanonicalLinkArgs<'b,U,N>>,
+          for<'b> LossLinearByCanonicalLink<'b,U,N>: Kernel<Args=LossLinearByCanonicalLinkArgs<'b,U,N>> {
     type IO = CudaTensor1dPtr<U,N>;
     type BatchIO = CudaVec<U,CudaTensor1dPtr<U,N>>;
-    fn loss_linear<'a,L>(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,N>, lossf: &L)
+    fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,N>, lossf: &L)
                          -> Result<Self::IO, TrainingError>
-        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,DeviceGpu<U>,N,Output=CudaTensor1dPtr<U,N>>,
-              for<'b> <L as LossFunctionLinear<'b,U,DeviceGpu<U>,N>>::Input: From<&'b CudaTensor1dPtr<U,N>> {
-        let actual = actual.into();
-
-        lossf.linear_derive(self,&actual, &(&expected.to_cuda(self)?).into())
+        where L: LossFunction<U> + LossFunctionLinear<'a,U,CudaTensor1dPtr<U,N>,DeviceGpu<U>,N,Output=CudaTensor1dPtr<U,N>> {
+        Ok(lossf.linear_derive(self,&actual, &expected.to_cuda(self)?)?)
     }
 
-    fn loss_linear_by_canonical_link<'a>(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,N>)
+    fn loss_linear_by_canonical_link(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,N>)
         -> Result<Self::IO, TrainingError> {
         let expected = expected.to_cuda(self)?;
         let expected = (&expected).into();
@@ -178,7 +171,7 @@ impl<U,const N:usize> DeviceLinearOutput<U,N> for DeviceGpu<U>
         Ok(args.output)
     }
 
-    fn loss_linear_total<'a,L: LossFunction<U>>(&self, exptected: &'a Arr<U,N>,
+    fn loss_linear_total<L: LossFunction<U>>(&self, exptected: &'a Arr<U,N>,
                                                 actual: &'a CudaTensor1dPtr<U,N>, lossf: &L)
         -> Result<U, TrainingError> {
         let actual = CudaTensor1dPtrView::<'a,U,N>::from(actual);
@@ -189,8 +182,8 @@ impl<U,const N:usize> DeviceLinearOutput<U,N> for DeviceGpu<U>
         }))
     }
 
-    fn loss_linear_batch_by_canonical_link<'a>(&self, expected: &'a SerializedVec<U, Arr<U, N>>,
-                                               actual: &'a CudaVec<U,CudaTensor1dPtr<U,N>>)
+    fn loss_linear_batch_by_canonical_link(&self, expected: &'a SerializedVec<U, Arr<U, N>>,
+                                           actual: &'a CudaVec<U,CudaTensor1dPtr<U,N>>)
         -> Result<Self::BatchIO, TrainingError> {
         let expected_ptr = expected.to_cuda(self)?;
         let expected_ptr = (&expected_ptr).try_into()?;
@@ -217,14 +210,15 @@ impl<U,const N:usize> DeviceLinearOutput<U,N> for DeviceGpu<U>
         Ok(args.output)
     }
 
-    fn batch_loss_linear<'a,L>(&self, expected: &'a SerializedVec<U, Arr<U, N>>,
+    fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U, Arr<U, N>>,
                                actual: &'a CudaVec<U,CudaTensor1dPtr<U,N>>, lossf: &L)
                                -> Result<Self::BatchIO, TrainingError>
-        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,DeviceGpu<U>,N,Output=Self::BatchIO>,
-              for<'b> <L as BatchLossFunctionLinear<'b,U,DeviceGpu<U>,N>>::Input: TryFrom<&'b CudaVec<U,CudaTensor1dPtr<U,N>>,Error=TypeConvertError> {
-        lossf.batch_linear_derive(self, &(&expected.to_cuda(self)?).try_into()?, &actual.try_into()?)
+        where L: LossFunction<U> + BatchLossFunctionLinear<'a,U,Self::BatchIO,DeviceGpu<U>,N,Output=Self::BatchIO> {
+        let expected = expected.to_cuda(self)?;
+
+        Ok(lossf.batch_linear_derive(self, &expected, actual)?)
     }
-    fn batch_loss_linear_total<'a,L: LossFunction<U>>(&self, exptected: &'a SerializedVec<U, Arr<U, N>>,
+    fn batch_loss_linear_total<L: LossFunction<U>>(&self, exptected: &'a SerializedVec<U, Arr<U, N>>,
                                                       actual: &'a Self::BatchIO,
                                                       lossf: &L)
                                                       -> Result<U, TrainingError> {

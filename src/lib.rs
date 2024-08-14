@@ -167,18 +167,18 @@ mod tests {
 
     #[test]
     fn build_layers() {
-        let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
         let device = DeviceCpu::new().unwrap();
-        let optimizer_builder = SGDBuilder::new(0.01);
+        let i:InputLayer<f32,Arr<f32,4>,_,_> = InputLayer::new(&device);
+        let optimizer_builder = SGDBuilder::new(&device).lr(0.01);
 
         let _l = i.add_layer(|l| LinearLayerBuilder::<4,1>::new().build(l,&device, || 1., || 0.,&optimizer_builder).unwrap());
     }
 
     #[test]
     fn build_train_layers() {
-        let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
         let device = DeviceCpu::new().unwrap();
-        let optimizer_builder = SGDBuilder::new(0.01);
+        let i:InputLayer<f32,Arr<f32,4>,_,_> = InputLayer::new(&device);
+        let optimizer_builder = SGDBuilder::new(&device).lr(0.01);
 
         let _l = i.add_layer(|l| {
             LinearLayerBuilder::<4,1>::new().build(l,&device,|| 1., || 0.,&optimizer_builder).unwrap()

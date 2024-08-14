@@ -32,7 +32,7 @@ fn test_mnist_batch_norm() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -198,7 +198,7 @@ fn test_fashion_mnist_batch_norm() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -363,7 +363,7 @@ fn test_mnist_batch_norm_double() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -529,7 +529,7 @@ fn test_fashion_mnist_batch_norm_double() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -696,7 +696,7 @@ fn test_mnist_batch_norm_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -864,7 +864,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -1031,7 +1031,7 @@ fn test_mnist_batch_norm_for_gpu_double() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -1199,7 +1199,7 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 

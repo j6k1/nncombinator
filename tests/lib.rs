@@ -50,7 +50,7 @@ fn test_mnist_for_cpu() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -210,7 +210,7 @@ fn test_fashion_mnist_for_cpu() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -371,7 +371,7 @@ fn test_mnist_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -533,7 +533,7 @@ fn test_mnist_for_gpu_double() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -695,7 +695,7 @@ fn test_fashion_mnist_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -856,7 +856,7 @@ fn test_fashion_mnist_for_gpu_double() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -1014,7 +1014,7 @@ fn test_weather() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,14>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,14>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -1178,7 +1178,7 @@ fn test_weather_by_forward_diff() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_> = InputLayer::new();
+    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -1360,7 +1360,7 @@ fn test_diff_learn_error() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_> = InputLayer::new();
+    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -1420,7 +1420,7 @@ fn test_diff_learn_error_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_> = InputLayer::new();
+    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -1479,7 +1479,7 @@ fn test_weather_batch_train() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,14>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,14>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -1666,7 +1666,7 @@ fn test_weather_batch_train_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,14>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,14>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -1853,7 +1853,7 @@ fn test_weather_batch_train_for_gpu_double() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f64,Arr<f64,14>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,14>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -2037,7 +2037,7 @@ fn test_penguins() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,6>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,6>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -2255,7 +2255,7 @@ fn test_penguins_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,6>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,6>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -2472,7 +2472,7 @@ fn test_weather_for_gpu() {
 
     let device = DeviceGpu::new(&SHARED_MEMORY_POOL.clone()).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,14>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,14>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -2636,7 +2636,7 @@ fn test_weather_by_forward_diff_for_gpu() {
 
     let device = DeviceGpu::new(&SHARED_MEMORY_POOL.clone()).unwrap();
 
-    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_> = InputLayer::new();
+    let net:InputLayer<f32,DiffInput<DiffArr<f32,14>,f32,14,100>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -2820,7 +2820,7 @@ fn test_penguins_for_gpu_double() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f64,Arr<f64,6>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,6>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -3037,7 +3037,7 @@ fn test_weather_for_gpu_double() {
 
     let device = DeviceGpu::new(&SHARED_MEMORY_POOL.clone()).unwrap();
 
-    let net:InputLayer<f64,Arr<f64,14>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,14>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -3201,7 +3201,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
 
     let device = DeviceGpu::new(&SHARED_MEMORY_POOL.clone()).unwrap();
 
-    let net:InputLayer<f64,DiffInput<DiffArr<f64,14>,f64,14,100>,_> = InputLayer::new();
+    let net:InputLayer<f64,DiffInput<DiffArr<f64,14>,f64,14,100>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -3385,7 +3385,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -3544,7 +3544,7 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -3701,7 +3701,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -3860,7 +3860,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -4017,7 +4017,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -4175,7 +4175,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 

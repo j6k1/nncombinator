@@ -6,7 +6,7 @@ use std::ops::{Add, AddAssign, Deref, DerefMut, Div, Index, IndexMut, Mul, Neg, 
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
-use crate::cuda::{CudaTensor1dPtr, Memory, ToCuda};
+use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, Memory, MemorySize, ToCuda, ToHost};
 use crate::device::{DeviceGpu, DeviceMemoryPool};
 use crate::error::{IndexOutBoundError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
@@ -180,6 +180,13 @@ impl<'a,T,const N:usize> ToCuda<T> for &'a Arr<T,N>
         ptr.memcpy(self.as_ptr(),N)?;
 
         Ok(ptr)
+    }
+}
+impl<T,const N:usize> ToHost<T> for Arr<T,N> where T: Default + Clone + Send {
+    type Output = Arr<T,N>;
+
+    fn to_host(self) -> Result<Self::Output, TypeConvertError> {
+        Ok(self)
     }
 }
 impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Send {
@@ -1377,6 +1384,48 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
                 t: PhantomData::<Arr<U, N>>
             })
         }
+    }
+}
+impl<U,T> ToCuda<U> for SerializedVec<U,T>
+    where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
+          <T as ToCuda<U>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
+          for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U> {
+    type Output = CudaVec<U,<T as ToCuda<U>>::Output>;
+
+    fn to_cuda(self, device: &DeviceGpu<U>) -> Result<Self::Output,TypeConvertError> {
+        if T::slice_size() != <T as ToCuda<U>>::Output::size() {
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U>>::Output::size())))
+        } else {
+            let mut ptr = CudaVec::new(self.len,device.get_memory_pool())?;
+
+            ptr.memcpy(self.arr.as_ptr(), self.len * <T as ToCuda<U>>::Output::size())?;
+
+            Ok(ptr)
+        }
+    }
+}
+impl<'a,U,T> ToCuda<U> for &'a SerializedVec<U,T>
+    where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
+          <T as ToCuda<U>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
+          for<'b> T: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> + ToCuda<U> {
+    type Output = CudaVec<U,<T as ToCuda<U>>::Output>;
+    fn to_cuda(self, device: &DeviceGpu<U>) -> Result<Self::Output,TypeConvertError> {
+        if T::slice_size() != <T as ToCuda<U>>::Output::size() {
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U>>::Output::size())))
+        } else {
+            let mut ptr = CudaVec::new(self.len,device.get_memory_pool())?;
+
+            ptr.memcpy(self.arr.as_ptr(), self.len * <T as ToCuda<U>>::Output::size())?;
+
+            Ok(ptr)
+        }
+    }
+}
+impl<U,T> ToHost<U> for SerializedVec<U,T> where U: Default + Clone + Copy + Send {
+    type Output = SerializedVec<U,T>;
+
+    fn to_host(self) -> Result<Self::Output, TypeConvertError> {
+        Ok(self)
     }
 }
 impl<U,T,R> TryFrom<SerializedVecConverter<U,T>> for SerializedVec<U,R>

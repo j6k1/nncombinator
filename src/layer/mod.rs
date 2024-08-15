@@ -149,8 +149,7 @@ pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
 }
 /// Trait that defines the learning process of a neural network.
 pub trait Train<U,L>: PreTrain<U>
-    where U: UnitValue<U>,
-          L: LossFunction<U> {
+    where U: UnitValue<U> {
     /// Train neural networks.
     /// # Arguments
     /// * `expected` - expected value
@@ -275,7 +274,7 @@ pub trait AddLayer: ForwardAll where Self: Sized {
 }
 /// Trait that defines the ability to add a layer with learning capabilities to a neural network.
 pub trait AddLayerTrain<U,L>: PreTrain<U>
-    where Self: Sized, U: UnitValue<U>, L: LossFunction<U> {
+    where Self: Sized, U: UnitValue<U> {
     /// Adding Layers
     /// # Arguments
     /// * `f` - Callback that takes itself and returns an object with an internally generated layer added
@@ -287,7 +286,7 @@ impl<T> AddLayer for T where T: ForwardAll + Sized {
     }
 }
 impl<T,U,L> AddLayerTrain<U,L> for T
-    where T: PreTrain<U> + Sized, U: UnitValue<U>, L: LossFunction<U> {
+    where T: PreTrain<U> + Sized, U: UnitValue<U> {
     fn add_layer_train<C,F>(self, f: F) -> C where C: Train<U,L>, F: FnOnce(Self) -> C {
         f(self)
     }

@@ -201,7 +201,7 @@ impl Device<f32> for DeviceGpu<f32> {
 impl<U,T,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,N>,U,N> for DeviceGpu<U>
     where U: UnitValue<U> + DataTypeInfo,
           T: BatchSize,
-          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,N>>: TryFrom<&'a T,Error=TrainingError>,
+          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,N>>: TryFrom<&'a T,Error=TypeConvertError>,
           for<'a> ReduceLinearBatch::<'a,U,N>: Kernel<Args=ReduceLinearBatchArgs<'a,U,N>> {
     #[inline]
     fn reduce<'a>(&self, input: &'a T) -> Result<CudaTensor1dPtr<U, N>, TrainingError> {

@@ -188,7 +188,7 @@ impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,N
           <I as BatchDataType>::Type: BatchSize,
           Self: DeviceReduce<CudaVec<U,CudaTensor1dPtr<U,NO>>,CudaTensor1dPtr<U,NO>,U,NO>,
           for<'a> CudaTensor1dPtrView<'a,U,NI>: From<&'a I>,
-          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TrainingError>,
+          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           for<'b> ForwardLinear::<'b,U,NI,NO>: Kernel<Args=ForwardLinearArgs<'b,U,NI,NO>>,
           for<'b> BackwardLinear::<'b,U,NI,NO>: Kernel<Args=BackwardLinearArgs<'b,U,NI,NO>>,
           for<'b> LinearGradient::<'b,U,NI,NO>: Kernel<Args=LinearGradientArgs<'b,U,NI,NO>>,
@@ -202,7 +202,7 @@ impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,N
     type BatchLossOutput = CudaVec<U,CudaTensor1dPtr<U,NI>>;
     #[inline]
     fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<U,NO>, units: &CudaTensor2dPtr<U,NI,NO>, input: &'a I)
-                          -> Result<CudaTensor1dPtr<U,NO>, EvaluateError> {
+        -> Result<CudaTensor1dPtr<U,NO>, EvaluateError> {
         let input = input.into();
         let output = CudaTensor1dPtr::<U,NO>::with_initializer(self.get_memory_pool(),Default::default)?;
 

@@ -23,7 +23,7 @@ pub trait BiasLayerInstantiation<U,C,P,OP,D,I,PI,const N:usize>
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync,
+          PI: Debug,
           OP: Optimizer<U,D> {
     /// Create and return an instance with the specified scale, bias, and momentum.
     /// # Arguments
@@ -40,7 +40,7 @@ pub struct BiasLayer<U,C,P,OP,D,I,PI,const N:usize>
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync,
+          PI: Debug,
           OP: Optimizer<U,D> {
     parent:P,
     device:D,
@@ -53,7 +53,7 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
              PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync,
+          PI: Debug,
           OP: Optimizer<U,DeviceCpu<U>>,
           ConfigReadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
@@ -83,7 +83,7 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
              PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync,
+          PI: Debug,
           OP: Optimizer<U,DeviceGpu<U>>,
           DeviceGpu<U>: Device<U>,
           ConfigReadError: From<<U as FromStr>::Err> {
@@ -121,7 +121,7 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,Arr<U,
              PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync,
+          PI: Debug,
           OP: Optimizer<U,DeviceCpu<U>> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
@@ -149,7 +149,7 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,CudaTe
              PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync,
+          PI: Debug,
           OP: Optimizer<U,DeviceGpu<U>>,
           DeviceGpu<U>: Device<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
@@ -183,7 +183,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Forward<PI,Result<PI,EvaluateError>> for Bia
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType,
+          PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + BatchSize {
 
@@ -197,7 +197,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> ForwardAll for BiasLayer<U,C,P,OP,D,I,PI,N>
           D: Device<U> + DeviceBias<U,C,PI,N>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
     type Input = I;
@@ -211,7 +211,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PreTrain<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
           D: Device<U> + DeviceBias<U,C,PI,N>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
     type PreOutput = PI;
@@ -230,7 +230,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Backward<U,PI,Result<PI,TrainingError>> for 
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
     fn backward(&mut self, input: PI) -> Result<PI,TrainingError> {
@@ -242,7 +242,7 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,Arr<U,N>,P,OP,Dev
           U: Default + Clone + Copy + Send + UnitValue<U>,
           DeviceCpu<U>: Device<U> + DeviceBias<U,Arr<U,N>,PI,N>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,DeviceCpu<U>>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
@@ -271,7 +271,7 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,CudaTensor1dPtr<U
     where P: BackwardAll<U,LossInput=PI> + ForwardAll<Input=I,Output=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,DeviceGpu<U>>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           DeviceGpu<U>: Device<U> + DeviceBias<U,CudaTensor1dPtr<U,N>,PI,N>,
@@ -302,7 +302,7 @@ impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,Arr<U,N>,P,OP,De
              PreTrain<U,PreOutput=PI> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,DeviceCpu<U>>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           OP: Optimizer<U,DeviceCpu<U>>,
@@ -323,7 +323,7 @@ impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,CudaTensor1dPtr<
              PreTrain<U,PreOutput=PI> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,DeviceGpu<U>>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           DeviceGpu<U>: Device<U>,
@@ -347,7 +347,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> AskDiffInput<U> for BiasLayer<U,C,P,OP,D,I,P
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           Self: PreTrain<U,PreOutput=PI> {
@@ -361,7 +361,7 @@ impl<U,P,OP,I,PI,const N:usize> Loss<U> for BiasLayer<U,Arr<U,N>,P,OP,DeviceCpu<
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,DeviceCpu<U>>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           DeviceCpu<U>: Device<U> + DeviceBias<U,Arr<U,N>,PI,N>,
@@ -372,7 +372,7 @@ impl<U,P,OP,I,PI,const N:usize> Loss<U> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,O
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,DeviceGpu<U>>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           DeviceGpu<U>: Device<U> + DeviceBias<U,CudaTensor1dPtr<U,N>,PI,N>,
@@ -386,7 +386,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchForwardBase for BiasLayer<U,C,P,OP,D,I,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,D>,
@@ -400,7 +400,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchForward for BiasLayer<U,C,P,OP,D,I,PI,N
           D: Device<U> + DeviceBias<U,C,PI,N>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,D> {
@@ -417,7 +417,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrainBase<U> for BiasLayer<U,C,P,OP,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,D>,
@@ -432,7 +432,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain<U> for BiasLayer<U,C,P,OP,D,I,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,D> {
@@ -451,7 +451,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,Arr<U,N>,P,OP,D
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,DeviceCpu<U>>,
@@ -487,7 +487,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,CudaTensor1dPtr
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,DeviceGpu<U>>,
@@ -524,7 +524,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,Arr<U,N>,P,OP,Devic
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,DeviceCpu<U>>,
@@ -539,7 +539,7 @@ impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,CudaTensor1dPtr<U,N
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + Send + Sync + BatchDataType + 'static,
+          PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
           <I as BatchDataType>::Type: Debug,
           OP: Optimizer<U,DeviceGpu<U>>,
@@ -552,7 +552,7 @@ impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,Arr<U,N>,P,OP,DeviceCpu
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType,
+          PI: Debug + BatchDataType,
           OP: Optimizer<U,DeviceCpu<U>> {
     fn instantiation<UI: FnMut() -> U,B: OptimizerBuilder<U,DeviceCpu<U>,Output=OP>>(parent: P, device: &DeviceCpu<U>, ui: UI, b: &B)
         -> Result<BiasLayer<U, Arr<U,N>, P, OP, DeviceCpu<U>, I, PI, N>, LayerInstantiationError> {
@@ -577,7 +577,7 @@ impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,CudaTensor1dPtr<U,N>,P,
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug + Send + Sync + BatchDataType,
+          PI: Debug + BatchDataType,
           OP: Optimizer<U,DeviceGpu<U>>,
           DeviceGpu<U>: Device<U> {
     fn instantiation<UI: FnMut() -> U,B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent: P, device: &DeviceGpu<U>, ui: UI, b: &B)
@@ -618,7 +618,7 @@ impl<const N:usize> BiasLayerBuilder<N> {
               U: Default + Clone + Copy + Send + UnitValue<U>,
               D: Device<U>,
               I: Debug + Send + Sync + BatchDataType,
-              PI: Debug + Send + Sync + BatchDataType,
+              PI: Debug + BatchDataType,
               <I as BatchDataType>::Type: Debug + Send + Sync + 'static,
               OP: Optimizer<U,D>,
               B: OptimizerBuilder<U,D,Output=OP>,

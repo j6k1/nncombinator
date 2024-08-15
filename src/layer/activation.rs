@@ -2,11 +2,10 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::{Cons, Stack};
 use crate::device::activation::DeviceActivation;
 use crate::device::Device;
-use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError, TypeConvertError};
+use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
 use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
@@ -15,9 +14,8 @@ use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, Te
 /// Activation layer Implementation
 pub struct ActivationLayer<U,P,A,I,PI,D,const N:usize> where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
                                                U: UnitValue<U>,
-                                               D: Device<U>,
-                                               for<'a> D: DeviceActivation<U,PI,A,N>,
-                                               PI: Debug + BatchDataType + Send + Sync + 'static,
+                                               D: Device<U> + DeviceActivation<U,PI,A,N>,
+                                               PI: Debug + BatchDataType + 'static,
                                                I: Debug + Send + Sync {
     parent:P,
     f:A,
@@ -29,9 +27,8 @@ pub struct ActivationLayer<U,P,A,I,PI,D,const N:usize> where P: ForwardAll<Input
 impl<U,P,A,I,PI,D,const N:usize> ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync {
     /// Create and return an instance of ActivationLayer
     /// # Arguments
@@ -53,9 +50,8 @@ impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence<U>,Specialize
     where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence<U>,Specialized> +
              BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: UnitValue<U> + std::str::FromStr,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)
@@ -70,9 +66,8 @@ impl<T,U,P,A,I,PI,D,const N:usize> Persistence<U,T,Linear> for ActivationLayer<U
           P: ForwardAll<Input=I,Output=PI> + Persistence<U,T,Linear> +
              BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)
@@ -85,11 +80,9 @@ impl<T,U,P,A,I,PI,D,const N:usize> Persistence<U,T,Linear> for ActivationLayer<U
 impl<U,P,A,I,PI,D,const N:usize> ForwardAll for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + From<Arr<U,N>> + 'static,
-          I: Debug + Send + Sync,
-          for<'a> ArrView<'a,U,N>: From<&'a PI> {
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + 'static,
+          I: Debug + Send + Sync {
     type Input = I;
     type Output = PI;
 
@@ -101,11 +94,9 @@ impl<U,P,A,I,PI,D,const N:usize> Forward<PI,Result<PI,EvaluateError>> for Activa
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + From<Arr<U,N>> + 'static,
-          I: Debug + Send + Sync,
-          for<'a> ArrView<'a,U,N>: From<&'a PI> {
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + 'static,
+          I: Debug + Send + Sync {
     fn forward(&self, input: &PI) -> Result<PI,EvaluateError> {
         self.device.apply(&self.f, &input)
     }
@@ -114,11 +105,9 @@ impl<U,P,A,I,PI,D,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + From<Arr<U,N>>,
-          I: Debug + Send + Sync,
-          for<'a> ArrView<'a,U,N>: From<&'a PI> {
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync {
     type PreOutput = PI;
     type OutStack = Cons<<P as PreTrain<U>>::OutStack, Self::PreOutput>;
 
@@ -133,11 +122,9 @@ impl<U,P,A,I,PI,D,const N:usize> PreTrain<U> for ActivationLayer<U,P,A,I,PI,D,N>
 impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + From<Arr<U,N>>,
-          I: Debug + Send + Sync,
-          for<'a> ArrView<'a,U,N>: From<&'a PI> {
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync {
     type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
@@ -155,9 +142,8 @@ impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D
 impl<U,P,A,I,PI,D,const N:usize> UpdateWeight<U> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + From<Arr<U,N>>,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
           I: Debug + Send + Sync {
     type GradientStack = <P as UpdateWeight<U>>::GradientStack;
 
@@ -169,11 +155,9 @@ impl<U,P,A,I,PI,D,const N:usize> AskDiffInput<U> for ActivationLayer<U,P,A,I,PI,
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + Loss<U> + AskDiffInput<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + From<Arr<U,N>>,
-          I: Debug + Send + Sync,
-          for<'a> ArrView<'a,U,N>: From<&'a PI> {
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync {
     type DiffInput = P::DiffInput;
 
     fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
@@ -184,11 +168,9 @@ impl<U,P,A,I,PI,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + From<Arr<U,N>>,
-          I: Debug + Send + Sync,
-          for<'a> ArrView<'a,U,N>: From<&'a PI> {
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync {
     fn loss<L: LossFunction<U>>(&mut self, loss: Self::LossInput, _:&L, stack: Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         let (s,o) = stack.pop();
 
@@ -203,13 +185,11 @@ impl<U,P,A,I,PI,D,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,PI
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> +
              BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + BatchDataType + Send + Sync + From<Arr<U,N>> + BatchDataType,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> ArrView<'a,U,N>: From<&'a PI> {
+          <I as BatchDataType>::Type: Debug {
     type BatchInput = <I as BatchDataType>::Type;
     type BatchOutput = <PI as BatchDataType>::Type;
 }
@@ -218,16 +198,11 @@ impl<U,P,A,I,PI,D,const N:usize> BatchForward for ActivationLayer<U,P,A,I,PI,D,N
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError> {
+          <I as BatchDataType>::Type: Debug {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
@@ -240,13 +215,11 @@ impl<U,P,A,I,PI,D,const N:usize> BatchPreTrainBase<U> for ActivationLayer<U,P,A,
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> + BatchBackward<U> +
              BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> ArrView<'a,U,N>: From<&'a PI> {
+          <I as BatchDataType>::Type: Debug {
     type BatchPreOutput = <PI as BatchDataType>::Type;
     type BatchOutStack = Cons<<P as BatchPreTrainBase<U>>::BatchOutStack, Self::BatchPreOutput>;
 }
@@ -256,16 +229,11 @@ impl<U,P,A,I,PI,D,const N:usize> BatchPreTrain<U> for ActivationLayer<U,P,A,I,PI
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> + BatchBackward<U> +
              BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError> {
+          <I as BatchDataType>::Type: Debug {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let r = self.parent.batch_pre_train(input)?;
 
@@ -282,15 +250,11 @@ impl<U,P,A,I,PI,D,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,PI
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> + BatchBackward<U> +
              BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError> {
+          <I as BatchDataType>::Type: Debug {
     type BatchLossInput = <PI as BatchDataType>::Type;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
@@ -308,16 +272,11 @@ impl<U,P,A,I,PI,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,PI,D,N
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U>,
-          for<'a> D: DeviceActivation<U,PI,A,N>,
-          PI: Debug + Send + Sync + From<Arr<U,N>> + BatchDataType,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> ArrView<'a,U,N>: From<&'a PI>,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <PI as BatchDataType>::Type,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError> {
+          <I as BatchDataType>::Type: Debug {
     fn batch_loss<L: LossFunction<U>>(&self, loss: Self::BatchLossInput, _: &L, stack: Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
         let (s,o) = stack.pop();
 

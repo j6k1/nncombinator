@@ -10,7 +10,7 @@ use libc::c_void;
 use rcudnn::Error;
 use rcudnn::utils::DataType;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t, cudnnDataType_t};
-use crate::arr::{IntoConverter, MakeView, MakeViewMut, SerializedVec, SliceSize};
+use crate::arr::{Arr, IntoConverter, MakeView, MakeViewMut, SerializedVec, SliceSize};
 use crate::cuda::mem::{MemoryPool};
 use crate::device::{DeviceGpu};
 use crate::error::{CudaError, CudaRuntimeError, SizeMismatchError, TypeConvertError};
@@ -949,6 +949,13 @@ impl<'a,T,const N:usize> From<&'a mut CudaTensor1dPtr<T,N>> for &'a mut CudaMemo
         &mut value.ptr
     }
 }
+impl<'a,T,const N:usize> ToHost<T> for CudaTensor1dPtr<T,N>
+    where T: Default + Debug + Clone + Send + Sync + 'static {
+    type Output = Arr<T,N>;
+    fn to_host(self) -> Result<Self::Output,TypeConvertError> {
+        Ok(self.ptr.read_to_vec()?.try_into()?)
+    }
+}
 impl<T,const N:usize> MemorySize for CudaTensor1dPtr<T,N>
     where T: Default + Debug {
     #[inline]
@@ -1745,12 +1752,31 @@ impl<U,T,R> TryFrom<CudaVecConverter<U,T>> for CudaVec<U,R>
 }
 impl<U,T,R> TryFrom<CudaVecConverter<U,T>> for SerializedVec<U,R>
     where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
-          for<'a> T: MemorySize + AsKernelPtr + AsConstKernelPtr + Memory<U>,
+          for<'a> T: MemorySize + AsKernelPtr + AsConstKernelPtr,
           for<'b> R: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> {
     type Error = TypeConvertError;
     #[inline]
     fn try_from(value: CudaVecConverter<U,T>) -> Result<Self, Self::Error> {
-        Ok(value.ptr.read_to_vec()?.into_boxed_slice().try_into()?)
+        if T::size() != R::slice_size() {
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::size(),R::slice_size())))
+        } else {
+            Ok(value.ptr.read_to_vec()?.into_boxed_slice().try_into()?)
+        }
+    }
+}
+impl<U,T> ToHost<U> for CudaVec<U,T>
+    where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
+          SerializedVec<U,<T as ToHost<U>>::Output>: TryFrom<Box<[U]>,Error=TypeConvertError>,
+          for<'a> <T as ToHost<U>>::Output: SliceSize + MakeView<'a,U>,
+          for<'a> T: MemorySize + AsKernelPtr + AsConstKernelPtr + ToHost<U> {
+    type Output = SerializedVec<U,<T as ToHost<U>>::Output>;
+    #[inline]
+    fn to_host(self) -> Result<Self::Output,TypeConvertError> {
+        if T::size() != <T as ToHost<U>>::Output::slice_size() {
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::size(),<T as ToHost<U>>::Output::slice_size())))
+        } else {
+            Ok(self.ptr.read_to_vec()?.into_boxed_slice().try_into()?)
+        }
     }
 }
 impl<'a,U,T> Deref for CudaVecView<'a,U,T>
@@ -1840,6 +1866,12 @@ pub trait ToCuda<T> where T: UnitValue<T> {
 
     fn to_cuda(self,device:&DeviceGpu<T>) -> Result<Self::Output,TypeConvertError>;
 }
+/// Trait for inverse conversion of value to host memory type
+pub trait ToHost<T> where T: Default + Clone + Send {
+    type Output;
+
+    fn to_host(self) -> Result<Self::Output,TypeConvertError>;
+}
 impl<'a,T,const N:usize> ToCuda<T> for &'a CudaTensor1dPtr<T,N>
     where T :UnitValue<T> {
     type Output = CudaTensor1dPtrView<'a,T,N>;
@@ -1853,7 +1885,7 @@ impl<T,const N:usize> ToCuda<T> for CudaTensor1dPtr<T,N>
     type Output = CudaTensor1dPtr<T,N>;
 
     fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
-        Ok(self.into())
+        Ok(self)
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> ToCuda<T> for &'a CudaTensor2dPtr<T,N1,N2>
@@ -1869,7 +1901,7 @@ impl<T,const N1:usize,const N2:usize> ToCuda<T> for CudaTensor2dPtr<T,N1,N2>
     type Output = CudaTensor2dPtr<T,N1,N2>;
 
     fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
-        Ok(self.into())
+        Ok(self)
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> ToCuda<T> for &'a CudaTensor3dPtr<T,N1,N2,N3>
@@ -1885,7 +1917,7 @@ impl<T,const N1:usize,const N2:usize,const N3:usize> ToCuda<T> for CudaTensor3dP
     type Output = CudaTensor3dPtr<T,N1,N2,N3>;
 
     fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
-        Ok(self.into())
+        Ok(self)
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<T> for &'a CudaTensor4dPtr<T,N1,N2,N3,N4>
@@ -1901,7 +1933,7 @@ impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<T> fo
     type Output = CudaTensor4dPtr<T,N1,N2,N3,N4>;
 
     fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
-        Ok(self.into())
+        Ok(self)
     }
 }
 /// Trait that defines the ability to get a reference to a cuda smart pointer

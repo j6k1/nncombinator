@@ -80,7 +80,7 @@ fn test_mnist_for_cpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -248,7 +248,7 @@ fn test_fashion_mnist_for_cpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -401,7 +401,7 @@ fn test_mnist_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -563,7 +563,7 @@ fn test_mnist_for_gpu_double() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -733,7 +733,7 @@ fn test_fashion_mnist_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -894,7 +894,7 @@ fn test_fashion_mnist_for_gpu_double() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1036,7 +1036,7 @@ fn test_weather() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1200,7 +1200,7 @@ fn test_weather_by_forward_diff() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1382,7 +1382,7 @@ fn test_diff_learn_error() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1442,7 +1442,7 @@ fn test_diff_learn_error_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1509,7 +1509,7 @@ fn test_weather_batch_train() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1696,7 +1696,7 @@ fn test_weather_batch_train_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1883,7 +1883,7 @@ fn test_weather_batch_train_for_gpu_double() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -2059,7 +2059,7 @@ fn test_penguins() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -2277,7 +2277,7 @@ fn test_penguins_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -2494,7 +2494,7 @@ fn test_weather_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -2658,7 +2658,7 @@ fn test_weather_by_forward_diff_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -2842,7 +2842,7 @@ fn test_penguins_for_gpu_double() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -3059,7 +3059,7 @@ fn test_weather_for_gpu_double() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -3223,7 +3223,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -3415,7 +3415,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -3574,7 +3574,7 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -3731,7 +3731,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -3890,7 +3890,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -4047,7 +4047,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -4205,7 +4205,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 

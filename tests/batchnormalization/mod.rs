@@ -66,7 +66,7 @@ fn test_mnist_batch_norm() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -242,7 +242,7 @@ fn test_fashion_mnist_batch_norm() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -397,7 +397,7 @@ fn test_mnist_batch_norm_double() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -573,7 +573,7 @@ fn test_fashion_mnist_batch_norm_double() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -730,7 +730,7 @@ fn test_mnist_batch_norm_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -908,7 +908,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1065,7 +1065,7 @@ fn test_mnist_batch_norm_for_gpu_double() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1243,7 +1243,7 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
         ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 

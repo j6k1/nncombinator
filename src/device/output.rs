@@ -10,7 +10,7 @@ use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
 use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, Memory, ToCuda};
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, LossLinearByCanonicalLink, LossLinearByCanonicalLinkArgs};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
-use crate::error::{TrainingError, TypeConvertError};
+use crate::error::{TrainingError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;

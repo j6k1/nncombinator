@@ -398,10 +398,10 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
                                      const size_t input_len, const size_t output_len, const size_t batch_size) {
     extern __shared__ char smem[];
 
-    T *sdata_sum = reinterpret_cast<T*>(&smem[0]);
-    T *sdata_c = reinterpret_cast<T*>(&smem[BLOCK_SHARED_SMALL * sizeof(T)]);
-
     if (blockIdx.x < output_len * batch_size && blockIdx.z * blockDim.x + threadIdx.x < input_len) {
+        T *sdata_sum = reinterpret_cast<T*>(&smem[0]);
+        T *sdata_c = reinterpret_cast<T*>(&smem[BLOCK_SHARED_SMALL * sizeof(T)]);
+
         size_t batch_index = blockIdx.x / output_len;
 
         size_t tid = threadIdx.x;
@@ -424,19 +424,21 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
 
         acc = input[i + j] * units[j * output_len + out_index] - c;
 
+        T dc = 0.0;
+        T dacc = 0.0;
+        T y;
+        T t;
+
         /**
          * Kahan summation algorithm
          */
         {
-            T dc = 0.0;
-            T dacc = 0.0;
-
             dc = __shfl_down_sync(0xffffffff,c,16);
             dacc = __shfl_down_sync(0xffffffff,acc,16);
 
             {
-                const T y = dacc - c - dc;
-                const T t = acc + y;
+                y = dacc - c - dc;
+                t = acc + y;
                 c = (t - acc) - y;
                 acc = t;
             }
@@ -445,8 +447,8 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dacc = __shfl_down_sync(0xffffffff,acc,8);
 
             {
-                const T y = dacc - c - dc;
-                const T t = acc + y;
+                y = dacc - c - dc;
+                t = acc + y;
                 c = (t - acc) - y;
                 acc = t;
             }
@@ -455,8 +457,8 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dacc = __shfl_down_sync(0xffffffff,acc,4);
 
             {
-                const T y = dacc - c - dc;
-                const T t = acc + y;
+                y = dacc - c - dc;
+                t = acc + y;
                 c = (t - acc) - y;
                 acc = t;
             }
@@ -465,8 +467,8 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dacc = __shfl_down_sync(0xffffffff,acc,2);
 
             {
-                const T y = dacc - c - dc;
-                const T t = acc + y;
+                y = dacc - c - dc;
+                t = acc + y;
                 c = (t - acc) - y;
                 acc = t;
             }
@@ -475,8 +477,8 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dacc = __shfl_down_sync(0xffffffff,acc,1);
 
             {
-                const T y = dacc - c - dc;
-                const T t = acc + y;
+                y = dacc - c - dc;
+                t = acc + y;
                 c = (t - acc) - y;
                 acc = t;
             }
@@ -492,15 +494,15 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             c = sdata_c[tid];
             acc = sdata_sum[tid];
 
-            T dc = 0.0;
-            T dacc = 0.0;
+            dc = 0.0;
+            dacc = 0.0;
 
             dc = __shfl_down_sync(0xffffffff,c,16);
             dacc = __shfl_down_sync(0xffffffff,acc,16);
 
             {
-                const T y = dacc - c - dc;
-                const T t = acc + y;
+                y = dacc - c - dc;
+                t = acc + y;
                 c = (t - acc) - y;
                 acc = t;
             }
@@ -509,8 +511,8 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dacc = __shfl_down_sync(0xffffffff,acc,8);
 
             {
-                const T y = dacc - c - dc;
-                const T t = acc + y;
+                y = dacc - c - dc;
+                t = acc + y;
                 c = (t - acc) - y;
                 acc = t;
             }
@@ -519,8 +521,8 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dacc = __shfl_down_sync(0xffffffff,acc,4);
 
             {
-                const T y = dacc - c - dc;
-                const T t = acc + y;
+                y = dacc - c - dc;
+                t = acc + y;
                 c = (t - acc) - y;
                 acc = t;
             }
@@ -529,8 +531,8 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dacc = __shfl_down_sync(0xffffffff,acc,2);
 
             {
-                const T y = dacc - c - dc;
-                const T t = acc + y;
+                y = dacc - c - dc;
+                t = acc + y;
                 c = (t - acc) - y;
                 acc = t;
             }
@@ -539,16 +541,16 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
             dacc = __shfl_down_sync(0xffffffff,acc,1);
 
             {
-                const T y = dacc - c - dc;
-                const T t = acc + y;
+                y = dacc - c - dc;
+                t = acc + y;
                 c = (t - acc) - y;
                 acc = t;
             }
         }
 
         if (tid == 0) {
-            const T y = bias[out_index] - c;
-            const T t = acc + y;
+            y = bias[out_index] - c;
+            t = acc + y;
             atomicAdd(&output[blockIdx.x], t);
         }
     }

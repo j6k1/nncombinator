@@ -1509,11 +1509,11 @@ impl<U,T> CudaVec<U,T>
     /// This function may return the following errors
     /// * [`CudaError`]
     pub fn with_initializer<I: FnMut() -> U>(size: usize, memory_pool:&Arc<Mutex<MemoryPool>>, initializer: I) -> Result<CudaVec<U,T>, CudaError> {
-        let mut ptr = CudaMemoryPoolPtr::new(size,memory_pool)?;
+        let mut ptr = CudaMemoryPoolPtr::new(size * T::size(),memory_pool)?;
 
         let mut src = Vec::with_capacity(size * T::size());
 
-        src.resize_with(size,initializer);
+        src.resize_with(size * T::size(),initializer);
 
         ptr.memcpy(src.into_boxed_slice().as_ptr(),size * T::size())?;
 

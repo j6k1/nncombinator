@@ -1490,7 +1490,7 @@ impl<U,T> CudaVec<U,T>
     /// This function may return the following errors
     /// * [`CudaError`]
     pub fn new(size: usize, memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CudaVec<U,T>, CudaError> {
-        let ptr = CudaMemoryPoolPtr::new(size,memory_pool)?;
+        let ptr = CudaMemoryPoolPtr::new(size * T::size(), memory_pool)?;
 
         Ok(CudaVec {
             len:size,

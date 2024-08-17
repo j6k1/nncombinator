@@ -67,7 +67,7 @@ __device__ void relu_forward(const T *input, T *output, const size_t units_len, 
     if (index < units_len && batch_index < batch_len) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        output = _fmax(input[i],0.0);
+        output[i] = _fmax(input[i],0.0);
     }
 }
 template<typename T>
@@ -225,7 +225,7 @@ __device__ void relu_backward(const T *o, const T *u, const T *loss, T *output, 
         if (!(u[i] > 0.0)) {
             output[i] = 0.0;
         } else {
-            output = loss[i];
+            output[i] = loss[i];
         }
     }
 }

@@ -126,7 +126,7 @@ impl<U,P,I,PI,CI,D> AskDiffInput<U> for BridgeLayer<U,P,I,PI,CI,D>
           I: Debug + Send + Sync {
     type DiffInput = P::DiffInput;
 
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
         self.parent.ask_diff_input(stack)
     }
 }

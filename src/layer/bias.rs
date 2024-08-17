@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::cuda::{CudaTensor1dPtr, Memory};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::bias::DeviceBias;
-use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
+use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
@@ -353,7 +353,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> AskDiffInput<U> for BiasLayer<U,C,P,OP,D,I,P
           Self: PreTrain<U,PreOutput=PI> {
     type DiffInput = P::DiffInput;
 
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
         stack.map_remaining(|s| self.parent.ask_diff_input(s))
     }
 }

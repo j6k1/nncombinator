@@ -11,7 +11,7 @@ use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLu, SoftMax};
 use nncombinator::arr::Arr;
 use nncombinator::device::{DeviceCpu, DeviceGpu};
-use nncombinator::layer::{AddLayer, AddLayerTrain, BatchForward, BatchTrain, ForwardAll};
+use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll};
 use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::batchnormalization::{BatchNormalizationLayerBuilder};
 use nncombinator::layer::input::InputLayer;
@@ -19,7 +19,7 @@ use nncombinator::layer::linear::LinearLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::optimizer::{MomentumSGDBuilder};
-use crate::common::SHARED_MEMORY_POOL;
+use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
 
 #[test]
 fn test_mnist_batch_norm() {
@@ -703,36 +703,134 @@ fn test_mnist_batch_norm_for_gpu() {
     let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.004);
 
     let mut net = net.add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         let rnd = rnd.clone();
         LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
             move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
             move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,10>::new().build(l,&device,
             move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         LinearOutputLayer::new(l,&device)
     });
+
+    assert_forward_all(&net);
+    assert_pre_train(&net);
+    assert_backward_all(&net);
+    assert_update_weight(&net);
+    assert_batch_forward(&net);
+    assert_batch_pre_train(&net);
+    assert_batch_backward(&net);
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
 

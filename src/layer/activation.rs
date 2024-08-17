@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use crate::{Cons, Stack};
 use crate::device::activation::DeviceActivation;
 use crate::device::Device;
-use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
+use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
@@ -160,7 +160,7 @@ impl<U,P,A,I,PI,D,const N:usize> AskDiffInput<U> for ActivationLayer<U,P,A,I,PI,
           I: Debug + Send + Sync {
     type DiffInput = P::DiffInput;
 
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
         stack.map_remaining(|s| self.parent.ask_diff_input(s))
     }
 }

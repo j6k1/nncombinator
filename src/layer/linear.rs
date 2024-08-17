@@ -438,7 +438,7 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U
     }
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> AskDiffInput<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
-    where P: PreTrain<U,OutStack=<<Self as PreTrain<U>>::OutStack as Stack>::Remaining,PreOutput=<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output> +
+    where P: PreTrain<U,OutStack=<<Self as PreTrain<U>>::OutStack as Stack>::Remaining> +
              ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + Loss<U> +
              AskDiffInput<U>,
@@ -447,10 +447,10 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> AskDiffInput<U> for Linea
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
-          Self: PreTrain<U,PreOutput=PI> {
+          Self: PreTrain<U> {
     type DiffInput = P::DiffInput;
 
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
         stack.map_remaining(|s| self.parent.ask_diff_input(s))
     }
 }
@@ -663,7 +663,7 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize,
           <PI as BatchDataType>::Type: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TrainingError> + Debug,
+          <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TypeConvertError> + Debug,
           PI: Debug + From<<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::LossOutput> + BatchDataType,
           DeviceGpu<U>: Device<U> + DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type>,
           <DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::BatchOutput: Debug,
@@ -734,7 +734,7 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,C
           PI: Debug + From<<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::LossOutput> + BatchDataType,
           OP: Optimizer<U,DeviceGpu<U>>,
           <PI as BatchDataType>::Type: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TrainingError> + Debug,
+          <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TypeConvertError> + Debug,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize,
           <PI as BatchDataType>::Type: TryFrom<<<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::BatchLossOutput as IntoConverter>::Converter> + Debug,
@@ -1210,7 +1210,7 @@ impl<U,P,OP,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<
           for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor2dPtr<U,NI,NO>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor1dPtr<U,NO>>,
           for<'a> &'a mut <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a mut CudaTensor2dPtr<U,NI,NO>>,
-          Self: ForwardAll + PreTrain<U,OutStack=Cons<<P as PreTrain<U>>::OutStack,Arr<U,NO>>> {
+          Self: ForwardAll + PreTrain<U,OutStack=Cons<<P as PreTrain<U>>::OutStack,CudaTensor1dPtr<U,NO>>> {
     type LossInput = <DeviceGpu<U> as DeviceDiffLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,NI,NO>>::Output;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
@@ -1276,19 +1276,37 @@ impl<U,P,OP,I,const NI:usize,const NO:usize> UpdateWeight<U> for DiffLinearLayer
         Ok(self.parent.update_weight(s)?)
     }
 }
-impl<U,C,BC,P,OP,D,I,const NI:usize,const NO:usize> AskDiffInput<U> for DiffLinearLayer<U,C,BC,P,OP,D,I,NI,NO>
+impl<U,C,BC,P,OP,I,const NI:usize,const NO:usize> AskDiffInput<U> for DiffLinearLayer<U,C,BC,P,OP,DeviceCpu<U>,I,NI,NO>
     where P: BackwardAll<U,LossInput=()> +
              ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              PreTrain<U,PreOutput=DiffInput<DiffArr<U,NI>,U,NI,NO>> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO>,
+          DeviceCpu<U>: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,D>,
+          OP: Optimizer<U,DeviceCpu<U>>,
           Self: PreTrain<U,OutStack=Cons<<P as PreTrain<U>>::OutStack,Arr<U,NO>>> {
     type DiffInput = Arr<U,NO>;
 
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
-        stack.map(|o| o.clone())
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
+        Ok(stack.map(|o| o.clone()))
+    }
+}
+impl<U,C,BC,P,OP,I,const NI:usize,const NO:usize> AskDiffInput<U> for DiffLinearLayer<U,C,BC,P,OP,DeviceGpu<U>,I,NI,NO>
+    where P: BackwardAll<U,LossInput=()> +
+             ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
+             PreTrain<U,PreOutput=DiffInput<DiffArr<U,NI>,U,NI,NO>> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          DeviceGpu<U>: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO>,
+          I: Debug + Send + Sync,
+          OP: Optimizer<U,DeviceGpu<U>>,
+          Arr<U,NO>: TryFrom<Vec<U>,Error=TypeConvertError>,
+          Self: PreTrain<U,OutStack=Cons<<P as PreTrain<U>>::OutStack,CudaTensor1dPtr<U,NO>>> {
+    type DiffInput = Arr<U,NO>;
+
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
+        Ok(stack.map(|o| {
+            o.read_to_vec().map(|r| r.try_into())
+        })??)
     }
 }
 impl<U,C,BC,P,OP,D,I,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<U,C,BC,P,OP,D,I,NI,NO>

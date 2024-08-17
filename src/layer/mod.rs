@@ -4,7 +4,8 @@ use std::fmt::Debug;
 use crate::arr::*;
 use crate::device::*;
 use crate::{Stack};
-use crate::error::{DeviceError, EvaluateError, TrainingError};
+use crate::cuda::ToCuda;
+use crate::error::{DeviceError, EvaluateError, TrainingError, TypeConvertError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 
@@ -31,6 +32,27 @@ pub trait BatchDataType {
 }
 impl BatchDataType for () {
     type Type = ();
+}
+
+impl<T,U,const NI:usize,const NO:usize> BatchDataType for DiffInput<T,U,NI,NO>
+    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
+    type Type = Vec<DiffInput<T,U,NI,NO>>;
+}
+impl<T,U,const NI:usize,const NO:usize> ToCuda<U> for DiffInput<T,U,NI,NO>
+    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
+    type Output = Self;
+
+    fn to_cuda(self, _: &DeviceGpu<U>) -> Result<Self::Output, TypeConvertError> {
+        Ok(self)
+    }
+}
+impl<T,U,const NI:usize,const NO:usize> ToCuda<U> for Vec<DiffInput<T,U,NI,NO>>
+    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
+    type Output = Self;
+
+    fn to_cuda(self, _: &DeviceGpu<U>) -> Result<Self::Output, TypeConvertError> {
+        Ok(self)
+    }
 }
 /// Trait that defines the ability to get the size of a batch
 pub trait BatchSize {
@@ -169,7 +191,7 @@ pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
     /// Data inquiry for creating difference information
     /// # Arguments
     /// * `stack` - Stack to store calculation results at upper layers
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput;
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError>;
 }
 /// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForwardBase: ForwardAll {

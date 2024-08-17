@@ -29,15 +29,16 @@ use nncombinator::activation::{ReLu, Sigmoid, SoftMax, Swish, Tanh};
 use nncombinator::arr::{Arr, DiffArr};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
 use nncombinator::error::{TrainingError, UnsupportedOperationError};
-use nncombinator::layer::{AddLayer, AddLayerTrain, AskDiffInput, BatchForward, BatchTrain, DiffInput, ForwardAll, ForwardDiff, Train};
+use nncombinator::layer::{AddLayer, AskDiffInput, BatchForward, BatchTrain, DiffInput, ForwardAll, ForwardDiff, Train};
 use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::input::InputLayer;
 use nncombinator::layer::linear::{DiffLinearLayerBuilder, LinearLayerBuilder};
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{AdagradBuilder, MomentumSGDBuilder, SGDBuilder};
+use nncombinator::cuda::Memory;
 
-use crate::common::SHARED_MEMORY_POOL;
+use crate::common::{assert_ask_diff_input, assert_backward_all, assert_forward_all, assert_foward_diff, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
 
 #[test]
 fn test_mnist_for_cpu() {
@@ -1185,24 +1186,70 @@ fn test_weather_by_forward_diff() {
     let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_foward_diff(&l);
+
         let rnd = rnd.clone();
         DiffLinearLayerBuilder::<14,100>::new().build(l,&device,
             move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_ask_diff_input(&l);
+        assert_foward_diff(&l);
+
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_ask_diff_input(&l);
+        assert_foward_diff(&l);
+
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
             move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_ask_diff_input(&l);
+        assert_foward_diff(&l);
+
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_ask_diff_input(&l);
+        assert_foward_diff(&l);
+
         LinearOutputLayer::new(l,&device)
     });
+
+    assert_forward_all(&net);
+    assert_pre_train(&net);
+    assert_backward_all(&net);
+    assert_update_weight(&net);
+    assert_ask_diff_input(&net);
+    assert_foward_diff(&net);
 
     let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
 
@@ -1331,7 +1378,7 @@ fn test_weather_by_forward_diff() {
 
             prev = input.clone();
 
-            let o = net.ask_diff_input(&s);
+            let o = net.ask_diff_input(&s).unwrap();
 
             Some(net.forward_diff(DiffInput::Diff(d,o)).unwrap())
         } else {
@@ -1396,7 +1443,7 @@ fn test_diff_learn_error() {
 
     expected[0] = 1.;
 
-    let o = net.ask_diff_input(&s);
+    let o = net.ask_diff_input(&s).unwrap();
     let d = DiffArr::new();
 
     match net.train(expected, DiffInput::Diff(d,o), &lossf) {
@@ -1427,24 +1474,70 @@ fn test_diff_learn_error_for_gpu() {
     let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_foward_diff(&l);
+
         let rnd = rnd.clone();
         DiffLinearLayerBuilder::<14,100>::new().build(l,&device,
             move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_ask_diff_input(&l);
+        assert_foward_diff(&l);
+
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_ask_diff_input(&l);
+        assert_foward_diff(&l);
+
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
             move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_ask_diff_input(&l);
+        assert_foward_diff(&l);
+
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_ask_diff_input(&l);
+        assert_foward_diff(&l);
+
         LinearOutputLayer::new(l,&device)
     });
+
+    assert_forward_all(&net);
+    assert_pre_train(&net);
+    assert_backward_all(&net);
+    assert_update_weight(&net);
+    assert_ask_diff_input(&net);
+    assert_foward_diff(&net);
 
     let input = Arr::new();
 
@@ -1456,7 +1549,7 @@ fn test_diff_learn_error_for_gpu() {
 
     expected[0] = 1.;
 
-    let o = net.ask_diff_input(&s);
+    let o = net.ask_diff_input(&s).unwrap();
     let d = DiffArr::new();
 
     match net.train(expected, DiffInput::Diff(d,o), &lossf) {
@@ -2789,7 +2882,7 @@ fn test_weather_by_forward_diff_for_gpu() {
 
             prev = input.clone();
 
-            let o = net.ask_diff_input(&s);
+            let o = net.ask_diff_input(&s).unwrap();
 
             Some(net.forward_diff(DiffInput::Diff(d,o)).unwrap())
         } else {
@@ -2798,7 +2891,7 @@ fn test_weather_by_forward_diff_for_gpu() {
             Some(net.forward_diff(DiffInput::NotDiff(input)).unwrap())
         };
 
-        let r = s.as_ref().map(|r| r.1[0]).unwrap();
+        let r = s.as_ref().map(|r| r.1.read_to_vec().unwrap()[0]).unwrap();
 
         if (t && r >= 0.5) || !t && r < 0.5 {
             correct_answers += 1;
@@ -3354,7 +3447,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
 
             prev = input.clone();
 
-            let o = net.ask_diff_input(&s);
+            let o = net.ask_diff_input(&s).unwrap();
 
             Some(net.forward_diff(DiffInput::Diff(d,o)).unwrap())
         } else {
@@ -3363,7 +3456,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
             Some(net.forward_diff(DiffInput::NotDiff(input)).unwrap())
         };
 
-        let r = s.as_ref().map(|r| r.1[0]).unwrap();
+        let r = s.as_ref().map(|r| r.1.read_to_vec().unwrap()[0]).unwrap();
 
         if (t && r >= 0.5) || !t && r < 0.5 {
             correct_answers += 1;

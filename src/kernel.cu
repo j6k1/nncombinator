@@ -1,4 +1,9 @@
 #include<cmath>
+#include<mma.h>
+#include<cuda.h>
+#include<cuda_runtime.h>
+
+using namespace nvcuda;
 
 __device__ float _exp(float x) {
     return __expf(x);
@@ -40,8 +45,26 @@ __device__ double _fma(double x, double y, double z) {
     return fma(x,y,z);
 }
 
+__device__ half _to_half(float x) {
+    return __float2half(x);
+}
+
+__device__ half _to_half(double x) {
+    return __double2half(x);
+}
+
+__device__ size_t calc_index(size_t x, size_t y, size_t leading_dimension) {
+    return y * leading_dimension + x;
+}
+
+__device__ size_t calc_transposed_index(size_t x, size_t y, size_t leading_dimension) {
+    return x * leading_dimension + y;
+}
+
 #define BLOCK_SHARED 1024
 #define BLOCK_SHARED_SMALL 32
+#define TILE_SIZE 16
+#define TILE_SIZE_2D 256
 template<typename T>
 
 __device__ void sigmoid_forward(const T *input, T *output, const size_t units_len, const size_t batch_len) {
@@ -561,53 +584,59 @@ template<typename T>
 __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
                                      const size_t input_len, const size_t output_len, const size_t batch_size) {
     extern __shared__ char smem[];
-    T *sdata = reinterpret_cast<T*>(smem);
 
-    if (blockIdx.x < input_len * batch_size && blockDim.x * blockIdx.z + threadIdx.x < output_len) {
-        size_t batch_index = blockIdx.x / input_len;
+    float *sdata_c = reinterpret_cast<float*>(&smem[0]);
+    half *sdata_a = reinterpret_cast<half*>(&smem[TILE_SIZE_2D * sizeof(float)]);
+    half *sdata_b = reinterpret_cast<half*>(&smem[TILE_SIZE_2D * sizeof(float) + TILE_SIZE_2D * sizeof(half)]);
 
-        size_t tid = threadIdx.x;
-        size_t tid_warp = tid % 32;
-        size_t input_index = blockIdx.x - input_len * batch_index;
-        size_t i = batch_index * output_len;
-        size_t j = tid;
-        size_t distance = blockDim.x;
+    wmma::fragment<wmma::matrix_a, TILE_SIZE, TILE_SIZE, TILE_SIZE, half, wmma::row_major> a_frag;
+    wmma::fragment<wmma::matrix_b, TILE_SIZE, TILE_SIZE, TILE_SIZE, half, wmma::row_major> b_frag;
+    wmma::fragment<wmma::accumulator, TILE_SIZE, TILE_SIZE, TILE_SIZE, float> c_frag;
 
-        if (tid < 32) {
-            sdata[tid] = (T)0;
+    size_t tx = threadIdx.x;
+    size_t ty = threadIdx.y;
+    size_t bx = blockIdx.x * TILE_SIZE;
+    size_t by = blockIdx.y * TILE_SIZE;
+
+    if (ty < 2) {
+        wmma::fill_fragment(c_frag, 0.0f);
+    }
+
+    __syncthreads();
+
+    for (int k = 0; k < output_len; k += TILE_SIZE) {
+        if (k+tx < output_len && by + ty < batch_size) {
+            sdata_a[ty * TILE_SIZE + tx] = _to_half(loss[calc_index(k+tx,by+ty,output_len)]);
+        } else {
+            sdata_a[ty * TILE_SIZE + tx] = __float2half(0.0f);
         }
+
+        if (k+ty < output_len && bx + tx < input_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(units[calc_transposed_index(bx+tx,k+ty,output_len)]);
+        } else {
+            sdata_b[ty * TILE_SIZE + tx] = __float2half(0.0f);
+        }
+
         __syncthreads();
 
-        T acc = 0.0;
+        if (ty < 2) {
+            wmma::load_matrix_sync(a_frag, sdata_a, TILE_SIZE);
+            wmma::load_matrix_sync(b_frag, sdata_b, TILE_SIZE);
 
-        j += distance * blockIdx.z;
-
-        acc += loss[i + j] * units[input_index * output_len + j];
-
-        acc += __shfl_down_sync(0xffffffff,acc,16);
-        acc += __shfl_down_sync(0xffffffff,acc,8);
-        acc += __shfl_down_sync(0xffffffff,acc,4);
-        acc += __shfl_down_sync(0xffffffff,acc,2);
-        acc += __shfl_down_sync(0xffffffff,acc,1);
-
-        if (tid_warp == 0) {
-            sdata[tid / 32] = acc;
+            wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
         }
+
         __syncthreads();
+    }
 
-        if (tid < 32) {
-            acc = sdata[tid];
+    if (ty < 2) {
+        wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
+    }
 
-            acc += __shfl_down_sync(0xffffffff,acc,16);
-            acc += __shfl_down_sync(0xffffffff,acc,8);
-            acc += __shfl_down_sync(0xffffffff,acc,4);
-            acc += __shfl_down_sync(0xffffffff,acc,2);
-            acc += __shfl_down_sync(0xffffffff,acc,1);
-        }
+    __syncthreads();
 
-        if (tid == 0) {
-            atomicAdd(&output[blockIdx.x],acc);
-        }
+    if (tx + bx < input_len && ty + by < batch_size) {
+        output[calc_index(tx+bx,ty+by,input_len)] = (T)sdata_c[ty * TILE_SIZE + tx];
     }
 }
 

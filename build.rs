@@ -31,7 +31,7 @@ fn main() {
 				"--prec-div=true",
 				"--fmad=true",
 				"-cudart=shared",
-				"-arch=sm_60",
+				"-arch=sm_70",
 				"src/kernel.cu",
 				// Output static library (.lib)
 				"-lib",
@@ -59,8 +59,6 @@ fn main() {
 			.flag("arch=compute_80,code=sm_80")
 			.flag("-gencode")
 			.flag("arch=compute_72,code=sm_72")
-			.flag("-gencode")
-			.flag("arch=compute_61,code=sm_61")
 			.file("src/kernel.cu")
 			.out_dir(&out_dir)
 			.compile("libkernel.a");

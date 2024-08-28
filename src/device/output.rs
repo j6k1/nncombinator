@@ -230,12 +230,14 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U>
         ))?;
 
         let loss = actual.par_iter().zip(exptected.par_iter()).map(|(a, e)| {
-            a.par_iter().cloned()
-                .zip(e.par_iter().cloned())
-                .reduce(|| (U::default(), U::default()), |(sum, d), (a, e)| {
-                    (sum + lossf.apply(a, e), d)
+            a.iter().cloned()
+                .zip(e.iter().cloned())
+                .fold(U::default(), |sum, (a, e)| {
+                    sum + lossf.apply(a, e)
                 })
-        }).map(|(sum, _)| sum).reduce(|| U::default(), |sum, l| sum + l);
+        }).fold(|| U::default(), | acc, s | {
+            acc + s
+        }).reduce(|| U::default(), | acc, s | acc + s);
 
         U::from_f64(f64::from(loss) / n).ok_or(TrainingError::TypeCastError(
             String::from("An error occurred in the type conversion of the total loss.")

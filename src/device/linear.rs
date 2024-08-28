@@ -224,7 +224,7 @@ impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,N
     fn backward_linear<'a>(&self, units: &CudaTensor2dPtr<U,NI,NO>, input: &'a Self::Output)
         -> Result<Self::LossOutput, TrainingError> {
         let input_ptr = input.into();
-        let output = CudaTensor1dPtr::<U,NI>::with_initializer(&self.memory_pool,Default::default)?;
+        let output = CudaTensor1dPtr::<U,NI>::new(&self.memory_pool)?;
 
         let mut args = BackwardLinearArgs::new(&input_ptr,
                                                     units,
@@ -232,8 +232,9 @@ impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,N
 
         let mut kernel = BackwardLinear::<U,NI,NO>::new();
 
-        kernel.launch(dim3 { x: NI as c_uint, y: 1, z: (NO as c_uint + 1023) / 1024 },
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
+        kernel.launch(dim3 { x: (NI as c_uint + 15) / 16, y: 1, z: 1 },
+                      dim3 { x: 16, y: 16, z: 1 },&mut args,
+                      2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>())?;
 
         Ok(args.output.into())
     }
@@ -291,7 +292,7 @@ impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,N
 
         let input_ptr = input.try_into()?;
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,NI>>::with_initializer(n,&self.memory_pool,Default::default)?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,NI>>::new(n,&self.memory_pool)?;
 
         let mut args = BackwardLinearBatchArgs::new(&input_ptr,
                                                     units,
@@ -300,8 +301,9 @@ impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,N
 
         let mut kernel = BackwardLinearBatch::<U,NI,NO>::new();
 
-        kernel.launch(dim3 { x: (NI * n) as c_uint, y: 1, z: (NO as c_uint + 1023) / 1024 },
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
+        kernel.launch(dim3 { x: (NI as c_uint + 15) / 16, y: (n as c_uint + 15) / 16, z: 1 },
+                      dim3 { x: 16, y: 16, z: 1 },&mut args,
+                      2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>())?;
 
         Ok(args.output.into_converter().try_into()?)
     }

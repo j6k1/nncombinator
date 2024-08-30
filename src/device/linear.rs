@@ -103,27 +103,30 @@ pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
 }
 impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,I,NI,NO> for DeviceCpu<U>
     where U: UnitValue<U>,
-          I: BatchDataType,
+          I: BatchDataType + From<Arr<U,NI>> + Debug + 'static,
+          <I as BatchDataType>::Type: Debug + 'static,
+          <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          SerializedVec<U,Arr<U,NI>>: IntoConverter,
           for<'a> ArrView<'a,U,NI>: From<&'a I>,
           for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           Self: DeviceReduce<SerializedVec<U,Arr<U,NO>>,Arr<U,NO>,U,NO> {
     type Output = Arr<U,NO>;
     type BatchOutput = <Arr<U,NO> as BatchDataType>::Type;
-    type LossOutput = Arr<U,NI>;
-    type BatchLossOutput = SerializedVec<U,Arr<U,NI>>;
+    type LossOutput = I;
+    type BatchLossOutput = <I as BatchDataType>::Type;
     #[inline]
     fn forward_linear<'a>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: &'a I) -> Result<Arr<U, NO>, EvaluateError> {
         Ok(ArrView::<'a,U,NI>::from(input).product(units) + bias)
     }
 
     #[inline]
-    fn backward_linear<'a>(&self, units: &Arr2<U,NI,NO>, input: &'a Arr<U,NO>) -> Result<Arr<U, NI>, TrainingError> {
-        Ok(units.iter().map(|u| {
+    fn backward_linear<'a>(&self, units: &Arr2<U,NI,NO>, input: &'a Arr<U,NO>) -> Result<I, TrainingError> {
+        Ok(Arr::<U,NI>::try_from(units.iter().map(|u| {
             u.iter().zip(input.iter())
                 .map(|(&w,&l)| w * l).fold(U::default(), |acc,g|{
                 acc + g
             })
-        }).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))?)
+        }).collect::<Vec<U>>()).map_err(|e| TrainingError::from(e))?.into())
     }
 
     #[inline]
@@ -138,15 +141,15 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
     }
     #[inline]
     fn batch_backward_linear<'a>(&self, units: &Arr2<U,NI,NO>, input: &'a SerializedVec<U,Arr<U,NO>>)
-                             -> Result<SerializedVec<U,Arr<U,NI>>, TrainingError> {
-        Ok(input.par_iter().map(|l| {
+                             -> Result<<I as BatchDataType>::Type, TrainingError> {
+        Ok(SerializedVec::<U,Arr<U,NI>>::from(input.par_iter().map(|l| {
             units.iter().map(|u| {
                 u.iter().zip(l.iter())
                     .map(|(&w,&l)| w * l).fold(U::default(), |acc,g|{
                     acc + g
                 })
             }).collect::<Vec<U>>().try_into()
-        }).collect::<Result<Vec<Arr<U,NI>>,_>>()?.into())
+        }).collect::<Result<Vec<Arr<U,NI>>,_>>()?).into_converter().try_into()?)
     }
 
     #[inline]
@@ -184,8 +187,10 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
 }
 impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,I,NI,NO> for DeviceGpu<U>
     where U: DataTypeInfo + UnitValue<U>,
-          I: BatchDataType,
-          <I as BatchDataType>::Type: BatchSize,
+          I: BatchDataType + From<CudaTensor1dPtr<U,NI>> + Debug + 'static,
+          <I as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          CudaVec<U,CudaTensor1dPtr<U,NI>>: IntoConverter,
           Self: DeviceReduce<CudaVec<U,CudaTensor1dPtr<U,NO>>,CudaTensor1dPtr<U,NO>,U,NO>,
           for<'a> CudaTensor1dPtrView<'a,U,NI>: From<&'a I>,
           for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
@@ -198,8 +203,8 @@ impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,N
           for<'b> ReduceLinearBatch::<'b,U,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,U,NO>> {
     type Output = CudaTensor1dPtr<U,NO>;
     type BatchOutput = CudaVec<U,CudaTensor1dPtr<U,NO>>;
-    type LossOutput = CudaTensor1dPtr<U,NI>;
-    type BatchLossOutput = CudaVec<U,CudaTensor1dPtr<U,NI>>;
+    type LossOutput = I;
+    type BatchLossOutput = <I as BatchDataType>::Type;
     #[inline]
     fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<U,NO>, units: &CudaTensor2dPtr<U,NI,NO>, input: &'a I)
         -> Result<CudaTensor1dPtr<U,NO>, EvaluateError> {
@@ -223,7 +228,7 @@ impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,N
 
     #[inline]
     fn backward_linear<'a>(&self, units: &CudaTensor2dPtr<U,NI,NO>, input: &'a Self::Output)
-        -> Result<Self::LossOutput, TrainingError> {
+        -> Result<I, TrainingError> {
         let input_ptr = input.into();
         let output = CudaTensor1dPtr::<U,NI>::new(&self.memory_pool)?;
 
@@ -289,7 +294,7 @@ impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,N
 
     #[inline]
     fn batch_backward_linear<'a>(&self, units: &CudaTensor2dPtr<U, NI, NO>, input: &'a Self::BatchOutput)
-        -> Result<Self::BatchLossOutput, TrainingError> {
+        -> Result<<I as BatchDataType>::Type, TrainingError> {
         let n = input.size();
 
         let input_ptr = input.try_into()?;

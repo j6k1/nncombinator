@@ -5,7 +5,7 @@ use crate::arr::*;
 use crate::device::*;
 use crate::{Stack};
 use crate::cuda::ToCuda;
-use crate::error::{DeviceError, EvaluateError, TrainingError, TypeConvertError};
+use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 
@@ -294,22 +294,8 @@ pub trait AddLayer: ForwardAll where Self: Sized {
     /// * `f` - Callback that takes itself and returns an object with an internally generated layer added
     fn add_layer<C,F>(self,f:F) -> C where C: ForwardAll, F: FnOnce(Self) -> C;
 }
-/// Trait that defines the ability to add a layer with learning capabilities to a neural network.
-pub trait AddLayerTrain<U,L>: PreTrain<U>
-    where Self: Sized, U: UnitValue<U> {
-    /// Adding Layers
-    /// # Arguments
-    /// * `f` - Callback that takes itself and returns an object with an internally generated layer added
-    fn add_layer_train<C,F>(self,f:F) -> C where C: Train<U,L>, F: FnOnce(Self) -> C;
-}
 impl<T> AddLayer for T where T: ForwardAll + Sized {
     fn add_layer<C, F>(self, f: F) -> C where C: ForwardAll, F: FnOnce(Self) -> C {
-        f(self)
-    }
-}
-impl<T,U,L> AddLayerTrain<U,L> for T
-    where T: PreTrain<U> + Sized, U: UnitValue<U> {
-    fn add_layer_train<C,F>(self, f: F) -> C where C: Train<U,L>, F: FnOnce(Self) -> C {
         f(self)
     }
 }
@@ -325,27 +311,8 @@ pub trait TryAddLayer: ForwardAll where Self: Sized {
     /// * [`DeviceError`]
     fn try_add_layer<C,F,E>(self,f:F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E>;
 }
-/// Trait that defines a function that seeks to add a learnable layer to a neural network
-pub trait TryAddLayerTrain<U,L>: PreTrain<U>
-    where Self: Sized, U: UnitValue<U>, L: LossFunction<U> {
-    /// Adding Layers
-    /// # Arguments
-    /// * `f` - Callback that takes itself and returns an object of type Result with an internally generated layer added
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`DeviceError`]
-    fn try_add_layer_train<C,F>(self,f:F) -> Result<C,DeviceError> where C: Train<U,L>, F: FnOnce(Self) -> Result<C,DeviceError>;
-}
 impl<T> TryAddLayer for T where T: ForwardAll + Sized {
     fn try_add_layer<C,F,E>(self, f: F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E> {
-        f(self)
-    }
-}
-impl<T,U,L> TryAddLayerTrain<U,L> for T
-    where T: PreTrain<U> + Sized, U: UnitValue<U>, L: LossFunction<U> {
-    fn try_add_layer_train<C, F>(self, f: F) -> Result<C,DeviceError> where C: Train<U,L>, F: FnOnce(Self) -> Result<C,DeviceError> {
         f(self)
     }
 }

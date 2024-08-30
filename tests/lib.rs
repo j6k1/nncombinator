@@ -19,6 +19,7 @@ use std::io::{BufRead, BufReader};
 use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::Instant;
 use csv::Reader;
 use mnist::{Mnist, MnistBuilder};
 use rand::{prelude, Rng, SeedableRng};
@@ -781,6 +782,8 @@ fn test_fashion_mnist_for_gpu() {
 
     let max_epochs = 10;
 
+    let start_time = Instant::now();
+
     for _ in 0..max_epochs {
         let mut total_loss = 0.;
         let mut count = 0;
@@ -801,12 +804,18 @@ fn test_fashion_mnist_for_gpu() {
 
             count += 1;
 
-            let _ = net.batch_forward(batch_data.1.into()).unwrap();
+            //let _ = net.batch_forward(batch_data.1.into()).unwrap();
         }
 
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss / count as f32);
     }
+
+    let elapsed = start_time.elapsed();
+
+    let elapsed = elapsed.as_secs() as u64 * 1000 + elapsed.subsec_millis() as u64;
+
+    println!("processing time is {} secs.",elapsed as f64 / 1000.);
 
     let mut tests:Vec<(Vec<f32>,usize)> = Vec::new();
 

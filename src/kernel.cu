@@ -421,161 +421,58 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
                                      const size_t input_len, const size_t output_len, const size_t batch_size) {
     extern __shared__ char smem[];
 
-    if (blockIdx.x < output_len * batch_size && blockIdx.z * blockDim.x + threadIdx.x < input_len) {
-        T *sdata_sum = reinterpret_cast<T*>(&smem[0]);
-        T *sdata_c = reinterpret_cast<T*>(&smem[BLOCK_SHARED_SMALL * sizeof(T)]);
+    float *sdata_c = reinterpret_cast<float*>(&smem[0]);
+    half *sdata_a = reinterpret_cast<half*>(&smem[TILE_SIZE_2D * sizeof(float)]);
+    half *sdata_b = reinterpret_cast<half*>(&smem[TILE_SIZE_2D * sizeof(float) + TILE_SIZE_2D * sizeof(half)]);
 
-        size_t batch_index = blockIdx.x / output_len;
+    wmma::fragment<wmma::matrix_a, TILE_SIZE, TILE_SIZE, TILE_SIZE, half, wmma::row_major> a_frag;
+    wmma::fragment<wmma::matrix_b, TILE_SIZE, TILE_SIZE, TILE_SIZE, half, wmma::row_major> b_frag;
+    wmma::fragment<wmma::accumulator, TILE_SIZE, TILE_SIZE, TILE_SIZE, float> c_frag;
 
-        size_t tid = threadIdx.x;
-        size_t out_index = blockIdx.x - output_len * batch_index;
-        size_t i = batch_index * input_len;
-        size_t j = tid;
-        size_t tid_warp = tid % 32;
-        size_t distance = blockDim.x;
+    size_t tx = threadIdx.x;
+    size_t ty = threadIdx.y;
+    size_t bx = blockIdx.x * TILE_SIZE;
+    size_t by = blockIdx.y * TILE_SIZE;
 
-        if (tid < 32) {
-            sdata_sum[tid] = 0.0;
-            sdata_c[tid] = 0.0;
+    wmma::fill_fragment(c_frag, 0.0f);
+
+    __syncthreads();
+
+    for (int k = 0; k <= input_len; k += TILE_SIZE) {
+        if (k + tx < input_len && by + ty < batch_size) {
+            sdata_a[ty * TILE_SIZE + tx] = _to_half(input[calc_index(k+tx,by+ty,input_len)]);
+        } else if (k + tx == input_len && by + ty < batch_size) {
+            sdata_a[ty * TILE_SIZE + tx] = __float2half(1.0f);
+        } else {
+            sdata_a[ty * TILE_SIZE + tx] = __float2half(0.0f);
         }
+
+        if (k + ty <= input_len && bx + tx < output_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(units[calc_index(bx+tx,k+ty,output_len)]);
+        } else if (k + ty == input_len && bx + tx < output_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(bias[bx + tx]);
+        } else {
+            sdata_b[ty * TILE_SIZE + tx] = __float2half(0.0f);
+        }
+
         __syncthreads();
 
-        T acc = 0.0;
-        T c = 0.0;
+        wmma::load_matrix_sync(a_frag, sdata_a, TILE_SIZE);
+        wmma::load_matrix_sync(b_frag, sdata_b, TILE_SIZE);
 
-        j += blockIdx.z * distance;
+        wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
 
-        acc = input[i + j] * units[j * output_len + out_index] - c;
-
-        T dc = 0.0;
-        T dacc = 0.0;
-        T y;
-        T t;
-
-        /**
-         * Kahan summation algorithm
-         */
-        {
-            dc = __shfl_down_sync(0xffffffff,c,16);
-            dacc = __shfl_down_sync(0xffffffff,acc,16);
-
-            {
-                y = dacc - c - dc;
-                t = acc + y;
-                c = (t - acc) - y;
-                acc = t;
-            }
-
-            dc = __shfl_down_sync(0xffffffff,c,8);
-            dacc = __shfl_down_sync(0xffffffff,acc,8);
-
-            {
-                y = dacc - c - dc;
-                t = acc + y;
-                c = (t - acc) - y;
-                acc = t;
-            }
-
-            dc = __shfl_down_sync(0xffffffff,c,4);
-            dacc = __shfl_down_sync(0xffffffff,acc,4);
-
-            {
-                y = dacc - c - dc;
-                t = acc + y;
-                c = (t - acc) - y;
-                acc = t;
-            }
-
-            dc = __shfl_down_sync(0xffffffff,c,2);
-            dacc = __shfl_down_sync(0xffffffff,acc,2);
-
-            {
-                y = dacc - c - dc;
-                t = acc + y;
-                c = (t - acc) - y;
-                acc = t;
-            }
-
-            dc = __shfl_down_sync(0xffffffff,c,1);
-            dacc = __shfl_down_sync(0xffffffff,acc,1);
-
-            {
-                y = dacc - c - dc;
-                t = acc + y;
-                c = (t - acc) - y;
-                acc = t;
-            }
-        }
-
-        if (tid_warp == 0) {
-            sdata_c[tid / 32] = c;
-            sdata_sum[tid / 32] = acc;
-        }
         __syncthreads();
+    }
 
-        if (tid < 32) {
-            c = sdata_c[tid];
-            acc = sdata_sum[tid];
+    if (ty < 2) {
+        wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
+    }
 
-            dc = 0.0;
-            dacc = 0.0;
+    __syncthreads();
 
-            dc = __shfl_down_sync(0xffffffff,c,16);
-            dacc = __shfl_down_sync(0xffffffff,acc,16);
-
-            {
-                y = dacc - c - dc;
-                t = acc + y;
-                c = (t - acc) - y;
-                acc = t;
-            }
-
-            dc = __shfl_down_sync(0xffffffff,c,8);
-            dacc = __shfl_down_sync(0xffffffff,acc,8);
-
-            {
-                y = dacc - c - dc;
-                t = acc + y;
-                c = (t - acc) - y;
-                acc = t;
-            }
-
-            dc = __shfl_down_sync(0xffffffff,c,4);
-            dacc = __shfl_down_sync(0xffffffff,acc,4);
-
-            {
-                y = dacc - c - dc;
-                t = acc + y;
-                c = (t - acc) - y;
-                acc = t;
-            }
-
-            dc = __shfl_down_sync(0xffffffff,c,2);
-            dacc = __shfl_down_sync(0xffffffff,acc,2);
-
-            {
-                y = dacc - c - dc;
-                t = acc + y;
-                c = (t - acc) - y;
-                acc = t;
-            }
-
-            dc = __shfl_down_sync(0xffffffff,c,1);
-            dacc = __shfl_down_sync(0xffffffff,acc,1);
-
-            {
-                y = dacc - c - dc;
-                t = acc + y;
-                c = (t - acc) - y;
-                acc = t;
-            }
-        }
-
-        if (tid == 0) {
-            y = bias[out_index] - c;
-            t = acc + y;
-            atomicAdd(&output[blockIdx.x], t);
-        }
+    if (tx + bx < output_len && ty + by < batch_size) {
+        output[calc_index(tx+bx,ty+by,output_len)] = (T)sdata_c[ty * TILE_SIZE + tx];
     }
 }
 

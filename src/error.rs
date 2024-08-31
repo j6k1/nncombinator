@@ -680,6 +680,8 @@ pub enum LayerInstantiationError {
     OptimizerBuildError(OptimizerBuildError),
     /// Errors caused by generating fixed-length arrays from different size Vecs
     SizeMismatchError(SizeMismatchError),
+    /// Error generated when type conversion fails
+    TypeConvertError(TypeConvertError),
 }
 impl fmt::Display for LayerInstantiationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -694,6 +696,9 @@ impl fmt::Display for LayerInstantiationError {
                 write!(f,"An unexpected error occurred during build optimizer ({})",e)
             },
             LayerInstantiationError::SizeMismatchError(e) => {
+                write!(f,"An unexpected error occurred during layer instantiation ({})",e)
+            },
+            LayerInstantiationError::TypeConvertError(e) => {
                 write!(f,"An unexpected error occurred during layer instantiation ({})",e)
             }
         }
@@ -713,6 +718,9 @@ impl error::Error for LayerInstantiationError {
             },
             LayerInstantiationError::SizeMismatchError(_) => {
                 "An unexpected error occurred during layer instantiation. (Error during conversion to fixed length array)."
+            },
+            LayerInstantiationError::TypeConvertError(_) => {
+                "An error occurred during a type conversion operation within the layer object creation process."
             }
         }
     }
@@ -722,7 +730,8 @@ impl error::Error for LayerInstantiationError {
             LayerInstantiationError::CudaError(ref e) => Some(e),
             LayerInstantiationError::CudnnError(ref e) => Some(e),
             LayerInstantiationError::OptimizerBuildError(ref e) => Some(e),
-            LayerInstantiationError::SizeMismatchError(ref e) => Some(e)
+            LayerInstantiationError::SizeMismatchError(ref e) => Some(e),
+            LayerInstantiationError::TypeConvertError(ref e) => Some(e)
         }
     }
 }
@@ -744,6 +753,11 @@ impl From<OptimizerBuildError> for LayerInstantiationError {
 impl From<SizeMismatchError> for LayerInstantiationError {
     fn from(err: SizeMismatchError) -> LayerInstantiationError {
         LayerInstantiationError::SizeMismatchError(err)
+    }
+}
+impl From<TypeConvertError> for LayerInstantiationError {
+    fn from(err: TypeConvertError) -> LayerInstantiationError {
+        LayerInstantiationError::TypeConvertError(err)
     }
 }
 /// Error when layer instantiation fails

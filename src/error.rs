@@ -232,10 +232,35 @@ impl error::Error for SizeMismatchError {
         None
     }
 }
+/// An error that occurs when creating a fixed-length collection from collections
+/// of different sizes, when the number of elements in the converted collection is not divisible
+/// by the number of elements in the destination collection.
+#[derive(Debug)]
+pub struct IndivisibleError(pub usize, pub usize);
+impl fmt::Display for IndivisibleError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            IndivisibleError(from, to) => {
+                write!(f, "memory size indivisible. (dividend = {}, divisor = {})",from,to)
+            }
+        }
+    }
+}
+impl error::Error for IndivisibleError {
+    fn description(&self) -> &str {
+        "memory size indivisible."
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
+    }
+}
 #[derive(Debug)]
 pub enum TypeConvertError {
     /// Error generating fixed-length collections from collections of different sizes
     SizeMismatchError(SizeMismatchError),
+    /// Error when creating a fixed length collection from collections of different sizes (left side not divisible by right side)
+    IndivisibleError(IndivisibleError),
     /// Error in cuda processing
     CudaError(CudaError),
     /// Error in cudnn processing
@@ -245,6 +270,7 @@ impl fmt::Display for TypeConvertError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             TypeConvertError::SizeMismatchError(e) => write!(f,"{}",e),
+            TypeConvertError::IndivisibleError(e) => write!(f,"{}",e),
             TypeConvertError::CudaError(e) => write!(f, "An error occurred in the process of cuda. ({})",e),
             TypeConvertError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
         }
@@ -254,6 +280,7 @@ impl error::Error for TypeConvertError {
     fn description(&self) -> &str {
         match *self {
             TypeConvertError::SizeMismatchError(_) => "memory size does not match.",
+            TypeConvertError::IndivisibleError(_) => "memory size indivisible.",
             TypeConvertError::CudaError(_) => "An error occurred in the process of cuda.",
             TypeConvertError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
         }
@@ -262,6 +289,7 @@ impl error::Error for TypeConvertError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             TypeConvertError::SizeMismatchError(e) => Some(e),
+            TypeConvertError::IndivisibleError(e) => Some(e),
             TypeConvertError::CudaError(e) => Some(e),
             TypeConvertError::CudnnError(e) => Some(e)
         }
@@ -270,6 +298,11 @@ impl error::Error for TypeConvertError {
 impl From<SizeMismatchError> for TypeConvertError {
     fn from(err: SizeMismatchError) -> TypeConvertError {
         TypeConvertError::SizeMismatchError(err)
+    }
+}
+impl From<IndivisibleError> for TypeConvertError {
+    fn from(err: IndivisibleError) -> TypeConvertError {
+        TypeConvertError::IndivisibleError(err)
     }
 }
 impl From<CudaError> for TypeConvertError {

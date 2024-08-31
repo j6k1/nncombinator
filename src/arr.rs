@@ -8,7 +8,7 @@ use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallel
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, Memory, MemorySize, ToCuda, ToHost};
 use crate::device::{DeviceGpu, DeviceMemoryPool};
-use crate::error::{IndexOutBoundError, SizeMismatchError, TypeConvertError};
+use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::{Product, Sum, UnitValue};
@@ -1373,7 +1373,7 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
 
     fn try_from(items: Vec<U>) -> Result<Self,TypeConvertError> {
         if items.len() % N != 0 {
-            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(items.len(),N)))
+            Err(TypeConvertError::IndivisibleError(IndivisibleError(items.len(),N)))
         } else {
             let len = items.len() / N;
 
@@ -1474,7 +1474,7 @@ impl<U,T> TryFrom<Box<[U]>> for SerializedVec<U,T>
         let n = T::slice_size();
 
         if arr.len() % n != 0 {
-            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(arr.len(),n)))
+            Err(TypeConvertError::IndivisibleError(IndivisibleError(arr.len(),n)))
         } else {
             let len = arr.len() / n;
 

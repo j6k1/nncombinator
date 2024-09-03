@@ -259,8 +259,9 @@ impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,N
 
         let mut kernel = LinearGradient::<U,NI,NO>::new();
 
-        kernel.launch(dim3 { x: (NI * NO) as c_uint, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
+        kernel.launch(dim3 { x: (NO as c_uint + 15) / 16, y: (NI as c_uint + 15) / 16, z: 1 },
+                      dim3 { x: 16, y: 16, z: 1 },&mut args,
+                      2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>())?;
 
         Ok(args.output)
     }

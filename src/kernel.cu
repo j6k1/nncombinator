@@ -722,7 +722,7 @@ template<typename T>
 
 __device__ void update_with_adam(T *weight, const T *grad, const size_t size,
                                  const T a, const T weight_decay, const T eps,
-                                 T *mt, T *vt, const T b1, const T b2, T b1t, T b2t) {
+                                 T *mt, T *vt, const T b1, const T b2, const T b1t, const T b2t) {
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (index < size) {
@@ -997,13 +997,15 @@ extern "C" {
 
     __global__ void update_with_adam_float(float *weight, const float *grad, const size_t size,
                                            const float a, const float weight_decay,
-                                           const float eps, float *mt, float *vt, const float b1, const float b2, float b1t, float b2t) {
+                                           const float eps, float *mt, float *vt,
+                                           const float b1, const float b2, const float b1t, const float b2t) {
         update_with_adam(weight,grad,size,a,weight_decay,eps,mt,vt,b1,b2,b1t,b2t);
     }
 
     __global__ void update_with_adam_double(double *weight, const double *grad, const size_t size,
                                             const double a, const double weight_decay,
-                                            const double eps, double *mt, double *vt, const double b1, const double b2, double b1t, double b2t) {
+                                            const double eps, double *mt, double *vt,
+                                            const double b1, const double b2, const double b1t, const double b2t) {
         update_with_adam(weight,grad,size,a,weight_decay,eps,mt,vt,b1,b2,b1t,b2t);
     }
 

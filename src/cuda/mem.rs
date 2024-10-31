@@ -28,6 +28,7 @@ pub enum Alloctype {
     /// Host memory
     Host(libc::c_uint)
 }
+const ALIGNMENT:usize = 256;
 /// Cuda Memory pool
 pub struct MemoryPool {
     alloc_type:Alloctype,
@@ -162,6 +163,8 @@ impl MemoryPool {
             )));
         }
 
+        let real_size = (size + ALIGNMENT - 1) / ALIGNMENT * ALIGNMENT;
+
         let mut p = self.pool;
         let mut prev_key = None;
 
@@ -173,12 +176,12 @@ impl MemoryPool {
             {
                 let mut current = c.deref().borrow_mut();
 
-                if current.value.allocated == false && current.value.size >= size {
-                    let remaining = current.value.size - size;
+                if current.value.allocated == false && current.value.size >= real_size {
+                    let remaining = current.value.size - real_size;
 
                     current.value.allocated = true;
 
-                    current.value.size = size;
+                    current.value.size = real_size;
 
                     if self.map.contains_key(&(p as *const c_void)) {
                         return Err(CudaError::LogicError(String::from(
@@ -196,7 +199,7 @@ impl MemoryPool {
                         });
 
                         self.prev_map.insert(p, Rc::clone(&c));
-                        prev_key = unsafe { Some(p.add(size)) };
+                        prev_key = unsafe { Some(p.add(real_size)) };
                     } else {
                         n = None;
                     }

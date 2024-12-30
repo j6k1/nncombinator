@@ -5,7 +5,8 @@ use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::{UnitValue};
-use crate::cuda::{CudaMemoryPoolPtr, kernel, Kernel};
+use crate::arr::ShieldSlice;
+use crate::cuda::{CudaMemoryPoolPtr, CudaMutPtr, kernel, Kernel};
 use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, MomentumSGDArgs, RMSpropArgs, SGDArgs};
 use crate::error::{OptimizerBuildError, TrainingError};
 
@@ -17,11 +18,12 @@ pub trait OptimizerBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
 /// Optimizer Definition
 pub trait Optimizer<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
     type InternalType: ?Sized;
+    type InternalUpdateType<'a>: ?Sized;
     /// Update Weights
     /// # Arguments
     /// * `e` - error
     /// * `w` - weight
-    fn update(&mut self, e:&Self::InternalType, w:&mut Self::InternalType) -> Result<(),TrainingError>;
+    fn update<'a>(&mut self, e:&'a Self::InternalType, w:Self::InternalUpdateType<'a>) -> Result<(),TrainingError>;
 }
 /// Optimizer State Definition
 pub trait OptimizerState<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
@@ -65,9 +67,11 @@ impl<U,D> SGD<U,D> where U: UnitValue<U>, D: Device<U> {
 }
 impl<U> Optimizer<U,DeviceCpu<U>> for SGD<U,DeviceCpu<U>> where U: UnitValue<U>, DeviceCpu<U>: Device<U> {
     type InternalType = [U];
+    type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
     #[inline]
-    fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a [U], w: Self::InternalUpdateType<'a>) -> Result<(),TrainingError> {
+        let mut w = w;
         let a = self.lr;
         let weight_decay = self.weight_decay;
 
@@ -82,10 +86,12 @@ impl<U> Optimizer<U,DeviceGpu<U>> for SGD<U,DeviceGpu<U>>
     where U: UnitValue<U>, DeviceGpu<U>: Device<U>,
           for<'a> kernel::optimizer::SGD<'a,U>: Kernel<Args=SGDArgs<'a,U>> {
     type InternalType = CudaMemoryPoolPtr<U>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaMemoryPoolPtr<U>>;
 
     #[inline]
-    fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
-        let mut args = SGDArgs::new(w,e,self.size,self.lr,self.weight_decay);
+    fn update<'a>(&mut self, e: &'a CudaMemoryPoolPtr<U>, w: CudaMutPtr<'a,CudaMemoryPoolPtr<U>>) -> Result<(),TrainingError> {
+        let mut w = w;
+        let mut args = SGDArgs::new(&mut w,e,self.size,self.lr,self.weight_decay);
 
         let mut kernel = kernel::optimizer::SGD::<'_,U>::new();
 
@@ -192,9 +198,11 @@ impl<U> MomentumSGD<U,DeviceCpu<U>> where U: UnitValue<U> {
 }
 impl<U> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>> where U: UnitValue<U> {
     type InternalType = [U];
+    type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
     #[inline]
-    fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &[U], w: Self::InternalUpdateType<'a>) -> Result<(),TrainingError> {
+        let mut w = w;
         let a = self.lr;
         let mu = self.mu;
 
@@ -251,10 +259,12 @@ impl<U> Optimizer<U,DeviceGpu<U>> for MomentumSGD<U,DeviceGpu<U>>
           DeviceGpu<U>: Device<U>,
           for<'a> kernel::optimizer::MomentumSGD<'a,U>: Kernel<Args=MomentumSGDArgs<'a,U>> {
     type InternalType = CudaMemoryPoolPtr<U>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaMemoryPoolPtr<U>>;
 
     #[inline]
-    fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
-        let mut args = MomentumSGDArgs::new(w,e,self.size,self.lr,self.mu,self.weight_decay,&mut self.vt);
+    fn update<'a>(&mut self, e: &CudaMemoryPoolPtr<U>, w: CudaMutPtr<'a,CudaMemoryPoolPtr<U>>) -> Result<(),TrainingError> {
+        let mut w = w;
+        let mut args = MomentumSGDArgs::new(&mut w,e,self.size,self.lr,self.mu,self.weight_decay,&mut self.vt);
 
         let mut kernel = kernel::optimizer::MomentumSGD::<'_,U>::new();
 
@@ -389,9 +399,11 @@ impl<U> Adagrad<U,DeviceCpu<U>> where U: UnitValue<U> {
 }
 impl<U> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>> where U: UnitValue<U> {
     type InternalType = [U];
+    type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
     #[inline]
-    fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &[U], w: Self::InternalUpdateType<'a>) -> Result<(),TrainingError> {
+        let mut w = w;
         let a = self.lr;
         let weight_decay = self.weight_decay;
 
@@ -438,10 +450,12 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adagrad<U,DeviceGpu<U>>
           DeviceGpu<U>: Device<U>,
           for<'a> kernel::optimizer::Adagrad<'a,U>: Kernel<Args=AdagradArgs<'a,U>> {
     type InternalType = CudaMemoryPoolPtr<U>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaMemoryPoolPtr<U>>;
 
     #[inline]
-    fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
-        let mut args = AdagradArgs::new(w,e,self.size,self.lr,self.weight_decay,self.eps,&mut self.gt);
+    fn update<'a>(&mut self, e: &'a CudaMemoryPoolPtr<U>, w: CudaMutPtr<'a,CudaMemoryPoolPtr<U>>) -> Result<(),TrainingError> {
+        let mut w = w;
+        let mut args = AdagradArgs::new(&mut w,e,self.size,self.lr,self.weight_decay,self.eps,&mut self.gt);
 
         let mut kernel = kernel::optimizer::Adagrad::<'_,U>::new();
 
@@ -576,9 +590,11 @@ impl<U> RMSprop<U,DeviceCpu<U>> where U: UnitValue<U> {
 }
 impl<U> Optimizer<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>> where U: UnitValue<U> {
     type InternalType = [U];
+    type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
     #[inline]
-    fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a [U], w: Self::InternalUpdateType<'a>) -> Result<(),TrainingError> {
+        let mut w = w;
         let a = self.lr;
         let weight_decay = self.weight_decay;
         let alpha = self.alpha;
@@ -649,10 +665,12 @@ impl<U> Optimizer<U,DeviceGpu<U>> for RMSprop<U,DeviceGpu<U>>
           DeviceGpu<U>: Device<U>,
           for<'a> kernel::optimizer::RMSprop<'a,U>: Kernel<Args=RMSpropArgs<'a,U>> {
     type InternalType = CudaMemoryPoolPtr<U>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaMemoryPoolPtr<U>>;
 
     #[inline]
-    fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
-        let mut args = RMSpropArgs::new(w,e,self.size,self.lr,self.weight_decay,self.alpha,self.mu,self.eps,&mut self.gt, &mut self.bt);
+    fn update<'a>(&mut self, e: &'a CudaMemoryPoolPtr<U>, w: CudaMutPtr<'a,CudaMemoryPoolPtr<U>>) -> Result<(),TrainingError> {
+        let mut w = w;
+        let mut args = RMSpropArgs::new(&mut w,e,self.size,self.lr,self.weight_decay,self.alpha,self.mu,self.eps,&mut self.gt, &mut self.bt);
 
         let mut kernel = kernel::optimizer::RMSprop::<'_,U>::new();
 
@@ -824,9 +842,11 @@ impl<U> Adam<U,DeviceCpu<U>> where U: UnitValue<U> {
 }
 impl<U> Optimizer<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>> where U: UnitValue<U> {
     type InternalType = [U];
+    type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
     #[inline]
-    fn update(&mut self, e: &[U], w: &mut [U]) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a [U], w: Self::InternalUpdateType<'a>) -> Result<(),TrainingError> {
+        let mut w = w;
         let a = self.lr;
         let weight_decay = self.weight_decay;
         let b1 = self.b1;
@@ -899,10 +919,12 @@ impl<U> Optimizer<U,DeviceGpu<U>> for Adam<U,DeviceGpu<U>>
           DeviceGpu<U>: Device<U>,
           for<'a> kernel::optimizer::Adam<'a,U>: Kernel<Args=AdamArgs<'a,U>> {
     type InternalType = CudaMemoryPoolPtr<U>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaMemoryPoolPtr<U>>;
 
     #[inline]
-    fn update(&mut self, e: &CudaMemoryPoolPtr<U>, w: &mut CudaMemoryPoolPtr<U>) -> Result<(),TrainingError> {
-        let mut args = AdamArgs::new(w,e,self.size,self.lr,self.weight_decay,self.eps,
+    fn update<'a>(&mut self, e: &'a CudaMemoryPoolPtr<U>, w: CudaMutPtr<'a,CudaMemoryPoolPtr<U>>) -> Result<(),TrainingError> {
+        let mut w = w;
+        let mut args = AdamArgs::new(&mut w,e,self.size,self.lr,self.weight_decay,self.eps,
                                                  &mut self.mt,&mut self.vt,
                                                  self.b1,self.b2,self.b1t,self.b2t);
 

@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Deref, DerefMut, Div, Index, IndexMut, Mul, Neg, Sub};
+use std::slice::IterMut;
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
@@ -19,6 +20,24 @@ pub trait SliceSize {
 
     fn slice_size() -> usize {
         Self::SIZE
+    }
+}
+/// Wrapper to prevent operations on references to mutable slices that overwrite the slice itself with another slice
+pub struct ShieldSlice<'a,T> {
+    raw: &'a mut [T]
+}
+
+impl<'a,T> ShieldSlice<'a,T> {
+    /// Creating a ShieldSlice instance
+    pub fn new(raw:&'a mut [T]) -> ShieldSlice<'a,T> {
+        ShieldSlice {
+            raw: raw
+        }
+    }
+
+    /// Obtaining a mutable iterator
+    pub fn iter_mut(&'a mut self) -> IterMut<'a,T> {
+        self.raw.iter_mut()
     }
 }
 /// Fixed-length one-dimensional array implementation
@@ -153,9 +172,9 @@ impl<'a,T,const N:usize> From<&'a Arr<T,N>> for &'a [T] where T: Default + Clone
         &arr.arr
     }
 }
-impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for &'a mut [T] where T: Default + Clone + Send {
+impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: Default + Clone + Send {
     fn from(arr: &'a mut Arr<T, N>) -> Self {
-        &mut arr.arr
+        ShieldSlice::new(&mut arr.arr)
     }
 }
 impl<T,const N:usize> ToCuda<T> for Arr<T,N>
@@ -301,8 +320,8 @@ impl<'a,T,const N:usize> AsRawSlice<T> for Arr<T,N> where T: Default + Clone + S
     }
 }
 impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for Arr<T,N> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 impl<T,const N:usize> BatchDataType for Arr<T,N> where T: Default + Clone + Send {
@@ -389,8 +408,8 @@ impl<'a,T,const N1:usize, const N2: usize> AsRawSlice<T> for Arr2<T,N1,N2> where
     }
 }
 impl<'a,T,const N1:usize, const N2:usize> AsRawMutSlice<'a,T> for Arr2<T,N1,N2> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 impl<T,const N1:usize, const N2: usize> TryFrom<Vec<T>> for Arr2<T,N1,N2> where T: Default + Clone + Send {
@@ -431,7 +450,7 @@ impl<'a,T,const N1:usize,const N2:usize> From<&'a Arr2<T,N1,N2>> for &'a [T] whe
         arr.as_raw_slice()
     }
 }
-impl<'a,T,const N1:usize,const N2:usize> From<&'a mut Arr2<T,N1,N2>> for &'a mut [T] where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize> From<&'a mut Arr2<T,N1,N2>> for ShieldSlice<'a,T> where T: Default + Clone + Send {
     fn from(arr: &'a mut Arr2<T, N1, N2>) -> Self {
         arr.as_raw_mut_slice()
     }
@@ -526,8 +545,8 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3<T
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 /// Fixed-length 4D array implementation
@@ -624,8 +643,8 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawSlic
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawMutSlice<'a,T> for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 /// Implementation of an immutable view of a fixed-length 1D array
@@ -832,8 +851,8 @@ impl<'a,T,const N:usize> AsRawSlice<T> for ArrViewMut<'a,T,N> where T: Default +
     }
 }
 impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 /// Implementation of a immutable view of a fixed-length 2D array
@@ -926,8 +945,8 @@ impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2ViewMut<'a,T,N1,N
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> AsRawMutSlice<'a,T> for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 /// Implementation of an mutable iterator for fixed-length 2D arrays
@@ -1041,8 +1060,8 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3Vi
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Send {
@@ -1502,8 +1521,8 @@ impl<'a,U,T> AsRawSlice<U> for SerializedVec<U,T>
 impl<'a,U,T> AsRawMutSlice<'a,U> for SerializedVec<U,T>
     where U: Default + Clone + Send,
           T: SliceSize {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [U] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,U> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 impl<'a,U,T> Add<U> for &'a SerializedVec<U,T>

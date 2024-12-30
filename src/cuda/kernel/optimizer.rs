@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 use libc::{size_t,c_void};
-use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaMemoryPoolPtr, Kernel, KernelArgs};
+use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaMemoryPoolPtr, CudaMutPtr, Kernel, KernelArgs};
 
 extern "C" {
     fn update_with_sgd_float(weight: *mut f32, grad: *const f32, size: size_t, a: f32, weight_decay: f32);
@@ -18,7 +18,7 @@ extern "C" {
 }
 /// Defines the list passed to the cuda kernel function as arguments to the SGD optimizer.
 pub struct SGDArgs<'a,T> {
-    weight: &'a mut CudaMemoryPoolPtr<T>,
+    weight: &'a mut CudaMutPtr<'a,CudaMemoryPoolPtr<T>>,
     grad: CudaConstPtr<'a,CudaMemoryPoolPtr<T>>,
     size: usize,
     a: T,
@@ -33,7 +33,7 @@ impl<'a,T> SGDArgs<'a,T> {
     /// * `size` - number of weights to be updated
     /// * `a` - learning rate
     /// * `weight_decay` - Weight decay
-    pub fn new(weight: &'a mut CudaMemoryPoolPtr<T>, grad: &'a CudaMemoryPoolPtr<T>, size: usize, a: T, weight_decay: T) -> SGDArgs<'a,T> {
+    pub fn new(weight: &'a mut CudaMutPtr<'a,CudaMemoryPoolPtr<T>>, grad: &'a CudaMemoryPoolPtr<T>, size: usize, a: T, weight_decay: T) -> SGDArgs<'a,T> {
         SGDArgs {
             weight,
             grad: CudaConstPtr::new(grad),
@@ -78,7 +78,7 @@ impl<'a> Kernel for SGD<'a,f64> {
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Momentum SGD optimizer.
 pub struct MomentumSGDArgs<'a,T> {
-    weight: &'a mut CudaMemoryPoolPtr<T>,
+    weight: &'a mut CudaMutPtr<'a,CudaMemoryPoolPtr<T>>,
     grad: CudaConstPtr<'a,CudaMemoryPoolPtr<T>>,
     size: usize,
     a: T,
@@ -97,7 +97,7 @@ impl<'a,T> MomentumSGDArgs<'a,T> {
     /// * `mu` - mu
     /// * `weight_decay` - Weight decay
     /// * `vt` - vt
-    pub fn new(weight: &'a mut CudaMemoryPoolPtr<T>, grad: &'a CudaMemoryPoolPtr<T>,
+    pub fn new(weight: &'a mut CudaMutPtr<'a,CudaMemoryPoolPtr<T>>, grad: &'a CudaMemoryPoolPtr<T>,
                size: usize, a: T, mu: T, weight_decay: T,
                vt: &'a mut CudaMemoryPoolPtr<T>) -> MomentumSGDArgs<'a,T> {
         MomentumSGDArgs {
@@ -148,7 +148,7 @@ impl<'a> Kernel for MomentumSGD<'a,f64> {
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Adagrad optimizer.
 pub struct AdagradArgs<'a,T> {
-    weight: &'a mut CudaMemoryPoolPtr<T>,
+    weight: &'a mut CudaMutPtr<'a,CudaMemoryPoolPtr<T>>,
     grad: CudaConstPtr<'a,CudaMemoryPoolPtr<T>>,
     size: usize,
     a: T,
@@ -167,7 +167,7 @@ impl<'a,T> AdagradArgs<'a,T> {
     /// * `weight_decay` - Weight decay
     /// * `eps` - Correction value to prevent zero division
     /// * `gt` - gt
-    pub fn new(weight: &'a mut CudaMemoryPoolPtr<T>, grad: &'a CudaMemoryPoolPtr<T>,
+    pub fn new(weight: &'a mut CudaMutPtr<'a,CudaMemoryPoolPtr<T>>, grad: &'a CudaMemoryPoolPtr<T>,
                size: usize, a: T, weight_decay: T, eps: T,
                gt: &'a mut CudaMemoryPoolPtr<T>) -> AdagradArgs<'a,T> {
         AdagradArgs {
@@ -218,7 +218,7 @@ impl<'a> Kernel for Adagrad<'a,f64> {
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Rmsprop optimizer.
 pub struct RMSpropArgs<'a,T> {
-    weight: &'a mut CudaMemoryPoolPtr<T>,
+    weight: &'a mut CudaMutPtr<'a,CudaMemoryPoolPtr<T>>,
     grad: CudaConstPtr<'a,CudaMemoryPoolPtr<T>>,
     size: usize,
     lr: T,
@@ -242,7 +242,7 @@ impl<'a,T> RMSpropArgs<'a,T> {
     /// * `eps` - Correction value to prevent zero division
     /// * `gt` - gt
     /// * `bt` - bt
-    pub fn new(weight: &'a mut CudaMemoryPoolPtr<T>, grad: &'a CudaMemoryPoolPtr<T>,
+    pub fn new(weight: &'a mut CudaMutPtr<'a,CudaMemoryPoolPtr<T>>, grad: &'a CudaMemoryPoolPtr<T>,
                size: usize, lr: T, weight_decay: T, alpha: T, mu: T, eps: T,
                gt: &'a mut CudaMemoryPoolPtr<T>,
                bt: &'a mut CudaMemoryPoolPtr<T>) -> RMSpropArgs<'a,T> {
@@ -300,7 +300,7 @@ impl<'a> Kernel for RMSprop<'a,f64> {
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Adam optimizer.
 pub struct AdamArgs<'a,T> {
-    weight: &'a mut CudaMemoryPoolPtr<T>,
+    weight: &'a mut CudaMutPtr<'a,CudaMemoryPoolPtr<T>>,
     grad: CudaConstPtr<'a,CudaMemoryPoolPtr<T>>,
     size: usize,
     a: T,
@@ -329,7 +329,7 @@ impl<'a,T> AdamArgs<'a,T> {
     /// * `b2` - b2
     /// * `b1t` - b1t
     /// * `b2t` - b2t
-    pub fn new(weight: &'a mut CudaMemoryPoolPtr<T>, grad: &'a CudaMemoryPoolPtr<T>,
+    pub fn new(weight: &'a mut CudaMutPtr<'a,CudaMemoryPoolPtr<T>>, grad: &'a CudaMemoryPoolPtr<T>,
                size: usize, a: T, weight_decay: T, eps: T,
                mt: &'a mut CudaMemoryPoolPtr<T>,
                vt: &'a mut CudaMemoryPoolPtr<T>,b1: T, b2: T, b1t: T, b2t: T) -> AdamArgs<'a,T> {

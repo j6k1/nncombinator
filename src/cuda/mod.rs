@@ -1466,9 +1466,6 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> TryFrom<&
 pub trait MemorySize {
     fn size() -> usize;
 }
-pub trait AsCudaPtr {
-
-}
 #[derive(Debug)]
 pub struct CudaVec<U,T>
     where U: UnitValue<U>,
@@ -2005,6 +2002,57 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaPtr
 
     fn as_cuda_ptr_ref(&self) -> &Self::Pointer {
         self.ptr
+    }
+}
+/// Proxy type to Cuda smart pointer type with write operation
+pub struct CudaMutPtr<'a,P> {
+    ptr:&'a mut P
+}
+impl<'a,P> CudaMutPtr<'a,P> {
+    pub fn new(ptr:&'a mut P) -> CudaMutPtr<'a,P> {
+        CudaMutPtr {
+            ptr:ptr
+        }
+    }
+}
+impl <'a,P> private::AsKernelPtrBase for CudaMutPtr<'a,P>  where P: private::AsKernelPtrBase {
+    fn as_kernel_ptr(&mut self) -> *mut c_void {
+        self.ptr.as_kernel_ptr()
+    }
+}
+/// Characteristic that defines the ability to obtain a reference to a writable cuda smart pointer
+pub trait AsCudaMutPtr {
+    /// Returned Cuda smart pointer type
+    type Pointer;
+
+    fn as_cuda_mut_ptr<'a>(&'a mut self) -> CudaMutPtr<Self::Pointer>;
+}
+impl<T,const N:usize> AsCudaMutPtr for CudaTensor1dPtr<T,N> where T: Default + Debug {
+    type Pointer = CudaMemoryPoolPtr<T>;
+
+    fn as_cuda_mut_ptr<'a>(&'a mut self) -> CudaMutPtr<'a,CudaMemoryPoolPtr<T>> {
+        CudaMutPtr {
+            ptr:&mut self.ptr
+        }
+    }
+}
+impl<T,const N1:usize,const N2:usize> AsCudaMutPtr for CudaTensor2dPtr<T,N1,N2> where T: Default + Debug {
+    type Pointer = CudaMemoryPoolPtr<T>;
+
+    fn as_cuda_mut_ptr<'a>(&'a mut self) -> CudaMutPtr<'a,CudaMemoryPoolPtr<T>> {
+        CudaMutPtr {
+            ptr:&mut self.ptr
+        }
+    }
+}
+impl<'a,T,const N:usize> From<&'a mut CudaTensor1dPtr<T,N>> for CudaMutPtr<'a,CudaMemoryPoolPtr<T>> where T: Default + Debug {
+    fn from(value: &'a mut CudaTensor1dPtr<T,N>) -> Self {
+        value.as_cuda_mut_ptr()
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> From<&'a mut CudaTensor2dPtr<T,N1,N2>> for CudaMutPtr<'a,CudaMemoryPoolPtr<T>> where T: Default + Debug {
+    fn from(value: &'a mut CudaTensor2dPtr<T,N1,N2>) -> Self {
+        value.as_cuda_mut_ptr()
     }
 }
 /// Trait that defines arguments passed to cuda kernel functions

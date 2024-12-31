@@ -2,8 +2,8 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::{Add, AddAssign, Deref, DerefMut, Div, Index, IndexMut, Mul, Neg, Sub};
-use std::slice::IterMut;
+use std::ops::{Add, AddAssign, Deref, Div, Index, IndexMut, Mul, Neg, Sub};
+use std::slice::{IterMut};
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
@@ -55,6 +55,11 @@ impl<T,const N:usize> Arr<T,N> where T: Default + Clone + Send {
             arr:arr.into_boxed_slice()
         }
     }
+
+    /// Obtaining a mutable iterator
+    pub fn iter_mut(&mut self) -> IterMut<'_,T> {
+        self.arr.iter_mut()
+    }
 }
 impl<T,const N:usize> Default for Arr<T,N> where T: Default + Clone + Send {
     fn default() -> Self {
@@ -65,11 +70,6 @@ impl<T,const N:usize> Deref for Arr<T,N> where T: Default + Clone + Send {
     type Target = Box<[T]>;
     fn deref(&self) -> &Self::Target {
         &self.arr
-    }
-}
-impl<T,const N:usize> DerefMut for Arr<T,N> where T: Default + Clone + Send  {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.arr
     }
 }
 impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
@@ -210,6 +210,18 @@ impl<T,const N:usize> ToHost<T> for Arr<T,N> where T: Default + Clone + Send {
 }
 impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Send {
     const SIZE: usize = N;
+}
+impl<T,const N:usize> Index<usize> for Arr<T,N> where T: Default + Clone + Send {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.arr[index]
+    }
+}
+impl<T,const N:usize> IndexMut<usize> for Arr<T,N> where T: Default + Clone + Send {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.arr[index]
+    }
 }
 impl<'a,T,const N:usize> Add<T> for &'a Arr<T,N> where T: Add<Output=T> + Clone + Copy + Default + Send {
     type Output = Arr<T,N>;
@@ -820,15 +832,28 @@ impl<'a,T,const N1:usize, const N2:usize> Product<&'a Arr2<T,N1,N2>> for ArrView
 pub struct ArrViewMut<'a,T,const N:usize> {
     pub(crate) arr:&'a mut [T]
 }
+impl<'a,T,const N:usize> ArrViewMut<'a,T,N> {
+    /// Obtaining a mutable iterator
+    pub fn iter_mut(&mut self) -> IterMut<'_,T> {
+        self.arr.iter_mut()
+    }
+}
 impl<'a,T,const N:usize> Deref for ArrViewMut<'a,T,N> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
         &self.arr
     }
 }
-impl<'a,T,const N:usize> DerefMut for ArrViewMut<'a,T,N> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.arr
+impl<'a,T,const N:usize> Index<usize> for ArrViewMut<'a,T,N> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.arr[index]
+    }
+}
+impl<'a,T,const N:usize> IndexMut<usize> for ArrViewMut<'a,T,N> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.arr[index]
     }
 }
 impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: Default + Clone + Send {

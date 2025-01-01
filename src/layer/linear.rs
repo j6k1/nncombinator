@@ -7,7 +7,7 @@ use crate::{Cons, Stack};
 use crate::cuda::{CudaTensor1dPtr, CudaTensor2dPtr, DataTypeInfo, ReadMemory, WriteMemory};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
-use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError, CudaError};
+use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, DiffInput, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
@@ -91,7 +91,7 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> LinearLayer<U,CudaTensor2dPtr<U,
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`CudaError`]
+    /// * [`LayerInstantiationError`]
     pub fn new<UI,BI,B>(parent:P,device:&DeviceGpu<U>,ui:UI,bi:BI, b:&B)
         -> Result<LinearLayer<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,P,DeviceGpu<U>,I,PI,OP,NI,NO>,LayerInstantiationError>
         where UI: FnMut() -> U, BI: FnMut() -> U, B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP> {
@@ -909,7 +909,7 @@ impl<U,P,OP,I,const NI:usize,const NO:usize> DiffLinearLayer<U,CudaTensor2dPtr<U
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`CudaError`]
+    /// * [`LayerInstantiationError`]
     pub fn new<UI,BI,B>(parent:P,device:&DeviceGpu<U>,ui:UI,bi:BI, b: &B)
         -> Result<DiffLinearLayer<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,P,OP,DeviceGpu<U>,I,NI,NO>,LayerInstantiationError>
         where UI: FnMut() -> U, BI: FnMut() -> U, B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP> {

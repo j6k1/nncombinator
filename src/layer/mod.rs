@@ -5,7 +5,7 @@ use crate::arr::*;
 use crate::device::*;
 use crate::{Stack};
 use crate::cuda::ToCuda;
-use crate::error::{EvaluateError, TrainingError, TypeConvertError, DeviceError};
+use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 
@@ -308,7 +308,7 @@ pub trait TryAddLayer: ForwardAll where Self: Sized {
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`DeviceError`]
+    /// * [`E`]
     fn try_add_layer<C,F,E>(self,f:F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E>;
 }
 impl<T> TryAddLayer for T where T: ForwardAll + Sized {

@@ -60,6 +60,11 @@ impl<T,const N:usize> Arr<T,N> where T: Default + Clone + Send {
     pub fn iter_mut(&mut self) -> IterMut<'_,T> {
         self.arr.iter_mut()
     }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.arr.as_mut_ptr()
+    }
 }
 impl<T,const N:usize> Default for Arr<T,N> where T: Default + Clone + Send {
     fn default() -> Self {

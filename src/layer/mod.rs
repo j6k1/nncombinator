@@ -5,7 +5,7 @@ use crate::arr::*;
 use crate::device::*;
 use crate::{Stack};
 use crate::cuda::ToCuda;
-use crate::error::{EvaluateError, TrainingError, TypeConvertError};
+use crate::error::{EvaluateError, TrainingError, TypeConvertError, DeviceError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 

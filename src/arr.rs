@@ -1390,7 +1390,7 @@ impl<U,T> SerializedVec<U,T>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U>,
           for<'a> T: From<<T as AsView<'a>>::ViewType> {
-    /// Converted to Vec<T>
+    /// Converted to `Vec<T>`
     pub fn to_vec(&self) -> Vec<T> {
         self.iter().map(|v| v.into()).collect()
     }

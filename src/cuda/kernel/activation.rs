@@ -10,22 +10,22 @@ extern "C" {
     fn relu_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn swish_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn tanh_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
-    fn softmax_forward_float(input: *const f32, output: *mut f32, len: size_t, batch_len: size_t) -> c_void;
-    fn sigmoid_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
-    fn relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
-    fn swish_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
-    fn tanh_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
-    fn softmax_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_len: size_t) -> c_void;
+    fn softmax_forward_float(input: *const f32, output: *mut f32, len: size_t, batch_size: size_t) -> c_void;
+    fn sigmoid_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
+    fn relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
+    fn swish_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
+    fn tanh_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
+    fn softmax_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn sigmoid_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn relu_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn swish_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn tanh_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
-    fn softmax_forward_double(input: *const f64, output: *mut f64, len: size_t, batch_len: size_t) -> c_void;
-    fn sigmoid_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
-    fn relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
-    fn swish_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
-    fn tanh_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
-    fn softmax_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_len: size_t) -> c_void;
+    fn softmax_forward_double(input: *const f64, output: *mut f64, len: size_t, batch_size: size_t) -> c_void;
+    fn sigmoid_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
+    fn relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
+    fn swish_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
+    fn tanh_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
+    fn softmax_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
 }
 /// Defines the list of passed to the cuda kernel function for the arguments of the activation function.
 pub struct ActivationForwardArgs<'a,T,const N:usize> where T: DataTypeInfo + UnitValue<T> {
@@ -33,7 +33,7 @@ pub struct ActivationForwardArgs<'a,T,const N:usize> where T: DataTypeInfo + Uni
     /// Output buffer
     pub output: CudaTensor1dPtr<T,N>,
     units_len: usize,
-    batch_len: usize,
+    batch_size: usize,
 }
 /// Create an instance of an object representing the argument list at the time of activation function forward.
 impl<'a,T,const N:usize> ActivationForwardArgs<'a,T,N> where T: DataTypeInfo + UnitValue<T> {
@@ -46,7 +46,7 @@ impl<'a,T,const N:usize> ActivationForwardArgs<'a,T,N> where T: DataTypeInfo + U
             input: CudaConstPtr::new(input),
             output: output,
             units_len: N,
-            batch_len: 1
+            batch_size: 1
         }
     }
 }
@@ -56,7 +56,7 @@ impl<'a,T,const N:usize> KernelArgs for ActivationForwardArgs<'a,T,N> where T: D
             &mut self.input,
             &mut self.output,
             &mut self.units_len,
-            &mut self.batch_len
+            &mut self.batch_size
         ]
     }
 }
@@ -68,7 +68,7 @@ pub struct ActivationBackwardArgs<'a,T,const N:usize> where T: DataTypeInfo + Un
     /// Output of error back propagation
     pub output: CudaTensor1dPtr<T,N>,
     units_len: usize,
-    batch_len: usize,
+    batch_size: usize,
 }
 /// Create an instance of an object representing the list of arguments during error back propagation of the activation function.
 impl<'a,T,const N:usize> ActivationBackwardArgs<'a,T,N> where T: DataTypeInfo + UnitValue<T> {
@@ -88,7 +88,7 @@ impl<'a,T,const N:usize> ActivationBackwardArgs<'a,T,N> where T: DataTypeInfo + 
             loss: CudaConstPtr::new(loss),
             output: output,
             units_len: N,
-            batch_len: 1
+            batch_size: 1
         }
     }
 }
@@ -100,7 +100,7 @@ impl<'a,T,const N:usize> KernelArgs for ActivationBackwardArgs<'a,T,N> where T: 
             &mut self.loss,
             &mut self.output,
             &mut self.units_len,
-            &mut self.batch_len
+            &mut self.batch_size
         ]
     }
 }
@@ -111,7 +111,7 @@ pub struct ActivationBatchForwardArgs<'a,T,const N:usize> where T: DataTypeInfo 
     /// Output buffer
     pub output: CudaVec<T,CudaTensor1dPtr<T,N>>,
     units_len: usize,
-    batch_len: usize,
+    batch_size: usize,
 }
 /// Create an instance of an object representing the argument list
 /// of the forward propagation of the activation function during batch execution.
@@ -120,14 +120,14 @@ impl<'a,T,const N:usize> ActivationBatchForwardArgs<'a,T,N> where T: DataTypeInf
     /// # Arguments
     /// * `input` - Input buffer
     /// * `output` - Output buffer
-    /// * `batch_lne` - batches count
-    pub fn new(input:&'a CudaVecView<'a,T,CudaTensor1dPtr<T,N>>,output:CudaVec<T,CudaTensor1dPtr<T,N>>, batch_len: usize)
+    /// * `batch_size` - batches count
+    pub fn new(input:&'a CudaVecView<'a,T,CudaTensor1dPtr<T,N>>,output:CudaVec<T,CudaTensor1dPtr<T,N>>, batch_size: usize)
         -> ActivationBatchForwardArgs<'a,T,N> {
         ActivationBatchForwardArgs {
             input: CudaConstPtr::new(input),
             output: output,
             units_len: N,
-            batch_len: batch_len
+            batch_size: batch_size
         }
     }
 }
@@ -137,7 +137,7 @@ impl<'a,T,const N:usize> KernelArgs for ActivationBatchForwardArgs<'a,T,N> where
             &mut self.input,
             &mut self.output,
             &mut self.units_len,
-            &mut self.batch_len
+            &mut self.batch_size
         ]
     }
 }
@@ -150,7 +150,7 @@ pub struct ActivationBatchBackwardArgs<'a,T,const N:usize> where T: DataTypeInfo
     /// Output of error back propagation
     pub output: CudaVec<T,CudaTensor1dPtr<T,N>>,
     units_len: usize,
-    batch_len: usize,
+    batch_size: usize,
 }
 /// Instantiate an object representing the list of arguments during error back propagation
 /// of the activation function during batch execution.
@@ -161,7 +161,7 @@ impl<'a,T,const N:usize> ActivationBatchBackwardArgs<'a, T, N> where T: DataType
     /// * `u` - Input values from upper layers
     /// * `loss` - loss value
     /// * `output` - Output of error back propagation
-    /// * `batch_len` - batch count
+    /// * `batch_size` - batch count
     pub fn new(o: &'a CudaVecView<'a,T,CudaTensor1dPtr<T,N>>,
                u: &'a CudaVecView<'a,T,CudaTensor1dPtr<T,N>>,
                loss: &'a CudaVecView<'a,T,CudaTensor1dPtr<T,N>>,
@@ -172,7 +172,7 @@ impl<'a,T,const N:usize> ActivationBatchBackwardArgs<'a, T, N> where T: DataType
             loss: CudaConstPtr::new(loss),
             output: output,
             units_len: N,
-            batch_len: batch_size
+            batch_size: batch_size
         }
     }
 }
@@ -184,7 +184,7 @@ impl<'a,T,const N:usize> KernelArgs for ActivationBatchBackwardArgs<'a,T,N> wher
             &mut self.loss,
             &mut self.output,
             &mut self.units_len,
-            &mut self.batch_len
+            &mut self.batch_size
         ]
     }
 }

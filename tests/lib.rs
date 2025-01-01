@@ -37,7 +37,7 @@ use nncombinator::layer::linear::{DiffLinearLayerBuilder, LinearLayerBuilder};
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{AdagradBuilder, AdamBuilder, MomentumSGDBuilder, SGDBuilder};
-use nncombinator::cuda::{ReadMemory,WriteMemory};
+use nncombinator::cuda::{ReadMemory};
 
 use crate::common::{assert_ask_diff_input, assert_backward_all, assert_forward_all, assert_foward_diff, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
 

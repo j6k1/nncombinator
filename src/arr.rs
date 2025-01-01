@@ -1498,7 +1498,7 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
 impl<U,T> ToCuda<U> for SerializedVec<U,T>
     where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
           <T as ToCuda<U>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
-          for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U> + WriteMemory<U> {
+          for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U> {
     type Output = CudaVec<U,<T as ToCuda<U>>::Output>;
 
     fn to_cuda(self, device: &DeviceGpu<U>) -> Result<Self::Output,TypeConvertError> {

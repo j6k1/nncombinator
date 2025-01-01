@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::arr::{Arr, Arr2, DiffArr, IntoConverter};
 use crate::{Cons, Stack};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor2dPtr, DataTypeInfo, Memory};
+use crate::cuda::{CudaTensor1dPtr, CudaTensor2dPtr, DataTypeInfo, ReadMemory, WriteMemory};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};

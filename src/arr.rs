@@ -7,7 +7,7 @@ use std::slice::{IterMut};
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
-use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, Memory, MemorySize, ToCuda, ToHost};
+use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, ToHost};
 use crate::device::{DeviceGpu, DeviceMemoryPool};
 use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
@@ -385,6 +385,17 @@ impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2> where T: Default {
         Arr2IterMut(&mut *self.arr)
     }
 }
+impl<T,const N1:usize,const N2:usize> Arr2<T,N1,N2> where T: Default {
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
+    }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.arr.as_mut_ptr()
+    }
+}
 impl<T,const N1:usize, const N2:usize> Clone for Arr2<T,N1,N2> where T: Default + Clone + Send {
     fn clone(&self) -> Self {
         Arr2 {
@@ -503,6 +514,17 @@ impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: D
         Arr3IterMut(&mut *self.arr)
     }
 }
+impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: Default {
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
+    }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.arr.as_mut_ptr()
+    }
+}
 impl<T,const N1:usize, const N2:usize, const N3:usize> Index<(usize,usize,usize)> for Arr3<T,N1,N2,N3> where T: Default {
     type Output = T;
 
@@ -592,6 +614,17 @@ impl<T,const N1:usize,const N2:usize,const N3:usize, const N4:usize> Arr4<T,N1,N
     /// Obtaining a mutable iterator
     pub fn iter_mut<'a>(&'a mut self) -> Arr4IterMut<'a,T,N2,N3,N4> {
         Arr4IterMut(&mut *self.arr)
+    }
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> Arr4<T,N1,N2,N3,N4> where T: Default {
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
+    }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.arr.as_mut_ptr()
     }
 }
 impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> Index<(usize,usize,usize,usize)> for Arr4<T,N1,N2,N3,N4>
@@ -889,6 +922,11 @@ impl<'a,T,const N1:usize,const N2:usize> Arr2View<'a,T,N1,N2> {
     pub fn iter(&'a self) -> Arr2Iter<'a,T,N2> {
         Arr2Iter(&self.arr)
     }
+
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
+    }
 }
 impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2View<'a,T,N1,N2> {
     fn as_raw_slice(&self) -> &[T] {
@@ -959,6 +997,16 @@ pub struct Arr2ViewMut<'a,T,const N1:usize,const N2:usize> {
 impl<'a,T,const N1:usize,const N2:usize> Arr2ViewMut<'a,T,N1,N2> {
     pub fn iter_mut(&'a mut self) -> Arr2IterMut<'a,T,N2> {
         Arr2IterMut(&mut self.arr)
+    }
+
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
+    }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.arr.as_mut_ptr()
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> SliceSize for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Send {
@@ -1031,6 +1079,11 @@ pub struct Arr3View<'a,T,const N1:usize,const N2:usize,const N3:usize> {
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3View<'a,T,N1,N2,N3> {
     pub fn iter(&'a self) -> Arr3Iter<'a,T,N2,N3> {
         Arr3Iter(&self.arr)
+    }
+
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3View<'a,T,N1,N2,N3> {
@@ -1210,7 +1263,7 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
     }
 
     /// Obtaining a immutable iterator
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item=&(usize,T)> {
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=&'a (usize,T)> {
         self.items.iter()
     }
 
@@ -1354,6 +1407,18 @@ impl<U,T> SerializedVec<U,T>
         }
     }
 }
+impl<U,T> SerializedVec<U,T> {
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&self) -> *const U {
+        self.arr.as_ptr()
+    }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut U {
+        self.arr.as_mut_ptr()
+    }
+
+}
 impl<U,T> IntoConverter for SerializedVec<U,T>
     where U: Default + Clone + Copy + Send,
     for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
@@ -1433,7 +1498,7 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
 impl<U,T> ToCuda<U> for SerializedVec<U,T>
     where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
           <T as ToCuda<U>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
-          for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U> {
+          for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U> + WriteMemory<U> {
     type Output = CudaVec<U,<T as ToCuda<U>>::Output>;
 
     fn to_cuda(self, device: &DeviceGpu<U>) -> Result<Self::Output,TypeConvertError> {
@@ -1442,7 +1507,7 @@ impl<U,T> ToCuda<U> for SerializedVec<U,T>
         } else {
             let mut ptr = CudaVec::new(self.len,device.get_memory_pool())?;
 
-            ptr.memcpy(self.arr.as_ptr(), self.len * <T as ToCuda<U>>::Output::size())?;
+            ptr.memcpy(self.as_ptr(), self.len * <T as ToCuda<U>>::Output::size())?;
 
             Ok(ptr)
         }
@@ -1737,6 +1802,12 @@ impl<'a,U,T> SerializedVecView<'a,U,T>
             u:PhantomData::<U>,
             t:PhantomData::<T>,
         }
+    }
+}
+impl<'a,U,T> SerializedVecView<'a,U,T> {
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const U {
+        self.arr.as_ptr()
     }
 }
 impl<'a,U,T> Clone for SerializedVecView<'a,U,T> {

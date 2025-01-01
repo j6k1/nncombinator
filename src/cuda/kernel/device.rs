@@ -2,7 +2,6 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::DerefMut;
 use libc::{c_int, c_void, size_t};
 use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaMemoryPoolPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs};
 use crate::ope::UnitValue;
@@ -262,7 +261,7 @@ impl<'a,T,const NI:usize,const NO:usize> KernelArgs for DiffLinearForwardArgs<'a
             &mut self.indexes,
             &mut self.input,
             &mut self.units,
-            self.output.deref_mut(),
+            &mut self.output,
             &mut self.output_size,
             &mut self.diff_len
         ]

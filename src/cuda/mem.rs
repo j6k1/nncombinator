@@ -8,7 +8,7 @@ use std::ops::{Deref, DerefMut, Index};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use libc::c_void;
-use crate::cuda::{AsPtr, AsVoidPtr, CudaMemoryPoolPtr, ffi, Memory};
+use crate::cuda::{AsPtr, AsVoidPtr, CudaMemoryPoolPtr, ffi, WriteMemory};
 use crate::cuda::private::{AsMutKernelPtrBase, AsConstKernelPtrBase};
 use crate::error::{CudaError};
 use crate::list::ListNode;

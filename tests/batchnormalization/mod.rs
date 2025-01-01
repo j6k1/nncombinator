@@ -19,7 +19,7 @@ use nncombinator::layer::linear::LinearLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::optimizer::{MomentumSGDBuilder};
-use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
+use crate::common::{assert_device, assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
 
 #[test]
 fn test_mnist_batch_norm() {
@@ -695,6 +695,8 @@ fn test_mnist_batch_norm_for_gpu() {
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
     let device = DeviceGpu::new(memory_pool).unwrap();
+
+    assert_device::<f32,Arr<f32,{ 28*28 }>,_>(&device);
 
     let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 

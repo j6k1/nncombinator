@@ -1,13 +1,19 @@
+use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 use nncombinator::cuda::mem::{Alloctype, MemoryPool};
-use nncombinator::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchForward, BatchLoss, BatchPreTrain, ForwardAll, ForwardDiff, Loss, PreTrain, UpdateWeight};
+use nncombinator::device::input::DeviceInput;
+use nncombinator::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchPreTrain, ForwardAll, ForwardDiff, Loss, PreTrain, UpdateWeight};
 use nncombinator::ope::UnitValue;
 
 lazy_static! {
     pub static ref SHARED_MEMORY_POOL:Arc<Mutex<MemoryPool>> = Arc::new(Mutex::new(MemoryPool::with_size(8 * 1024 * 1024 * 1024,Alloctype::Device).unwrap()));
 }
-
+pub fn assert_device<U,I,D: DeviceInput<U,I>>(_:&D)
+    where U: UnitValue<U>,
+          I: BatchDataType + Debug + 'static,
+          <I as BatchDataType>::Type: Debug + 'static {
+}
 pub fn assert_forward_all<T: ForwardAll>(_:&T) {
 
 }

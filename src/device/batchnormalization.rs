@@ -1,6 +1,5 @@
 //! Implementation of the calculation process for batch normalization
 use std::fmt::Debug;
-use std::ops::DerefMut;
 use rcudnn::{API};
 use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BATCHNORM_SPATIAL};
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
@@ -9,7 +8,7 @@ use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
-use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Memory, MemoryMoveTo};
+use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, WriteMemory, ReadMemory, MemoryMoveTo};
 use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
 use crate::device::{DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
@@ -426,7 +425,7 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
         let mut mean = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
         let mut inv_variance = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
 
-        estimated_mean.memcpy_to(mean.deref_mut(),N)?;
+        estimated_mean.memcpy_to(&mut mean,N)?;
         inv_variance.memcpy(estimated_variance.read_to_vec()?.into_boxed_slice()
                                                                 .iter()
                                                                 .map(|&v| U::one() / SqrtNode::new().forward(v + eps))
@@ -579,8 +578,8 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
         let mut new_running_mean = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
         let mut new_running_variance = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
 
-        running_mean.memcpy_to(new_running_mean.deref_mut(), N)?;
-        running_variance.memcpy_to(new_running_variance.deref_mut(), N)?;
+        running_mean.memcpy_to(&mut new_running_mean, N)?;
+        running_variance.memcpy_to(&mut new_running_variance, N)?;
 
         let mut mean = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
         let mut inv_variance = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;

@@ -2,12 +2,11 @@
 
 use std::fmt::Debug;
 use std::iter;
-use std::ops::DerefMut;
 use libc::c_int;
 use rcublas_sys::{cublasDaxpy_v2, cublasSaxpy_v2, cublasStatus_t};
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::collection::Broadcast;
-use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, Memory, MemoryMoveTo};
+use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo};
 use crate::device::{DeviceCpu, DeviceGpu, DeviceMemoryPool, DeviceReduce};
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
@@ -123,7 +122,7 @@ impl<IO,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,N>,IO,N> for DeviceGpu
         let input_ptr = CudaTensor1dPtrView::<'a,f32,N>::from(input);
         let mut output_ptr = CudaTensor1dPtr::<f32,N>::new(self.get_memory_pool())?;
 
-        bias.memcpy_to(output_ptr.deref_mut(),N)?;
+        bias.memcpy_to(&mut output_ptr,N)?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
 
@@ -242,7 +241,7 @@ impl<IO,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,N>,IO,N> for DeviceGpu
         let input_ptr = CudaTensor1dPtrView::<'a,f64,N>::from(input);
         let mut output_ptr = CudaTensor1dPtr::<f64,N>::new(self.get_memory_pool())?;
 
-        bias.memcpy_to(output_ptr.deref_mut(),N)?;
+        bias.memcpy_to(&mut output_ptr,N)?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
 

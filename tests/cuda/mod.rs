@@ -1,4 +1,4 @@
-use nncombinator::cuda::{CudaMemoryPoolPtr, Memory};
+use nncombinator::cuda::{CudaMemoryPoolPtr, ReadMemory, WriteMemory};
 use crate::common::SHARED_MEMORY_POOL;
 
 #[test]

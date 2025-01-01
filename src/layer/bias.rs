@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::arr::{Arr, IntoConverter};
 use crate::{Cons, Stack};
-use crate::cuda::{CudaTensor1dPtr, Memory};
+use crate::cuda::{CudaTensor1dPtr, ReadMemory, WriteMemory};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::bias::DeviceBias;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};

@@ -1965,6 +1965,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaPtr
 impl<CP> private::AsConstKernelPtrBase for CP
     where CP: AsCudaPtrRef,
           <CP as AsCudaPtrRef>::Pointer: private::AsConstKernelPtrBase {
+    #[inline]
     fn as_const_kernel_ptr(&self) -> *mut c_void {
         self.as_cuda_ptr_ref().as_const_kernel_ptr()
     }
@@ -1972,6 +1973,7 @@ impl<CP> private::AsConstKernelPtrBase for CP
 impl<CP> AsVoidPtr for CP
     where CP: AsCudaPtrRef,
           <CP as AsCudaPtrRef>::Pointer: AsVoidPtr {
+    #[inline]
     fn as_void_ptr(&self) -> *const c_void {
         self.as_cuda_ptr_ref().as_void_ptr()
     }
@@ -1979,6 +1981,7 @@ impl<CP> AsVoidPtr for CP
 impl<CP,T> AsPtr<T> for CP
     where CP: AsCudaPtrRef,
           <CP as AsCudaPtrRef>::Pointer: AsPtr<T> {
+    #[inline]
     fn as_ptr(&self) -> *const T {
         self.as_cuda_ptr_ref().as_ptr()
     }
@@ -1986,10 +1989,12 @@ impl<CP,T> AsPtr<T> for CP
 impl<CP> ReadMemory<<CP as PointerElement>::Element> for CP
     where CP: AsCudaPtrRef + PointerElement,
           <CP as AsCudaPtrRef>::Pointer: ReadMemory<<CP as PointerElement>::Element> {
+    #[inline]
     fn read_to_vec(&self) -> Result<Vec<<CP as PointerElement>::Element>, Error> {
         self.as_cuda_ptr_ref().read_to_vec()
     }
 
+    #[inline]
     fn read_to_vec_with_size(&self, size: usize) -> Result<Vec<<CP as PointerElement>::Element>, Error> {
         self.as_cuda_ptr_ref().read_to_vec_with_size(size)
     }
@@ -1997,9 +2002,11 @@ impl<CP> ReadMemory<<CP as PointerElement>::Element> for CP
 impl<CP> ReadMemoryAsync<<CP as PointerElement>::Element> for CP
     where CP: AsCudaPtrRef + PointerElement,
           <CP as AsCudaPtrRef>::Pointer: ReadMemoryAsync<<CP as PointerElement>::Element> {
+    #[inline]
     fn read_to_vec_async(&self, stream: cudaStream_t) -> Result<Vec<<CP as PointerElement>::Element>, Error> {
         self.as_cuda_ptr_ref().read_to_vec_async(stream)
     }
+    #[inline]
     fn read_to_vec_with_size_async(&self, stream: cudaStream_t, size: usize) -> Result<Vec<<CP as PointerElement>::Element>, Error> {
         self.as_cuda_ptr_ref().read_to_vec_with_size_async(stream,size)
     }
@@ -2009,6 +2016,7 @@ impl<CP,D> MemoryMoveTo<<CP as PointerElement>::Element,D> for CP
           D: AsCudaMutPtr,
           <CP as AsCudaPtrRef>::Pointer: MemoryMoveTo<<CP as PointerElement>::Element,<D as AsCudaMutPtr>::Pointer>,
           <D as AsCudaMutPtr>::Pointer: AsMutPtr<<CP as PointerElement>::Element> {
+    #[inline]
     fn memcpy_to(&self, dst: &mut D, len: usize) -> Result<usize, Error> {
         self.as_cuda_ptr_ref().memcpy_to(dst.as_cuda_mut_ptr().ptr,len)
     }
@@ -2016,6 +2024,7 @@ impl<CP,D> MemoryMoveTo<<CP as PointerElement>::Element,D> for CP
 impl<CP> MemoryMoveTo<<CP as PointerElement>::Element,CudaPtr<<CP as PointerElement>::Element>> for CP
     where CP: AsCudaPtrRef + PointerElement,
           <CP as AsCudaPtrRef>::Pointer: MemoryMoveTo<<CP as PointerElement>::Element,CudaPtr<<CP as PointerElement>::Element>> {
+    #[inline]
     fn memcpy_to(&self, dst: &mut CudaPtr<<CP as PointerElement>::Element>, len: usize) -> Result<usize, Error> {
         self.as_cuda_ptr_ref().memcpy_to(dst,len)
     }
@@ -2023,6 +2032,7 @@ impl<CP> MemoryMoveTo<<CP as PointerElement>::Element,CudaPtr<<CP as PointerElem
 impl<CP> MemoryMoveTo<<CP as PointerElement>::Element,CudaHostPtr<<CP as PointerElement>::Element>> for CP
     where CP: AsCudaPtrRef + PointerElement,
           <CP as AsCudaPtrRef>::Pointer: MemoryMoveTo<<CP as PointerElement>::Element,CudaHostPtr<<CP as PointerElement>::Element>> {
+    #[inline]
     fn memcpy_to(&self, dst: &mut CudaHostPtr<<CP as PointerElement>::Element>, len: usize) -> Result<usize, Error> {
         self.as_cuda_ptr_ref().memcpy_to(dst,len)
     }
@@ -2030,6 +2040,7 @@ impl<CP> MemoryMoveTo<<CP as PointerElement>::Element,CudaHostPtr<<CP as Pointer
 impl<CP> MemoryMoveTo<<CP as PointerElement>::Element,CudaMemoryPoolPtr<<CP as PointerElement>::Element>> for CP
     where CP: AsCudaPtrRef + PointerElement,
           <CP as AsCudaPtrRef>::Pointer: MemoryMoveTo<<CP as PointerElement>::Element,CudaMemoryPoolPtr<<CP as PointerElement>::Element>> {
+    #[inline]
     fn memcpy_to(&self, dst: &mut CudaMemoryPoolPtr<<CP as PointerElement>::Element>, len: usize) -> Result<usize, Error> {
         self.as_cuda_ptr_ref().memcpy_to(dst,len)
     }
@@ -2039,6 +2050,7 @@ impl<CP,D> MemoryMoveToAsync<<CP as PointerElement>::Element,D> for CP
           D: AsCudaMutPtr,
           <CP as AsCudaPtrRef>::Pointer: MemoryMoveToAsync<<CP as PointerElement>::Element,<D as AsCudaMutPtr>::Pointer>,
           <D as AsCudaMutPtr>::Pointer: AsMutPtr<<CP as PointerElement>::Element> {
+    #[inline]
     fn memcpy_to_async(&self, dst: &mut D, len: usize,stream:cudaStream_t) -> Result<usize, Error> {
         self.as_cuda_ptr_ref().memcpy_to_async(&mut dst.as_cuda_mut_ptr().ptr,len,stream)
     }
@@ -2046,6 +2058,7 @@ impl<CP,D> MemoryMoveToAsync<<CP as PointerElement>::Element,D> for CP
 impl<CP> MemoryMoveToAsync<<CP as PointerElement>::Element,CudaPtr<<CP as PointerElement>::Element>> for CP
     where CP: AsCudaPtrRef + PointerElement,
           <CP as AsCudaPtrRef>::Pointer: MemoryMoveToAsync<<CP as PointerElement>::Element,CudaPtr<<CP as PointerElement>::Element>> {
+    #[inline]
     fn memcpy_to_async(&self, dst: &mut CudaPtr<<CP as PointerElement>::Element>, len: usize,stream:cudaStream_t) -> Result<usize, Error> {
         self.as_cuda_ptr_ref().memcpy_to_async(dst,len,stream)
     }
@@ -2053,6 +2066,7 @@ impl<CP> MemoryMoveToAsync<<CP as PointerElement>::Element,CudaPtr<<CP as Pointe
 impl<CP> MemoryMoveToAsync<<CP as PointerElement>::Element,CudaHostPtr<<CP as PointerElement>::Element>> for CP
     where CP: AsCudaPtrRef + PointerElement,
           <CP as AsCudaPtrRef>::Pointer: MemoryMoveToAsync<<CP as PointerElement>::Element,CudaHostPtr<<CP as PointerElement>::Element>> {
+    #[inline]
     fn memcpy_to_async(&self, dst: &mut CudaHostPtr<<CP as PointerElement>::Element>, len: usize,stream:cudaStream_t) -> Result<usize, Error> {
         self.as_cuda_ptr_ref().memcpy_to_async(dst,len,stream)
     }
@@ -2060,6 +2074,7 @@ impl<CP> MemoryMoveToAsync<<CP as PointerElement>::Element,CudaHostPtr<<CP as Po
 impl<CP> MemoryMoveToAsync<<CP as PointerElement>::Element,CudaMemoryPoolPtr<<CP as PointerElement>::Element>> for CP
     where CP: AsCudaPtrRef + PointerElement,
           <CP as AsCudaPtrRef>::Pointer: MemoryMoveToAsync<<CP as PointerElement>::Element,CudaMemoryPoolPtr<<CP as PointerElement>::Element>> {
+    #[inline]
     fn memcpy_to_async(&self, dst: &mut CudaMemoryPoolPtr<<CP as PointerElement>::Element>, len: usize,stream:cudaStream_t) -> Result<usize, Error> {
         self.as_cuda_ptr_ref().memcpy_to_async(dst,len,stream)
     }

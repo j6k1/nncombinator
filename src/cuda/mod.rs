@@ -217,12 +217,6 @@ pub trait PointerElement {
 }
 /// Trait to implement cuda synchronous memory read operations
 pub trait ReadMemory<T: Default + Debug>: PointerElement {
-    /// Repeatedly copy the contents of memory
-    /// # Arguments
-    /// * `p` - Pointer to source memory
-    /// * `len` - Number of elements of the value to be copied
-    /// * `count` - Number of times to copy repeatedly
-    ///
     /// # Errors
     ///
     /// This function may return the following errors
@@ -269,6 +263,12 @@ pub trait WriteMemory<T: Default + Debug>: AsMutVoidPtr {
 }
 /// Trait to implement cuda asynchronous memory read operations
 pub trait ReadMemoryAsync<T: Default + Debug> {
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`rcudnn::Error`]
+    ///
+    ///
     fn read_to_vec_async(&self,stream:cudaStream_t) -> Result<Vec<T>,rcudnn::Error>;
     /// Read memory as Vec with size specified
     /// # Arguments
@@ -1847,12 +1847,25 @@ impl TryFrom<i64> for CudaHostPtr<i64> {
 pub trait ToCuda<T> where T: UnitValue<T> {
     type Output;
 
+    /// # Arguments
+    /// * `device` - gpu device
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TypeConvertError`]
+    ///
     fn to_cuda(self,device:&DeviceGpu<T>) -> Result<Self::Output,TypeConvertError>;
 }
 /// Trait for inverse conversion of value to host memory type
 pub trait ToHost<T> where T: Default + Clone + Send {
     type Output;
 
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TypeConvertError`]
+    ///
     fn to_host(self) -> Result<Self::Output,TypeConvertError>;
 }
 impl<'a,T,const N:usize> ToCuda<T> for &'a CudaTensor1dPtr<T,N>

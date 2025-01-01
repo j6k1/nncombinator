@@ -13,6 +13,9 @@ use crate::error::{OptimizerBuildError, TrainingError};
 /// OptimizerBuilder Definition
 pub trait OptimizerBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
     type Output: Optimizer<U,D>;
+    /// Create and return an optimizer
+    /// # Arguments
+    /// * `size` - Total number of weights to be optimized
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError>;
 }
 /// Optimizer Definition
@@ -27,6 +30,7 @@ pub trait Optimizer<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
 }
 /// Optimizer State Definition
 pub trait OptimizerState<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
+    /// State type
     type Type;
 }
 /// SGD Implementation

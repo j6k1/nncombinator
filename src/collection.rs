@@ -1,4 +1,4 @@
-//! Definition and implementation of various collection typess
+//! Definition and implementation of various collection types
 use std::fmt::Debug;
 use std::ops::{Add, Div, Mul, Sub};
 

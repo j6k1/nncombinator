@@ -32,6 +32,14 @@ pub trait Device<U>: Clone where U: UnitValue<U> {
 }
 /// Characteristics defining devices responsible for various convolutional computations of neural networks
 pub trait DeviceReduce<T,R,U,const N:usize> where U: UnitValue<U> {
+    /// Convolutional computation of input
+    /// # Arguments
+    /// * `input` - convolutional input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn reduce<'a>(&self, input: &'a T) -> Result<R, TrainingError>;
 }
 /// Implementation of Device to be computed by CPU

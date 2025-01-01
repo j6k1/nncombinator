@@ -924,6 +924,7 @@ pub struct Arr2View<'a,T,const N1:usize,const N2:usize> {
     arr:&'a [T]
 }
 impl<'a,T,const N1:usize,const N2:usize> Arr2View<'a,T,N1,N2> {
+    /// Obtaining a immutable iterator
     pub fn iter(&'a self) -> Arr2Iter<'a,T,N2> {
         Arr2Iter(&self.arr)
     }
@@ -1000,6 +1001,7 @@ pub struct Arr2ViewMut<'a,T,const N1:usize,const N2:usize> {
     arr: &'a mut [T]
 }
 impl<'a,T,const N1:usize,const N2:usize> Arr2ViewMut<'a,T,N1,N2> {
+    /// Obtaining a mutable iterator
     pub fn iter_mut(&'a mut self) -> Arr2IterMut<'a,T,N2> {
         Arr2IterMut(&mut self.arr)
     }
@@ -1082,6 +1084,7 @@ pub struct Arr3View<'a,T,const N1:usize,const N2:usize,const N3:usize> {
     arr: &'a [T]
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3View<'a,T,N1,N2,N3> {
+    /// Obtaining a immutable iterator
     pub fn iter(&'a self) -> Arr3Iter<'a,T,N2,N3> {
         Arr3Iter(&self.arr)
     }
@@ -1133,6 +1136,7 @@ pub struct Arr3ViewMut<'a,T,const N1:usize,const N2:usize,const N3:usize> {
     arr:&'a mut [T]
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3ViewMut<'a,T,N1,N2,N3> {
+    /// Obtaining a mutable iterator
     pub fn iter_mut(&'a mut self) -> Arr3IterMut<'a,T,N2,N3> {
         Arr3IterMut(&mut self.arr)
     }
@@ -1319,6 +1323,7 @@ pub struct SerializedVecConverter<U,T>
 /// Trait that implements the ability to convert to a converter type
 /// for conversion to a destination type.
 pub trait IntoConverter {
+    /// Converter type to go through when converting to the type being converted
     type Converter;
 
     fn into_converter(self) -> Self::Converter;

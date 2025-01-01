@@ -7,6 +7,8 @@ use crate::error::{TypeConvertError};
 use crate::layer::BatchDataType;
 use crate::ope::UnitValue;
 
+/// Trait that defines the function of processing data input in the input layer
+/// into a form that can be passed to subsequent intermediate layers.
 pub trait DeviceInput<U,I>: Device<U>
     where U: UnitValue<U>,
           I: BatchDataType + Debug + 'static,
@@ -14,7 +16,26 @@ pub trait DeviceInput<U,I>: Device<U>
     type Output: Debug + 'static;
     type BatchOutput: Debug + 'static;
 
+    /// Type conversion during forward propagation
+    /// # Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TypeConvertError`]
+    ///
     fn forward_input(&self,input: I) -> Result<Self::Output,TypeConvertError>;
+
+    /// Type conversion during forward propagation in batch
+    /// # Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TypeConvertError`]
+    ///
     fn batch_forward_input(&self,input: <I as BatchDataType>::Type) -> Result<Self::BatchOutput,TypeConvertError>;
 }
 

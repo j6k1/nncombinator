@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::arr::{Arr, Arr2, DiffArr, IntoConverter};
 use crate::{Cons, Stack};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor2dPtr, DataTypeInfo, ReadMemory, WriteMemory};
+use crate::cuda::{CudaTensor1dPtr, CudaTensor2dPtr, ReadMemory, WriteMemory};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
@@ -362,58 +362,22 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
         Ok(self.device.backward_linear(&self.units,input)?.into())
     }
 }
-impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,Arr2<U,NI,NO>,Arr<U,NO>,P,DeviceCpu<U>,I,PI,OP,NI,NO>
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: BackwardAll<U,LossInput=PI> + ForwardAll<Input=I,Output=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceCpu<U>>,
+          C: Debug,
+          BC: Debug,
+          OP: Optimizer<U,D>,
           PI: Debug + BatchDataType +
-              From<<DeviceCpu<U> as DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>>::LossOutput>,
-          DeviceCpu<U>: Device<U> + DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr2<U,NI,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr2<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,NO>> {
-    type LossInput = <DeviceCpu<U> as DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>>::Output;
-    type LossOutput = <P as BackwardAll<U>>::LossOutput;
-
-    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-        let (s,_) = stack.pop();
-
-        let loss = input;
-
-        let next_loss = self.backward(&loss)?;
-
-        let g = s.map(|o| {
-            self.device.backward_weight_gradient(o.into(),&loss)
-        })?;
-
-        let bg = self.device.backward_bias_weight_gradient(loss)?;
-
-        let (s,loss) = self.parent.loss(next_loss.into(),lossf,s)?;
-
-        let (l,s) = self.parent.backward_all(loss, s, lossf)?;
-
-        Ok((l,Cons(s,(g,bg))))
-    }
-}
-impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,P,DeviceGpu<U>,I,PI,OP,NI,NO>
-    where P: BackwardAll<U,LossInput=PI> + ForwardAll<Input=I,Output=PI> +
-             PreTrain<U,PreOutput=PI> +
-             Loss<U>,
-          U: Default + Debug + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          PI: Debug + BatchDataType +
-              From<<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::LossOutput>,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor2dPtr<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor2dPtr<U,NI,NO>> {
-    type LossInput = <DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::Output;
+              From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
+    type LossInput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
@@ -454,20 +418,22 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> AskDiffInput<U> for Linea
         stack.map_remaining(|s| self.parent.ask_diff_input(s))
     }
 }
-impl<U,P,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,Arr2<U,NI,NO>,Arr<U,NO>,P,DeviceCpu<U>,I,PI,OP,NI,NO>
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> +
              Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceCpu<U>>,
-          PI: Debug + BatchDataType + From<<DeviceCpu<U> as DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>>::LossOutput>,
-          DeviceCpu<U>: Device<U> + DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr2<U,NI,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr2<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,NO>> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr2<U,NI,NO>,Arr<U,NO>)>;
+          C: Debug,
+          BC: Debug,
+          OP: Optimizer<U,D>,
+          PI: Debug + BatchDataType + From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(C,BC)>;
 
     fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
         let (s,(g,bg)) = stack.pop();
@@ -478,57 +444,20 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<
         Ok(self.parent.update_weight(s)?)
     }
 }
-impl<U,P,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,P,DeviceGpu<U>,I,PI,OP,NI,NO>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> +
-             Loss<U> + UpdateWeight<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          PI: Debug + BatchDataType + From<<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::LossOutput>,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor2dPtr<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor2dPtr<U,NI,NO>> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>)>;
-
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
-        let (s,(g,bg)) = stack.pop();
-
-        self.bias_optimizer.update((&bg).into(), (&mut self.bias).into())?;
-        self.unit_optimizer.update((&g).into(),(&mut self.units).into())?;
-
-        Ok(self.parent.update_weight(s)?)
-    }
-}
-impl<U,P,I,PI,OP,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,Arr2<U,NI,NO>,Arr<U,NO>,P,DeviceCpu<U>,I,PI,OP,NI,NO>
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: PreTrain<U,PreOutput=PI> +
              ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceCpu<U>>,
-          PI: Debug + BatchDataType + From<<DeviceCpu<U> as DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>>::LossOutput>,
-          DeviceCpu<U>: Device<U> + DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr2<U,NI,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr2<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,NO>> {
-}
-impl<U,P,I,PI,OP,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,P,DeviceGpu<U>,I,PI,OP,NI,NO>
-    where P: PreTrain<U,PreOutput=PI> +
-             ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          PI: Debug + BatchDataType +
-              From<<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::LossOutput>,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>,
-          Self: BackwardAll<U>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor2dPtr<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor2dPtr<U,NI,NO>> {
+          C: Debug,
+          BC: Debug,
+          OP: Optimizer<U,D>,
+          PI: Debug + BatchDataType + From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchForwardBase for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
@@ -602,7 +531,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrain<U> for Line
         Ok(Cons(r,u))
     }
 }
-impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,Arr2<U,NI,NO>,Arr<U,NO>,P,DeviceCpu<U>,I,PI,OP,NI,NO>
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> +
              Loss<U> + BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
@@ -611,20 +540,22 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
+          C: Debug,
+          BC: Debug,
           PI: BatchDataType,
-          OP: Optimizer<U,DeviceCpu<U>>,
+          OP: Optimizer<U,D>,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize,
           <PI as BatchDataType>::Type: IntoConverter,
           <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TypeConvertError> + Debug,
-          PI: Debug + From<<DeviceCpu<U> as DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>>::LossOutput> + BatchDataType,
-          DeviceCpu<U>: Device<U> + DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type>,
-          <DeviceCpu<U> as DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>>::BatchOutput: Debug,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr2<U,NI,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr2<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,NO>> {
-    type BatchLossInput = <DeviceCpu<U> as DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>>::BatchOutput;
+          PI: Debug + From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput> + BatchDataType,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type>,
+          <D as DeviceLinear<U,C,BC,PI,NI,NO>>::BatchOutput: Debug,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
+    type BatchLossInput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::BatchOutput;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
@@ -650,7 +581,7 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer
         Ok((l,Cons(s,(g,bg))))
     }
 }
-impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,P,DeviceGpu<U>,I,PI,OP,NI,NO>
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
@@ -659,89 +590,21 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
-          OP: Optimizer<U,DeviceGpu<U>>,
+          C: Debug,
+          BC: Debug,
+          OP: Optimizer<U,D>,
+          PI: Debug + From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput> + BatchDataType,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize,
           <PI as BatchDataType>::Type: IntoConverter,
           <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TypeConvertError> + Debug,
-          PI: Debug + From<<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::LossOutput> + BatchDataType,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type>,
-          <DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::BatchOutput: Debug,
-          <<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::Output as BatchDataType>::Type: Debug,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor2dPtr<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor2dPtr<U,NI,NO>> {
-    type BatchLossInput = <DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::BatchOutput;
-    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
-
-    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-        let (s, _) = stack.pop();
-
-        let loss = input;
-
-        let next_loss = self.device.batch_backward_linear(&self.units, &loss)?;
-
-        let g = s.map(|o| {
-            self.device.batch_backward_weight_gradient(o, &loss)
-        })?;
-
-        let bg = self.device.batch_linear_reduce(&loss)?;
-
-        let (
-            s,
-            loss
-        ) = self.parent.batch_loss(next_loss.into_converter().try_into()?,lossf,s)?;
-
-        let (l,s) = self.parent.batch_backward(loss, s, lossf)?;
-
-        Ok((l,Cons(s,(g,bg))))
-    }
-}
-impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,Arr2<U,NI,NO>,Arr<U,NO>,P,DeviceCpu<U>,I,PI,OP,NI,NO>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
-             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync + BatchDataType,
-          OP: Optimizer<U,DeviceCpu<U>>,
-          PI: Debug + From<<DeviceCpu<U> as DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>>::LossOutput> + BatchDataType,
-          <I as BatchDataType>::Type: Debug,
-          <PI as BatchDataType>::Type: BatchSize,
-          <PI as BatchDataType>::Type: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TypeConvertError> + Debug,
-          DeviceCpu<U>: Device<U> + DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type>,
-          <DeviceCpu<U> as DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>>::BatchOutput: Debug,
-          <<DeviceCpu<U> as DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,PI,NI,NO>>::Output as BatchDataType>::Type: Debug,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr2<U,NI,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr2<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,NO>> {
-}
-impl<U,P,I,PI,OP,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,P,DeviceGpu<U>,I,PI,OP,NI,NO>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> +
-             Loss<U> + BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
-             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
-          U: Default + Clone + Copy + Send + UnitValue<U> + DataTypeInfo,
-          I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + From<<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::LossOutput> + BatchDataType,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          <PI as BatchDataType>::Type: IntoConverter,
-          <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TypeConvertError> + Debug,
-          <I as BatchDataType>::Type: Debug,
-          <PI as BatchDataType>::Type: BatchSize,
-          <PI as BatchDataType>::Type: TryFrom<<<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::BatchLossOutput as IntoConverter>::Converter> + Debug,
-          DeviceGpu<U>: Device<U> + DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type>,
-          <DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::BatchOutput: Debug,
-          <<DeviceGpu<U> as DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,PI,NI,NO>>::Output as BatchDataType>::Type: Debug,
-          Self: Loss<U> + BatchBackward<U> {
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type>,
+          <D as DeviceLinear<U,C,BC,PI,NI,NO>>::BatchOutput: Debug,
+          <<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
 }
 /// Trait for LinearLayer instance creation
 pub trait LinearLayerInstantiation<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
@@ -1159,23 +1022,25 @@ impl<U,C,BC,P,OP,D,I,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLa
         Ok(Cons(s,u))
     }
 }
-impl<U,P,OP,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,Arr2<U,NI,NO>,Arr<U,NO>,P,OP,DeviceCpu<U>,I,NI,NO>
+impl<U,C,BC,P,D,OP,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,C,BC,P,OP,D,I,NI,NO>
     where P: BackwardAll<U,LossInput=()> +
              ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              PreTrain<U,PreOutput=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceCpu<U>>,
-          DeviceCpu<U>: Device<U> + DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO>,
-          <DeviceCpu<U> as DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO>>::Output: Debug + 'static,
-          Arr<U,NO>: From<<DeviceCpu<U> as DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO>>::Output>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr2<U,NI,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr2<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,NO>>,
-          Self: ForwardAll + PreTrain<U,OutStack=Cons<<P as PreTrain<U>>::OutStack,Arr<U,NO>>> {
-    type LossInput = <DeviceCpu<U> as DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO>>::Output;
+          C: Debug,
+          BC: Debug,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO>,
+          <D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output: Debug + 'static,
+          BC: From<<D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC>,
+          Self: ForwardAll + PreTrain<U,OutStack=Cons<<P as PreTrain<U>>::OutStack,BC>> {
+    type LossInput = <D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
@@ -1195,77 +1060,21 @@ impl<U,P,OP,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<
         Ok((l,Cons(s,(g,bg.into()))))
     }
 }
-impl<U,P,OP,I,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,P,OP,DeviceGpu<U>,I,NI,NO>
-    where P: BackwardAll<U,LossInput=()> +
-             ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
-             PreTrain<U,PreOutput=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
-             Loss<U>,
-          U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U> + DeviceDiffLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,NI,NO>,
-          <DeviceGpu<U> as DeviceDiffLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,NI,NO>>::Output: Debug + 'static,
-          CudaTensor1dPtr<U,NO>: From<<DeviceGpu<U> as DeviceDiffLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,NI,NO>>::Output>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor2dPtr<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor2dPtr<U,NI,NO>>,
-          Self: ForwardAll + PreTrain<U,OutStack=Cons<<P as PreTrain<U>>::OutStack,CudaTensor1dPtr<U,NO>>> {
-    type LossInput = <DeviceGpu<U> as DeviceDiffLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,NI,NO>>::Output;
-    type LossOutput = <P as BackwardAll<U>>::LossOutput;
-
-    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-        let (s,_) = stack.pop();
-
-        let loss = input;
-
-        let g = s.map(|o| {
-            self.device.backward_diff_weight_gradient(o,&loss)
-        })?;
-
-        let bg = loss;
-
-        let (l,s) = self.parent.backward_all((), s, lossf)?;
-
-        Ok((l,Cons(s,(g,bg.into()))))
-    }
-}
-impl<U,P,OP,I,const NI:usize,const NO:usize> UpdateWeight<U> for DiffLinearLayer<U,Arr2<U,NI,NO>,Arr<U,NO>,P,OP,DeviceCpu<U>,I,NI,NO>
+impl<U,C,BC,P,D,OP,I,const NI:usize,const NO:usize> UpdateWeight<U> for DiffLinearLayer<U,C,BC,P,OP,D,I,NI,NO>
     where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
              PreTrain<U> +
              Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceCpu<U>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr2<U,NI,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr2<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,NO>> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr2<U,NI,NO>,Arr<U,NO>)>;
-
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
-        let (s,(g,bg)) = stack.pop();
-
-        self.bias_optimizer.update((&bg).into(),(&mut self.bias).into())?;
-        self.unit_optimizer.update((&g).into(),(&mut self.units).into())?;
-
-        Ok(self.parent.update_weight(s)?)
-    }
-}
-impl<U,P,OP,I,const NI:usize,const NO:usize> UpdateWeight<U> for DiffLinearLayer<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,P,OP,DeviceGpu<U>,I,NI,NO>
-    where P: ForwardAll<Input=I,Output=DiffInput<DiffArr<U,NI>,U,NI,NO>> +
-             PreTrain<U> +
-             Loss<U> + UpdateWeight<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,NO>>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor2dPtr<U,NI,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,NO>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor2dPtr<U,NI,NO>> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>)>;
+          C: Debug,
+          BC: Debug,
+          OP: Optimizer<U,D>,
+          D: Device<U>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(C,BC)>;
 
     fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
         let (s,(g,bg)) = stack.pop();
@@ -1316,6 +1125,8 @@ impl<U,C,BC,P,OP,D,I,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO>,
           I: Debug + Send + Sync,
+          C: Debug,
+          BC: Debug,
           OP: Optimizer<U,D>,
           BC: From<<D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output>,
           Self: BackwardAll<U> {

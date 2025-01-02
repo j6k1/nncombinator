@@ -534,16 +534,18 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> Backward<U,(&PI,&PI,&C,&C),Result<(PI,C,C)
                                         saved_inv_variance)
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>
+impl<U,C,P,OP,D,I,PI,S,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          OP: Optimizer<U,DeviceCpu<U>>,
-          DeviceCpu<U>: Device<U> + DeviceBatchNorm<U,Arr<U,N>,PI,N>,
+          S: Debug + Sized + 'static,
+          C: Debug,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           <PI as BatchDataType>::Type: Debug + 'static,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
@@ -566,79 +568,19 @@ impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,Arr
         Ok((l,Cons(s,(scale,bias,None))))
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,PI,N>,
-          <PI as BatchDataType>::Type: Debug + 'static,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,N>> {
-    type LossInput = PI;
-    type LossOutput = <P as BackwardAll<U>>::LossOutput;
-
-    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-
-        let (s,_) = stack.pop();
-        let (s,(m,iv)) = s.pop();
-
-        let loss = input;
-
-        let (loss,scale,bias) = s.map(|input| {
-            self.backward((&loss,input,&m,&iv))
-        })?;
-
-        let (s,loss) = self.parent.loss(loss,lossf,s)?;
-
-        let (l,s) = self.parent.backward_all(loss, s, lossf)?;
-
-        Ok((l,Cons(s,(scale,bias,None))))
-    }
-}
-impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>
+impl<U,C,P,OP,D,I,PI,S,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          OP: Optimizer<U,DeviceCpu<U>>,
+          S: Debug + Sized + 'static,
+          C: Debug,
+          OP: Optimizer<U,D>,
+          D: Device<U>,
           <PI as BatchDataType>::Type: Debug + 'static,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(Arr<U,N>,Arr<U,N>,Option<(Arr<U,N>,Arr<U,N>)>)>;
-
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
-        let (s,(scale,bias,saved)) = stack.pop();
-
-        self.bias_optimizer.update((&bias).into(),(&mut self.bias).into())?;
-        self.scale_optimizer.update((&scale).into(),(&mut self.scale).into())?;
-
-        if let Some((running_mean,running_variance)) = saved {
-            for (it, &m) in self.running_mean.iter_mut().zip(running_mean.iter()) {
-                *it = m;
-            }
-
-            for (it, &v) in self.running_variance.iter_mut().zip(running_variance.iter()) {
-                *it = v;
-            }
-        }
-
-        Ok(self.parent.update_weight(s)?)
-    }
-}
-impl<U,P,OP,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + UpdateWeight<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U>,
-          <PI as BatchDataType>::Type: Debug + 'static,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,N>> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>,Option<(CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>)>)>;
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(C,C,Option<(C,C)>)>;
 
     fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
         let (s,(scale,bias,saved)) = stack.pop();
@@ -671,27 +613,18 @@ impl<U,P,OP,C,I,PI,S,const N:usize> AskDiffInput<U> for BatchNormalizationLayer<
         stack.map_remaining(|s| s.map_remaining(|s| self.parent.ask_diff_input(s)))
     }
 }
-impl<U,P,OP,I,PI,const N:usize> Loss<U> for BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>
+impl<U,C,P,OP,D,I,PI,S,const N:usize> Loss<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          OP: Optimizer<U,DeviceCpu<U>>,
-          DeviceCpu<U>: Device<U> + DeviceBatchNorm<U,Arr<U,N>,PI,N>,
+          S: Debug + Sized + 'static,
+          C: Debug,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           <PI as BatchDataType>::Type: Debug + 'static,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
-}
-impl<U,P,OP,I,PI,const N:usize> Loss<U> for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          PI: Debug + BatchDataType + 'static,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,PI,N>,
-          <PI as BatchDataType>::Type: Debug + 'static,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
 }
 impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchForwardBase for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
@@ -774,20 +707,22 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLay
         }).push(u))
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>
+impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
-          OP: Optimizer<U,DeviceCpu<U>>,
+          OP: Optimizer<U,D>,
           PI: BatchDataType + Debug + 'static,
+          S: Debug + Sized + 'static,
+          C: Debug,
           <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          DeviceCpu<U>: Device<U> + DeviceBatchNorm<U,Arr<U,N>,PI,N>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type BatchLossInput = <PI as BatchDataType>::Type;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
@@ -817,78 +752,22 @@ impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,A
         Ok((l,Cons(s,(scale,bias,Some((running_mean,running_variance))))))
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
-          OP: Optimizer<U,DeviceGpu<U>>,
+          OP: Optimizer<U,D>,
           PI: BatchDataType + Debug + 'static,
+          S: Debug + Sized + 'static,
+          C: Debug,
           <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,PI,N>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,N>> {
-    type BatchLossInput = <PI as BatchDataType>::Type;
-    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
-
-    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
-        let loss = input;
-
-        let (s, _) = stack.pop();
-
-        let (s,MeanAndVariance {
-            running_mean,
-            running_variance,
-            saved_mean,
-            saved_inv_variance
-        }) = s.pop();
-
-        let (loss,scale,bias) = s.map(|input| {
-            self.device.batch_backward_batch_norm(&loss,input,&self.scale,&saved_mean,&saved_inv_variance)
-        })?;
-
-        let (s,
-            loss
-        ) = self.parent.batch_loss(loss,lossf,s)?;
-
-        let (l,s) = self.parent.batch_backward(loss, s, lossf)?;
-
-        Ok((l,Cons(s,(scale,bias,Some((running_mean,running_variance))))))
-    }
-}
-impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
-             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
-          U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
-          I: Debug + Send + Sync + BatchDataType,
-          OP: Optimizer<U,DeviceCpu<U>>,
-          PI: BatchDataType + Debug + 'static,
-          <PI as BatchDataType>::Type: Debug + 'static,
-          <I as BatchDataType>::Type: Debug,
-          DeviceCpu<U>: Device<U> + DeviceBatchNorm<U,Arr<U,N>,PI,N>,
-          for<'a> &'a <OP as Optimizer<U,DeviceCpu<U>>>::InternalType: From<&'a Arr<U,N>>,
-          for<'a> <OP as Optimizer<U,DeviceCpu<U>>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
-}
-impl<U,P,OP,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
-             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync + BatchDataType,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          PI: BatchDataType + Debug + 'static,
-          <PI as BatchDataType>::Type: Debug + 'static,
-          <I as BatchDataType>::Type: Debug,
-          DeviceGpu<U>: Device<U> + DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,PI,N>,
-          for<'a> &'a <OP as Optimizer<U,DeviceGpu<U>>>::InternalType: From<&'a CudaTensor1dPtr<U,N>>,
-          for<'a> <OP as Optimizer<U,DeviceGpu<U>>>::InternalUpdateType<'a>: From<&'a mut CudaTensor1dPtr<U,N>> {
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
 }
 /// Builder for BatchNormalizationLayer instance creation
 pub struct BatchNormalizationLayerBuilder<const N:usize> {

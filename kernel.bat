@@ -1,0 +1,1 @@
+nvcc -O3 --prec-div=true --fmad=true -cudart=shared -arch=sm_70 src/kernel.cu -lib -ccbin cl.exe -Xcompiler -wd4819 -o kernel.lib

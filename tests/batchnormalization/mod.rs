@@ -11,15 +11,15 @@ use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLu, SoftMax};
 use nncombinator::arr::Arr;
 use nncombinator::device::{DeviceCpu, DeviceGpu};
-use nncombinator::layer::{AddLayer, AddLayerTrain, BatchForward, BatchTrain, ForwardAll};
+use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll};
 use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::batchnormalization::{BatchNormalizationLayerBuilder};
 use nncombinator::layer::input::InputLayer;
 use nncombinator::layer::linear::LinearLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
-use nncombinator::optimizer::{MomentumSGD};
-use crate::common::SHARED_MEMORY_POOL;
+use nncombinator::optimizer::{MomentumSGDBuilder};
+use crate::common::{assert_device, assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
 
 #[test]
 fn test_mnist_batch_norm() {
@@ -32,30 +32,41 @@ fn test_mnist_batch_norm() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder =  MomentumSGDBuilder::new(&device).lr(0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<100,10>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -71,7 +82,6 @@ fn test_mnist_batch_norm() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.008);
 
     let mut rng = rand::thread_rng();
 
@@ -119,7 +129,7 @@ fn test_mnist_batch_norm() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -183,49 +193,56 @@ fn test_fashion_mnist_batch_norm() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/1200f32).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(1200f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/2000f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(1800f32).sqrt()).unwrap();
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.01);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },1200>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },2000>::new().build(l,&device,
+                                                          move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                          &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<2000,2000>::new().build(l,&device,
+                                                     move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                     &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<2000,1800>::new().build(l,&device,
+                                                     move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                     &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<1800,10>::new().build(l,&device,
+                                                   move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                   &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -247,41 +264,39 @@ fn test_fashion_mnist_batch_norm() {
         teachers.push((i.iter().map(|&p| p as f32 / 255.).collect::<Vec<f32>>(),l as usize));
     }
 
-    let mut optimizer = MomentumSGD::new(0.008);
-
     let mut rng = rand::thread_rng();
 
     teachers.shuffle(&mut rng);
 
     let mut correct_answers = 0;
 
-    let train_size = 5000;
-    let batch_size = 100;
+    let train_size = 6000;
+    let batch_size = 256;
 
-    let mut teachers = teachers.into_iter().take(train_size).collect::<Vec<(Vec<f32>,usize)>>();
+    let teachers = teachers.into_iter().take(train_size).collect::<Vec<(Vec<f32>,usize)>>();
 
-    let iter_per_epoch = (train_size / batch_size).max(1);
+    let mut teachers = teachers.into_iter().map(|(img, lbl)| {
+        let pixels = img.clone().try_into().unwrap();
+
+        let input = pixels;
+
+        let mut expected = Arr::new();
+
+        expected[lbl] = 1.;
+
+        (expected, input)
+    }).collect::<Vec<(Arr<f32,10>,Arr<f32,784>)>>();
+
     let max_epochs = 10;
-    let mut epoch_cnt = 0;
 
-    for i in 0.. {
+    for _ in 0..max_epochs {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for _ in 0..1 {
-            let batch_data = teachers.iter().take(batch_size).map(|( img,lbl)| {
-                let pixels = img.clone().try_into().unwrap();
-
-                let input = pixels;
-
-                let mut expected = Arr::new();
-
-                expected[*lbl] = 1.;
-
-                (expected, input)
-            }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+        for teachers in teachers.chunks(batch_size) {
+            let batch_data = teachers.iter().cloned().fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
                 acc.0.push(e);
                 acc.1.push(i);
                 acc
@@ -289,7 +304,7 @@ fn test_fashion_mnist_batch_norm() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             count += 1;
@@ -297,15 +312,8 @@ fn test_fashion_mnist_batch_norm() {
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
         }
 
-        if i % iter_per_epoch == 0 {
-            epoch_cnt += 1;
-            println!("total_loss = {}", total_loss);
-            println!("loss_average = {}", total_loss as f32 / count as f32);
-
-            if epoch_cnt >= max_epochs {
-                break;
-            }
-        }
+        println!("total_loss = {}", total_loss);
+        println!("loss_average = {}", total_loss as f32 / count as f32);
     }
 
     let mut tests:Vec<(Vec<f32>,usize)> = Vec::new();
@@ -355,30 +363,41 @@ fn test_mnist_batch_norm_double() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<100,10>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -394,7 +413,6 @@ fn test_mnist_batch_norm_double() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.008);
 
     let mut rng = rand::thread_rng();
 
@@ -442,7 +460,7 @@ fn test_mnist_batch_norm_double() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -506,49 +524,56 @@ fn test_fashion_mnist_batch_norm_double() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f64>::new(0.0, (2f64/(28f64*28f64)).sqrt()).unwrap();
-    let n2 = Normal::<f64>::new(0.0, (2f64/1200f64).sqrt()).unwrap();
-    let n3 = Normal::<f64>::new(0.0, 1f64/(1200f64).sqrt()).unwrap();
+    let n2 = Normal::<f64>::new(0.0, (2f64/2000f64).sqrt()).unwrap();
+    let n3 = Normal::<f64>::new(0.0, 1f64/(1800f64).sqrt()).unwrap();
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.01);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },1200>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },2000>::new().build(l,&device,
+                                                          move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                          &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<2000,2000>::new().build(l,&device,
+                                                     move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                     &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<2000,1800>::new().build(l,&device,
+                                                     move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                     &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<1800,10>::new().build(l,&device,
+                                                   move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                   &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -570,41 +595,39 @@ fn test_fashion_mnist_batch_norm_double() {
         teachers.push((i.iter().map(|&p| p as f64 / 255.).collect::<Vec<f64>>(),l as usize));
     }
 
-    let mut optimizer = MomentumSGD::new(0.008);
-
     let mut rng = rand::thread_rng();
 
     teachers.shuffle(&mut rng);
 
     let mut correct_answers = 0;
 
-    let train_size = 5000;
-    let batch_size = 100;
+    let train_size = 6000;
+    let batch_size = 256;
 
-    let mut teachers = teachers.into_iter().take(train_size).collect::<Vec<(Vec<f64>,usize)>>();
+    let teachers = teachers.into_iter().take(train_size).collect::<Vec<(Vec<f64>,usize)>>();
 
-    let iter_per_epoch = (train_size / batch_size).max(1);
+    let mut teachers = teachers.into_iter().map(|(img, lbl)| {
+        let pixels = img.clone().try_into().unwrap();
+
+        let input = pixels;
+
+        let mut expected = Arr::new();
+
+        expected[lbl] = 1.;
+
+        (expected, input)
+    }).collect::<Vec<(Arr<f64,10>,Arr<f64,784>)>>();
+
     let max_epochs = 10;
-    let mut epoch_cnt = 0;
 
-    for i in 0.. {
+    for _ in 0..max_epochs {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for _ in 0..1 {
-            let batch_data = teachers.iter().take(batch_size).map(|( img,lbl)| {
-                let pixels = img.clone().try_into().unwrap();
-
-                let input = pixels;
-
-                let mut expected = Arr::new();
-
-                expected[*lbl] = 1.;
-
-                (expected, input)
-            }).fold((Vec::<Arr<f64, 10>>::new(), Vec::<Arr<f64, 784>>::new(), ), |mut acc, (e, i)| {
+        for teachers in teachers.chunks(batch_size) {
+            let batch_data = teachers.iter().cloned().fold((Vec::<Arr<f64, 10>>::new(), Vec::<Arr<f64, 784>>::new(), ), |mut acc, (e, i)| {
                 acc.0.push(e);
                 acc.1.push(i);
                 acc
@@ -612,7 +635,7 @@ fn test_fashion_mnist_batch_norm_double() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             count += 1;
@@ -620,15 +643,8 @@ fn test_fashion_mnist_batch_norm_double() {
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
         }
 
-        if i % iter_per_epoch == 0 {
-            epoch_cnt += 1;
-            println!("total_loss = {}", total_loss);
-            println!("loss_average = {}", total_loss as f64 / count as f64);
-
-            if epoch_cnt >= max_epochs {
-                break;
-            }
-        }
+        println!("total_loss = {}", total_loss);
+        println!("loss_average = {}", total_loss as f64 / count as f64);
     }
 
     let mut tests:Vec<(Vec<f64>,usize)> = Vec::new();
@@ -663,9 +679,9 @@ fn test_fashion_mnist_batch_norm_double() {
         }
     }
 
-    println!("correct_answers = {},{}%",correct_answers,correct_answers as f64 / count as f64 * 100.);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers as f64 / count as f64 * 100. > 80.)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
 }
 #[test]
 fn test_mnist_batch_norm_for_gpu() {
@@ -680,32 +696,143 @@ fn test_mnist_batch_norm_for_gpu() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    assert_device::<f32,Arr<f32,{ 28*28 }>,_>(&device);
+
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.004);
+
     let mut net = net.add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,10>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+
         LinearOutputLayer::new(l,&device)
     });
+
+    assert_forward_all(&net);
+    assert_pre_train(&net);
+    assert_backward_all(&net);
+    assert_update_weight(&net);
+    assert_batch_forward(&net);
+    assert_batch_pre_train(&net);
+    assert_batch_backward(&net);
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
 
@@ -719,7 +846,6 @@ fn test_mnist_batch_norm_for_gpu() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.008);
 
     let mut rng = rand::thread_rng();
 
@@ -767,7 +893,7 @@ fn test_mnist_batch_norm_for_gpu() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
@@ -831,51 +957,58 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f32>::new(0.0, (2f32/(28f32*28f32)).sqrt()).unwrap();
-    let n2 = Normal::<f32>::new(0.0, (2f32/1200f32).sqrt()).unwrap();
-    let n3 = Normal::<f32>::new(0.0, 1f32/(1200f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/2000f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(1800f32).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.01);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },1200>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },1000>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<1000,1000>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<1000,1000>::new().build(l,&device,
+                                                     move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                     &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<1000,10>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -897,41 +1030,39 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
         teachers.push((i.iter().map(|&p| p as f32 / 255.).collect::<Vec<f32>>(),l as usize));
     }
 
-    let mut optimizer = MomentumSGD::new(0.008);
-
     let mut rng = rand::thread_rng();
 
     teachers.shuffle(&mut rng);
 
     let mut correct_answers = 0;
 
-    let train_size = 5000;
-    let batch_size = 100;
+    let train_size = 6000;
+    let batch_size = 256;
 
-    let mut teachers = teachers.into_iter().take(train_size).collect::<Vec<(Vec<f32>,usize)>>();
+    let teachers = teachers.into_iter().take(train_size).collect::<Vec<(Vec<f32>,usize)>>();
 
-    let iter_per_epoch = (train_size / batch_size).max(1);
+    let mut teachers = teachers.into_iter().map(|(img, lbl)| {
+        let pixels = img.clone().try_into().unwrap();
+
+        let input = pixels;
+
+        let mut expected = Arr::new();
+
+        expected[lbl] = 1.;
+
+        (expected, input)
+    }).collect::<Vec<(Arr<f32,10>,Arr<f32,784>)>>();
+
     let max_epochs = 10;
-    let mut epoch_cnt = 0;
 
-    for i in 0.. {
+    for _ in 0..max_epochs {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for _ in 0..1 {
-            let batch_data = teachers.iter().take(batch_size).map(|( img,lbl)| {
-                let pixels = img.clone().try_into().unwrap();
-
-                let input = pixels;
-
-                let mut expected = Arr::new();
-
-                expected[*lbl] = 1.;
-
-                (expected, input)
-            }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
+        for teachers in teachers.chunks(batch_size) {
+            let batch_data = teachers.iter().cloned().fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<f32, 784>>::new(), ), |mut acc, (e, i)| {
                 acc.0.push(e);
                 acc.1.push(i);
                 acc
@@ -939,7 +1070,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             count += 1;
@@ -947,15 +1078,8 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
         }
 
-        if i % iter_per_epoch == 0 {
-            epoch_cnt += 1;
-            println!("total_loss = {}", total_loss);
-            println!("loss_average = {}", total_loss as f32 / count as f32);
-
-            if epoch_cnt >= max_epochs {
-                break;
-            }
-        }
+        println!("total_loss = {}", total_loss);
+        println!("loss_average = {}", total_loss / count as f32);
     }
 
     let mut tests:Vec<(Vec<f32>,usize)> = Vec::new();
@@ -1007,30 +1131,41 @@ fn test_mnist_batch_norm_for_gpu_double() {
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.004);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
+            move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<100,100>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<100,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<100,100>::new().build(l,&device,
+            move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<100,10>::new().build(l,&device,
+            move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+            &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1046,7 +1181,6 @@ fn test_mnist_batch_norm_for_gpu_double() {
             teachers.push((n,path));
         }
     }
-    let mut optimizer = MomentumSGD::new(0.008);
 
     let mut rng = rand::thread_rng();
 
@@ -1094,13 +1228,13 @@ fn test_mnist_batch_norm_for_gpu_double() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
         }
         println!("total_loss = {}", total_loss);
-        println!("loss_average = {}", total_loss as f64 / count as f64);
+        println!("loss_average = {}", total_loss / count as f64);
     }
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();
@@ -1148,9 +1282,9 @@ fn test_mnist_batch_norm_for_gpu_double() {
         }
     }
 
-    println!("correct_answers = {},{}%",correct_answers,correct_answers as f64 / count as f64 * 100.);
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
-    debug_assert!(correct_answers as f64 / count as f64 * 100. > 80.)
+    debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
 }
 #[test]
 fn test_fashion_mnist_batch_norm_for_gpu_double() {
@@ -1158,51 +1292,58 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
     let n1 = Normal::<f64>::new(0.0, (2f64/(28f64*28f64)).sqrt()).unwrap();
-    let n2 = Normal::<f64>::new(0.0, (2f64/1200f64).sqrt()).unwrap();
-    let n3 = Normal::<f64>::new(0.0, 1f64/(1200f64).sqrt()).unwrap();
+    let n2 = Normal::<f64>::new(0.0, (2f64/2000f64).sqrt()).unwrap();
+    let n3 = Normal::<f64>::new(0.0, 1f64/(1800f64).sqrt()).unwrap();
 
     let memory_pool = &SHARED_MEMORY_POOL.clone();
 
     let device = DeviceGpu::new(memory_pool).unwrap();
 
-    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_> = InputLayer::new();
+    let net:InputLayer<f64,Arr<f64,{ 28*28 }>,_,_> = InputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.01);
+
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<{ 28*28 },1200>::new().build(l,&device, move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<{ 28*28 },2000>::new().build(l,&device,
+                                                          move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                          &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<2000,2000>::new().build(l,&device,
+                                                     move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                     &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
-    }).add_layer(|l| {
-        let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,1200>::new().build(l,&device, move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
-    }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device).unwrap()
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<1200,10>::new().build(l,&device, move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.).unwrap()
+        LinearLayerBuilder::<2000,1800>::new().build(l,&device,
+                                                     move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                     &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<1800,10>::new().build(l,&device,
+                                                   move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                   &optimizer_builder
+        ).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
-    }).add_layer_train(|l| {
+    }).add_layer(|l| {
         LinearOutputLayer::new(l,&device)
     });
 
@@ -1224,41 +1365,39 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
         teachers.push((i.iter().map(|&p| p as f64 / 255.).collect::<Vec<f64>>(),l as usize));
     }
 
-    let mut optimizer = MomentumSGD::new(0.008);
-
     let mut rng = rand::thread_rng();
 
     teachers.shuffle(&mut rng);
 
     let mut correct_answers = 0;
 
-    let train_size = 5000;
-    let batch_size = 100;
+    let train_size = 6000;
+    let batch_size = 256;
 
-    let mut teachers = teachers.into_iter().take(train_size).collect::<Vec<(Vec<f64>,usize)>>();
+    let teachers = teachers.into_iter().take(train_size).collect::<Vec<(Vec<f64>,usize)>>();
 
-    let iter_per_epoch = (train_size / batch_size).max(1);
+    let mut teachers = teachers.into_iter().map(|(img, lbl)| {
+        let pixels = img.clone().try_into().unwrap();
+
+        let input = pixels;
+
+        let mut expected = Arr::new();
+
+        expected[lbl] = 1.;
+
+        (expected, input)
+    }).collect::<Vec<(Arr<f64,10>,Arr<f64,784>)>>();
+
     let max_epochs = 10;
-    let mut epoch_cnt = 0;
 
-    for i in 0.. {
+    for _ in 0..max_epochs {
         let mut total_loss = 0.;
         let mut count = 0;
 
         teachers.shuffle(&mut rng);
 
-        for _ in 0..1 {
-            let batch_data = teachers.iter().take(batch_size).map(|( img,lbl)| {
-                let pixels = img.clone().try_into().unwrap();
-
-                let input = pixels;
-
-                let mut expected = Arr::new();
-
-                expected[*lbl] = 1.;
-
-                (expected, input)
-            }).fold((Vec::<Arr<f64, 10>>::new(), Vec::<Arr<f64, 784>>::new(), ), |mut acc, (e, i)| {
+        for teachers in teachers.chunks(batch_size) {
+            let batch_data = teachers.iter().cloned().fold((Vec::<Arr<f64, 10>>::new(), Vec::<Arr<f64, 784>>::new(), ), |mut acc, (e, i)| {
                 acc.0.push(e);
                 acc.1.push(i);
                 acc
@@ -1266,7 +1405,7 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
 
             let lossf = CrossEntropyMulticlass::new();
 
-            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &mut optimizer, &lossf).unwrap();
+            let loss = net.batch_train(batch_data.0.into(), batch_data.1.clone().into(), &lossf).unwrap();
             total_loss += loss;
 
             count += 1;
@@ -1274,15 +1413,8 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
             let _ = net.batch_forward(batch_data.1.into()).unwrap();
         }
 
-        if i % iter_per_epoch == 0 {
-            epoch_cnt += 1;
-            println!("total_loss = {}", total_loss);
-            println!("loss_average = {}", total_loss as f64 / count as f64);
-
-            if epoch_cnt >= max_epochs {
-                break;
-            }
-        }
+        println!("total_loss = {}", total_loss);
+        println!("loss_average = {}", total_loss / count as f64);
     }
 
     let mut tests:Vec<(Vec<f64>,usize)> = Vec::new();

@@ -5,28 +5,15 @@ use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::c_uint;
 use cuda_runtime_sys::dim3;
-use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::UnitValue;
 use crate::arr::*;
-use crate::cuda::{CudaPtr, DataTypeInfo, Kernel, Memory};
-use crate::cuda::kernel::activation::{
-    ActivationBackwardArgs,
-    ActivationForwardArgs,
-    ReLuBackward,
-    ReLuForward,
-    SigmoidBackward,
-    SigmoidForward,
-    SoftMaxBackward,
-    SoftMaxForward,
-    SwishBackward,
-    SwishForward,
-    TanhBackward,
-    TanhForward
-};
+use crate::cuda::{CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel};
+use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationBatchBackwardArgs, ActivationBatchForwardArgs, ActivationForwardArgs, ReLuBackward, ReLuBatchBackward, ReLuForward, ReLuBatchForward, SigmoidBackward, SigmoidBatchBackward, SigmoidForward, SigmoidBatchForward, SoftMaxBackward, SoftMaxBatchBackward, SoftMaxForward, SoftMaxBatchForward, SwishBackward, SwishBatchBackward, SwishForward, TanhBackward, TanhBatchBackward, TanhForward, TanhBatchForward, SwishBatchForward};
 use crate::device::*;
 use crate::error::{CudaError, EvaluateError, TrainingError};
+use crate::layer::BatchSize;
 use crate::lossfunction::LossFunction;
-use crate::mem::AsRawSlice;
 
 /// Trait defining activation functions
 pub trait Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
@@ -59,7 +46,7 @@ pub trait Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
 }
 
 /// Trait that defines the activation function during batch processing
-pub trait BatchActivation<U,T,C,R,D>: Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
+pub trait BatchActivation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
     /// Apply the activation function
     /// # Arguments
     /// * `device` - Device objects available for processing
@@ -69,7 +56,7 @@ pub trait BatchActivation<U,T,C,R,D>: Activation<U,T,R,D> where U: UnitValue<U>,
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_apply(&self, device:&D, input:&C) -> Result<SerializedVec<U,R>, TrainingError>;
+    fn batch_apply(&self, device:&D, input:&T) -> Result<R, TrainingError>;
     /// Apply derivatives of the activation function
     /// # Arguments
     /// * `device` - Device objects available for processing
@@ -81,7 +68,7 @@ pub trait BatchActivation<U,T,C,R,D>: Activation<U,T,R,D> where U: UnitValue<U>,
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_derive(&self, device:&D, o:&C, loss:&C, u:&C) -> Result<SerializedVec<U,R>, TrainingError>;
+    fn batch_derive(&self, device:&D, o:&T, loss:&T, u:&T) -> Result<R, TrainingError>;
 }
 /// Identity Implementation
 pub struct Identity<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -103,7 +90,7 @@ impl<U,D> Identity<U,D> where U: UnitValue<U>, D: Device<U> {
     }
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
-    where U: UnitValue<U>, I: IndexedParallelIterator<Item=U> + IntoParallelIterator + Clone {
+    where U: UnitValue<U>, I: Iterator<Item=U> + Clone {
 
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().collect::<Vec<U>>().try_into()?)
@@ -147,22 +134,24 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
         self.c.contains(l.name())
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPtr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>>
     where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
 
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        Ok((*input).clone())
+    fn apply(&self, _: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
+        Ok(input.try_into()?)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, _: &Arr<U,N>, loss: &Arr<U,N>, _: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        Ok((*loss).clone())
+    fn derive(&self, _: &DeviceGpu<U>,
+              _: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, _: &CudaTensor1dPtrView<U,N>)
+        -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
+        Ok(loss.try_into()?)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         self.c.contains(l.name())
     }
 }
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
+impl<U,const N:usize> BatchActivation<U,SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
@@ -174,7 +163,7 @@ impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U
         Ok((*loss).clone())
     }
 }
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Identity<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
@@ -182,35 +171,27 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
         Ok(input.into())
     }
 
-    fn batch_derive(&self, _: &DeviceCpu<U>, _: &SerializedVecView<'a,U,Arr<U,N>>,
-                    loss: &SerializedVecView<'a,U,Arr<U,N>>, _: &SerializedVecView<'a,U,Arr<U,N>>)
-        -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
+    fn batch_derive(&self, _: &DeviceCpu<U>,
+                    _: &SerializedVecView<'a,U,Arr<U,N>>,
+                    loss: &SerializedVecView<'a,U,Arr<U,N>>,
+                    _: &SerializedVecView<'a,U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(loss.into())
     }
 }
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,CudaVec<U,CudaTensor1dPtr<U,N>>,DeviceGpu<U>>
+    for Identity<U,DeviceGpu<U>>
     where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
 
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        Ok((*input).clone())
+    fn batch_apply(&self, _: &DeviceGpu<U>, input: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>)
+        -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        Ok(input.try_into()?)
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, _: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, _: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        Ok((*loss).clone())
-    }
-}
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for Identity<U,DeviceGpu<U>>
-    where U: UnitValue<U>, DeviceGpu<U>: Device<U>,
-          Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
-
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        Ok(input.into())
-    }
-
-    fn batch_derive(&self, _: &DeviceGpu<U>, _: &SerializedVecView<'a,U,Arr<U,N>>,
-                    loss: &SerializedVecView<'a,U,Arr<U,N>>, _: &SerializedVecView<'a,U,Arr<U,N>>)
-                    -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        Ok(loss.into())
+    fn batch_derive(&self, _: &DeviceGpu<U>,
+                    _: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    loss: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    _: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        Ok(loss.try_into()?)
     }
 }
 /// Sigmoid Implementation
@@ -236,11 +217,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -251,11 +232,11 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -264,9 +245,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: UnitValue<U>,
-          I: IndexedParallelIterator<Item=U> + Clone,
-          <I as IntoParallelIterator>::Iter: IndexedParallelIterator<Item=U>{
-
+          I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| U::one() / (U::one() + (-i).exp())).collect::<Vec<U>>().try_into()?)
     }
@@ -279,119 +258,68 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,Devi
         self.c.contains(l.name())
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPtr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-             SigmoidForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-             SigmoidBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
+          for<'b> SigmoidForward<'b,U,N>: Kernel<Args=ActivationForwardArgs<'b,U,N>>,
+          for<'b> SigmoidBackward<'b,U,N>: Kernel<Args=ActivationBackwardArgs<'b,U,N>> {
 
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
+    fn apply(&self, device: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut args = ActivationForwardArgs::new(input_output, N,1);
+        let mut args = ActivationForwardArgs::new(input,output);
 
-        let mut kernel = SigmoidForward::<U>::new();
+        let mut kernel = SigmoidForward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N)?;
+    fn derive(&self, device: &DeviceGpu<U>,
+              o: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, u: &CudaTensor1dPtrView<'a,U,N>)
+        -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
+        let mut args = ActivationBackwardArgs::new(o, u, loss, output);
 
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,1);
-
-        let mut kernel = SigmoidBackward::<U>::new();
+        let mut kernel = SigmoidBackward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         self.c.contains(l.name())
     }
 }
-impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-          SigmoidForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          SigmoidBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-
-    fn apply(&self, _: &DeviceGpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationForwardArgs::new(input_output, N,1);
-
-        let mut kernel = SigmoidForward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.input_output.read_to_vec()?.try_into()?)
-    }
-
-    fn derive(&self, _: &DeviceGpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N)?;
-
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
-
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,1);
-
-        let mut kernel = SigmoidBackward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.loss.read_to_vec()?.try_into()?)
-    }
-
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
-        self.c.contains(l.name())
-    }
-}
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
+impl<U,const N:usize> BatchActivation<U,SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
@@ -399,96 +327,50 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
                     loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
         -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,CudaVec<U,CudaTensor1dPtr<U,N>>,DeviceGpu<U>>
+    for Sigmoid<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-          SigmoidForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          SigmoidBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
+          for<'b> SigmoidBatchForward<'b,U,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,N>>,
+          for<'b> SigmoidBatchBackward<'b,U,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,N>> {
 
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
+    fn batch_apply(&self, device: &DeviceGpu<U>, input: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let len = input.size();
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
 
-        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
+        let mut args = ActivationBatchForwardArgs::new(input,output,len);
 
-        let mut kernel = SigmoidForward::<U>::new();
+        let mut kernel = SigmoidBatchForward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                             y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
+                             y: (len as c_uint + 32 - 1) / 32, z: 1 },
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N * o.len())?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N * o.len())?;
+    fn batch_derive(&self, device: &DeviceGpu<U>,
+                    o: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    loss: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    u: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U, CudaTensor1dPtr<U, N>>, TrainingError> {
+        let len = loss.size();
 
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
 
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
+        let mut args = ActivationBatchBackwardArgs::new(o, u, loss, output, len);
 
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,loss.len());
-
-        let mut kernel = SigmoidBackward::<U>::new();
+        let mut kernel = SigmoidBatchBackward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
+                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.try_into()?)
-    }
-}
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for Sigmoid<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-          SigmoidForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          SigmoidBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
-
-        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
-
-        let mut kernel = SigmoidForward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-            y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.input_output.read_to_vec()?.try_into()?)
-    }
-
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &SerializedVecView<'a,U,Arr<U,N>>,
-                    loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
-        -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N * o.len())?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N * o.len())?;
-
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
-
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,loss.len());
-
-        let mut kernel = SigmoidBackward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-            y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.loss.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 }
 /// ReLu Implementation
@@ -509,11 +391,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,De
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -524,11 +406,11 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -537,15 +419,10 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
     where U: UnitValue<U>,
-          I: IndexedParallelIterator<Item=U> + Clone,
-          <I as IntoParallelIterator>::Iter: IndexedParallelIterator<Item=U> {
+          I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| {
-            if i > U::default() || i.is_nan() {
-                i
-            } else {
-                U::default()
-            }
+            i.max(&U::default())
         }).collect::<Vec<U>>().try_into()?)
     }
 
@@ -563,121 +440,68 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceC
         false
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPtr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
-          ReLuForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          ReLuBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+          for<'b> ReLuForward<'b,U,N>: Kernel<Args=ActivationForwardArgs<'b,U,N>>,
+          for<'b> ReLuBackward<'b,U,N>: Kernel<Args=ActivationBackwardArgs<'b,U,N>> {
+    fn apply(&self, device: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
+        let mut args = ActivationForwardArgs::new(input, output);
 
-        let mut args = ActivationForwardArgs::new(input_output, N,1);
-
-        let mut kernel = ReLuForward::<U>::new();
+        let mut kernel = ReLuForward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N)?;
+    fn derive(&self, device: &DeviceGpu<U>,
+              o: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, u: &CudaTensor1dPtrView<'a,U,N>)
+        -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
+        let mut args = ActivationBackwardArgs::new(o, u, loss, output);
 
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,1);
-
-        let mut kernel = ReLuBackward::<U>::new();
+        let mut kernel = ReLuBackward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
-impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataTypeInfo,
-          DeviceGpu<U>: Device<U>,
-          ReLuForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          ReLuBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-    fn apply(&self, _: &DeviceGpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationForwardArgs::new(input_output, N,1);
-
-        let mut kernel = ReLuForward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.input_output.read_to_vec()?.try_into()?)
-    }
-
-    fn derive(&self, _: &DeviceGpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N)?;
-
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
-
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,1);
-
-        let mut kernel = ReLuBackward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.loss.read_to_vec()?.try_into()?)
-    }
-
-    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
-        false
-    }
-}
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
+impl<U,const N:usize> BatchActivation<U,SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
@@ -685,98 +509,53 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
                     loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
         -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,CudaVec<U,CudaTensor1dPtr<U,N>>,DeviceGpu<U>>
+    for ReLu<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
-          ReLuForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          ReLuBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
+          for<'b> ReLuBatchForward<'b,U,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,N>>,
+          for<'b> ReLuBatchBackward<'b,U,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,N>> {
 
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
+    fn batch_apply(&self, device: &DeviceGpu<U>, input: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>)
+        -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let len = input.size();
 
-        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
 
-        let mut kernel = ReLuForward::<U>::new();
+        let mut args = ActivationBatchForwardArgs::new(input, output, len);
+
+        let mut kernel = ReLuBatchForward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-            y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
+            y: (len as c_uint + 32 - 1) / 32, z: 1 },
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N * o.len())?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N * o.len())?;
+    fn batch_derive(&self, device: &DeviceGpu<U>,
+                    o: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    loss: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    u: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let len = loss.size();
 
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
 
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
+        let mut args = ActivationBatchBackwardArgs::new(o, u, loss, output, len);
 
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,loss.len());
-
-        let mut kernel = ReLuBackward::<U>::new();
+        let mut kernel = ReLuBatchBackward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
+                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.try_into()?)
-    }
-}
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for ReLu<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataTypeInfo,
-          DeviceGpu<U>: Device<U>,
-          ReLuForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          ReLuBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVecView<'a,U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
-
-        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
-
-        let mut kernel = ReLuForward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-            y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.input_output.read_to_vec()?.try_into()?)
-    }
-
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &SerializedVecView<'a,U,Arr<U,N>>,
-                    loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
-        -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N * o.len())?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N * o.len())?;
-
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
-
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,loss.len());
-
-        let mut kernel = ReLuBackward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-            y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.loss.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 }
 /// Swish Implementation
@@ -797,11 +576,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,D
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -812,11 +591,11 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -825,9 +604,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: UnitValue<U>,
-          I: IndexedParallelIterator<Item=U> + Clone,
-          <I as IntoParallelIterator>::Iter: IndexedParallelIterator<Item=U> {
-
+          I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| i * (U::one() / (U::one() + (-i).exp()))).collect::<Vec<U>>().try_into()?)
     }
@@ -842,119 +619,68 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Swish<U,Device
         false
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPtr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-             SwishForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-             SwishBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
+             for<'b> SwishForward<'b,U,N>: Kernel<Args=ActivationForwardArgs<'b,U,N>>,
+             for<'b> SwishBackward<'b,U,N>: Kernel<Args=ActivationBackwardArgs<'b,U,N>> {
 
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
+    fn apply(&self, device: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut args = ActivationForwardArgs::new(input_output, N,1);
+        let mut args = ActivationForwardArgs::new(input,output);
 
-        let mut kernel = SwishForward::<U>::new();
+        let mut kernel = SwishForward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N)?;
+    fn derive(&self, device: &DeviceGpu<U>,
+              o: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, u: &CudaTensor1dPtrView<'a,U,N>)
+        -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
+        let mut args = ActivationBackwardArgs::new(o, u, loss, output);
 
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,1);
-
-        let mut kernel = SwishBackward::<U>::new();
+        let mut kernel = SwishBackward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
-impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-          SwishForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          SwishBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-
-    fn apply(&self, _: &DeviceGpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationForwardArgs::new(input_output, N,1);
-
-        let mut kernel = SwishForward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.input_output.read_to_vec()?.try_into()?)
-    }
-
-    fn derive(&self, _: &DeviceGpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N)?;
-
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
-
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,1);
-
-        let mut kernel = SwishBackward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.loss.read_to_vec()?.try_into()?)
-    }
-
-    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
-        false
-    }
-}
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
+impl<U,const N:usize> BatchActivation<U,SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
@@ -962,96 +688,52 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
                     loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
         -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,CudaVec<U,CudaTensor1dPtr<U,N>>,DeviceGpu<U>>
+    for Swish<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-          SwishForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          SwishBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
+          for<'b> SwishBatchForward<'b,U,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,N>>,
+          for<'b> SwishBatchBackward<'b,U,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,N>> {
 
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
+    fn batch_apply(&self, device: &DeviceGpu<U>, input: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>)
+        -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let len = input.size();
 
-        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
 
-        let mut kernel = SwishForward::<U>::new();
+        let mut args = ActivationBatchForwardArgs::new(input,output,len);
+
+        let mut kernel = SwishBatchForward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
+                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N * o.len())?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N * o.len())?;
+    fn batch_derive(&self, device: &DeviceGpu<U>,
+                    o: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    loss: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    u: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let len = loss.size();
 
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
 
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
+        let mut args = ActivationBatchBackwardArgs::new(o, u, loss, output, len);
 
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,loss.len());
-
-        let mut kernel = SwishBackward::<U>::new();
+        let mut kernel = SwishBatchBackward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
+                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.try_into()?)
-    }
-}
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for Swish<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-          SwishForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          SwishBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVecView<'a,U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
-
-        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
-
-        let mut kernel = SwishForward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-            y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.input_output.read_to_vec()?.try_into()?)
-    }
-
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &SerializedVecView<'a,U,Arr<U,N>>,
-                    loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
-        -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N * o.len())?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N * o.len())?;
-
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
-
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,loss.len());
-
-        let mut kernel = SwishBackward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-            y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.loss.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 }
 /// Tanh Implementation
@@ -1072,11 +754,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Tanh<U,De
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -1087,11 +769,11 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
@@ -1100,9 +782,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
     where U: UnitValue<U>,
-          I: IndexedParallelIterator<Item=U> + Clone,
-          <I as IntoParallelIterator>::Iter: IndexedParallelIterator<Item=U> {
-
+          I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| i.tanh()).collect::<Vec<U>>().try_into()?)
     }
@@ -1117,119 +797,68 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceC
         false
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPtr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-             TanhForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-             TanhBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
+          for<'b> TanhForward<'b,U,N>: Kernel<Args=ActivationForwardArgs<'b,U,N>>,
+          for<'b> TanhBackward<'b,U,N>: Kernel<Args=ActivationBackwardArgs<'b,U,N>> {
 
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
+    fn apply(&self, device: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut args = ActivationForwardArgs::new(input_output, N,1);
+        let mut args = ActivationForwardArgs::new(input,output);
 
-        let mut kernel = TanhForward::<U>::new();
+        let mut kernel = TanhForward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N)?;
+    fn derive(&self, device: &DeviceGpu<U>,
+              o: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, u: &CudaTensor1dPtrView<'a,U,N>)
+        -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
+        let mut args = ActivationBackwardArgs::new(o, u, loss, output);
 
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,1);
-
-        let mut kernel = TanhBackward::<U>::new();
+        let mut kernel = TanhBackward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
         false
     }
 }
-impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-          TanhForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          TanhBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-
-    fn apply(&self, _: &DeviceGpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationForwardArgs::new(input_output, N,1);
-
-        let mut kernel = TanhForward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.input_output.read_to_vec()?.try_into()?)
-    }
-
-    fn derive(&self, _: &DeviceGpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N)?;
-
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
-
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,1);
-
-        let mut kernel = TanhBackward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.loss.read_to_vec()?.try_into()?)
-    }
-
-    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
-        false
-    }
-}
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
+impl<U,const N:usize> BatchActivation<U,SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
@@ -1237,96 +866,52 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
                     loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
         -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,CudaVec<U,CudaTensor1dPtr<U,N>>,DeviceGpu<U>>
+    for Tanh<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-          TanhForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          TanhBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
+          for<'b> TanhBatchForward<'b,U,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,N>>,
+          for<'b> TanhBatchBackward<'b,U,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,N>> {
 
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
+    fn batch_apply(&self, device: &DeviceGpu<U>, input: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>)
+        -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let len = input.size();
 
-        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
 
-        let mut kernel = TanhForward::<U>::new();
+        let mut args = ActivationBatchForwardArgs::new(input,output,len);
+
+        let mut kernel = TanhBatchForward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
+                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.input_output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N * o.len())?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N * o.len())?;
+    fn batch_derive(&self, device: &DeviceGpu<U>,
+                    o: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    loss: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    u: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U, CudaTensor1dPtr<U, N>>, TrainingError> {
+        let len = loss.size();
 
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
 
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
+        let mut args = ActivationBatchBackwardArgs::new(o, u, loss, output, len);
 
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,loss.len());
-
-        let mut kernel = TanhBackward::<U>::new();
+        let mut kernel = TanhBatchBackward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
+                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
-        Ok(args.loss.read_to_vec()?.try_into()?)
-    }
-}
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for Tanh<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataTypeInfo, DeviceGpu<U>: Device<U>,
-          TanhForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          TanhBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVecView<'a,U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
-
-        let mut args = ActivationForwardArgs::new(input_output, N,input.len());
-
-        let mut kernel = TanhForward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-            y: (input.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.input_output.read_to_vec()?.try_into()?)
-    }
-
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &SerializedVecView<'a,U,Arr<U,N>>,
-                    loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
-        -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N * o.len())?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N * o.len())?;
-
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
-
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,loss.len());
-
-        let mut kernel = TanhBackward::<U>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-            y: (loss.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
-
-        Ok(args.loss.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 }
 /// SoftMax Implementation
@@ -1352,11 +937,11 @@ impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for SoftMax<U
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -1367,11 +952,11 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     where U: UnitValue<U> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        self.apply(device,&input.par_iter().cloned())
+        self.apply(device,&input.iter().cloned())
     }
 
     fn derive(&self, device: &DeviceCpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        self.derive(device,&o.par_iter().cloned(),&loss.par_iter().cloned(),&u.par_iter().cloned(),)
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
@@ -1380,14 +965,12 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 }
 impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
     where U: UnitValue<U>,
-          I: IndexedParallelIterator<Item=U> + Clone,
-          <I as IntoParallelIterator>::Iter: IndexedParallelIterator<Item=U> {
-
+          I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &I) -> Result<Arr<U,N>, EvaluateError> {
-        let alpha = input.clone().reduce(|| U::initial_max_value(), |m,v| {
+        let alpha = input.clone().fold(U::initial_max_value(), |m,v| {
             v.max(&m)
         });
-        let sum = input.clone().map(|x| (x - alpha).exp()).reduce(|| U::default(),
+        let sum = input.clone().map(|x| (x - alpha).exp()).fold(U::default(),
             |acc,x| {
             acc + x
         });
@@ -1402,7 +985,7 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,Devi
 
         let sum = loss.clone().zip(o.clone()).map(|(l,o)| {
             (l * -o) * scale
-        }).reduce(|| U::default(), |acc,x| {
+        }).fold(U::default(), |acc,x| {
             acc + x
         }) / scale;
 
@@ -1415,123 +998,70 @@ impl<U,I,const N:usize> Activation<U,I,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,Devi
         self.c.contains(l.name())
     }
 }
-impl<U,const N:usize> Activation<U,Arr<U,N>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPtr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
           CudaPtr<U>: TryFrom<U,Error=CudaError>,
-          SoftMaxForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
+          for<'b> SoftMaxForward<'b,U,N>: Kernel<Args=ActivationForwardArgs<'b,U,N>>,
+          for<'b> SoftMaxBackward<'b,U,N>: Kernel<Args=ActivationBackwardArgs<'b,U,N>> {
 
-    fn apply(&self, _: &DeviceGpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
+    fn apply(&self, device: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut args = ActivationForwardArgs::new(input_output, N, 1);
+        let mut args = ActivationForwardArgs::new(input,output);
 
-        let mut kernel = SoftMaxForward::<U>::new();
+        let mut kernel = SoftMaxForward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: 1, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
+                      &mut args, 32 * mem::size_of::<U>() * 2)?;
 
-        Ok(args.input_output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
-    fn derive(&self, _: &DeviceGpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N)?;
+    fn derive(&self, device: &DeviceGpu<U>,
+              o: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, u: &CudaTensor1dPtrView<'a,U,N>)
+        -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
 
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
+        let mut args = ActivationBackwardArgs::new(o, u, loss, output);
 
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,1);
-
-        let mut kernel = SoftMaxBackward::<U>::new();
+        let mut kernel = SoftMaxBackward::<'_,U,N>::new();
 
         kernel.launch(dim3 { x: 1, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 1024 * mem::size_of::<U>())?;
 
-        Ok(args.loss.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
         self.c.contains(l.name())
     }
 }
-impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataTypeInfo,
-          DeviceGpu<U>: Device<U>,
-          CudaPtr<U>: TryFrom<U,Error=CudaError>,
-          SoftMaxForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-
-    fn apply(&self, _: &DeviceGpu<U>, input: &ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N)?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationForwardArgs::new(input_output, N, 1);
-
-        let mut kernel = SoftMaxForward::<U>::new();
-
-        kernel.launch(dim3 { x: 1, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
-
-        Ok(args.input_output.read_to_vec()?.try_into()?)
-    }
-
-    fn derive(&self, _: &DeviceGpu<U>, o: &ArrView<'a,U,N>, loss: &ArrView<'a,U,N>, u: &ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N)?;
-
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N)?;
-
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N)?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N)?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,1);
-
-        let mut kernel = SoftMaxBackward::<U>::new();
-
-        kernel.launch(dim3 { x: 1, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>())?;
-
-        Ok(args.loss.read_to_vec()?.try_into()?)
-    }
-
-    fn is_canonical_link<L: LossFunction<U>>(&self, l: &L) -> bool {
-        self.c.contains(l.name())
-    }
-}
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
+impl<U,const N:usize> BatchActivation<U,SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
     fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for SoftMax<U,DeviceCpu<U>>
     where U: UnitValue<U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVecView<'a,U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
-            self.apply(device, &i.par_iter().cloned())
+            self.apply(device, &i.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
     }
 
@@ -1539,95 +1069,50 @@ impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U
                     loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
         -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
-            self.derive(device, &o.par_iter().cloned(), &l.par_iter().cloned(), &u.par_iter().cloned())
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVec<U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
+impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,CudaVec<U,CudaTensor1dPtr<U,N>>,DeviceGpu<U>>
+    for SoftMax<U,DeviceGpu<U>>
     where U: UnitValue<U> + DataTypeInfo,
           DeviceGpu<U>: Device<U>,
-          CudaPtr<U>: TryFrom<U,Error=CudaError>,
-          SoftMaxForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
+          for<'b> SoftMaxBatchForward<'b,U,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,N>>,
+          for<'b> SoftMaxBatchBackward<'b,U,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,N>> {
 
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
+    fn batch_apply(&self, device: &DeviceGpu<U>, input: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>)
+        -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let len = input.size();
 
-        let mut args = ActivationForwardArgs::new(input_output, N, input.len());
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
 
-        let mut kernel = SoftMaxForward::<U>::new();
+        let mut args = ActivationBatchForwardArgs::new(input, output, len);
 
-        kernel.launch(dim3 { x: input.len() as c_uint, y: 1, z: 1 },
+        let mut kernel = SoftMaxBatchForward::<'_,U,N>::new();
+
+        kernel.launch(dim3 { x: len as c_uint, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
+                      &mut args, 32 * mem::size_of::<U>() * 2)?;
 
-        Ok(args.input_output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N * o.len())?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N * o.len())?;
+    fn batch_derive(&self, device: &DeviceGpu<U>,
+                    o: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    loss: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>,
+                    u: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
+        let len = loss.size();
 
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
 
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
+        let mut args = ActivationBatchBackwardArgs::new(o, u, loss, output, len);
 
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,loss.len());
+        let mut kernel = SoftMaxBatchBackward::<'_,U,N>::new();
 
-        let mut kernel = SoftMaxBackward::<U>::new();
-
-        kernel.launch(dim3 { x: loss.len() as c_uint, y: 1, z: 1 },
+        kernel.launch(dim3 { x: len as c_uint, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },
                       &mut args, 1024 * mem::size_of::<U>())?;
 
-        Ok(args.loss.read_to_vec()?.try_into()?)
-    }
-}
-impl<'a,U,const N:usize> BatchActivation<U,Arr<U,N>,SerializedVecView<'a,U,Arr<U,N>>,Arr<U,N>,DeviceGpu<U>> for SoftMax<U,DeviceGpu<U>>
-    where U: UnitValue<U> + DataTypeInfo,
-          DeviceGpu<U>: Device<U>,
-          CudaPtr<U>: TryFrom<U,Error=CudaError>,
-          SoftMaxForward<U>: Kernel<Args=ActivationForwardArgs<U>>,
-          SoftMaxBackward<U>: Kernel<Args=ActivationBackwardArgs<U>> {
-
-    fn batch_apply(&self, _: &DeviceGpu<U>, input: &SerializedVecView<'a,U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut input_output: CudaPtr<U> = CudaPtr::new(N * input.len())?;
-        input_output.memcpy(input.as_raw_slice().as_ptr(), N * input.len())?;
-
-        let mut args = ActivationForwardArgs::new(input_output, N, input.len());
-
-        let mut kernel = SoftMaxForward::<U>::new();
-
-        kernel.launch(dim3 { x: input.len() as c_uint, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>() * 2)?;
-
-        Ok(args.input_output.read_to_vec()?.try_into()?)
-    }
-
-    fn batch_derive(&self, _: &DeviceGpu<U>, o: &SerializedVecView<'a,U,Arr<U,N>>,
-                    loss: &SerializedVecView<'a,U,Arr<U,N>>, u: &SerializedVecView<'a,U,Arr<U,N>>)
-        -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
-        let mut o_ptr: CudaPtr<U> = CudaPtr::new(N * o.len())?;
-        o_ptr.memcpy(o.as_raw_slice().as_ptr(),N * o.len())?;
-
-        let mut u_ptr: CudaPtr<U> = CudaPtr::new(N * u.len())?;
-        u_ptr.memcpy(u.as_raw_slice().as_ptr(), N * u.len())?;
-
-        let mut loss_ptr: CudaPtr<U> = CudaPtr::new(N * loss.len())?;
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(), N * loss.len())?;
-
-        let mut args = ActivationBackwardArgs::new(o_ptr, u_ptr, loss_ptr, N,loss.len());
-
-        let mut kernel = SoftMaxBackward::<U>::new();
-
-        kernel.launch(dim3 { x: loss.len() as c_uint, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>())?;
-
-        Ok(args.loss.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 }

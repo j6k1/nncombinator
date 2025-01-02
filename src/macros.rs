@@ -11,60 +11,60 @@ macro_rules! derive_arithmetic {
     ( Broadcast<T> > $rt:ty = $ot:ty) => {
         impl<'a,U,T> Add<$rt> for Broadcast<T>
             where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U>,
-                  for<'data> T: SliceSize + MakeView<'data,U> + Clone +
-                             Add<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
-                  for<'data> <T as AsView<'data>>::ViewType: Send + Add<Output=T> + Add<T,Output=T>,
+                  for<'data> T: SliceSize + MakeView<'data,U> + Clone + Send + Sync,
+                  for<'data> &'data T: Add<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn add(self, rhs: $rt) -> Self::Output {
-                rayon::iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.par_iter()).map(|(l,r)| {
-                    l + r
+                rhs.iter().map(|r| {
+                    &self.0 + r
                 }).collect::<Vec<T>>().into()
             }
         }
 
         impl<'a,U,T> Sub<$rt> for Broadcast<T>
             where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U>,
-                  for<'data> T: SliceSize + MakeView<'data,U> + Clone +
-                             Sub<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
-                  for<'data> <T as AsView<'data>>::ViewType: Send + Sub<Output=T> + Sub<T,Output=T>,
+                  for<'data> T: SliceSize + MakeView<'data,U> + Clone + Send + Sync,
+                  for<'data> &'data T: Sub<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn sub(self, rhs: $rt) -> Self::Output {
-                rayon::iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.par_iter()).map(|(l,r)| {
-                    l - r
+                rhs.iter().map(|r| {
+                    &self.0 - r
                 }).collect::<Vec<T>>().into()
             }
         }
 
         impl<'a,U,T> Mul<$rt> for Broadcast<T>
             where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U>,
-                  for<'data> T: SliceSize + MakeView<'data,U> + Clone +
-                             Mul<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
-                  for<'data> <T as AsView<'data>>::ViewType: Send + Mul<Output=T> + Mul<T,Output=T>,
+                  for<'data> T: SliceSize + MakeView<'data,U> + Clone + Send + Sync,
+                  for<'data> &'data T: Mul<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn mul(self, rhs: $rt) -> Self::Output {
-                rayon::iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.par_iter()).map(|(l,r)| {
-                    l * r
+                rhs.iter().map(|r| {
+                    &self.0 * r
                 }).collect::<Vec<T>>().into()
             }
         }
 
         impl<'a,U,T> Div<$rt> for Broadcast<T>
             where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U>,
-                  for<'data> T: SliceSize + MakeView<'data,U> + Clone +
-                             Div<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
-                  for<'data> <T as AsView<'data>>::ViewType: Send + Div<Output=T> + Div<T,Output=T>,
+                  for<'data> T: SliceSize + MakeView<'data,U> + Clone + Send + Sync,
+                  for<'data> &'data T: Div<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn div(self, rhs: $rt) -> Self::Output {
-                rayon::iter::repeat(self.0.clone()).take(rhs.len()).zip(rhs.par_iter()).map(|(l,r)| {
-                    l / r
+                rhs.iter().map(|r| {
+                    &self.0 / r
                 }).collect::<Vec<T>>().into()
             }
         }
@@ -72,60 +72,60 @@ macro_rules! derive_arithmetic {
     ( $lt:ty > Broadcast<T> = $ot:ty) => {
         impl<'a,U,T> Add<Broadcast<T>> for $lt
             where U: Send + Sync + Default + Clone + Copy + 'static + Add<Output=U>,
-                  for<'data> T: SliceSize + MakeView<'data,U> + Clone +
-                             Add<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
-                  for<'data> <T as AsView<'data>>::ViewType: Send + Add<Output=T> + Add<T,Output=T>,
+                  for<'data> T: SliceSize + MakeView<'data,U> + Clone + Send + Sync,
+                  for<'data> <T as AsView<'data>>::ViewType: Send + Add<&'data T,Output=T> + Add<T,Output=T>,
                   $ot: From<Vec<T>> {
             type Output = $ot;
         
+            #[inline]
             fn add(self, rhs: Broadcast<T>) -> Self::Output {
-                self.par_iter().zip(rayon::iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
-                    l + r
+                self.iter().map(|l| {
+                    l + &rhs.0
                 }).collect::<Vec<T>>().into()
             }
         }
 
         impl<'a,U,T> Sub<Broadcast<T>> for $lt
             where U: Send + Sync + Default + Clone + Copy + 'static + Sub<Output=U>,
-                  for<'data> T: SliceSize + MakeView<'data,U> + Clone +
-                             Sub<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
-                  for<'data> <T as AsView<'data>>::ViewType: Send + Sub<Output=T> + Sub<T,Output=T>,
+                  for<'data> T: SliceSize + MakeView<'data,U> + Clone + Send + Sync,
+                  for<'data> <T as AsView<'data>>::ViewType: Send + Sub<&'data T,Output=T> + Add<T,Output=T>,
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn sub(self, rhs: Broadcast<T>) -> Self::Output {
-                self.par_iter().zip(rayon::iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
-                    l - r
+                self.iter().map(|l| {
+                    l - &rhs.0
                 }).collect::<Vec<T>>().into()
             }
         }
 
         impl<'a,U,T> Mul<Broadcast<T>> for $lt
             where U: Send + Sync + Default + Clone + Copy + 'static + Mul<Output=U>,
-                  for<'data> T: SliceSize + MakeView<'data,U> + Clone +
-                             Mul<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
-                  for<'data> <T as AsView<'data>>::ViewType: Send + Mul<Output=T> + Mul<T,Output=T>,
+                  for<'data> T: SliceSize + MakeView<'data,U> + Clone + Send + Sync,
+                  for<'data> <T as AsView<'data>>::ViewType: Send + Mul<&'data T,Output=T> + Add<T,Output=T>,
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn mul(self, rhs: Broadcast<T>) -> Self::Output {
-                self.par_iter().zip(rayon::iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
-                    l * r
+                self.iter().map(|l| {
+                    l * &rhs.0
                 }).collect::<Vec<T>>().into()
             }
         }
 
         impl<'a,U,T> Div<Broadcast<T>> for $lt
             where U: Send + Sync + Default + Clone + Copy + 'static + Div<Output=U>,
-                  for<'data> T: SliceSize + MakeView<'data,U> + Clone +
-                             Div<<T as AsView<'data>>::ViewType,Output=T> + Send + Sync,
-                  for<'data> <T as AsView<'data>>::ViewType: Send + Div<Output=T> + Div<T,Output=T>,
+                  for<'data> T: SliceSize + MakeView<'data,U> + Clone + Send + Sync,
+                  for<'data> <T as AsView<'data>>::ViewType: Send + Div<&'data T,Output=T> + Add<T,Output=T>,
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn div(self, rhs: Broadcast<T>) -> Self::Output {
-                self.par_iter().zip(rayon::iter::repeat(rhs.0.clone()).take(self.len())).map(|(l,r)| {
-                    l / r
+                self.iter().map(|l| {
+                    l / &rhs.0
                 }).collect::<Vec<T>>().into()
             }
         }
@@ -138,8 +138,9 @@ macro_rules! derive_arithmetic {
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn add(self, rhs: $rt) -> Self::Output {
-                self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l + r).collect::<Vec<T>>().into()
+                self.iter().zip(rhs.iter()).map(|(l,r)| l + r).collect::<Vec<T>>().into()
             }
         }
 
@@ -150,8 +151,9 @@ macro_rules! derive_arithmetic {
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn sub(self, rhs: $rt) -> Self::Output {
-                self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l - r).collect::<Vec<T>>().into()
+                self.iter().zip(rhs.iter()).map(|(l,r)| l - r).collect::<Vec<T>>().into()
             }
         }
 
@@ -162,8 +164,9 @@ macro_rules! derive_arithmetic {
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn mul(self, rhs: $rt) -> Self::Output {
-                self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l * r).collect::<Vec<T>>().into()
+                self.iter().zip(rhs.iter()).map(|(l,r)| l * r).collect::<Vec<T>>().into()
             }
         }
 
@@ -174,8 +177,9 @@ macro_rules! derive_arithmetic {
                   $ot: From<Vec<T>> {
             type Output = $ot;
 
+            #[inline]
             fn div(self, rhs: $rt) -> Self::Output {
-                self.par_iter().zip(rhs.par_iter()).map(|(l,r)| l / r).collect::<Vec<T>>().into()
+                self.iter().zip(rhs.iter()).map(|(l,r)| l / r).collect::<Vec<T>>().into()
             }
         }
     };
@@ -187,6 +191,7 @@ macro_rules! derive_arithmetic {
             T: Clone {
             type Output = $ot;
 
+            #[inline]
             fn add(self, rhs: $rt) -> Self::Output {
                 <&$clt>::from(&self) + <&$crt>::from(&rhs)
             }
@@ -199,6 +204,7 @@ macro_rules! derive_arithmetic {
             T: Clone {
             type Output = $ot;
 
+            #[inline]
             fn sub(self, rhs: $rt) -> Self::Output {
                 <&$clt>::from(&self) - <&$crt>::from(&rhs)
             }
@@ -211,6 +217,7 @@ macro_rules! derive_arithmetic {
             T: Clone {
             type Output = $ot;
 
+            #[inline]
             fn mul(self, rhs: $rt) -> Self::Output {
                 <&$clt>::from(&self) * <&$crt>::from(&rhs)
             }
@@ -223,6 +230,7 @@ macro_rules! derive_arithmetic {
             T: Clone {
             type Output = $ot;
 
+            #[inline]
             fn div(self, rhs: $rt) -> Self::Output {
                 <&$clt>::from(&self) / <&$crt>::from(&rhs)
             }
@@ -244,6 +252,7 @@ macro_rules! derive_arr_like_arithmetic {
             where T: Add<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
             type Output = $ot;
 
+            #[inline]
             fn add(self, rhs: $rt) -> Self::Output {
                 self.iter().zip(rhs.iter()).map(|(&l,&r)| l + r)
                     .collect::<Vec<T>>().try_into().expect("An error occurred in the add of Arr and Arr.")
@@ -254,6 +263,7 @@ macro_rules! derive_arr_like_arithmetic {
             where T: Sub<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
             type Output = $ot;
 
+            #[inline]
             fn sub(self, rhs: $rt) -> Self::Output {
                 self.iter().zip(rhs.iter()).map(|(&l,&r)| l - r)
                     .collect::<Vec<T>>().try_into().expect("An error occurred in the sub of Arr and Arr.")
@@ -264,6 +274,7 @@ macro_rules! derive_arr_like_arithmetic {
             where T: Mul<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
             type Output = $ot;
 
+            #[inline]
             fn mul(self, rhs: $rt) -> Self::Output {
                 self.iter().zip(rhs.iter()).map(|(&l,&r)| l * r)
                     .collect::<Vec<T>>().try_into().expect("An error occurred in the mul of Arr and Arr.")
@@ -274,6 +285,7 @@ macro_rules! derive_arr_like_arithmetic {
             where T: Div<Output=T> + Clone + Copy + Default + Send + Sync + 'static {
             type Output = $ot;
 
+            #[inline]
             fn div(self, rhs: $rt) -> Self::Output {
                 self.iter().zip(rhs.iter()).map(|(&l,&r)| l / r)
                     .collect::<Vec<T>>().try_into().expect("An error occurred in the sub of Arr and Arr.")
@@ -288,6 +300,7 @@ macro_rules! derive_arr_like_arithmetic {
             T: Default + Clone + Send {
             type Output = $ot;
 
+            #[inline]
             fn add(self, rhs: $rt) -> Self::Output {
                 <&$clt>::from(&self) + <&$crt>::from(&rhs)
             }
@@ -300,6 +313,7 @@ macro_rules! derive_arr_like_arithmetic {
             T: Default + Clone + Send {
             type Output = $ot;
 
+            #[inline]
             fn sub(self, rhs: $rt) -> Self::Output {
                 <&$clt>::from(&self) - <&$crt>::from(&rhs)
             }
@@ -312,6 +326,7 @@ macro_rules! derive_arr_like_arithmetic {
             T: Default + Clone + Send {
             type Output = $ot;
 
+            #[inline]
             fn mul(self, rhs: $rt) -> Self::Output {
                 <&$clt>::from(&self) * <&$crt>::from(&rhs)
             }
@@ -324,6 +339,7 @@ macro_rules! derive_arr_like_arithmetic {
             T: Default + Clone + Send {
             type Output = $ot;
 
+            #[inline]
             fn div(self, rhs: $rt) -> Self::Output {
                 <&$clt>::from(&self) / <&$crt>::from(&rhs)
             }

@@ -2,22 +2,21 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use crate::arr::{MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SliceSize};
+use crate::arr::{IntoConverter, MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SliceSize};
 use crate::device::Device;
-use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PreTrain};
+use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
+use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
-use crate::optimizer::Optimizer;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
 
 /// Bridge layer Implementation
-pub struct BridgeLayer<U,P,I,PI,CI,D> where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+pub struct BridgeLayer<U,P,I,PI,CI,D> where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
                                                              U: UnitValue<U>,
                                                              D: Device<U>,
-                                                             PI: Debug + Send + Sync + 'static,
-                                                             CI: Debug + Send + Sync + 'static,
+                                                             PI: Debug + 'static,
+                                                             CI: Debug + 'static,
                                                              I: Debug + Send + Sync {
     parent:P,
     device:PhantomData<D>,
@@ -28,11 +27,11 @@ pub struct BridgeLayer<U,P,I,PI,CI,D> where P: ForwardAll<Input=I,Output=PI> + B
 }
 impl<U,P,I,PI,CI,D> Persistence<U,TextFilePersistence<U>,Specialized> for BridgeLayer<U,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence<U>,Specialized> +
-             BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U>,
-          PI: Debug + Send + Sync + 'static,
-          CI: Debug + Send + Sync + 'static,
+          PI: Debug + 'static,
+          CI: Debug + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)
@@ -45,11 +44,11 @@ impl<U,P,I,PI,CI,D> Persistence<U,TextFilePersistence<U>,Specialized> for Bridge
 impl<T,U,P,I,PI,CI,D> Persistence<U,T,Linear> for BridgeLayer<U,P,I,PI,CI,D>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + Persistence<U,T,Linear> +
-             BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + 'static,
-          CI: Debug + Send + Sync + 'static,
+          PI: Debug + 'static,
+          CI: Debug + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)
@@ -60,11 +59,11 @@ impl<T,U,P,I,PI,CI,D> Persistence<U,T,Linear> for BridgeLayer<U,P,I,PI,CI,D>
     }
 }
 impl<U,P,I,PI,CI,D> ForwardAll for BridgeLayer<U,P,I,PI,CI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + 'static,
-          CI: Debug + Send + Sync + 'static,
+          PI: Debug + 'static,
+          CI: Debug + 'static,
           I: Debug + Send + Sync {
     type Input = I;
     type Output = PI;
@@ -74,13 +73,14 @@ impl<U,P,I,PI,CI,D> ForwardAll for BridgeLayer<U,P,I,PI,CI,D>
     }
 }
 impl<U,P,I,PI,CI,D> PreTrain<U> for BridgeLayer<U,P,I,PI,CI,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + From<CI>,
-          CI: Debug + Send + Sync + 'static,
+          PI: Debug + From<CI>,
+          CI: Debug + 'static,
           I: Debug + Send + Sync {
+    type PreOutput = PI;
     type OutStack = <P as PreTrain<U>>::OutStack;
 
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
@@ -88,130 +88,161 @@ impl<U,P,I,PI,CI,D> PreTrain<U> for BridgeLayer<U,P,I,PI,CI,D>
     }
 }
 impl<U,P,I,PI,CI,D> BackwardAll<U> for BridgeLayer<U,P,I,PI,CI,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + From<CI>,
-          CI: Debug + Send + Sync + 'static,
+          PI: Debug + From<CI>,
+          CI: Debug + 'static,
           I: Debug + Send + Sync, {
     type LossInput = CI;
+    type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<OP: Optimizer<U>,L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, optimizer: &mut OP, lossf:&L) -> Result<(), TrainingError> {
-        Ok(self.parent.backward_all(input.into(), stack, optimizer,lossf)?.into())
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        Ok(self.parent.backward_all(input.into(), stack, lossf)?.into())
+    }
+}
+impl<U,P,I,PI,CI,D> UpdateWeight<U> for BridgeLayer<U,P,I,PI,CI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + 
+             Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + From<CI>,
+          CI: Debug + 'static,
+          I: Debug + Send + Sync, {
+    type GradientStack = <P as UpdateWeight<U>>::GradientStack;
+
+    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+        Ok(self.parent.update_weight(stack)?)
     }
 }
 impl<U,P,I,PI,CI,D> AskDiffInput<U> for BridgeLayer<U,P,I,PI,CI,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + Loss<U> + AskDiffInput<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + From<CI>,
-          CI: Debug + Send + Sync + 'static,
+          PI: Debug + From<CI>,
+          CI: Debug + 'static,
           I: Debug + Send + Sync {
     type DiffInput = P::DiffInput;
 
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Self::DiffInput {
+    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
         self.parent.ask_diff_input(stack)
     }
 }
 impl<U,P,I,PI,CI,D> Loss<U> for BridgeLayer<U,P,I,PI,CI,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + From<CI>,
-          CI: Debug + Send + Sync + 'static,
+          PI: Debug + From<CI>,
+          CI: Debug + 'static,
           I: Debug + Send + Sync {}
 impl<U,P,I,PI,CI,D> BatchForwardBase for BridgeLayer<U,P,I,PI,CI,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,PI>> + BatchPreTrainBase<U> + BatchBackward<U> +
-             BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<U> + BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + From<CI>,
-          for<'a> CI: Debug + Send + Sync + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
-          I: Debug + Send + Sync {
-    type BatchInput = SerializedVec<U,I>;
-    type BatchOutput = SerializedVec<U,PI>;
+          PI: Debug + From<CI> + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
+    type BatchInput = <I as BatchDataType>::Type;
+    type BatchOutput = <PI as BatchDataType>::Type;
 }
 impl<U,P,I,PI,CI,D> BatchForward for BridgeLayer<U,P,I,PI,CI,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,PI>> + BatchForward +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
+             BatchPreTrainBase<U> + BatchPreTrain<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + From<CI>,
-          for<'a> CI: Debug + Send + Sync + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
-          I: Debug + Send + Sync,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,CI>,Error=SizeMismatchError> {
+          PI: Debug + From<CI> + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         self.parent.batch_forward(input)
     }
 }
 impl<U,P,I,PI,CI,D> BatchPreTrainBase<U> for BridgeLayer<U,P,I,PI,CI,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,PI>> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<U> + BatchPreTrain<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + From<CI>,
-          for<'a> CI: Debug + Send + Sync + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
-          I: Debug + Send + Sync {
+          PI: Debug + From<CI> + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
+    type BatchPreOutput = <PI as BatchDataType>::Type;
     type BatchOutStack = <P as BatchPreTrainBase<U>>::BatchOutStack;
 }
 impl<U,P,I,PI,CI,D> BatchPreTrain<U> for BridgeLayer<U,P,I,PI,CI,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,PI>> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<U> + BatchPreTrain<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + From<CI>,
-          for<'a> CI: Debug + Send + Sync + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
-          I: Debug + Send + Sync,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,CI>,Error=SizeMismatchError> {
+          PI: Debug + From<CI> + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         self.parent.batch_pre_train(input)
     }
 }
 impl<U,P,I,PI,CI,D> BatchBackward<U> for BridgeLayer<U,P,I,PI,CI,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,PI>> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<U> + BatchPreTrain<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + From<CI>,
-          for<'a> CI: Debug + Send + Sync + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
-          I: Debug + Send + Sync,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,CI>,Error=SizeMismatchError> {
+          PI: Debug + From<CI> + BatchDataType,
+          for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug,
+          SerializedVec<U,CI>: IntoConverter,
+          <PI as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type : TryFrom<<SerializedVec<U,CI> as IntoConverter>::Converter,Error=TypeConvertError> {
     type BatchLossInput = SerializedVec<U,CI>;
-    fn batch_backward<OP: Optimizer<U>, L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, optimizer: &mut OP, lossf: &L) -> Result<(), TrainingError> {
-        self.parent.batch_backward(input.into_converter().try_into()?, stack, optimizer, lossf)
+    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
+    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
+        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        self.parent.batch_backward(input.into_converter().try_into()?, stack, lossf)
     }
 }
 impl<U,P,I,PI,CI,D> BatchLoss<U> for BridgeLayer<U,P,I,PI,CI,D>
-    where P: PreTrain<U> + ForwardAll<Input=I,Output=PI> +
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + Loss<U> +
-             BatchForwardBase<BatchInput=SerializedVec<U,I>,BatchOutput=SerializedVec<U,PI>> +
-             BatchPreTrainBase<U> + BatchPreTrain<U> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=SerializedVec<U,PI>>,
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<U> + BatchPreTrain<U,BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + From<CI>,
-          for<'a> CI: Debug + Send + Sync + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
-          I: Debug + Send + Sync,
-          SerializedVec<U,PI>: TryFrom<SerializedVecConverter<U,CI>,Error=SizeMismatchError> {
+          PI: Debug + From<CI> + BatchDataType,
+          for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type : TryFrom<SerializedVecConverter<U,CI>,Error=TypeConvertError> {
 
 }
 /// Trait for BridgeLayer instance creation
 pub trait BridgeLayerInstantiation<U,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + 'static,
-          CI: Debug + Send + Sync + 'static,
-          I: Debug + Send + Sync + 'static,
-          SerializedVec<U,I>: Debug + Send + Sync + 'static {
+          PI: Debug + 'static,
+          CI: Debug + 'static,
+          I: Debug + Send + Sync + 'static + BatchDataType,
+          <I as BatchDataType>::Type: Debug + Send + Sync + 'static {
     /// Create and return an instance with the specified scale, bias, and momentum.
     /// # Arguments
     /// * `parent` - upper layer
@@ -220,12 +251,13 @@ pub trait BridgeLayerInstantiation<U,P,I,PI,CI,D>
     fn instantiation(parent:P,device:&D) -> Result<BridgeLayer<U,P,I,PI,CI,D>,LayerInstantiationError>;
 }
 impl<U,P,I,PI,CI,D> BridgeLayerInstantiation<U,P,I,PI,CI,D> for BridgeLayer<U,P,I,PI,CI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: UnitValue<U>,
           D: Device<U>,
-          PI: Debug + Send + Sync + 'static,
-          CI: Debug + Send + Sync + 'static,
-          I: Debug + Send + Sync + 'static {
+          PI: Debug + 'static,
+          CI: Debug + 'static,
+          I: Debug + Send + Sync + 'static + BatchDataType,
+          <I as BatchDataType>::Type: Debug + Send + Sync + 'static {
     /// Create and return an instance of BridgeLayer
     /// # Arguments
     /// * `parent` - upper layer
@@ -242,10 +274,10 @@ impl<U,P,I,PI,CI,D> BridgeLayerInstantiation<U,P,I,PI,CI,D> for BridgeLayer<U,P,
     }
 }
 /// Builder for BridgeLayer instance creation
-pub struct BridgeLayerBuilder<CI> where CI: Debug + Send + Sync + 'static {
+pub struct BridgeLayerBuilder<CI> where CI: Debug + 'static {
     ci:PhantomData<CI>
 }
-impl<CI> BridgeLayerBuilder<CI> where CI: Debug + Send + Sync + 'static {
+impl<CI> BridgeLayerBuilder<CI> where CI: Debug + 'static {
     pub fn new() -> BridgeLayerBuilder<CI> {
         BridgeLayerBuilder {
             ci:PhantomData::<CI>
@@ -263,13 +295,13 @@ impl<CI> BridgeLayerBuilder<CI> where CI: Debug + Send + Sync + 'static {
     /// * [`LayerInstantiationError`]
     pub fn build<U,P,I,PI,D>(&self,parent:P,device:&D) -> Result<BridgeLayer<U,P,I,PI,CI,D>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> +
-                 BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+                 BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
               U: Default + Clone + Copy + Send + UnitValue<U>,
               D: Device<U>,
-              PI: Debug + Send + Sync + 'static,
-              CI: Debug + Send + Sync + 'static,
-              I: Debug + Send + Sync + 'static,
-              SerializedVec<U,I>: Debug + Send + Sync + 'static,
+              PI: Debug + 'static,
+              CI: Debug + 'static,
+              I: Debug + Send + Sync + 'static + BatchDataType,
+              <I as BatchDataType>::Type: Debug + Send + Sync + 'static,
               BridgeLayer<U,P,I,PI,CI,D>: BridgeLayerInstantiation<U,P,I,PI,CI,D> {
         BridgeLayer::<U,P,I,PI,CI,D>::instantiation(parent,device)
     }

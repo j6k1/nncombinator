@@ -199,6 +199,28 @@ fn launch_with_stream(func: *const c_void,
         Err(CudaRuntimeError::new(cuda_error))
     }
 }
+fn launch_cooperative_with_stream(func: *const c_void,
+                      grid_dim: dim3,
+                      block_dim: dim3,
+                      args: &mut [*mut c_void],
+                      shared_mem: usize,
+                      stream:cuda_runtime_sys::cudaStream_t)
+                      -> Result<(),CudaRuntimeError> {
+    let cuda_error = unsafe {
+        cuda_runtime_sys::cudaLaunchCooperativeKernel(func,
+                                           grid_dim,
+                                           block_dim,
+                                           args.as_mut_ptr(),
+                                           shared_mem,
+                                           stream)
+    };
+
+    if cuda_error == cuda_runtime_sys::cudaError::cudaSuccess {
+        Ok(())
+    } else {
+        Err(CudaRuntimeError::new(cuda_error))
+    }
+}
 /// cuda kernel startup function
 /// # Arguments
 /// * `func` - Pointer to cuda kernel function
@@ -223,4 +245,45 @@ pub fn launch(func: *const c_void,
                        args,
                        shared_mem,
                        null_mut())
+}
+/// cuda kernel startup function
+/// Launches a device function where thread blocks can cooperate and synchronize as they execute.
+/// # Arguments
+/// * `func` - Pointer to cuda kernel function
+/// * `grid_dim` - Number of dims in grid
+/// * `block_dim` - Number of blocks in grid
+/// * `args` - List of arguments passed to cuda kernel functions
+/// * `shared_mem` - Size (in bytes) of shared memory to allocate for use within cuda kernel functions.
+///
+/// # Errors
+///
+/// This function may return the following errors
+/// * [`CudaRuntimeError`]
+pub fn launch_cooperative(func: *const c_void,
+              grid_dim: dim3,
+              block_dim: dim3,
+              args: &mut [*mut c_void],
+              shared_mem: usize)
+              -> Result<(),CudaRuntimeError> {
+    launch_cooperative_with_stream(func,
+                       grid_dim,
+                       block_dim,
+                       args,
+                       shared_mem,
+                       null_mut())
+}
+/// Function that waits for the completion of the execution of the process passed to the Cuda kernel
+///
+/// # Errors
+///
+/// This function may return the following errors
+/// * [`CudaRuntimeError`]
+pub fn device_synchronize() -> Result<(),CudaRuntimeError> {
+    let cuda_error = unsafe { cuda_runtime_sys::cudaDeviceSynchronize() };
+
+    if cuda_error == cuda_runtime_sys::cudaError::cudaSuccess {
+        Ok(())
+    } else {
+        Err(CudaRuntimeError::new(cuda_error))
+    }
 }

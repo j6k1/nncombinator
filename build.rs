@@ -28,13 +28,17 @@ fn main() {
 	if cfg!(target_os = "windows") {
 		Command::new("nvcc")
 			.args(&["-O3",
+				"--prec-div=true",
+				"--fmad=true",
+				"-cudart=shared",
+				"-arch=sm_70",
 				"src/kernel.cu",
-				// static library (.lib) を出力させる
+				// Output static library (.lib)
 				"-lib",
-				// Cコンパイラのパスを指定
+				// Specify the path to the C compiler
 				"-ccbin",
 				"cl.exe",
-				// Cコンパイラにwarning 4819を無視するよう指示
+				// Instruct C compiler to ignore warning 4819
 				"-Xcompiler", "-wd4819",
 				"-o",
 			])
@@ -44,6 +48,8 @@ fn main() {
 	} else {
 		cc::Build::new()
 			.cuda(true)
+			.flag("--prec-div=true")
+			.flag("--fmad=true")
 			.flag("-cudart=shared")
 			.flag("-gencode")
 			.flag("arch=compute_87,code=sm_87")
@@ -53,8 +59,6 @@ fn main() {
 			.flag("arch=compute_80,code=sm_80")
 			.flag("-gencode")
 			.flag("arch=compute_72,code=sm_72")
-			.flag("-gencode")
-			.flag("arch=compute_61,code=sm_61")
 			.file("src/kernel.cu")
 			.out_dir(&out_dir)
 			.compile("libkernel.a");

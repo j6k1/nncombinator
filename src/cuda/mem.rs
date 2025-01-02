@@ -8,8 +8,8 @@ use std::ops::{Deref, DerefMut, Index};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use libc::c_void;
-use crate::cuda::{AsPtr, AsVoidPtr, CudaMemoryPoolPtr, ffi, Memory};
-use crate::cuda::private::{AsMutKernelPtrBase, AsKernelPtrBase};
+use crate::cuda::{AsPtr, AsVoidPtr, CudaMemoryPoolPtr, ffi, WriteMemory};
+use crate::cuda::private::{AsMutKernelPtrBase, AsConstKernelPtrBase};
 use crate::error::{CudaError};
 use crate::list::ListNode;
 use crate::mem::AsRawSlice;
@@ -21,13 +21,14 @@ struct Usage {
     allocated: bool
 }
 /// Momory Alloctype (Device or Host)
-#[derive(Debug)]
+#[derive(Debug,Copy,Clone)]
 pub enum Alloctype {
     /// Device memory
     Device,
     /// Host memory
     Host(libc::c_uint)
 }
+const ALIGNMENT:usize = 256;
 /// Cuda Memory pool
 pub struct MemoryPool {
     alloc_type:Alloctype,
@@ -162,6 +163,8 @@ impl MemoryPool {
             )));
         }
 
+        let real_size = (size + ALIGNMENT - 1) / ALIGNMENT * ALIGNMENT;
+
         let mut p = self.pool;
         let mut prev_key = None;
 
@@ -173,12 +176,12 @@ impl MemoryPool {
             {
                 let mut current = c.deref().borrow_mut();
 
-                if current.value.allocated == false && current.value.size >= size {
-                    let remaining = current.value.size - size;
+                if current.value.allocated == false && current.value.size >= real_size {
+                    let remaining = current.value.size - real_size;
 
                     current.value.allocated = true;
 
-                    current.value.size = size;
+                    current.value.size = real_size;
 
                     if self.map.contains_key(&(p as *const c_void)) {
                         return Err(CudaError::LogicError(String::from(
@@ -196,7 +199,7 @@ impl MemoryPool {
                         });
 
                         self.prev_map.insert(p, Rc::clone(&c));
-                        prev_key = unsafe { Some(p.add(size)) };
+                        prev_key = unsafe { Some(p.add(real_size)) };
                     } else {
                         n = None;
                     }
@@ -306,6 +309,11 @@ impl MemoryPool {
         }
 
         Ok(())
+    }
+
+    /// Get the type of memory allocation
+    pub fn get_alloc_type(&self) -> Alloctype {
+        self.alloc_type
     }
 }
 impl Drop for MemoryPool {
@@ -419,13 +427,21 @@ impl<U,T> AsVoidPtr for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlic
         self.ptr.as_void_ptr()
     }
 }
-impl<U,T> AsKernelPtrBase for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    fn as_kernel_ptr(&self) -> *const libc::c_void {
-        self.ptr.as_kernel_ptr()
+impl<U,T> AsConstKernelPtrBase for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+    fn as_const_kernel_ptr(&self) -> *mut libc::c_void {
+        self.ptr.as_const_kernel_ptr()
     }
 }
 impl<U,T> AsMutKernelPtrBase for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         self.ptr.as_mut_kernel_ptr()
+    }
+}
+impl<'a,U,T> From<&'a mut CachedTensor<U,T>> for &'a mut [U]
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          &'a mut [U]: From<&'a mut T> {
+    fn from(t: &'a mut CachedTensor<U,T>) -> Self {
+        (&mut t.value).into()
     }
 }

@@ -2,14 +2,17 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::{Add, Deref, DerefMut, Div, Index, IndexMut, Mul, Neg, Sub};
-use std;
+use std::ops::{Add, AddAssign, Deref, Div, Index, IndexMut, Mul, Neg, Sub};
+use std::slice::{IterMut};
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
-use crate::error::{IndexOutBoundError, SizeMismatchError};
+use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, ToHost};
+use crate::device::{DeviceGpu, DeviceMemoryPool};
+use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
+use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
-use crate::ope::Sum;
+use crate::ope::{Product, Sum, UnitValue};
 
 /// Trait that returns the number of elements in the slice held by itself
 pub trait SliceSize {
@@ -17,6 +20,24 @@ pub trait SliceSize {
 
     fn slice_size() -> usize {
         Self::SIZE
+    }
+}
+/// Wrapper to prevent operations on references to mutable slices that overwrite the slice itself with another slice
+pub struct ShieldSlice<'a,T> {
+    raw: &'a mut [T]
+}
+
+impl<'a,T> ShieldSlice<'a,T> {
+    /// Creating a ShieldSlice instance
+    pub fn new(raw:&'a mut [T]) -> ShieldSlice<'a,T> {
+        ShieldSlice {
+            raw: raw
+        }
+    }
+
+    /// Obtaining a mutable iterator
+    pub fn iter_mut(&'a mut self) -> IterMut<'a,T> {
+        self.raw.iter_mut()
     }
 }
 /// Fixed-length one-dimensional array implementation
@@ -34,6 +55,16 @@ impl<T,const N:usize> Arr<T,N> where T: Default + Clone + Send {
             arr:arr.into_boxed_slice()
         }
     }
+
+    /// Obtaining a mutable iterator
+    pub fn iter_mut(&mut self) -> IterMut<'_,T> {
+        self.arr.iter_mut()
+    }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.arr.as_mut_ptr()
+    }
 }
 impl<T,const N:usize> Default for Arr<T,N> where T: Default + Clone + Send {
     fn default() -> Self {
@@ -44,11 +75,6 @@ impl<T,const N:usize> Deref for Arr<T,N> where T: Default + Clone + Send {
     type Target = Box<[T]>;
     fn deref(&self) -> &Self::Target {
         &self.arr
-    }
-}
-impl<T,const N:usize> DerefMut for Arr<T,N> where T: Default + Clone + Send  {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.arr
     }
 }
 impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
@@ -116,13 +142,13 @@ impl<'data,U,const N:usize> From<ArrView<'data,U,N>> for Arr<U,N> where U: Defau
     }
 }
 impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(v: Vec<T>) -> Result<Self, Self::Error> {
         let s = v.into_boxed_slice();
 
         if s.len() != N {
-            Err(SizeMismatchError(s.len(),N))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(s.len(),N)))
         } else {
             Ok(Arr {
                 arr: s
@@ -131,11 +157,11 @@ impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Se
     }
 }
 impl<T,const N:usize> TryFrom<Box<[T]>> for Arr<T,N> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(arr: Box<[T]>) -> Result<Self, Self::Error> {
         if arr.len() != N {
-            Err(SizeMismatchError(arr.len(),N))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(arr.len(),N)))
         } else {
             Ok(Arr { arr: arr })
         }
@@ -146,8 +172,61 @@ impl<T,const N:usize> From<Arr<T,N>> for Box<[T]> where T: Default + Clone + Sen
         value.arr
     }
 }
+impl<'a,T,const N:usize> From<&'a Arr<T,N>> for &'a [T] where T: Default + Clone + Send {
+    fn from(arr: &'a Arr<T, N>) -> Self {
+        &arr.arr
+    }
+}
+impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: Default + Clone + Send {
+    fn from(arr: &'a mut Arr<T, N>) -> Self {
+        ShieldSlice::new(&mut arr.arr)
+    }
+}
+impl<T,const N:usize> ToCuda<T> for Arr<T,N>
+    where T: UnitValue<T> {
+    type Output = CudaTensor1dPtr<T,N>;
+
+    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+        let mut ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
+
+        ptr.memcpy(self.as_ptr(),N)?;
+
+        Ok(ptr)
+    }
+}
+impl<'a,T,const N:usize> ToCuda<T> for &'a Arr<T,N>
+    where T: UnitValue<T> {
+    type Output = CudaTensor1dPtr<T,N>;
+
+    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+        let mut ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
+
+        ptr.memcpy(self.as_ptr(),N)?;
+
+        Ok(ptr)
+    }
+}
+impl<T,const N:usize> ToHost<T> for Arr<T,N> where T: Default + Clone + Send {
+    type Output = Arr<T,N>;
+
+    fn to_host(self) -> Result<Self::Output, TypeConvertError> {
+        Ok(self)
+    }
+}
 impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Send {
     const SIZE: usize = N;
+}
+impl<T,const N:usize> Index<usize> for Arr<T,N> where T: Default + Clone + Send {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.arr[index]
+    }
+}
+impl<T,const N:usize> IndexMut<usize> for Arr<T,N> where T: Default + Clone + Send {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.arr[index]
+    }
 }
 impl<'a,T,const N:usize> Add<T> for &'a Arr<T,N> where T: Add<Output=T> + Clone + Copy + Default + Send {
     type Output = Arr<T,N>;
@@ -258,8 +337,31 @@ impl<'a,T,const N:usize> AsRawSlice<T> for Arr<T,N> where T: Default + Clone + S
     }
 }
 impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for Arr<T,N> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
+    }
+}
+impl<T,const N:usize> BatchDataType for Arr<T,N> where T: Default + Clone + Send {
+    type Type = SerializedVec<T,Arr<T,N>>;
+}
+impl<'a,T,const N:usize> BatchDataType for &'a Arr<T,N> where T: Default + Clone + Send {
+    type Type = &'a SerializedVec<T,Arr<T,N>>;
+}
+impl<'a,T,const N1:usize, const N2:usize> Product<&'a Arr2<T,N1,N2>> for &'a Arr<T,N1>
+    where T: Add<Output=T> + AddAssign + Mul<Output=T> + Default + Clone + Copy + Send {
+    type Output = Arr<T,N2>;
+
+    #[inline]
+    fn product(self, rhs: &'a Arr2<T, N1, N2>) -> Self::Output {
+        let mut o = Arr::new();
+
+        for (&l,r) in self.iter().zip(rhs.iter()) {
+            for (o,&r) in o.iter_mut().zip(r.iter()) {
+                *o += l * r;
+            }
+        }
+
+        o
     }
 }
 /// Fixed-length 2D array implementation
@@ -286,6 +388,17 @@ impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2> where T: Default {
     /// Obtaining a mutable iterator
     pub fn iter_mut<'a>(&'a mut self) -> Arr2IterMut<'a,T,N2> {
         Arr2IterMut(&mut *self.arr)
+    }
+}
+impl<T,const N1:usize,const N2:usize> Arr2<T,N1,N2> where T: Default {
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
+    }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.arr.as_mut_ptr()
     }
 }
 impl<T,const N1:usize, const N2:usize> Clone for Arr2<T,N1,N2> where T: Default + Clone + Send {
@@ -323,16 +436,16 @@ impl<'a,T,const N1:usize, const N2: usize> AsRawSlice<T> for Arr2<T,N1,N2> where
     }
 }
 impl<'a,T,const N1:usize, const N2:usize> AsRawMutSlice<'a,T> for Arr2<T,N1,N2> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 impl<T,const N1:usize, const N2: usize> TryFrom<Vec<T>> for Arr2<T,N1,N2> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(v: Vec<T>) -> Result<Self, Self::Error> {
         if v.len() != N1 * N2 {
-            Err(SizeMismatchError(v.len(),N1 * N2))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(v.len(),N1 * N2)))
         } else {
             let arr = v.into_boxed_slice();
 
@@ -343,11 +456,11 @@ impl<T,const N1:usize, const N2: usize> TryFrom<Vec<T>> for Arr2<T,N1,N2> where 
     }
 }
 impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(v: Vec<Arr<T,N2>>) -> Result<Self, Self::Error> {
         if v.len() != N1 {
-            Err(SizeMismatchError(v.len(),N1))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(v.len(),N1)))
         } else {
             let mut buffer = Vec::with_capacity(N1 * N2);
 
@@ -358,6 +471,16 @@ impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2
                 arr: buffer.into_boxed_slice()
             })
         }
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> From<&'a Arr2<T,N1,N2>> for &'a [T] where T: Default + Clone + Send {
+    fn from(arr: &'a Arr2<T, N1, N2>) -> Self {
+        arr.as_raw_slice()
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize> From<&'a mut Arr2<T,N1,N2>> for ShieldSlice<'a,T> where T: Default + Clone + Send {
+    fn from(arr: &'a mut Arr2<T, N1, N2>) -> Self {
+        arr.as_raw_mut_slice()
     }
 }
 impl<T,const N1:usize,const N2:usize> SliceSize for Arr2<T,N1,N2> where T: Default + Clone + Send {
@@ -396,6 +519,17 @@ impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: D
         Arr3IterMut(&mut *self.arr)
     }
 }
+impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: Default {
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
+    }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.arr.as_mut_ptr()
+    }
+}
 impl<T,const N1:usize, const N2:usize, const N3:usize> Index<(usize,usize,usize)> for Arr3<T,N1,N2,N3> where T: Default {
     type Output = T;
 
@@ -423,11 +557,11 @@ impl<T,const N1:usize, const N2:usize, const N3:usize> IndexMut<(usize,usize,usi
     }
 }
 impl<T,const N1:usize, const N2: usize, const N3:usize> TryFrom<Vec<Arr2<T,N2,N3>>> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(v: Vec<Arr2<T,N2,N3>>) -> Result<Self, Self::Error> {
         if v.len() != N1 {
-            Err(SizeMismatchError(v.len(),N1))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(v.len(),N1)))
         } else {
             let mut buffer = Vec::with_capacity(N1 * N2 * N3);
 
@@ -450,8 +584,8 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3<T
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 /// Fixed-length 4D array implementation
@@ -485,6 +619,17 @@ impl<T,const N1:usize,const N2:usize,const N3:usize, const N4:usize> Arr4<T,N1,N
     /// Obtaining a mutable iterator
     pub fn iter_mut<'a>(&'a mut self) -> Arr4IterMut<'a,T,N2,N3,N4> {
         Arr4IterMut(&mut *self.arr)
+    }
+}
+impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> Arr4<T,N1,N2,N3,N4> where T: Default {
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
+    }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.arr.as_mut_ptr()
     }
 }
 impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> Index<(usize,usize,usize,usize)> for Arr4<T,N1,N2,N3,N4>
@@ -521,11 +666,11 @@ impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> IndexMut<
 }
 impl<T,const N1:usize, const N2: usize, const N3:usize, const N4:usize> TryFrom<Vec<Arr3<T,N2,N3,N4>>>
     for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(v: Vec<Arr3<T,N2,N3,N4>>) -> Result<Self, Self::Error> {
         if v.len() != N1 {
-            Err(SizeMismatchError(v.len(),N1))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(v.len(),N1)))
         } else {
             let mut buffer = Vec::with_capacity(N1 * N2 * N3 * N4);
 
@@ -548,8 +693,8 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawSlic
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawMutSlice<'a,T> for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 /// Implementation of an immutable view of a fixed-length 1D array
@@ -579,11 +724,11 @@ impl<'a,T,const N:usize> From<&'a Arr<T,N>> for ArrView<'a,T,N> where T: Default
     }
 }
 impl<'a,T,const N:usize> TryFrom<&'a [T]> for ArrView<'a,T,N> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(arr: &'a [T]) -> Result<Self, Self::Error> {
         if arr.len() != N {
-            Err(SizeMismatchError(arr.len(),N))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(arr.len(),N)))
         } else {
             Ok(ArrView { arr: arr })
         }
@@ -703,10 +848,33 @@ derive_arr_like_arithmetic! (ArrView<'a,T,N> > Arr<T,N> = Arr<T,N>);
 derive_arr_like_arithmetic! (&'a ArrView<'a,T,N> > Arr<T,N> = Arr<T,N>);
 derive_arr_like_arithmetic! (ArrView<'a,T,N> > &'a Arr<T,N> = Arr<T,N>);
 
+impl<'a,T,const N1:usize, const N2:usize> Product<&'a Arr2<T,N1,N2>> for ArrView<'a,T,N1>
+    where T: Add<Output=T> + AddAssign + Mul<Output=T> + Default + Clone + Copy + Send {
+    type Output = Arr<T,N2>;
+
+    #[inline]
+    fn product(self, rhs: &'a Arr2<T, N1, N2>) -> Self::Output {
+        let mut o = Arr::new();
+
+        for (&l,r) in self.iter().zip(rhs.iter()) {
+            for (o,&r) in o.iter_mut().zip(r.iter()) {
+                *o += l * r;
+            }
+        }
+
+        o
+    }
+}
 /// Implementation of an mutable view of a fixed-length 1D array
 #[derive(Debug,Eq,PartialEq)]
 pub struct ArrViewMut<'a,T,const N:usize> {
     pub(crate) arr:&'a mut [T]
+}
+impl<'a,T,const N:usize> ArrViewMut<'a,T,N> {
+    /// Obtaining a mutable iterator
+    pub fn iter_mut(&mut self) -> IterMut<'_,T> {
+        self.arr.iter_mut()
+    }
 }
 impl<'a,T,const N:usize> Deref for ArrViewMut<'a,T,N> {
     type Target = [T];
@@ -714,17 +882,24 @@ impl<'a,T,const N:usize> Deref for ArrViewMut<'a,T,N> {
         &self.arr
     }
 }
-impl<'a,T,const N:usize> DerefMut for ArrViewMut<'a,T,N> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.arr
+impl<'a,T,const N:usize> Index<usize> for ArrViewMut<'a,T,N> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.arr[index]
+    }
+}
+impl<'a,T,const N:usize> IndexMut<usize> for ArrViewMut<'a,T,N> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.arr[index]
     }
 }
 impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
     fn try_from(arr: &'a mut [T]) -> Result<Self, Self::Error> {
         if arr.len() != N {
-            Err(SizeMismatchError(arr.len(),N))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(arr.len(),N)))
         } else {
             Ok(ArrViewMut { arr: arr })
         }
@@ -739,8 +914,8 @@ impl<'a,T,const N:usize> AsRawSlice<T> for ArrViewMut<'a,T,N> where T: Default +
     }
 }
 impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 /// Implementation of a immutable view of a fixed-length 2D array
@@ -749,8 +924,14 @@ pub struct Arr2View<'a,T,const N1:usize,const N2:usize> {
     arr:&'a [T]
 }
 impl<'a,T,const N1:usize,const N2:usize> Arr2View<'a,T,N1,N2> {
+    /// Obtaining a immutable iterator
     pub fn iter(&'a self) -> Arr2Iter<'a,T,N2> {
         Arr2Iter(&self.arr)
+    }
+
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2View<'a,T,N1,N2> {
@@ -770,7 +951,8 @@ impl<'a,T,const N:usize> Arr2Iter<'a,T,N> {
         N
     }
 }
-impl<'a,T,const N:usize> Iterator for Arr2Iter<'a,T,N> {
+impl<'a,T,const N:usize> Iterator for Arr2Iter<'a,T,N>
+    where T: Default + Clone + Send {
     type Item = ArrView<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -787,6 +969,26 @@ impl<'a,T,const N:usize> Iterator for Arr2Iter<'a,T,N> {
             })
         }
     }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+        if slice.is_empty() {
+            None
+        } else if n == 0 {
+            let (l,r) = slice.split_at(self.element_size());
+
+            self.0 = r;
+
+            Some(l.try_into().expect("An error occurred in the conversion from Slice to ArrView. The sizes do not match."))
+        } else {
+            let (_,r) = slice.split_at(self.element_size() * n);
+            let (l,r) = r.split_at(self.element_size());
+
+            self.0 = r;
+
+            Some(l.try_into().expect("An error occurred in the conversion from Slice to ArrView. The sizes do not match."))
+        }
+    }
 }
 impl<'a,T,const N:usize> AsRawSlice<T> for Arr2Iter<'a,T,N> {
     fn as_raw_slice(&self) -> &[T] {
@@ -799,8 +1001,19 @@ pub struct Arr2ViewMut<'a,T,const N1:usize,const N2:usize> {
     arr: &'a mut [T]
 }
 impl<'a,T,const N1:usize,const N2:usize> Arr2ViewMut<'a,T,N1,N2> {
+    /// Obtaining a mutable iterator
     pub fn iter_mut(&'a mut self) -> Arr2IterMut<'a,T,N2> {
         Arr2IterMut(&mut self.arr)
+    }
+
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
+    }
+
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut T {
+        self.arr.as_mut_ptr()
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> SliceSize for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Send {
@@ -812,8 +1025,8 @@ impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2ViewMut<'a,T,N1,N
     }
 }
 impl<'a,T,const N1:usize,const N2:usize> AsRawMutSlice<'a,T> for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 /// Implementation of an mutable iterator for fixed-length 2D arrays
@@ -826,7 +1039,8 @@ impl<'a,T,const N:usize> Arr2IterMut<'a,T,N> {
         N
     }
 }
-impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N> {
+impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N>
+    where T: Default + Clone + Send {
     type Item = ArrViewMut<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -843,6 +1057,26 @@ impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N> {
             })
         }
     }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        let slice = std::mem::replace(&mut self.0, &mut []);
+        if slice.is_empty() {
+            None
+        } else if n == 0 {
+            let (l,r) = slice.split_at_mut(self.element_size());
+
+            self.0 = r;
+
+            Some(l.try_into().expect("An error occurred in the conversion from Slice to ArrView. The sizes do not match."))
+        } else {
+            let (_,r) = slice.split_at_mut(self.element_size() * n);
+            let (l,r) = r.split_at_mut(self.element_size());
+
+            self.0 = r;
+
+            Some(l.try_into().expect("An error occurred in the conversion from Slice to ArrView. The sizes do not match."))
+        }
+    }
 }
 /// Implementation of a immutable view of a fixed-length 3D array
 #[derive(Debug,Eq,PartialEq)]
@@ -850,8 +1084,14 @@ pub struct Arr3View<'a,T,const N1:usize,const N2:usize,const N3:usize> {
     arr: &'a [T]
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3View<'a,T,N1,N2,N3> {
+    /// Obtaining a immutable iterator
     pub fn iter(&'a self) -> Arr3Iter<'a,T,N2,N3> {
         Arr3Iter(&self.arr)
+    }
+
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const T {
+        self.arr.as_ptr()
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3View<'a,T,N1,N2,N3> {
@@ -896,6 +1136,7 @@ pub struct Arr3ViewMut<'a,T,const N1:usize,const N2:usize,const N3:usize> {
     arr:&'a mut [T]
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3ViewMut<'a,T,N1,N2,N3> {
+    /// Obtaining a mutable iterator
     pub fn iter_mut(&'a mut self) -> Arr3IterMut<'a,T,N2,N3> {
         Arr3IterMut(&mut self.arr)
     }
@@ -906,8 +1147,8 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3Vi
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Send {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [T] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 impl<'a,T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Send {
@@ -1031,8 +1272,13 @@ impl<T,const N:usize> DiffArr<T,N> where T: Debug {
     }
 
     /// Obtaining a immutable iterator
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item=&(usize,T)> {
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=&'a (usize,T)> {
         self.items.iter()
+    }
+
+    /// get item count
+    pub fn len(&self) -> usize {
+        self.items.len()
     }
 }
 impl<T,const N:usize> Mul<T> for DiffArr<T,N>
@@ -1074,6 +1320,28 @@ pub struct SerializedVecConverter<U,T>
     u:PhantomData<U>,
     t:PhantomData<T>
 }
+/// Trait that implements the ability to convert to a converter type
+/// for conversion to a destination type.
+pub trait IntoConverter {
+    /// Converter type to go through when converting to the type being converted
+    type Converter;
+
+    fn into_converter(self) -> Self::Converter;
+}
+impl<U,T> From<SerializedVecConverter<U,T>> for Box<[U]>
+    where U: Default + Clone + Copy + Send,
+          for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+    fn from(value: SerializedVecConverter<U,T>) -> Self {
+        value.arr
+    }
+}
+impl<U,T> BatchSize for SerializedVecConverter<U,T>
+    where U: Default + Clone + Copy + Send,
+          for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+    fn size(&self) -> usize {
+        self.len
+    }
+}
 /// Implementation of fixed-length arrays whose size is not specified by a type parameter
 #[derive(Debug,Eq,PartialEq,Clone)]
 pub struct SerializedVec<U,T> {
@@ -1088,9 +1356,21 @@ impl<U,T> SerializedVec<U,T> where U: Default + Clone + Copy + Send {
         self.len
     }
 }
+impl<U,T> BatchSize for SerializedVec<U,T> {
+    /// get the number of element
+    fn size(&self) -> usize {
+        self.len
+    }
+}
+impl<'a,U,T> BatchSize for &'a SerializedVec<U,T> {
+    /// get the number of element
+    fn size(&self) -> usize {
+        self.len
+    }
+}
 impl<U,T> SerializedVec<U,T>
     where U: Default + Clone + Copy + Send,
-          for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+          for<'a> T: SliceSize + MakeView<'a,U> {
     /// Create a SerializedVec instance of the specified size
     /// # Arguments
     /// * `size`- Size to be secured
@@ -1115,7 +1395,19 @@ impl<U,T> SerializedVec<U,T>
             t:PhantomData::<T>,
         }
     }
-
+}
+impl<U,T> SerializedVec<U,T>
+    where U: Default + Clone + Copy + Send,
+          for<'a> T: SliceSize + AsView<'a> + MakeView<'a,U>,
+          for<'a> T: From<<T as AsView<'a>>::ViewType> {
+    /// Converted to `Vec<T>`
+    pub fn to_vec(&self) -> Vec<T> {
+        self.iter().map(|v| v.into()).collect()
+    }
+}
+impl<U,T> SerializedVec<U,T>
+    where U: Default + Clone + Copy + Send,
+          for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
     /// Obtaining a mutable iterator
     pub fn iter_mut(&mut self) -> SerializedVecIterMut<U,T> {
         SerializedVecIterMut {
@@ -1124,9 +1416,26 @@ impl<U,T> SerializedVec<U,T>
             t:PhantomData::<T>,
         }
     }
+}
+impl<U,T> SerializedVec<U,T> {
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&self) -> *const U {
+        self.arr.as_ptr()
+    }
 
-    /// Conversion to converter to SerializedVec with different internal types
-    pub fn into_converter(self) -> SerializedVecConverter<U,T> {
+    /// Returns a writable pointer to an internal buffer
+    pub fn as_mut_ptr(&mut self) -> *mut U {
+        self.arr.as_mut_ptr()
+    }
+
+}
+impl<U,T> IntoConverter for SerializedVec<U,T>
+    where U: Default + Clone + Copy + Send,
+    for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+    type Converter = SerializedVecConverter<U,T>;
+
+    #[inline]
+    fn into_converter(self) -> Self::Converter {
         SerializedVecConverter {
             arr:self.arr,
             len:self.len,
@@ -1179,11 +1488,11 @@ impl<'data,U,const N:usize> From<Vec<ArrView<'data,U,N>>> for SerializedVec<U,Ar
     }
 }
 impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Default + Clone + Copy + Send {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
-    fn try_from(items: Vec<U>) -> Result<Self,SizeMismatchError> {
+    fn try_from(items: Vec<U>) -> Result<Self,TypeConvertError> {
         if items.len() % N != 0 {
-            Err(SizeMismatchError(items.len(),N))
+            Err(TypeConvertError::IndivisibleError(IndivisibleError(items.len(),N)))
         } else {
             let len = items.len() / N;
 
@@ -1196,19 +1505,63 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
         }
     }
 }
+impl<U,T> ToCuda<U> for SerializedVec<U,T>
+    where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
+          <T as ToCuda<U>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
+          for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U> {
+    type Output = CudaVec<U,<T as ToCuda<U>>::Output>;
+
+    fn to_cuda(self, device: &DeviceGpu<U>) -> Result<Self::Output,TypeConvertError> {
+        if T::slice_size() != <T as ToCuda<U>>::Output::size() {
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U>>::Output::size())))
+        } else {
+            let mut ptr = CudaVec::new(self.len,device.get_memory_pool())?;
+
+            ptr.memcpy(self.as_ptr(), self.len * <T as ToCuda<U>>::Output::size())?;
+
+            Ok(ptr)
+        }
+    }
+}
+impl<'a,U,T> ToCuda<U> for &'a SerializedVec<U,T>
+    where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
+          <T as ToCuda<U>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
+          for<'b> T: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> + ToCuda<U> {
+    type Output = CudaVec<U,<T as ToCuda<U>>::Output>;
+    fn to_cuda(self, device: &DeviceGpu<U>) -> Result<Self::Output,TypeConvertError> {
+        if T::slice_size() != <T as ToCuda<U>>::Output::size() {
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U>>::Output::size())))
+        } else {
+            let mut ptr = CudaVec::new(self.len,device.get_memory_pool())?;
+
+            ptr.memcpy(self.arr.as_ptr(), self.len * <T as ToCuda<U>>::Output::size())?;
+
+            Ok(ptr)
+        }
+    }
+}
+impl<U,T> ToHost<U> for SerializedVec<U,T> where U: Default + Clone + Copy + Send {
+    type Output = SerializedVec<U,T>;
+
+    fn to_host(self) -> Result<Self::Output, TypeConvertError> {
+        Ok(self)
+    }
+}
 impl<U,T,R> TryFrom<SerializedVecConverter<U,T>> for SerializedVec<U,R>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U>,
           for<'b> R: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
-    fn try_from(s: SerializedVecConverter<U,T>) -> Result<Self,SizeMismatchError> {
+    fn try_from(s: SerializedVecConverter<U,T>) -> Result<Self,TypeConvertError> {
         if T::slice_size() != R::slice_size() {
-            Err(SizeMismatchError(T::slice_size(),R::slice_size()))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),R::slice_size())))
         } else {
+            let len = s.size();
+
             Ok(SerializedVec {
-                arr: s.arr,
-                len: s.len,
+                len: len,
+                arr: s.into(),
                 u:PhantomData::<U>,
                 t: PhantomData::<R>
             })
@@ -1231,20 +1584,24 @@ impl<'a,U,T> From<&'a SerializedVecView<'a,U,T>> for SerializedVec<U,T>
         }
     }
 }
-impl<U,const N:usize> TryFrom<Box<[U]>> for SerializedVec<U,Arr<U,N>> where U: Default + Clone + Send {
-    type Error = SizeMismatchError;
+impl<U,T> TryFrom<Box<[U]>> for SerializedVec<U,T> 
+    where U: Default + Clone + Send,
+          for<'a> T: SliceSize + MakeView<'a,U> {
+    type Error = TypeConvertError;
 
     fn try_from(arr: Box<[U]>) -> Result<Self, Self::Error> {
-        if arr.len() % N != 0 {
-            Err(SizeMismatchError(arr.len(),N))
+        let n = T::slice_size();
+
+        if arr.len() % n != 0 {
+            Err(TypeConvertError::IndivisibleError(IndivisibleError(arr.len(),n)))
         } else {
-            let len = arr.len() / N;
+            let len = arr.len() / n;
 
             Ok(SerializedVec {
                 arr: arr,
                 len: len,
                 u:PhantomData::<U>,
-                t: PhantomData::<Arr<U, N>>
+                t: PhantomData::<T>
             })
         }
     }
@@ -1264,8 +1621,8 @@ impl<'a,U,T> AsRawSlice<U> for SerializedVec<U,T>
 impl<'a,U,T> AsRawMutSlice<'a,U> for SerializedVec<U,T>
     where U: Default + Clone + Send,
           T: SliceSize {
-    fn as_raw_mut_slice(&'a mut self) -> &'a mut [U] {
-        &mut self.arr
+    fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,U> {
+        ShieldSlice::new(&mut self.arr)
     }
 }
 impl<'a,U,T> Add<U> for &'a SerializedVec<U,T>
@@ -1447,7 +1804,7 @@ impl<'a,U,T> SerializedVecView<'a,U,T> where U: Default + Clone + Copy + Send {
 }
 impl<'a,U,T> SerializedVecView<'a,U,T>
     where U: Default + Clone + Copy + Send,
-          T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
+          T: SliceSize + MakeView<'a,U> {
     /// Obtaining a immutable iterator
     pub fn iter(&self) -> SerializedVecIter<'a,U,T> {
         SerializedVecIter {
@@ -1455,6 +1812,12 @@ impl<'a,U,T> SerializedVecView<'a,U,T>
             u:PhantomData::<U>,
             t:PhantomData::<T>,
         }
+    }
+}
+impl<'a,U,T> SerializedVecView<'a,U,T> {
+    /// Returns a read-only pointer to an internal buffer
+    pub fn as_ptr(&mut self) -> *const U {
+        self.arr.as_ptr()
     }
 }
 impl<'a,U,T> Clone for SerializedVecView<'a,U,T> {
@@ -1475,15 +1838,20 @@ impl<'a,U,T> AsRawSlice<U> for SerializedVecView<'a,U,T>
         &self.arr
     }
 }
+impl<'a,U,T> BatchSize for SerializedVecView<'a,U,T> {
+    fn size(&self) -> usize {
+        self.len
+    }
+}
 impl<'a,U,T,R> TryFrom<&'a SerializedVec<U,T>> for SerializedVecView<'a,U,R>
     where U: Default + Clone + Copy + Send,
           T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U>,
           R: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> {
-    type Error = SizeMismatchError;
+    type Error = TypeConvertError;
 
-    fn try_from(s: &'a SerializedVec<U,T>) -> Result<Self, SizeMismatchError> {
+    fn try_from(s: &'a SerializedVec<U,T>) -> Result<Self, TypeConvertError> {
         if T::slice_size() != R::slice_size() {
-            Err(SizeMismatchError(T::slice_size(), R::slice_size()))
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(), R::slice_size())))
         } else {
             Ok(SerializedVecView {
                 arr: &*s.arr,

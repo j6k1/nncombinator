@@ -1,5 +1,6 @@
 //! Definition of various errors
 use std::{error, fmt, io};
+use std::array::TryFromSliceError;
 use std::ffi::CStr;
 use std::fmt::{Debug, Formatter};
 use std::num::ParseFloatError;
@@ -14,7 +15,7 @@ pub enum TrainingError {
     /// Errors occurring within the launched external thread
     /// (this error is currently not used within crate)
     ThreadError(String),
-    /// Errors caused by generating fixed-length arrays from different size Vecs
+    /// Error generating fixed-length collections from collections of different sizes
     SizeMismatchError(SizeMismatchError),
     /// Illegal input value
     InvalidInputError(String),
@@ -36,7 +37,11 @@ pub enum TrainingError {
     /// Error that occurs when calling a function that is not supported by the specification
     UnsupportedOperationError(UnsupportedOperationError),
     /// Error raised when cast of primitive type fails
-    TypeCastError(String)
+    TypeCastError(String),
+    /// Error generated when type conversion fails
+    TypeConvertError(TypeConvertError),
+    /// Error raised if cast to fixed-length array fails
+    TryFromSliceError(TryFromSliceError)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -54,6 +59,8 @@ impl fmt::Display for TrainingError {
             TrainingError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e),
             TrainingError::UnsupportedOperationError(e) => write!(f,"unsupported operation. ({})",e),
             TrainingError::TypeCastError(s) => write!(f,"{}",s),
+            TrainingError::TypeConvertError(e) => write!(f,"{}",e),
+            TrainingError::TryFromSliceError(e) => write!(f,"{}",e)
         }
     }
 }
@@ -73,6 +80,8 @@ impl error::Error for TrainingError {
             TrainingError::InvalidStateError(_) => "Invalid state.",
             TrainingError::UnsupportedOperationError(_) => "unsupported operation.",
             TrainingError::TypeCastError(_) => "Typecast failed.",
+            TrainingError::TypeConvertError(_) => "Type convert failed.",
+            TrainingError::TryFromSliceError(_) => "Conversion to fixed-length array failed.",
         }
     }
 
@@ -91,6 +100,8 @@ impl error::Error for TrainingError {
             TrainingError::InvalidStateError(e) => Some(e),
             TrainingError::UnsupportedOperationError(e) => Some(e),
             TrainingError::TypeCastError(_) => None,
+            TrainingError::TypeConvertError(e) => Some(e),
+            TrainingError::TryFromSliceError(e) => Some(e)
         }
     }
 }
@@ -102,7 +113,9 @@ pub enum ConfigReadError {
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidState(String),
     /// Error when trying to parse a numeric string into numbers
-    ParseFloatError(ParseFloatError)
+    ParseFloatError(ParseFloatError),
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error)
 }
 impl fmt::Display for ConfigReadError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -110,6 +123,7 @@ impl fmt::Display for ConfigReadError {
             ConfigReadError::IOError(_) => write!(f, "Error occurred in file I/O."),
             ConfigReadError::InvalidState(ref s) => write!(f, "Configuration is invalid. ({})",s),
             ConfigReadError::ParseFloatError(_) => write!(f, "An error occurred when converting a string to a double value."),
+            ConfigReadError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
         }
     }
 }
@@ -118,7 +132,8 @@ impl error::Error for ConfigReadError {
         match *self {
             ConfigReadError::IOError(_) => "Error occurred in file I/O.",
             ConfigReadError::InvalidState(_) => "Configuration is invalid.",
-            ConfigReadError::ParseFloatError(_) => "An error occurred when converting a string to a double value."
+            ConfigReadError::ParseFloatError(_) => "An error occurred when converting a string to a double value.",
+            ConfigReadError::CudnnError(_) => "An error occurred during the execution of a process in cudnn."
         }
     }
 
@@ -127,12 +142,18 @@ impl error::Error for ConfigReadError {
             ConfigReadError::IOError(ref e) => Some(e),
             ConfigReadError::InvalidState(_) => None,
             ConfigReadError::ParseFloatError(ref e) => Some(e),
+            ConfigReadError::CudnnError(ref e) => Some(e)
         }
     }
 }
 impl From<SizeMismatchError> for TrainingError {
     fn from(err: SizeMismatchError) -> TrainingError {
         TrainingError::SizeMismatchError(err)
+    }
+}
+impl From<TypeConvertError> for TrainingError {
+    fn from(err: TypeConvertError) -> TrainingError {
+        TrainingError::TypeConvertError(err)
     }
 }
 impl From<EvaluateError> for TrainingError {
@@ -180,7 +201,17 @@ impl From<ParseFloatError> for ConfigReadError {
         ConfigReadError::ParseFloatError(err)
     }
 }
-/// Errors caused by generating fixed-length arrays from different size Vecs
+impl From<rcudnn::Error> for ConfigReadError {
+    fn from(err: rcudnn::Error) -> ConfigReadError {
+        ConfigReadError::CudnnError(err)
+    }
+}
+impl From<TryFromSliceError> for TrainingError {
+    fn from(err: TryFromSliceError) -> TrainingError {
+        TrainingError::TryFromSliceError(err)
+    }
+}
+/// Error generating fixed-length collections from collections of different sizes
 #[derive(Debug)]
 pub struct SizeMismatchError(pub usize, pub usize);
 impl fmt::Display for SizeMismatchError {
@@ -199,6 +230,89 @@ impl error::Error for SizeMismatchError {
 
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         None
+    }
+}
+/// An error that occurs when creating a fixed-length collection from collections
+/// of different sizes, when the number of elements in the converted collection is not divisible
+/// by the number of elements in the destination collection.
+#[derive(Debug)]
+pub struct IndivisibleError(pub usize, pub usize);
+impl fmt::Display for IndivisibleError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            IndivisibleError(from, to) => {
+                write!(f, "memory size indivisible. (dividend = {}, divisor = {})",from,to)
+            }
+        }
+    }
+}
+impl error::Error for IndivisibleError {
+    fn description(&self) -> &str {
+        "memory size indivisible."
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
+    }
+}
+#[derive(Debug)]
+pub enum TypeConvertError {
+    /// Error generating fixed-length collections from collections of different sizes
+    SizeMismatchError(SizeMismatchError),
+    /// Error when creating a fixed length collection from collections of different sizes (left side not divisible by right side)
+    IndivisibleError(IndivisibleError),
+    /// Error in cuda processing
+    CudaError(CudaError),
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error),
+}
+impl fmt::Display for TypeConvertError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TypeConvertError::SizeMismatchError(e) => write!(f,"{}",e),
+            TypeConvertError::IndivisibleError(e) => write!(f,"{}",e),
+            TypeConvertError::CudaError(e) => write!(f, "An error occurred in the process of cuda. ({})",e),
+            TypeConvertError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
+        }
+    }
+}
+impl error::Error for TypeConvertError {
+    fn description(&self) -> &str {
+        match *self {
+            TypeConvertError::SizeMismatchError(_) => "memory size does not match.",
+            TypeConvertError::IndivisibleError(_) => "memory size indivisible.",
+            TypeConvertError::CudaError(_) => "An error occurred in the process of cuda.",
+            TypeConvertError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            TypeConvertError::SizeMismatchError(e) => Some(e),
+            TypeConvertError::IndivisibleError(e) => Some(e),
+            TypeConvertError::CudaError(e) => Some(e),
+            TypeConvertError::CudnnError(e) => Some(e)
+        }
+    }
+}
+impl From<SizeMismatchError> for TypeConvertError {
+    fn from(err: SizeMismatchError) -> TypeConvertError {
+        TypeConvertError::SizeMismatchError(err)
+    }
+}
+impl From<IndivisibleError> for TypeConvertError {
+    fn from(err: IndivisibleError) -> TypeConvertError {
+        TypeConvertError::IndivisibleError(err)
+    }
+}
+impl From<CudaError> for TypeConvertError {
+    fn from(err: CudaError) -> TypeConvertError {
+        TypeConvertError::CudaError(err)
+    }
+}
+impl From<rcudnn::Error> for TypeConvertError {
+    fn from(err: rcudnn::Error) -> TypeConvertError {
+        TypeConvertError::CudnnError(err)
     }
 }
 /// Error when accessing array out of range
@@ -248,12 +362,16 @@ pub enum EvaluateError {
     CudnnError(rcudnn::Error),
     /// Error in cuda runtime
     CudaRuntimeError(CudaRuntimeError),
-    /// Errors caused by generating fixed-length arrays from different size Vecs
+    /// Error generating fixed-length collections from collections of different sizes
     SizeMismatchError(SizeMismatchError),
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
     InvalidStateError(InvalidStateError),
     /// Error raised when cast of primitive type fails
-    TypeCastError(String)
+    TypeCastError(String),
+    /// Error generated when type conversion fails
+    TypeConvertError(TypeConvertError),
+    /// Error raised if cast to fixed-length array fails
+    TryFromSliceError(TryFromSliceError)
 }
 impl fmt::Display for EvaluateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -265,6 +383,8 @@ impl fmt::Display for EvaluateError {
             EvaluateError::SizeMismatchError(e) => write!(f,"{}",e),
             EvaluateError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e),
             EvaluateError::TypeCastError(s) => write!(f,"{}",s),
+            EvaluateError::TypeConvertError(e) => write!(f,"{}",e),
+            EvaluateError::TryFromSliceError(e) => write!(f,"{}",e)
         }
     }
 }
@@ -278,6 +398,8 @@ impl error::Error for EvaluateError {
             EvaluateError::SizeMismatchError(_) => "memory size does not match.",
             EvaluateError::InvalidStateError(_) => "Invalid state.",
             EvaluateError::TypeCastError(_) => "Typecast failed.",
+            EvaluateError::TypeConvertError(_) => "Type covert failed.",
+            EvaluateError::TryFromSliceError(_) => "Conversion to fixed-length array failed."
         }
     }
 
@@ -289,8 +411,9 @@ impl error::Error for EvaluateError {
             EvaluateError::CudaRuntimeError(_) => None,
             EvaluateError::SizeMismatchError(e) => Some(e),
             EvaluateError::InvalidStateError(e) => Some(e),
-            EvaluateError::TypeCastError(_) => None
-
+            EvaluateError::TypeCastError(_) => None,
+            EvaluateError::TypeConvertError(e) => Some(e),
+            EvaluateError::TryFromSliceError(e) => Some(e)
         }
     }
 }
@@ -319,29 +442,71 @@ impl From<SizeMismatchError> for EvaluateError {
         EvaluateError::SizeMismatchError(err)
     }
 }
+impl From<TypeConvertError> for EvaluateError {
+    fn from(err: TypeConvertError) -> EvaluateError {
+        EvaluateError::TypeConvertError(err)
+    }
+}
 impl From<InvalidStateError> for EvaluateError {
     fn from(err: InvalidStateError) -> EvaluateError {
         EvaluateError::InvalidStateError(err)
     }
 }
+impl From<TryFromSliceError> for EvaluateError {
+    fn from(err: TryFromSliceError) -> EvaluateError {
+        EvaluateError::TryFromSliceError(err)
+    }
+}
 #[derive(Debug)]
 pub enum PersistenceError {
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error),
+    /// Errors caused by generating fixed-length arrays from different size Vecs
+    SizeMismatchError(SizeMismatchError),
+    /// Error generated when type conversion fails
+    TypeConvertError(TypeConvertError),
 }
 impl fmt::Display for PersistenceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "An error occurred when saving model information.")
+        match self {
+            PersistenceError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
+            PersistenceError::SizeMismatchError(e) => write!(f, "{}",e),
+            PersistenceError::TypeConvertError(e) => write!(f,"{}",e),
+        }
     }
 }
 impl error::Error for PersistenceError {
     fn description(&self) -> &str {
-        "An error occurred when saving model information."
+        match *self {
+            PersistenceError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            PersistenceError::SizeMismatchError(_) => "memory size does not match.",
+            PersistenceError::TypeConvertError(_) => "Type convert failed.",
+        }
     }
 
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        None
+        match *self {
+            PersistenceError::CudnnError(ref e) => Some(e),
+            PersistenceError::SizeMismatchError(ref e) => Some(e),
+            PersistenceError::TypeConvertError(ref e) => Some(e),
+        }
     }
 }
-
+impl From<rcudnn::Error> for PersistenceError {
+    fn from(err: rcudnn::Error) -> PersistenceError {
+        PersistenceError::CudnnError(err)
+    }
+}
+impl From<SizeMismatchError> for PersistenceError {
+    fn from(err: SizeMismatchError) -> PersistenceError {
+        PersistenceError::SizeMismatchError(err)
+    }
+}
+impl From<TypeConvertError> for PersistenceError {
+    fn from(err: TypeConvertError) -> PersistenceError {
+        PersistenceError::TypeConvertError(err)
+    }
+}
 /// Error in cuda processing
 #[derive(Debug)]
 pub enum CudaError {
@@ -541,12 +706,32 @@ impl CudaRuntimeError {
 #[derive(Debug)]
 pub enum LayerInstantiationError {
     /// Error in cuda processing
-    CudaError(CudaError)
+    CudaError(CudaError),
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error),
+    /// Error in build optimizer processing
+    OptimizerBuildError(OptimizerBuildError),
+    /// Errors caused by generating fixed-length arrays from different size Vecs
+    SizeMismatchError(SizeMismatchError),
+    /// Error generated when type conversion fails
+    TypeConvertError(TypeConvertError),
 }
 impl fmt::Display for LayerInstantiationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             LayerInstantiationError::CudaError(e) => {
+                write!(f,"An unexpected error occurred during layer instantiation ({})",e)
+            },
+            LayerInstantiationError::CudnnError(e) => {
+                write!(f,"An unexpected error occurred during layer instantiation ({})",e)
+            },
+            LayerInstantiationError::OptimizerBuildError(e) => {
+                write!(f,"An unexpected error occurred during build optimizer ({})",e)
+            },
+            LayerInstantiationError::SizeMismatchError(e) => {
+                write!(f,"An unexpected error occurred during layer instantiation ({})",e)
+            },
+            LayerInstantiationError::TypeConvertError(e) => {
                 write!(f,"An unexpected error occurred during layer instantiation ({})",e)
             }
         }
@@ -557,6 +742,18 @@ impl error::Error for LayerInstantiationError {
         match self {
             LayerInstantiationError::CudaError(_) => {
                 "An unexpected error occurred during layer instantiation (An error occurred in the process of cudas)."
+            },
+            LayerInstantiationError::CudnnError(_) => {
+                "An unexpected error occurred during layer instantiation (An error occurred in the process of cudnns)."
+            },
+            LayerInstantiationError::OptimizerBuildError(_) => {
+                "An unexpected error occurred during build optimizer (An error occurred in the process of cudas)."
+            },
+            LayerInstantiationError::SizeMismatchError(_) => {
+                "An unexpected error occurred during layer instantiation. (Error during conversion to fixed length array)."
+            },
+            LayerInstantiationError::TypeConvertError(_) => {
+                "An error occurred during a type conversion operation within the layer object creation process."
             }
         }
     }
@@ -564,11 +761,84 @@ impl error::Error for LayerInstantiationError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             LayerInstantiationError::CudaError(ref e) => Some(e),
+            LayerInstantiationError::CudnnError(ref e) => Some(e),
+            LayerInstantiationError::OptimizerBuildError(ref e) => Some(e),
+            LayerInstantiationError::SizeMismatchError(ref e) => Some(e),
+            LayerInstantiationError::TypeConvertError(ref e) => Some(e)
         }
     }
 }
 impl From<CudaError> for LayerInstantiationError {
     fn from(err: CudaError) -> LayerInstantiationError {
         LayerInstantiationError::CudaError(err)
+    }
+}
+impl From<rcudnn::Error> for LayerInstantiationError {
+    fn from(err: rcudnn::Error) -> LayerInstantiationError {
+        LayerInstantiationError::CudnnError(err)
+    }
+}
+impl From<OptimizerBuildError> for LayerInstantiationError {
+    fn from(err: OptimizerBuildError) -> LayerInstantiationError {
+        LayerInstantiationError::OptimizerBuildError(err)
+    }
+}
+impl From<SizeMismatchError> for LayerInstantiationError {
+    fn from(err: SizeMismatchError) -> LayerInstantiationError {
+        LayerInstantiationError::SizeMismatchError(err)
+    }
+}
+impl From<TypeConvertError> for LayerInstantiationError {
+    fn from(err: TypeConvertError) -> LayerInstantiationError {
+        LayerInstantiationError::TypeConvertError(err)
+    }
+}
+/// Error when layer instantiation fails
+#[derive(Debug)]
+pub enum OptimizerBuildError {
+    /// Error in cuda processing
+    CudaError(CudaError),
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error),
+}
+impl fmt::Display for OptimizerBuildError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            OptimizerBuildError::CudaError(e) => {
+                write!(f,"An unexpected error occurred during build optimizer ({})",e)
+            },
+            OptimizerBuildError::CudnnError(e) => {
+                write!(f,"An unexpected error occurred during build optimizer ({})",e)
+            }
+        }
+    }
+}
+impl error::Error for OptimizerBuildError {
+    fn description(&self) -> &str {
+        match self {
+            OptimizerBuildError::CudaError(_) => {
+                "An unexpected error occurred during build optimizer (An error occurred in the process of cudas)."
+            },
+            OptimizerBuildError::CudnnError(_) => {
+                "An unexpected error occurred during build optimizer (An error occurred in the process of cudnn)."
+            }
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            OptimizerBuildError::CudaError(ref e) => Some(e),
+            OptimizerBuildError::CudnnError(ref e) => Some(e)
+        }
+    }
+}
+impl From<CudaError> for OptimizerBuildError {
+    fn from(err: CudaError) -> OptimizerBuildError {
+        OptimizerBuildError::CudaError(err)
+    }
+}
+impl From<rcudnn::Error> for OptimizerBuildError {
+    fn from(err: rcudnn::Error) -> OptimizerBuildError {
+        OptimizerBuildError::CudnnError(err)
     }
 }

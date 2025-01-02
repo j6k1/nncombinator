@@ -2,88 +2,45 @@
 pub mod linear;
 pub mod batchnormalization;
 pub mod bias;
+pub mod activation;
+pub mod output;
+pub mod input;
 
 use std::marker::PhantomData;
 use std::{mem};
+use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use cuda_runtime_sys::dim3;
 use libc::{c_uint};
-use num_traits::FromPrimitive;
 use rcublas::Context;
 use rcublas_sys::{cublasHandle_t};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
-use rcudnn::Cudnn;
+use rcudnn::{Cudnn};
 use rcudnn_sys::cudnnHandle_t;
-use crate::arr::{Arr, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaPtr, Kernel, Memory};
-use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
+use crate::arr::{Arr, SerializedVecView};
+use crate::cuda::{CudaTensor1dPtr, CudaVecView, DataTypeInfo, Kernel};
+use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::cuda::mem::{MemoryPool};
-use crate::error::{DeviceError, TrainingError};
-use crate::lossfunction::LossFunction;
-use crate::mem::{AsRawSlice};
+use crate::error::{DeviceError, TrainingError, TypeConvertError};
+use crate::layer::BatchSize;
 use crate::UnitValue;
 
 /// Trait that defines devices responsible for various computational processes of neural networks
 pub trait Device<U>: Clone where U: UnitValue<U> {
-    /// Calculation of Losses
+}
+/// Characteristics defining devices responsible for various convolutional computations of neural networks
+pub trait DeviceReduce<T,R,U,const N:usize> where U: UnitValue<U> {
+    /// Convolutional computation of input
     /// # Arguments
-    /// * `expected` - expected value
-    /// * `actual` - actual value
-    /// * `lossf` - loss function
-    fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
-        where L: LossFunction<U>;
-    /// Calculation of Losses by canonical link
-    /// # Arguments
-    /// * `expected` - expected value
-    /// * `actual` - actual value
-    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N>;
-    /// Calculation of total Losses
-    /// # Arguments
-    /// * `expected` - expected value
-    /// * `actual` - actual value
-    /// * `lossf` - loss function
-    fn loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&Arr<U,N>,actual:&Arr<U,N>,lossf:&L) -> U;
-    /// Calculation of loss during batch execution by canonical link
-    /// # Arguments
-    /// * `expected` - expected value
-    /// * `actual` - actual value
+    /// * `input` - convolutional input
     ///
     /// # Errors
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &SerializedVec<U,Arr<U, N>>, actual: &SerializedVec<U,Arr<U, N>>)
-                                                               -> Result<SerializedVec<U,Arr<U, N>>, TrainingError> where f64: From<U>;
-
-    /// convolutional calculation
-    /// # Arguments
-    /// * `loss` - loss
-    fn batch_linear_reduce<'a,const N: usize>(&self, loss:SerializedVecView<'a,U,Arr<U,N>>) -> Result<Arr<U,N>,  TrainingError>;
-    /// Calculation of total Losses (all batch)
-    /// # Arguments
-    /// * `expected` - expected value
-    /// * `actual` - actual value
-    /// * `lossf` - loss function
-    fn batch_loss_linear_total<L: LossFunction<U>,const N:usize>(&self,exptected:&SerializedVec<U,Arr<U,N>>,actual:&SerializedVec<U,Arr<U,N>>,lossf:&L)
-        -> Result<U,TrainingError> where f64: From<U> + FromPrimitive, f64: FromPrimitive {
-        let n = f64::from_usize(exptected.len()).ok_or(TrainingError::TypeCastError(
-            String::from("An error occurred when casting the batch size data type to f64.")
-        ))?;
-
-        let loss = actual.par_iter().zip(exptected.par_iter()).map(|(a,e)| {
-            a.par_iter().cloned()
-                .zip(e.par_iter().cloned())
-                .reduce(|| (U::default(),U::default()), |(sum,d),(a,e)| {
-                    (sum + lossf.apply(a,e),d)
-                })
-        }).map(|(sum,_)| sum).reduce(|| U::default(), |sum,l| sum + l);
-
-        U::from_f64(f64::from(loss) / n).ok_or(TrainingError::TypeCastError(
-            String::from("An error occurred in the type conversion of the total loss.")
-        ))
-    }
+    fn reduce<'a>(&self, input: &'a T) -> Result<R, TrainingError>;
 }
 /// Implementation of Device to be computed by CPU
 pub struct DeviceCpu<U> where U: UnitValue<U> {
@@ -100,55 +57,19 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     }
 }
 impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
-    fn loss_linear<L,const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> Arr<U, N>
-        where L: LossFunction<U> {
-
-        let mut loss = Arr::new();
-
-        for (loss,(a, e))in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
-            *loss = lossf.derive(*a, *e);
-        }
-
-        loss
-    }
-
-    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<U, N>, actual: &Arr<U, N>) -> Arr<U, N> {
-        let mut loss = Arr::new();
-
-        for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
-            *l = *a - *e;
-        }
-
-        loss
-    }
-
-    fn loss_linear_total<L: LossFunction<U>, const N: usize>(&self, exptected: &Arr<U, N>, actual: &Arr<U, N>, lossf: &L) -> U {
-        actual.iter().zip(exptected.iter()).fold(U::default(),| mut acc,(&a,&e) | {
-            acc += lossf.apply(a,e);
-            acc
-        })
-    }
-
-    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &SerializedVec<U,Arr<U, N>>, actual: &SerializedVec<U,Arr<U, N>>)
-                                                               -> Result<SerializedVec<U,Arr<U, N>>, TrainingError> where f64: From<U> {
-        let n = U::from_usize(actual.len()).ok_or(TrainingError::TypeCastError(
-            String::from("An error occurred when casting the batch size data type to U.")
-        ))?;
-
-        Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
-            a.par_iter().zip(e.par_iter())
-                .map(|(&a,&e)| (a - e) / n).collect::<Vec<U>>().try_into().map_err(|e| TrainingError::from(e))
-        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
-    }
-
-    fn batch_linear_reduce<'a,const N: usize>(&self, loss: SerializedVecView<'a,U,Arr<U, N>>) -> Result<Arr<U,N>,  TrainingError> {
-        Ok(loss.par_iter()
-            .map(|l| l.into())
-            .map(|l| Ok(l)).reduce(|| Ok(Arr::new()), |acc,l| {
-            acc.and_then(|acc| l.and_then(|l| {
+}
+impl<U,T,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu<U>
+    where U: UnitValue<U> + Debug,
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a T,Error=TypeConvertError> {
+    #[inline]
+    fn reduce<'a>(&self, input: &'a T) -> Result<Arr<U,N>,  TrainingError> {
+        Ok(SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?.par_iter()
+            .map(|i| i.into())
+            .map(|i| Ok(i)).reduce(|| Ok(Arr::new()), |acc,i| {
+            acc.and_then(|acc| i.and_then(|i| {
                 acc.par_iter().cloned()
-                    .zip(l.par_iter().cloned())
-                    .map(|(acc, l)| acc + l).collect::<Vec<U>>().try_into()
+                    .zip(i.par_iter().cloned())
+                    .map(|(acc, i)| acc + i).collect::<Vec<U>>().try_into()
             }))
         })?)
     }
@@ -284,132 +205,30 @@ impl<U> DeviceMemoryPool for DeviceGpu<U> {
     }
 }
 impl Device<f32> for DeviceGpu<f32> {
-    fn loss_linear<L,const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>, lossf: &L) -> Arr<f32, N>
-        where L: LossFunction<f32> {
+}
+impl<U,T,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,N>,U,N> for DeviceGpu<U>
+    where U: UnitValue<U> + DataTypeInfo,
+          T: BatchSize,
+          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,N>>: TryFrom<&'a T,Error=TypeConvertError>,
+          for<'a> ReduceLinearBatch::<'a,U,N>: Kernel<Args=ReduceLinearBatchArgs<'a,U,N>> {
+    #[inline]
+    fn reduce<'a>(&self, input: &'a T) -> Result<CudaTensor1dPtr<U, N>, TrainingError> {
+        let input_ptr = input.try_into()?;
+        let output_ptr = CudaTensor1dPtr::<U,N>::with_initializer(&self.memory_pool,Default::default)?;
 
-        let mut loss = Arr::new();
+        let mut args = ReduceLinearBatchArgs::new(&input_ptr,output_ptr,N,input.size());
 
-        for (loss,(a, e))in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
-            *loss = lossf.derive(*a, *e);
-        }
+        let mut kernel = ReduceLinearBatch::<U,N>::new();
 
-        loss
-    }
+        kernel.launch(dim3 { x: N as c_uint, y: 1, z: (input.size() as c_uint + 1023) / 1024 },
+                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
 
-    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<f32, N>, actual: &Arr<f32, N>) -> Arr<f32, N> {
-        let mut loss = Arr::new();
-
-        for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
-            *l = *a - *e;
-        }
-
-        loss
-    }
-
-    fn loss_linear_total<L: LossFunction<f32>, const N: usize>(&self, exptected: &Arr<f32, N>, actual: &Arr<f32, N>, lossf: &L) -> f32 {
-        actual.iter().zip(exptected.iter()).fold(0.,| mut acc,(&a,&e) | {
-            acc += lossf.apply(a,e);
-            acc
-        })
-    }
-
-    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &SerializedVec<f32, Arr<f32, N>>, actual: &SerializedVec<f32, Arr<f32, N>>)
-        -> Result<SerializedVec<f32, Arr<f32, N>>, TrainingError> {
-        let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
-        expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
-
-        let mut actual_ptr = CudaPtr::new(actual.len() * N).unwrap();
-        actual_ptr.memcpy(actual.as_raw_slice().as_ptr(), actual.len() * N).unwrap();
-
-        let mut args = LossLinearBatchByCanonicalLinkArgs::new(expected_ptr, actual_ptr, N, expected.len());
-
-        let mut kernel = LossLinearBatchByCanonicalLink::<f32>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
-                      dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
-
-        Ok(args.actual.read_to_vec()?.try_into()?)
-    }
-
-    fn batch_linear_reduce<'a,const N: usize>(&self, loss: SerializedVecView<'a,f32, Arr<f32, N>>) -> Result<Arr<f32, N>, TrainingError> {
-        let mut loss_ptr = CudaPtr::new(loss.len() * N).unwrap();
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),loss.len() * N).unwrap();
-        let output_ptr = CudaPtr::new(N).unwrap();
-
-        let mut args = ReduceLinearBatchArgs::new(loss_ptr,output_ptr,N,loss.len());
-
-        let mut kernel = ReduceLinearBatch::<f32>::new();
-
-        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<f32>()).unwrap();
-
-        Ok(args.output.read_to_vec()?.try_into()?)
+        Ok(args.output)
     }
 }
 impl Device<f64> for DeviceGpu<f64> {
-    fn loss_linear<L,const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> Arr<f64, N>
-        where L: LossFunction<f64> {
-
-        let mut loss = Arr::new();
-
-        for (loss,(a, e))in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
-            *loss = lossf.derive(*a, *e);
-        }
-
-        loss
-    }
-
-    fn loss_linear_by_canonical_link<const N: usize>(&self, expected: &Arr<f64, N>, actual: &Arr<f64, N>) -> Arr<f64, N> {
-        let mut loss = Arr::new();
-
-        for (l, (a, e)) in loss.iter_mut().zip(actual.iter().zip(expected.iter())) {
-            *l = *a - *e;
-        }
-
-        loss
-    }
-
-    fn loss_linear_total<L: LossFunction<f64>, const N: usize>(&self, exptected: &Arr<f64, N>, actual: &Arr<f64, N>, lossf: &L) -> f64 {
-        actual.iter().zip(exptected.iter()).fold(0.,| mut acc,(&a,&e) | {
-            acc += lossf.apply(a,e);
-            acc
-        })
-    }
-
-    fn loss_linear_batch_by_canonical_link<const N: usize>(&self, expected: &SerializedVec<f64, Arr<f64, N>>, actual: &SerializedVec<f64, Arr<f64, N>>)
-        -> Result<SerializedVec<f64, Arr<f64, N>>, TrainingError> {
-        let mut expected_ptr = CudaPtr::new(expected.len() * N).unwrap();
-        expected_ptr.memcpy(expected.as_raw_slice().as_ptr(), expected.len() * N).unwrap();
-
-        let mut actual_ptr = CudaPtr::new(actual.len() * N).unwrap();
-        actual_ptr.memcpy(actual.as_raw_slice().as_ptr(), actual.len() * N).unwrap();
-
-        let mut args = LossLinearBatchByCanonicalLinkArgs::new(expected_ptr, actual_ptr, N, expected.len());
-
-        let mut kernel = LossLinearBatchByCanonicalLink::<f64>::new();
-
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (expected.len() as c_uint + 32 - 1) / 32, z: 1},
-                      dim3 { x: 32, y: 32, z: 1 },&mut args,0).unwrap();
-
-        Ok(args.actual.read_to_vec()?.try_into()?)
-    }
-
-    fn batch_linear_reduce<'a,const N: usize>(&self, loss: SerializedVecView<'a,f64,Arr<f64, N>>) -> Result<Arr<f64, N>, TrainingError> {
-        let mut loss_ptr = CudaPtr::new(loss.len() * N).unwrap();
-        loss_ptr.memcpy(loss.as_raw_slice().as_ptr(),loss.len() * N).unwrap();
-        let output_ptr = CudaPtr::new(N).unwrap();
-
-        let mut args = ReduceLinearBatchArgs::new(loss_ptr,output_ptr,N,loss.len());
-
-        let mut kernel = ReduceLinearBatch::<f64>::new();
-
-        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1},
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,1024 * mem::size_of::<f64>()).unwrap();
-
-        Ok(args.output.read_to_vec()?.try_into()?)
-    }
 }
-impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> {
+impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> + Debug {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,

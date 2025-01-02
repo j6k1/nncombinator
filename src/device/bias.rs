@@ -1,18 +1,22 @@
 //! Implementation of the calculation process for bias layers
 
+use std::fmt::Debug;
+use std::iter;
 use libc::c_int;
 use rcublas_sys::{cublasDaxpy_v2, cublasSaxpy_v2, cublasStatus_t};
-use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
+use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::collection::Broadcast;
-use crate::cuda::{AsMutPtr, AsPtr, CudaMemoryPoolPtr, CudaPtr, Memory};
-use crate::cuda::mem::CachedTensor;
-use crate::device::{Device, DeviceCpu, DeviceGpu};
-use crate::error::{EvaluateError, TrainingError};
-use crate::mem::AsRawSlice;
+use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo};
+use crate::device::{DeviceCpu, DeviceGpu, DeviceMemoryPool, DeviceReduce};
+use crate::error::{EvaluateError, TrainingError, TypeConvertError};
+use crate::layer::{BatchDataType, BatchSize};
 use crate::ope::UnitValue;
 
 /// Trait that defines the implementation of various calculation processes in the bias layer
-pub trait DeviceBias<U,T,const N: usize> where U: UnitValue<U> {
+pub trait DeviceBias<U,T,IO,const N: usize>
+    where U: UnitValue<U>,
+          IO: BatchDataType + Debug,
+          <IO as BatchDataType>::Type: BatchSize + Debug {
     /// Forward propagation calculation
     /// # Arguments
     /// * `bias` - bias weights
@@ -22,7 +26,7 @@ pub trait DeviceBias<U,T,const N: usize> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn forward_bias<'a>(&self, bias:&T, input:ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError>;
+    fn forward_bias<'a>(&self, bias:&T, input:&'a IO) -> Result<IO, EvaluateError>;
     /// Error back propagation calculation
     /// # Arguments
     /// * `loss` - input
@@ -31,7 +35,7 @@ pub trait DeviceBias<U,T,const N: usize> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_bias<'a>(&self, input:Arr<U,N>) -> Result<Arr<U,N>, TrainingError>;
+    fn backward_bias<'a>(&self, input: IO) -> Result<IO, TrainingError>;
     /// Calculate the gradient of the weights
     /// # Arguments
     /// * `loss` - loss
@@ -40,8 +44,7 @@ pub trait DeviceBias<U,T,const N: usize> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_bias_weight_gradient<'a>(&self, loss: ArrView<'a,U,N>)
-                                    -> Result<ArrView<'a,U,N>, TrainingError>;
+    fn backward_bias_weight_gradient<'a>(&self, loss: &'a IO) -> Result<T, TrainingError>;
     /// Forward propagation calculation in batch
     /// # Arguments
     /// * `bias` - bias weights
@@ -51,8 +54,7 @@ pub trait DeviceBias<U,T,const N: usize> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_forward_bias<'a>(&self,bias:&T,input:SerializedVecView<'a,U,Arr<U,N>>)
-                                -> Result<SerializedVec<U,Arr<U,N>>,TrainingError>;
+    fn batch_forward_bias<'a>(&self,bias:&T,input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type,TrainingError>;
     /// Error back propagation in batch
     /// # Arguments
     /// * `loss` - input
@@ -61,8 +63,7 @@ pub trait DeviceBias<U,T,const N: usize> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward_bias<'a>(&self, input: SerializedVec<U,Arr<U,N>>)
-                                 -> Result<SerializedVec<U,Arr<U,N>>, TrainingError>;
+    fn batch_backward_bias<'a>(&self, input: <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError>;
     /// Calculate the gradient of the weights in batch
     /// # Arguments
     /// * `loss` - loss
@@ -71,41 +72,57 @@ pub trait DeviceBias<U,T,const N: usize> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward_bias_weight_gradient<'a>(&self, loss: SerializedVecView<'a,U,Arr<U,N>>)
-                                          -> Result<Arr<U,N>, TrainingError>;
+    fn batch_backward_bias_weight_gradient<'a>(&self, loss: &'a <IO as BatchDataType>::Type) -> Result<T, TrainingError>;
 }
-impl<U,const N:usize> DeviceBias<U,Arr<U,N>,N> for DeviceCpu<U> where U: UnitValue<U> {
-    fn forward_bias<'a>(&self, bias: &Arr<U,N>, input: ArrView<'a, U,N>) -> Result<Arr<U,N>, EvaluateError> {
-        Ok(input + bias)
+impl<U,IO,const N:usize> DeviceBias<U,Arr<U,N>,IO,N> for DeviceCpu<U>
+    where U: UnitValue<U>,
+          IO: BatchDataType + Debug + Clone,
+          <IO as BatchDataType>::Type: BatchSize + Debug,
+          IO: From<Arr<U,N>>,
+          Arr<U,N>: From<IO>,
+          SerializedVec<U,Arr<U,N>>: IntoConverter,
+          <IO as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          for<'a> ArrView<'a,U,N>: From<&'a IO>,
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TypeConvertError>,
+          Self: DeviceReduce<<IO as BatchDataType>::Type,Arr<U,N>,U,N> {
+    fn forward_bias<'a>(&self, bias: &Arr<U,N>, input: &'a IO) -> Result<IO, EvaluateError> {
+        Ok((ArrView::<'a,U,N>::from(input) + bias).into())
     }
 
-    fn backward_bias<'a>(&self, input: Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+    fn backward_bias<'a>(&self, input: IO) -> Result<IO, TrainingError> {
         Ok(input)
     }
 
-    fn backward_bias_weight_gradient<'a>(&self, loss: ArrView<'a, U,N>) -> Result<ArrView<'a,U,N>, TrainingError> {
-        Ok(loss)
+    fn backward_bias_weight_gradient<'a>(&self, loss: &'a IO) -> Result<Arr<U,N>, TrainingError> {
+        Ok(loss.clone().into())
     }
 
-    fn batch_forward_bias<'a>(&self, bias: &Arr<U,N>, input: SerializedVecView<'a, U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U,N>>, TrainingError> {
-        Ok(input + Broadcast(bias.clone()))
+    fn batch_forward_bias<'a>(&self, bias: &Arr<U,N>, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError> {
+        Ok((SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)? + Broadcast(bias.clone())).into_converter().try_into()?)
     }
 
-    fn batch_backward_bias<'a>(&self, input: SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U,N>>, TrainingError> {
+    fn batch_backward_bias<'a>(&self, input: <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError> {
         Ok(input)
     }
 
-    fn batch_backward_bias_weight_gradient<'a>(&self, loss: SerializedVecView<'a, U, Arr<U,N>>) -> Result<Arr<U,N>, TrainingError> {
-        self.batch_linear_reduce(loss)
+    fn batch_backward_bias_weight_gradient<'a>(&self, loss: &'a <IO as BatchDataType>::Type) -> Result<Arr<U,N>, TrainingError> {
+        self.reduce(loss)
     }
 }
-impl<const N:usize> DeviceBias<f32,CachedTensor<f32,Arr<f32,N>>,N> for DeviceGpu<f32> {
-    fn forward_bias<'a>(&self, bias: &CachedTensor<f32,Arr<f32,N>>, input: ArrView<'a,f32,N>) -> Result<Arr<f32,N>, EvaluateError> {
-        let mut input_ptr = CudaMemoryPoolPtr::new(N,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(N,&self.memory_pool)?;
+impl<IO,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,N>,IO,N> for DeviceGpu<f32>
+    where IO: BatchDataType + Debug,
+          <IO as BatchDataType>::Type: BatchSize + Debug,
+          IO: From<CudaTensor1dPtr<f32,N>>,
+          CudaVec<f32,CudaTensor1dPtr<f32,N>>: IntoConverter,
+          <IO as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,N>> as IntoConverter>::Converter,Error=TrainingError>,
+          for<'a> CudaTensor1dPtrView<'a,f32,N>: From<&'a IO>,
+          for<'a> CudaVecView<'a,f32,CudaTensor1dPtr<f32,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
+          Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f32,N>,f32,N> {
+    fn forward_bias<'a>(&self, bias: &CudaTensor1dPtr<f32,N>, input: &'a IO) -> Result<IO, EvaluateError> {
+        let input_ptr = CudaTensor1dPtrView::<'a,f32,N>::from(input);
+        let mut output_ptr = CudaTensor1dPtr::<f32,N>::new(self.get_memory_pool())?;
 
-        input_ptr.memcpy(input.as_raw_slice().as_ptr(),N)?;
-        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),N)?;
+        bias.memcpy_to(&mut output_ptr,N)?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
 
@@ -120,7 +137,7 @@ impl<const N:usize> DeviceBias<f32,CachedTensor<f32,Arr<f32,N>>,N> for DeviceGpu
                 1
             )
         } {
-            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.read_to_vec()?.try_into()?),
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.into()),
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
             },
@@ -141,22 +158,31 @@ impl<const N:usize> DeviceBias<f32,CachedTensor<f32,Arr<f32,N>>,N> for DeviceGpu
         }
     }
 
-    fn backward_bias<'a>(&self, input: Arr<f32,N>) -> Result<Arr<f32,N>, TrainingError> {
+    fn backward_bias<'a>(&self, input: IO) -> Result<IO, TrainingError> {
         Ok(input)
     }
 
-    fn backward_bias_weight_gradient<'a>(&self, loss: ArrView<'a,f32,N>) -> Result<ArrView<'a,f32,N>, TrainingError> {
-        Ok(loss)
+    fn backward_bias_weight_gradient<'a>(&self, loss: &'a IO) -> Result<CudaTensor1dPtr<f32,N>, TrainingError> {
+        let loss = CudaTensor1dPtrView::<f32,N>::from(loss);
+
+        let mut p = CudaTensor1dPtr::<f32,N>::new(self.get_memory_pool())?;
+
+        p.memcpy(loss.as_ptr(),N)?;
+
+        Ok(p)
     }
+    fn batch_forward_bias<'a>(&self, bias: &CudaTensor1dPtr<f32,N>, input: &'a <IO as BatchDataType>::Type)
+        -> Result<<IO as BatchDataType>::Type, TrainingError> {
+        let len = input.size();
 
-    fn batch_forward_bias<'a>(&self, bias: &CachedTensor<f32,Arr<f32,N>>, input: SerializedVecView<'a,f32,Arr<f32,N>>) -> Result<SerializedVec<f32,Arr<f32,N>>, TrainingError> {
-        let len = input.len();
+        let bias = iter::repeat(bias.read_to_vec()?.into_boxed_slice().iter().cloned().collect::<Vec<f32>>())
+            .take(input.size()).collect::<Vec<Vec<f32>>>()
+            .into_iter().flatten().collect::<Vec<f32>>();
 
-        let mut input_ptr = CudaMemoryPoolPtr::new(N,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(N,&self.memory_pool)?;
+        let input_ptr = CudaVecView::<'a,f32,CudaTensor1dPtr<f32,N>>::try_from(input)?;
+        let mut output_ptr = CudaVec::<f32,CudaTensor1dPtr::<f32,N>>::new(len,self.get_memory_pool())?;
 
-        input_ptr.memcpy(input.as_raw_slice().as_ptr(),N * len)?;
-        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),N * len)?;
+        output_ptr.memcpy(bias.as_ptr(),N * len)?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
 
@@ -171,7 +197,7 @@ impl<const N:usize> DeviceBias<f32,CachedTensor<f32,Arr<f32,N>>,N> for DeviceGpu
                 1
             )
         } {
-            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.read_to_vec()?.try_into()?),
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.into_converter().try_into()?),
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
             },
@@ -192,21 +218,30 @@ impl<const N:usize> DeviceBias<f32,CachedTensor<f32,Arr<f32,N>>,N> for DeviceGpu
         }
     }
 
-    fn batch_backward_bias<'a>(&self, input: SerializedVec<f32,Arr<f32,N>>) -> Result<SerializedVec<f32,Arr<f32,N>>, TrainingError> {
+    fn batch_backward_bias<'a>(&self, input: <IO as BatchDataType>::Type)
+        -> Result<<IO as BatchDataType>::Type, TrainingError> {
         Ok(input)
     }
 
-    fn batch_backward_bias_weight_gradient<'a>(&self, loss: SerializedVecView<'a,f32,Arr<f32,N>>) -> Result<Arr<f32,N>, TrainingError> {
-        self.batch_linear_reduce(loss)
+    fn batch_backward_bias_weight_gradient<'a>(&self, loss: &'a <IO as BatchDataType>::Type)
+        -> Result<CudaTensor1dPtr<f32,N>, TrainingError> {
+        self.reduce(loss)
     }
 }
-impl<const N:usize> DeviceBias<f64,CachedTensor<f64,Arr<f64,N>>,N> for DeviceGpu<f64> {
-    fn forward_bias<'a>(&self, bias: &CachedTensor<f64,Arr<f64,N>>, input: ArrView<'a,f64,N>) -> Result<Arr<f64,N>, EvaluateError> {
-        let mut input_ptr = CudaMemoryPoolPtr::new(N,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(N,&self.memory_pool)?;
+impl<IO,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,N>,IO,N> for DeviceGpu<f64>
+    where IO: BatchDataType + Debug,
+          <IO as BatchDataType>::Type: BatchSize + Debug,
+          IO: From<CudaTensor1dPtr<f64,N>>,
+          CudaVec<f64,CudaTensor1dPtr<f64,N>>: IntoConverter,
+          <IO as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,N>> as IntoConverter>::Converter,Error=TrainingError>,
+          for<'a> CudaTensor1dPtrView<'a,f64,N>: From<&'a IO>,
+          for<'a> CudaVecView<'a,f64,CudaTensor1dPtr<f64,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
+          Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f64,N>,f64,N> {
+    fn forward_bias<'a>(&self, bias: &CudaTensor1dPtr<f64,N>, input: &'a IO) -> Result<IO, EvaluateError> {
+        let input_ptr = CudaTensor1dPtrView::<'a,f64,N>::from(input);
+        let mut output_ptr = CudaTensor1dPtr::<f64,N>::new(self.get_memory_pool())?;
 
-        input_ptr.memcpy(input.as_raw_slice().as_ptr(),N)?;
-        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),N)?;
+        bias.memcpy_to(&mut output_ptr,N)?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
 
@@ -221,7 +256,7 @@ impl<const N:usize> DeviceBias<f64,CachedTensor<f64,Arr<f64,N>>,N> for DeviceGpu
                 1
             )
         } {
-            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.read_to_vec()?.try_into()?),
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.into()),
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
             },
@@ -242,22 +277,32 @@ impl<const N:usize> DeviceBias<f64,CachedTensor<f64,Arr<f64,N>>,N> for DeviceGpu
         }
     }
 
-    fn backward_bias<'a>(&self, input: Arr<f64,N>) -> Result<Arr<f64,N>, TrainingError> {
+    fn backward_bias<'a>(&self, input: IO) -> Result<IO, TrainingError> {
         Ok(input)
     }
 
-    fn backward_bias_weight_gradient<'a>(&self, loss: ArrView<'a,f64,N>) -> Result<ArrView<'a,f64,N>, TrainingError> {
-        Ok(loss)
+    fn backward_bias_weight_gradient<'a>(&self, loss: &'a IO) -> Result<CudaTensor1dPtr<f64,N>, TrainingError> {
+        let loss = CudaTensor1dPtrView::<f64,N>::from(loss);
+
+        let mut p = CudaTensor1dPtr::<f64,N>::new(self.get_memory_pool())?;
+
+        p.memcpy(loss.as_ptr(),N)?;
+
+        Ok(p)
     }
 
-    fn batch_forward_bias<'a>(&self, bias: &CachedTensor<f64,Arr<f64,N>>, input: SerializedVecView<'a,f64, Arr<f64,N>>) -> Result<SerializedVec<f64, Arr<f64,N>>, TrainingError> {
-        let len = input.len();
+    fn batch_forward_bias<'a>(&self, bias: &CudaTensor1dPtr<f64,N>, input: &'a <IO as BatchDataType>::Type)
+        -> Result<<IO as BatchDataType>::Type, TrainingError> {
+        let len = input.size();
 
-        let mut input_ptr = CudaMemoryPoolPtr::new(N,&self.memory_pool)?;
-        let mut output_ptr = CudaMemoryPoolPtr::new(N,&self.memory_pool)?;
+        let bias = iter::repeat(bias.read_to_vec()?.into_boxed_slice().iter().cloned().collect::<Vec<f64>>())
+            .take(input.size()).collect::<Vec<Vec<f64>>>()
+            .into_iter().flatten().collect::<Vec<f64>>();
 
-        input_ptr.memcpy(input.as_raw_slice().as_ptr(),N * len)?;
-        output_ptr.memcpy(bias.as_raw_slice().as_ptr(),N * len)?;
+        let input_ptr = CudaVecView::<'a,f64,CudaTensor1dPtr<f64,N>>::try_from(input)?;
+        let mut output_ptr = CudaVec::<f64,CudaTensor1dPtr<f64,N>>::new(len,&self.memory_pool)?;
+
+        output_ptr.memcpy(bias.as_ptr(),N * len)?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
 
@@ -272,7 +317,7 @@ impl<const N:usize> DeviceBias<f64,CachedTensor<f64,Arr<f64,N>>,N> for DeviceGpu
                 1
             )
         } {
-            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.read_to_vec()?.try_into()?),
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.into_converter().try_into()?),
             cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
                 return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
             },
@@ -293,12 +338,14 @@ impl<const N:usize> DeviceBias<f64,CachedTensor<f64,Arr<f64,N>>,N> for DeviceGpu
         }
     }
 
-    fn batch_backward_bias<'a>(&self, input: SerializedVec<f64,Arr<f64,N>>) -> Result<SerializedVec<f64,Arr<f64,N>>, TrainingError> {
+    fn batch_backward_bias<'a>(&self, input: <IO as BatchDataType>::Type)
+        -> Result<<IO as BatchDataType>::Type, TrainingError> {
         Ok(input)
     }
 
-    fn batch_backward_bias_weight_gradient<'a>(&self, loss: SerializedVecView<'a,f64,Arr<f64,N>>) -> Result<Arr<f64,N>, TrainingError> {
-        self.batch_linear_reduce(loss)
+    fn batch_backward_bias_weight_gradient<'a>(&self, loss: &'a <IO as BatchDataType>::Type)
+        -> Result<CudaTensor1dPtr<f64,N>, TrainingError> {
+        self.reduce(loss)
     }
 }
 

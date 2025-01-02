@@ -49,15 +49,41 @@ pub trait Stack {
     /// # Arguments
     /// * `f` - Applicable callbacks
     fn take_map<F: FnOnce(Self::Head) -> Result<(Self::Head, O),E>, O,E>(self, f: F) -> Result<(Self, O),E> where Self: Sized;
+    /// Pass a mutable reference to the top element of the stack to the callback function and return the result of executing it
+    /// # Arguments
+    /// * `f` - Applicable callbacks
+    fn map_mut<F: FnOnce(&mut Self::Head) -> O,O>(&mut self,f:F) -> O;
 }
 /// Stack containing elements
 #[derive(Debug,Clone)]
 pub struct Cons<R,T>(pub R,pub T) where R: Stack;
 
+impl<R,T> Cons<R,T> where R: Stack {
+    /// Returns a reference to the remaining items in the stack, not including the top item in the stack.
+    #[inline]
+    pub fn get_remaining(&self) -> &R {
+        match self {
+            &Cons(ref parent,_) => {
+                parent
+            }
+        }
+    }
+
+    /// Returns a reference to the top item on the stack
+    #[inline]
+    pub fn get_head(&self) -> &T {
+        match self {
+            &Cons(_, ref head) => {
+                head
+            }
+        }
+    }
+}
 impl<R,T> Stack for Cons<R,T> where R: Stack {
     type Remaining = R;
     type Head = T;
 
+    #[inline]
     fn pop(self) -> (Self::Remaining, Self::Head) {
         match self {
             Cons(parent,head) => {
@@ -66,20 +92,28 @@ impl<R,T> Stack for Cons<R,T> where R: Stack {
         }
     }
 
+    #[inline]
     fn push<H>(self,head:H) -> Cons<Self, H> where Self: Sized {
         Cons(self,head)
     }
 
+    #[inline]
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
         f(&self.1)
     }
+    #[inline]
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O,O>(&self,f:F) -> O { f(&self.0) }
+    #[inline]
     fn take_map<F: FnOnce(Self::Head) -> Result<(Self::Head, O),E>, O,E>(self, f: F) -> Result<(Self, O),E> where Self: Sized {
         let (s,h) = self.pop();
 
         let (h,r) = f(h)?;
 
         Ok((Cons(s,h),r))
+    }
+    #[inline]
+    fn map_mut<F: FnOnce(&mut Self::Head) -> O, O>(&mut self, f: F) -> O {
+        f(&mut self.1)
     }
 }
 /// Empty stack, containing no elements
@@ -89,24 +123,33 @@ pub struct Nil;
 impl Stack for Nil {
     type Remaining = Nil;
     type Head = ();
+    #[inline]
     fn pop(self) -> (Self::Remaining, Self::Head) {
         (Nil,())
     }
 
+    #[inline]
     fn push<H>(self, head: H) -> Cons<Self, H> where Self: Sized {
         Cons(Nil,head)
     }
 
+    #[inline]
     fn map<F: FnOnce(&Self::Head) -> O,O>(&self,f:F) -> O {
         f(&())
     }
+    #[inline]
     fn map_remaining<F: FnOnce(&Self::Remaining) -> O, O>(&self, f: F) -> O {
         f(&Nil)
     }
+    #[inline]
     fn take_map<F: FnOnce(Self::Head) -> Result<(Self::Head, O),E>, O,E>(self, f: F) -> Result<(Self, O),E> where Self: Sized {
         let (_,r) = f(())?;
 
         Ok((Nil,r))
+    }
+    #[inline]
+    fn map_mut<F: FnOnce(&mut Self::Head) -> O, O>(&mut self, f: F) -> O {
+        f(&mut ())
     }
 }
 
@@ -115,29 +158,32 @@ mod tests {
     use crate::activation::ReLu;
     use crate::arr::Arr;
     use crate::device::DeviceCpu;
-    use crate::layer::{AddLayer, AddLayerTrain};
+    use crate::layer::{AddLayer};
     use crate::layer::activation::ActivationLayer;
     use crate::layer::input::InputLayer;
     use crate::layer::linear::{LinearLayerBuilder};
     use crate::layer::output::LinearOutputLayer;
+    use crate::optimizer::SGDBuilder;
 
     #[test]
     fn build_layers() {
-        let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
         let device = DeviceCpu::new().unwrap();
+        let i:InputLayer<f32,Arr<f32,4>,_,_> = InputLayer::new(&device);
+        let optimizer_builder = SGDBuilder::new(&device).lr(0.01);
 
-        let _l = i.add_layer(|l| LinearLayerBuilder::<4,1>::new().build(l,&device, || 1., || 0.).unwrap());
+        let _l = i.add_layer(|l| LinearLayerBuilder::<4,1>::new().build(l,&device, || 1., || 0.,&optimizer_builder).unwrap());
     }
 
     #[test]
     fn build_train_layers() {
-        let i:InputLayer<f32,Arr<f32,4>,_> = InputLayer::new();
         let device = DeviceCpu::new().unwrap();
+        let i:InputLayer<f32,Arr<f32,4>,_,_> = InputLayer::new(&device);
+        let optimizer_builder = SGDBuilder::new(&device).lr(0.01);
 
         let _l = i.add_layer(|l| {
-            LinearLayerBuilder::<4,1>::new().build(l,&device,|| 1., || 0.).unwrap()
+            LinearLayerBuilder::<4,1>::new().build(l,&device,|| 1., || 0.,&optimizer_builder).unwrap()
         }).add_layer(|l| {
             ActivationLayer::new(l,ReLu::new(&device),&device)
-        }).add_layer_train(|l| LinearOutputLayer::new(l,&device));
+        }).add_layer(|l| LinearOutputLayer::new(l,&device));
     }
 }

@@ -1,3 +1,92 @@
+Version 0.9.0 (2025-01-02)
+===========================
+
+Refactoring and functionality additions
+--------
+
+Type additions
+- 
+- ShieldSlice
+- AsConstKernelPtrBase
+- AsConstKernelPtr
+- TryClone
+- PointerElement
+- ReadMemory
+- WriteMemory
+- ReadMemoryAsync
+- WriteMemoryAsync
+- CudaConstPtr
+- CudaTensor1dPtr
+- CudaTensor2dPtr
+- CudaTensor3dPtr
+- CudaTensor4dPtr
+- CudaTensor1dPtrView
+- CudaTensor2dPtrView
+- CudaTensor3dPtrView
+- CudaTensor4dPtrView
+- CudaVec
+- AsCudaPtrRef
+- AsCudaMutPtr
+- ToCuda
+- BatchDataType
+- LossFunctionLinear
+- BatchLossFunctionLinear
+- Product
+- OptimizerBuilder
+- OptimizerState
+
+
+Remove Type
+-
+- Memory (Split into ReadMemory and WriteMemory and redefine)
+- MemoryAsync (Split into ReadMemoryAsync and WriteMemoryAsync and redefine)
+
+Add module
+- cuda::kernel::optimizer
+- device::activation
+- device::input
+
+Add Functions
+-
+- Add Arr::iter_mut,Arr::as_mut_ptr,Arr::index(trait),Arr::index_mut(trait)
+- Add Arr2::as_ptr,Arr2::as_mut_ptr
+- Add Arr3::as_ptr,Arr3::as_mut_ptr
+- Add Arr4::as_ptr,Arr4::as_mut_ptr
+- Add ArrViewMut::iter_mut
+- Add Arr2View::as_ptr
+- Add Arr2Iter::nth(trait)
+- Add Arr2ViewMut::as_ptr,Arr2ViewMut::as_mut_ptr
+- Add Arr2IterMut::nth(trait)
+- Add Arr3View::as_ptr
+- Add DiffArr::len
+- Add SerializedVec::to_vec,SerializedVec::as_ptr,SerializedVec::as_mut_ptr
+- Add SerializedVecView::as_ptr
+- Add launch_cooperative,launch_cooperative_with_stream
+
+specification change
+-
+- Remove DerefMut Trait implementation from Arr,ArrViewMut.
+- A newly defined error is now returned in situations where
+  SizeMismatchError was being returned.
+- Changed the type of value returned by AsRawMutSlice to ShieldSlice
+- Changed Optimizer Trait specifications
+- Addition of From implementation for various collection types
+- Partitioning of layer and device modules
+
+Internal specification change
+-
+- When computing with the GPU version of the model,
+  parameters are passed to and from subsequent layers directly in GPU memory.
+
+Other
+-
+- Required WMMA API support for cuda kernel builds.
+
+Bugfix
+-
+- Alignment is now taken into account when allocating memory from the memory pool.
+- Fixed an issue where forward and back propagation calculations for linear layers were sometimes incorrect.
+
 Version 0.8.0 (2023-12-16)
 ===========================
 

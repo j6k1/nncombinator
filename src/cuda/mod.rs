@@ -507,7 +507,7 @@ impl<T: Default + Debug> ReadMemory<T> for CudaHostPtr<T> {
         ffi::memcpy(r.as_mut_ptr(),
                          self.ptr,
                          self.size,
-                         cudaMemcpyKind::cudaMemcpyDeviceToHost)?;
+                         cudaMemcpyKind::cudaMemcpyHostToHost)?;
         Ok(r)
     }
 
@@ -518,7 +518,7 @@ impl<T: Default + Debug> ReadMemory<T> for CudaHostPtr<T> {
         ffi::memcpy(r.as_mut_ptr(),
                          self.ptr,
                          size,
-                         cudaMemcpyKind::cudaMemcpyDeviceToHost)?;
+                         cudaMemcpyKind::cudaMemcpyHostToHost)?;
         Ok(r)
     }
 }
@@ -527,7 +527,7 @@ impl<T: Default + Debug> WriteMemory<T> for CudaHostPtr<T> {
         ffi::memcpy(self.ptr,
                     p,
                     len,
-                    cudaMemcpyKind::cudaMemcpyHostToDevice)?;
+                    cudaMemcpyKind::cudaMemcpyHostToHost)?;
         Ok(len)
     }
 
@@ -537,7 +537,7 @@ impl<T: Default + Debug> WriteMemory<T> for CudaHostPtr<T> {
                 ffi::memcpy(self.ptr.add(i * len),
                             p,
                             len,
-                            cudaMemcpyKind::cudaMemcpyHostToDevice)?;
+                            cudaMemcpyKind::cudaMemcpyHostToHost)?;
             }
         }
         Ok(len * count)
@@ -551,7 +551,7 @@ impl<T: Default + Debug> ReadMemoryAsync<T> for CudaHostPtr<T> {
         ffi::memcpy_async(r.as_mut_ptr(),
                                self.ptr,
                                self.size,
-                               cudaMemcpyKind::cudaMemcpyDeviceToHost,
+                               cudaMemcpyKind::cudaMemcpyHostToHost,
                                stream)?;
         Ok(r)
     }
@@ -563,7 +563,7 @@ impl<T: Default + Debug> ReadMemoryAsync<T> for CudaHostPtr<T> {
         ffi::memcpy_async(r.as_mut_ptr(),
                                self.ptr,
                                size,
-                               cudaMemcpyKind::cudaMemcpyDeviceToHost,
+                               cudaMemcpyKind::cudaMemcpyHostToHost,
                                stream)?;
         Ok(r)
     }
@@ -573,7 +573,7 @@ impl<T: Default + Debug> WriteMemoryAsync<T> for CudaHostPtr<T> {
         ffi::memcpy_async(self.ptr,
                           p,
                           len,
-                          cudaMemcpyKind::cudaMemcpyHostToDevice,stream)?;
+                          cudaMemcpyKind::cudaMemcpyHostToHost,stream)?;
         Ok(len)
     }
 
@@ -583,7 +583,7 @@ impl<T: Default + Debug> WriteMemoryAsync<T> for CudaHostPtr<T> {
                 ffi::memcpy_async(self.ptr.add(i * len),
                                   p,
                                   len,
-                                  cudaMemcpyKind::cudaMemcpyHostToDevice,stream)?;
+                                  cudaMemcpyKind::cudaMemcpyHostToHost,stream)?;
             }
         }
         Ok(len * count)

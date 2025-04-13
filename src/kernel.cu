@@ -417,6 +417,18 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
 }
 template<typename T>
 
+__device__ void addbias_batch(const T *bias, T *input_output, const size_t units_len, const size_t batch_size) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (index < units_len && batch_index < batch_size) {
+        size_t i = batch_index * units_len + index;
+
+        input_output[i] += bias[index];
+    }
+}
+template<typename T>
+
 __device__ void forward_linear_batch(const T *input, const T *units, const T *bias, T *output,
                                      const size_t input_len, const size_t output_len, const size_t batch_size) {
     extern __shared__ char smem[];
@@ -889,6 +901,14 @@ extern "C" {
 
     __global__ void reduce_linear_batch_double(const double *input, double *output, const int nlen, const int batch_size) {
         reduce_linear_batch(input,output,nlen,batch_size);
+    }
+
+    __global__ void addbias_batch_float(const float *bias, float *input_output, const size_t units_len, const size_t batch_size) {
+        addbias_batch(bias, input_output, units_len, batch_size);
+    }
+
+    __global__ void addbias_batch_double(const double *bias, double *input_output, const size_t units_len, const size_t batch_size) {
+        addbias_batch(bias, input_output, units_len, batch_size);
     }
 
     __global__ void forward_linear_batch_float(const float *input, const float *units, const float *bias, float *output,

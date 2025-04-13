@@ -19,6 +19,8 @@ extern "C" {
     fn loss_linear_batch_by_canonical_link_double(expected: *const f64, actual: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int) -> c_void;
     fn forward_diff_linear_float(indexes: *const size_t, input: *const f32, units: *const f32, bias: *const f32, output: *mut f32, output_size: size_t, diff_len: size_t) -> c_void;
     fn forward_diff_linear_double(indexes: *const size_t, input: *const f64, units: *const f64, bias: *const f32, output: *mut f64, output_size: size_t, diff_len: size_t) -> c_void;
+    fn addbias_batch_float(bias: *const f32, input_output: *mut f32, units_len: c_int, batch_size: c_int) -> c_void;
+    fn addbias_batch_double(bias: *const f64, input_output: *mut f64, units_len: c_int, batch_size: c_int) -> c_void;
 }
 /// Defines the list that is passed to the cuda kernel function as arguments for the convolution calculation.
 pub struct ReduceLinearBatchArgs<'a,T,const N:usize>
@@ -747,4 +749,131 @@ impl<'a,const NI:usize,const NO:usize> Kernel for LinearGradient<'a,f32,NI,NO> {
 impl<'a,const NI:usize,const NO:usize> Kernel for LinearGradient<'a,f64,NI,NO> {
     const FUNC_PTR: *const c_void = linear_gradient_batch_double as *const c_void;
     type Args = LinearGradientArgs<'a,f64,NI,NO>;
+}
+/// Defines the list of arguments passed to the cuda function
+/// that performs the addition of the bias to the mini-batch.
+pub struct AddBiasBatchArgs<'a,T,const N:usize>
+    where T: DataTypeInfo + Debug + Default + UnitValue<T> {
+    bias: CudaConstPtr<'a,CudaTensor1dPtr<T,N>>,
+    pub input_output: CudaVec<T,CudaTensor1dPtr<T,N>>,
+    units_len: usize,
+    batch_size: usize
+}
+/// Create an instance of the type that represents the list of arguments passed to the bias addition process
+impl<'a,T,const N:usize> AddBiasBatchArgs<'a, T, N>
+    where T: DataTypeInfo + Debug + Default + UnitValue<T> {
+    /// Create a AddBiasBatchArgs instance
+    /// # Arguments
+    /// * `bias` - bias
+    /// * `input_output` - input and output (Updated in-place)
+    /// * `units_len` - units_len
+    /// * `batch_len` - batch_count
+    pub fn new(bias: &'a CudaTensor1dPtr<T,N>,
+               input_output:CudaVec<T,CudaTensor1dPtr<T,N>>, batch_size: usize) -> AddBiasBatchArgs<'a,T,N> {
+        AddBiasBatchArgs {
+            bias: CudaConstPtr::new(bias),
+            input_output: input_output,
+            units_len: N,
+            batch_size: batch_size
+        }
+    }
+}
+impl<'a,T,const N:usize> KernelArgs for AddBiasBatchArgs<'a,T,N>
+    where T: DataTypeInfo + Debug + Default + UnitValue<T> {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
+        vec![
+            &mut self.bias,
+            &mut self.input_output,
+            &mut self.units_len,
+            &mut self.batch_size
+        ]
+    }
+}
+/// Implementation of process to add bias to mini-batch
+pub struct AddBiasBatch<'a,T,const N:usize>
+    where T: DataTypeInfo + Debug + Default + UnitValue<T> {
+    t:PhantomData<T>,
+    n:PhantomData<[();N]>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,const N:usize> AddBiasBatch<'a,T,N>
+    where T: DataTypeInfo + Debug + Default + UnitValue<T> {
+    /// Create a AddBiasBatch instance
+    pub fn new() -> AddBiasBatch<'a,T,N> {
+        AddBiasBatch {
+            t: PhantomData::<T>,
+            n:PhantomData::<[();N]>,
+            l:PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,const N:usize> Kernel for AddBiasBatch<'a,f32,N> {
+    const FUNC_PTR: *const c_void = addbias_batch_float as *const c_void;
+    type Args = AddBiasBatchArgs<'a,f32,N>;
+}
+impl<'a,const N:usize> Kernel for AddBiasBatch<'a,f64,N> {
+    const FUNC_PTR: *const c_void = addbias_batch_double as *const c_void;
+    type Args = AddBiasBatchArgs<'a,f64,N>;
+}
+/// Defines the type of the argument list passed to the kernel as arguments for bias addition.
+pub struct AddBiasArgs<'a,T,const N:usize>
+    where T: DataTypeInfo + Debug + Default + UnitValue<T> {
+    bias: CudaConstPtr<'a,CudaTensor1dPtr<T,N>>,
+    pub input_output: CudaTensor1dPtr<T,N>,
+    units_len: usize,
+    batch_size: usize
+}
+/// Create an instance of the type of the argument list passed to the bias addition process
+impl<'a,T,const N:usize> AddBiasArgs<'a,T,N>
+    where T: DataTypeInfo + Debug + Default + UnitValue<T> {
+    /// Create a AddBiasArgs instance
+    /// # Arguments
+    /// * `bias` - bias.
+    /// * `input_output` - input and output (Updated in-place)
+    pub fn new(bias: &'a CudaTensor1dPtr<T,N>,
+               input_output:CudaTensor1dPtr<T,N>) -> AddBiasArgs<'a,T,N> {
+        AddBiasArgs {
+            bias: CudaConstPtr::new(bias),
+            input_output: input_output,
+            units_len: N,
+            batch_size: 1
+        }
+    }
+}
+impl<'a,T,const N:usize> KernelArgs for AddBiasArgs<'a,T,N>
+    where T: DataTypeInfo + Debug + Default + UnitValue<T> {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
+        vec![
+            &mut self.bias,
+            &mut self.input_output,
+            &mut self.units_len,
+            &mut self.batch_size
+        ]
+    }
+}
+/// Implementation of the process of adding bias
+pub struct AddBias<'a,T,const N:usize>
+    where T: DataTypeInfo + Debug + Default + UnitValue<T> {
+    t:PhantomData<T>,
+    n:PhantomData<[();N]>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,const N:usize> AddBias<'a,T,N>
+    where T: DataTypeInfo + Debug + Default + UnitValue<T> {
+    /// Create a AddBias instance
+    pub fn new() -> AddBias<'a,T,N> {
+        AddBias {
+            t: PhantomData::<T>,
+            n:PhantomData::<[();N]>,
+            l:PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,const N:usize> Kernel for AddBias<'a,f32,N> {
+    const FUNC_PTR: *const c_void = addbias_batch_float as *const c_void;
+    type Args = AddBiasArgs<'a,f32,N>;
+}
+impl<'a,const N:usize> Kernel for AddBias<'a,f64,N> {
+    const FUNC_PTR: *const c_void = addbias_batch_double as *const c_void;
+    type Args = AddBiasArgs<'a,f64,N>;
 }

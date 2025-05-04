@@ -375,9 +375,9 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
-    if (blockIdx.x < nlen && blockDim.x * blockIdx.z + threadIdx.x < batch_size) {
+    if (blockIdx.x < nlen && blockDim.x + threadIdx.x < batch_size) {
         unsigned int tid = threadIdx.x;
-        unsigned int i = blockIdx.x + tid * nlen;
+        unsigned int size = batch_size * nlen;
         unsigned int distance = blockDim.x * nlen;
 
         if (tid < 32) {
@@ -387,7 +387,9 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
 
         T acc = 0.0;
 
-        acc += input[i + blockIdx.z * distance];
+        for (unsigned int i = blockIdx.x + tid * nlen; i < size; i += distance) {
+            acc += input[i];
+        }
 
         acc += __shfl_down_sync(0xffffffff,acc,16);
         acc += __shfl_down_sync(0xffffffff,acc,8);
@@ -411,7 +413,7 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
         }
 
         if (tid == 0) {
-            atomicAdd(&output[blockIdx.x],acc);
+            output[blockIdx.x] = acc;
         }
     }
 }

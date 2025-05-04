@@ -214,13 +214,13 @@ impl<U,T,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,N>,U,N> for DeviceGpu<U
     #[inline]
     fn reduce<'a>(&self, input: &'a T) -> Result<CudaTensor1dPtr<U, N>, TrainingError> {
         let input_ptr = input.try_into()?;
-        let output_ptr = CudaTensor1dPtr::<U,N>::with_initializer(&self.memory_pool,Default::default)?;
+        let output_ptr = CudaTensor1dPtr::<U,N>::new(&self.memory_pool)?;
 
         let mut args = ReduceLinearBatchArgs::new(&input_ptr,output_ptr,N,input.size());
 
         let mut kernel = ReduceLinearBatch::<U,N>::new();
 
-        kernel.launch(dim3 { x: N as c_uint, y: 1, z: (input.size() as c_uint + 1023) / 1024 },
+        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
 
         Ok(args.output)

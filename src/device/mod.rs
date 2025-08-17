@@ -21,8 +21,8 @@ use rcudnn::{Cudnn};
 use rcudnn_sys::cudnnHandle_t;
 use crate::arr::{Arr, SerializedVecView};
 use crate::cuda::{CudaTensor1dPtr, CudaVecView, DataTypeInfo, Kernel};
+use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
-use crate::cuda::mem::{MemoryPool};
 use crate::error::{DeviceError, TrainingError, TypeConvertError};
 use crate::layer::BatchSize;
 use crate::UnitValue;
@@ -157,14 +157,14 @@ impl Clone for CudnnContext {
     }
 }
 /// Implementation of Device to be computed by GPU
-pub struct DeviceGpu<U> {
+pub struct DeviceGpu<U,A> where A: CudaAllocator {
     u:PhantomData<U>,
     cublas:CublasContext,
     cudnn:CudnnContext,
     /// Memory pool for cuda memory allocation
-    pub memory_pool:Arc<Mutex<MemoryPool>>
+    allocator:A
 }
-impl<U> DeviceGpu<U> where U: UnitValue<U> {
+impl<U,A> DeviceGpu<U,A> where U: UnitValue<U>, A: CudaAllocator {
     /// Create an instance of DeviceGpu
     /// # Arguments
     /// * `memory_pool` - Memory pool for cuda memory allocation
@@ -173,7 +173,7 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`DeviceError`]
-    pub fn new(memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<DeviceGpu<U>,DeviceError> {
+    pub fn new(allocator:&A) -> Result<DeviceGpu<U,A>,DeviceError> {
         let context = CublasContext::new(PointerMode::Device)?;
         let cudnn = CudnnContext::new()?;
 
@@ -181,7 +181,7 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
             u:PhantomData::<U>,
             cublas:context,
             cudnn:cudnn,
-            memory_pool:Arc::clone(memory_pool)
+            allocator:allocator.clone()
         })
     }
 
@@ -195,26 +195,27 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
         &self.cudnn
     }
 }
-pub trait DeviceMemoryPool {
+pub trait DeviceAllocator<A: CudaAllocator> {
     /// Returns the memory pool object owned by itself
-    fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>>;
+    fn get_allocator(&self) -> &A;
 }
-impl<U> DeviceMemoryPool for DeviceGpu<U> {
-    fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>> {
-        &self.memory_pool
+impl<U,A> DeviceAllocator<A> for DeviceGpu<U,A> where A: CudaAllocator {
+    fn get_allocator(&self) -> &A {
+        &self.allocator
     }
 }
-impl Device<f32> for DeviceGpu<f32> {
+impl<A: CudaAllocator> Device<f32> for DeviceGpu<f32,A> {
 }
-impl<U,T,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,N>,U,N> for DeviceGpu<U>
+impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceGpu<U,A>
     where U: UnitValue<U> + DataTypeInfo,
           T: BatchSize,
-          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,N>>: TryFrom<&'a T,Error=TypeConvertError>,
+          A: CudaAllocator,
+          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,A,N>>: TryFrom<&'a T,Error=TypeConvertError>,
           for<'a> ReduceLinearBatch::<'a,U,N>: Kernel<Args=ReduceLinearBatchArgs<'a,U,N>> {
     #[inline]
-    fn reduce<'a>(&self, input: &'a T) -> Result<CudaTensor1dPtr<U, N>, TrainingError> {
+    fn reduce<'a>(&self, input: &'a T) -> Result<CudaTensor1dPtr<U,A,N>, TrainingError> {
         let input_ptr = input.try_into()?;
-        let output_ptr = CudaTensor1dPtr::<U,N>::new(&self.memory_pool)?;
+        let output_ptr = CudaTensor1dPtr::<U,A,N>::new(&self.allocator)?;
 
         let mut args = ReduceLinearBatchArgs::new(&input_ptr,output_ptr,N,input.size());
 
@@ -226,15 +227,15 @@ impl<U,T,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,N>,U,N> for DeviceGpu<U
         Ok(args.output)
     }
 }
-impl Device<f64> for DeviceGpu<f64> {
+impl<A: CudaAllocator> Device<f64> for DeviceGpu<f64,A> {
 }
-impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> + Debug {
+impl<U,A> Clone for DeviceGpu<U,A> where U: UnitValue<U> + Debug, A: CudaAllocator {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,
             cublas:self.cublas.clone(),
             cudnn:self.cudnn.clone(),
-            memory_pool:Arc::clone(&self.memory_pool)
+            allocator:Arc::clone(&self.allocator)
         }
     }
 }

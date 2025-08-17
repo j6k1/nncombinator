@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::arr::{Arr, Arr2, DiffArr, IntoConverter};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaTensor1dPtr, CudaTensor2dPtr, ReadMemory, WriteMemory};
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
+use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, DiffInput, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
@@ -96,8 +96,8 @@ impl<U,P,I,PI,OP,const NI:usize,const NO:usize> LinearLayer<U,CudaTensor2dPtr<U,
         -> Result<LinearLayer<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,P,DeviceGpu<U>,I,PI,OP,NI,NO>,LayerInstantiationError>
         where UI: FnMut() -> U, BI: FnMut() -> U, B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP> {
 
-        let units = CudaTensor2dPtr::with_initializer(device.get_memory_pool(),ui)?;
-        let bias = CudaTensor1dPtr::with_initializer(device.get_memory_pool(),bi)?;
+        let units = CudaTensor2dPtr::with_initializer(device.get_allocator(), ui)?;
+        let bias = CudaTensor1dPtr::with_initializer(device.get_allocator(), bi)?;
 
         Ok(LinearLayer {
             u:PhantomData::<U>,
@@ -781,8 +781,8 @@ impl<U,P,OP,I,const NI:usize,const NO:usize> DiffLinearLayer<U,CudaTensor2dPtr<U
             u:PhantomData::<U>,
             parent:parent,
             device:device.clone(),
-            units:CudaTensor2dPtr::with_initializer(device.get_memory_pool(),ui)?,
-            bias:CudaTensor1dPtr::with_initializer(device.get_memory_pool(),bi)?,
+            units:CudaTensor2dPtr::with_initializer(device.get_allocator(), ui)?,
+            bias:CudaTensor1dPtr::with_initializer(device.get_allocator(), bi)?,
             unit_optimizer:b.build(NI*NO)?,
             bias_optimizer:b.build(NO)?
         })

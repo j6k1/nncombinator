@@ -7,7 +7,7 @@ use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelI
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
 use crate::cuda::{CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel};
 use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs, LinearCrossEntropy, LinearCrossEntropyArgs, LinearCrossEntropyMulticlass, LinearCrossEntropyMulticlassArgs, LinearMse, LinearMseArgs};
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
+use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::error::{CudaError, TrainingError, TypeConvertError};
 use crate::layer::{BatchSize};
 use crate::UnitValue;
@@ -131,7 +131,7 @@ impl<'a,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for Mse<U>
         let actual = CudaTensor1dPtrView::<'b,U,N>::from(actual);
         let expected = CudaTensor1dPtrView::<'b,U,N>::from(expected);
 
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = LinearMseArgs::new(&expected, &actual, output, N);
 
@@ -155,7 +155,7 @@ impl<'a,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for Ms
         let actual = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(actual)?;
         let expected = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(expected)?;
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(expected.size(),device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(expected.size(),device.get_allocator())?;
 
         let mut args = LinearBatchMseArgs::new(&expected, &actual, output, N, expected.size());
 
@@ -204,7 +204,7 @@ impl<'a,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for CrossEn
         let actual = CudaTensor1dPtrView::<'b,U,N>::from(actual);
         let expected = CudaTensor1dPtrView::<'b,U,N>::from(expected);
 
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = LinearCrossEntropyArgs::new(&expected, &actual, output, N);
 
@@ -228,7 +228,7 @@ impl<'a,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for Cr
         let actual = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(actual)?;
         let expected = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(expected)?;
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(expected.size(),device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(expected.size(),device.get_allocator())?;
 
         let mut args = LinearBatchCrossEntropyArgs::new(&expected, &actual, output, N, expected.size());
 
@@ -277,7 +277,7 @@ impl<'a,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for CrossEn
         let actual = CudaTensor1dPtrView::<'b,U,N>::from(actual);
         let expected = CudaTensor1dPtrView::<'b,U,N>::from(expected);
 
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = LinearCrossEntropyMulticlassArgs::new(&expected, &actual, output, N);
 
@@ -302,7 +302,7 @@ impl<'a,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U>,N> for Cr
         let actual = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(actual)?;
         let expected = CudaVecView::<'b,U,CudaTensor1dPtr<U,N>>::try_from(expected)?;
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(expected.size(),device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(expected.size(),device.get_allocator())?;
 
         let mut args = LinearBatchCrossEntropyMulticlassArgs::new(&expected, &actual, output, N, expected.size());
 

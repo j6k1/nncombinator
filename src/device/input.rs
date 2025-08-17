@@ -1,6 +1,7 @@
 //! Implementation of the calculation process for input layers
 
 use std::fmt::Debug;
+use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::ToCuda;
 use crate::device::{Device, DeviceCpu, DeviceGpu};
 use crate::error::{TypeConvertError};
@@ -55,13 +56,14 @@ impl<U,I> DeviceInput<U,I> for DeviceCpu<U>
     }
 }
 
-impl<U,I> DeviceInput<U,I> for DeviceGpu<U> 
+impl<U,I,A> DeviceInput<U,I> for DeviceGpu<U,A>
     where U: UnitValue<U>,
           I: BatchDataType + ToCuda<U> + Debug + 'static,
           <I as BatchDataType>::Type: ToCuda<U> + Debug + 'static,
           <I as ToCuda<U>>::Output: Debug + 'static,
           <<I as BatchDataType>::Type as ToCuda<U>>::Output: Debug + 'static,
-          DeviceGpu<U>: Device<U> {
+          A: CudaAllocator,
+          DeviceGpu<U,A>: Device<U> {
     type Output = <I as ToCuda<U>>::Output;
     type BatchOutput = <<I as BatchDataType>::Type as ToCuda<U>>::Output;
 

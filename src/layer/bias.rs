@@ -6,7 +6,7 @@ use std::str::FromStr;
 use crate::arr::{Arr, IntoConverter};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaTensor1dPtr, ReadMemory, WriteMemory};
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
+use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::bias::DeviceBias;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
@@ -470,7 +470,7 @@ impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,CudaTensor1dPtr<U,N>,P,
         Ok(BiasLayer {
             parent: parent,
             device: device.clone(),
-            bias: CudaTensor1dPtr::with_initializer(device.get_memory_pool(),ui)?,
+            bias: CudaTensor1dPtr::with_initializer(device.get_allocator(), ui)?,
             u:PhantomData::<U>,
             optimizer:b.build(N)?
         })

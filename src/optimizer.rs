@@ -3,7 +3,7 @@
 use std::marker::PhantomData;
 use cuda_runtime_sys::dim3;
 use libc::c_uint;
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
+use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::{UnitValue};
 use crate::arr::ShieldSlice;
 use crate::cuda::{CudaMemoryPoolPtr, CudaMutPtr, kernel, Kernel};
@@ -234,7 +234,7 @@ impl<U> MomentumSGD<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<
             lr:lr,
             mu:U::from_f64(0.9).expect("Error in type conversion from f64."),
             weight_decay:U::default(),
-            vt: CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?
+            vt: CudaMemoryPoolPtr::with_initializer(size, device.get_allocator(), Default::default)?
         })
     }
     /// Create an instance of MomentumSGD with additional parameters other than the default values
@@ -254,7 +254,7 @@ impl<U> MomentumSGD<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<
             lr:lr,
             mu:mu,
             weight_decay:weight_decay,
-            vt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?
+            vt:CudaMemoryPoolPtr::with_initializer(size, device.get_allocator(), Default::default)?
         })
     }
 }
@@ -443,7 +443,7 @@ impl<U> Adagrad<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
             d:PhantomData::<DeviceGpu<U>>,
             size:size,
             lr:lr,
-            gt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
+            gt:CudaMemoryPoolPtr::with_initializer(size, device.get_allocator(), Default::default)?,
             weight_decay:weight_decay,
             eps:U::from_f64(1e-10f64).expect("Error in type conversion from f64.")
         })
@@ -658,8 +658,8 @@ impl<U> RMSprop<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
             weight_decay:weight_decay,
             alpha:alpha,
             mu:mu,
-            gt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
-            bt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
+            gt:CudaMemoryPoolPtr::with_initializer(size, device.get_allocator(), Default::default)?,
+            bt:CudaMemoryPoolPtr::with_initializer(size, device.get_allocator(), Default::default)?,
             eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
         })
     }
@@ -908,8 +908,8 @@ impl<U> Adam<U,DeviceGpu<U>> where U: UnitValue<U>, DeviceGpu<U>: Device<U> {
             size:size,
             lr:lr,
             weight_decay:weight_decay,
-            mt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
-            vt:CudaMemoryPoolPtr::with_initializer(size,device.get_memory_pool(),Default::default)?,
+            mt:CudaMemoryPoolPtr::with_initializer(size, device.get_allocator(), Default::default)?,
+            vt:CudaMemoryPoolPtr::with_initializer(size, device.get_allocator(), Default::default)?,
             b1:b1,
             b2:b2,
             b1t:b1,

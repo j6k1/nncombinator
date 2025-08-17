@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::arr::{Arr};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaPtr, CudaTensor1dPtr, ReadMemory, WriteMemory};
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
+use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
@@ -147,11 +147,11 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,CudaTenso
           DeviceGpu<U>: Device<U> {
     fn with_params<B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent:P,device:&DeviceGpu<U>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
         -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>,LayerInstantiationError> {
-        let mut scale_ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
+        let mut scale_ptr = CudaTensor1dPtr::new(device.get_allocator())?;
 
         scale_ptr.memcpy(scale.as_raw_slice().as_ptr(),N)?;
 
-        let mut bias_ptr = CudaTensor1dPtr::new(device.get_memory_pool())?;
+        let mut bias_ptr = CudaTensor1dPtr::new(device.get_allocator())?;
 
         bias_ptr.memcpy(bias.as_raw_slice().as_ptr(),N)?;
 
@@ -161,8 +161,8 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,CudaTenso
             scale:scale_ptr,
             bias:bias_ptr,
             momentum:momentum,
-            running_mean:CudaTensor1dPtr::with_initializer(device.get_memory_pool(),Default::default)?,
-            running_variance:CudaTensor1dPtr::with_initializer(device.get_memory_pool(),|| U::one())?,
+            running_mean:CudaTensor1dPtr::with_initializer(device.get_allocator(), Default::default)?,
+            running_variance:CudaTensor1dPtr::with_initializer(device.get_allocator(), || U::one())?,
             pi:PhantomData::<PI>,
             s:PhantomData::<CudaPtr<U>>,
             scale_optimizer:b.build(N)?,

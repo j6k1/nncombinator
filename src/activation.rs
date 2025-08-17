@@ -264,7 +264,7 @@ impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPt
           for<'b> SigmoidBackward<'b,U,N>: Kernel<Args=ActivationBackwardArgs<'b,U,N>> {
 
     fn apply(&self, device: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = ActivationForwardArgs::new(input,output);
 
@@ -280,7 +280,7 @@ impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPt
     fn derive(&self, device: &DeviceGpu<U>,
               o: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, u: &CudaTensor1dPtrView<'a,U,N>)
         -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = ActivationBackwardArgs::new(o, u, loss, output);
 
@@ -339,7 +339,7 @@ impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>
 
     fn batch_apply(&self, device: &DeviceGpu<U>, input: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
         let len = input.size();
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_allocator())?;
 
         let mut args = ActivationBatchForwardArgs::new(input,output,len);
 
@@ -359,7 +359,7 @@ impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>
                     u: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U, CudaTensor1dPtr<U, N>>, TrainingError> {
         let len = loss.size();
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_allocator())?;
 
         let mut args = ActivationBatchBackwardArgs::new(o, u, loss, output, len);
 
@@ -446,7 +446,7 @@ impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPt
           for<'b> ReLuForward<'b,U,N>: Kernel<Args=ActivationForwardArgs<'b,U,N>>,
           for<'b> ReLuBackward<'b,U,N>: Kernel<Args=ActivationBackwardArgs<'b,U,N>> {
     fn apply(&self, device: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = ActivationForwardArgs::new(input, output);
 
@@ -462,7 +462,7 @@ impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPt
     fn derive(&self, device: &DeviceGpu<U>,
               o: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, u: &CudaTensor1dPtrView<'a,U,N>)
         -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = ActivationBackwardArgs::new(o, u, loss, output);
 
@@ -524,7 +524,7 @@ impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>
         -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
         let len = input.size();
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_allocator())?;
 
         let mut args = ActivationBatchForwardArgs::new(input, output, len);
 
@@ -544,7 +544,7 @@ impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>
                     u: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
         let len = loss.size();
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_allocator())?;
 
         let mut args = ActivationBatchBackwardArgs::new(o, u, loss, output, len);
 
@@ -625,7 +625,7 @@ impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPt
              for<'b> SwishBackward<'b,U,N>: Kernel<Args=ActivationBackwardArgs<'b,U,N>> {
 
     fn apply(&self, device: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = ActivationForwardArgs::new(input,output);
 
@@ -641,7 +641,7 @@ impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPt
     fn derive(&self, device: &DeviceGpu<U>,
               o: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, u: &CudaTensor1dPtrView<'a,U,N>)
         -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = ActivationBackwardArgs::new(o, u, loss, output);
 
@@ -702,7 +702,7 @@ impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>
         -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
         let len = input.size();
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_allocator())?;
 
         let mut args = ActivationBatchForwardArgs::new(input,output,len);
 
@@ -722,7 +722,7 @@ impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>
                     u: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
         let len = loss.size();
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_allocator())?;
 
         let mut args = ActivationBatchBackwardArgs::new(o, u, loss, output, len);
 
@@ -803,7 +803,7 @@ impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPt
           for<'b> TanhBackward<'b,U,N>: Kernel<Args=ActivationBackwardArgs<'b,U,N>> {
 
     fn apply(&self, device: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = ActivationForwardArgs::new(input,output);
 
@@ -819,7 +819,7 @@ impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPt
     fn derive(&self, device: &DeviceGpu<U>,
               o: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, u: &CudaTensor1dPtrView<'a,U,N>)
         -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = ActivationBackwardArgs::new(o, u, loss, output);
 
@@ -880,7 +880,7 @@ impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>
         -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
         let len = input.size();
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_allocator())?;
 
         let mut args = ActivationBatchForwardArgs::new(input,output,len);
 
@@ -900,7 +900,7 @@ impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>
                     u: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U, CudaTensor1dPtr<U, N>>, TrainingError> {
         let len = loss.size();
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_allocator())?;
 
         let mut args = ActivationBatchBackwardArgs::new(o, u, loss, output, len);
 
@@ -1006,7 +1006,7 @@ impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPt
           for<'b> SoftMaxBackward<'b,U,N>: Kernel<Args=ActivationBackwardArgs<'b,U,N>> {
 
     fn apply(&self, device: &DeviceGpu<U>, input: &CudaTensor1dPtrView<'a,U,N>) -> Result<CudaTensor1dPtr<U,N>, EvaluateError> {
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = ActivationForwardArgs::new(input,output);
 
@@ -1022,7 +1022,7 @@ impl<'a,U,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTensor1dPt
     fn derive(&self, device: &DeviceGpu<U>,
               o: &CudaTensor1dPtrView<'a,U,N>, loss: &CudaTensor1dPtrView<'a,U,N>, u: &CudaTensor1dPtrView<'a,U,N>)
         -> Result<CudaTensor1dPtr<U,N>, TrainingError> {
-        let output = CudaTensor1dPtr::<U,N>::new(device.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,N>::new(device.get_allocator())?;
 
         let mut args = ActivationBackwardArgs::new(o, u, loss, output);
 
@@ -1084,7 +1084,7 @@ impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>
         -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
         let len = input.size();
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_allocator())?;
 
         let mut args = ActivationBatchForwardArgs::new(input, output, len);
 
@@ -1103,7 +1103,7 @@ impl<'a,U,const N:usize> BatchActivation<U,CudaVecView<'a,U,CudaTensor1dPtr<U,N>
                     u: &CudaVecView<'a,U,CudaTensor1dPtr<U,N>>) -> Result<CudaVec<U,CudaTensor1dPtr<U,N>>, TrainingError> {
         let len = loss.size();
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,device.get_allocator())?;
 
         let mut args = ActivationBatchBackwardArgs::new(o, u, loss, output, len);
 

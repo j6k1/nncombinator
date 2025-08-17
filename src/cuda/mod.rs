@@ -3,7 +3,7 @@
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
-use cuda_runtime_sys::{cudaHostAllocDefault, dim3};
+use cuda_runtime_sys::{dim3};
 use libc::{c_void};
 use rcudnn::Error;
 use rcudnn::utils::DataType;
@@ -930,6 +930,13 @@ impl<'a,T,const N:usize> AsCudaReadOnlyPtr<T> for CudaTensor1dPtrView<'a,T,N> wh
         self.ptr.clone()
     }
 }
+impl<'a,T,const N:usize> MemorySize for CudaTensor1dPtrView<'a,T,N>
+    where T: Default + Debug {
+    #[inline]
+    fn size() -> usize {
+        N
+    }
+}
 /// Cuda memory object representing a 2D array with dimension number as type parameter
 #[derive(Debug)]
 pub struct CudaTensor2dPtr<T,A,const N1:usize,const N2:usize> where T: Default + Debug, A: CudaAllocator {
@@ -1058,6 +1065,13 @@ impl<'a,T,A,const N1:usize,const N2:usize> From<&'a CudaTensor2dPtrView<'a,T,N1,
         }
     }
 }
+impl<'a,T,const N1:usize,const N2:usize> MemorySize for CudaTensor2dPtrView<'a,T,N1,N2>
+    where T: Default + Debug {
+    #[inline]
+    fn size() -> usize {
+        N1 * N2
+    }
+}
 /// Cuda memory object representing a 3D array with dimension number as type parameter
 #[derive(Debug)]
 pub struct CudaTensor3dPtr<T,A,const N1:usize,const N2:usize,const N3:usize> where T: Default + Debug, A: CudaAllocator {
@@ -1158,7 +1172,7 @@ pub struct CudaTensor3dPtrView<'a,T,const N1:usize,const N2:usize,const N3:usize
     ptr:&'a CudaPtrRef<'a,T>
 }
 impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> PointerElement for CudaTensor3dPtrView<'a,T,N1,N2,N3>
-    where T: Default + Debug{
+    where T: Default + Debug {
     type Element = T;
 }
 impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaReadOnlyPtr for CudaTensor3dPtrView<'a,T,N1,N2,N3> where T: Default + Debug, A: CudaAllocator {
@@ -1197,6 +1211,13 @@ impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> TryFrom<&'a CudaTensor
         Ok(CudaTensor3dPtr {
             ptr: dst
         })
+    }
+}
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> MemorySize for CudaTensor3dPtrView<'a,T,N1,N2,N3>
+    where T: Default + Debug {
+    #[inline]
+    fn size() -> usize {
+        N1 * N2 * N3
     }
 }
 /// Cuda memory object representing a 4D array with dimension number as type parameter
@@ -1335,6 +1356,13 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> From<&'a 
         }
     }
 }
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> MemorySize for CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>
+    where T: Default + Debug {
+    #[inline]
+    fn size() -> usize {
+        N1 * N2 * N3 * N4
+    }
+}
 /// Trait that returns the size of Cuda smart point type memory (returns the number of elements)
 pub trait MemorySize {
     fn size() -> usize;
@@ -1449,13 +1477,13 @@ impl<U,T,A> TryClone for CudaVec<U,T,A>
         })
     }
 }
-impl<'a,U,T,A> ToCuda<U> for &'a CudaVec<U,T,A>
+impl<'a,U,T,A> ToCuda<U,A> for &'a CudaVec<U,T,A>
     where U: UnitValue<U>,
           T: AsConstKernelPtr + AsKernelPtr + MemorySize,
           A: CudaAllocator {
     type Output = CudaVecView<'a,U,T>;
 
-    fn to_cuda(self, _: &DeviceGpu<U>) -> Result<Self::Output, TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<U,A>) -> Result<Self::Output, TypeConvertError> {
         Ok(self.try_into()?)
     }
 }
@@ -1687,7 +1715,7 @@ impl TryFrom<i64> for CudaPtr<i64,DeviceAllocator> {
     }
 }
 /// Trait to convert value to Cuda smart pointer type
-pub trait ToCuda<T> where T: UnitValue<T> {
+pub trait ToCuda<T,A> where T: UnitValue<T>, A: CudaAllocator {
     type Output;
 
     /// # Arguments

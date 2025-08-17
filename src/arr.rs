@@ -8,6 +8,7 @@ use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, ToHost};
+use crate::cuda::allocator::CudaAllocator;
 use crate::device::{DeviceGpu, DeviceAllocator};
 use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
@@ -1505,36 +1506,38 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
         }
     }
 }
-impl<U,T> ToCuda<U> for SerializedVec<U,T>
+impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
     where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
-          <T as ToCuda<U>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
-          for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U> {
-    type Output = CudaVec<U,<T as ToCuda<U>>::Output>;
+          <T as ToCuda<U,A>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
+          A: CudaAllocator,
+          for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U,A> {
+    type Output = CudaVec<U,A,<T as ToCuda<U,A>>::Output>;
 
-    fn to_cuda(self, device: &DeviceGpu<U>) -> Result<Self::Output,TypeConvertError> {
-        if T::slice_size() != <T as ToCuda<U>>::Output::size() {
-            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U>>::Output::size())))
+    fn to_cuda(self, device: &DeviceGpu<U,A>) -> Result<Self::Output,TypeConvertError> {
+        if T::slice_size() != <T as ToCuda<U,A>>::Output::size() {
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U,A>>::Output::size())))
         } else {
             let mut ptr = CudaVec::new(self.len,device.get_allocator())?;
 
-            ptr.memcpy(self.as_ptr(), self.len * <T as ToCuda<U>>::Output::size())?;
+            ptr.memcpy(self.as_ptr(), self.len * <T as ToCuda<U,A>>::Output::size())?;
 
             Ok(ptr)
         }
     }
 }
-impl<'a,U,T> ToCuda<U> for &'a SerializedVec<U,T>
+impl<'a,U,T,A> ToCuda<U,A> for &'a SerializedVec<U,T>
     where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
-          <T as ToCuda<U>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
-          for<'b> T: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> + ToCuda<U> {
-    type Output = CudaVec<U,<T as ToCuda<U>>::Output>;
-    fn to_cuda(self, device: &DeviceGpu<U>) -> Result<Self::Output,TypeConvertError> {
-        if T::slice_size() != <T as ToCuda<U>>::Output::size() {
-            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U>>::Output::size())))
+          <T as ToCuda<U,A>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
+          A: CudaAllocator,
+          for<'b> T: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> + ToCuda<U,A> {
+    type Output = CudaVec<U,A,<T as ToCuda<U,A>>::Output>;
+    fn to_cuda(self, device: &DeviceGpu<U,A>) -> Result<Self::Output,TypeConvertError> {
+        if T::slice_size() != <T as ToCuda<U,A>>::Output::size() {
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U,A>>::Output::size())))
         } else {
             let mut ptr = CudaVec::new(self.len,device.get_allocator())?;
 
-            ptr.memcpy(self.arr.as_ptr(), self.len * <T as ToCuda<U>>::Output::size())?;
+            ptr.memcpy(self.arr.as_ptr(), self.len * <T as ToCuda<U,A>>::Output::size())?;
 
             Ok(ptr)
         }

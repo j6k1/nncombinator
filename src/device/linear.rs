@@ -195,10 +195,10 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
           CudaVec<f32,A,CudaTensor1dPtr<f32,A,NI>>: IntoConverter,
           Self: DeviceReduce<CudaVec<f32,A,CudaTensor1dPtr<f32,A,NO>>,CudaTensor1dPtr<f32,A,NO>,f32,NO>,
           for<'a> CudaTensor1dPtrView<'a,f32,NI>: From<&'a I>,
-          for<'a> CudaVecView<'a,f32,CudaTensor1dPtr<f32,A,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
-          for<'a> AddBias<'a,f32,NO>: Kernel<Args=AddBiasArgs<'a,f32,NO>>,
-          for<'a> AddBiasBatch<'a,f32,NO>: Kernel<Args=AddBiasBatchArgs<'a,f32,NO>>,
-          for<'b> ReduceLinearBatch::<'b,f32,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,f32,NO>> {
+          for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> AddBias<'a,f32,A,NO>: Kernel<Args=AddBiasArgs<'a,f32,A,NO>>,
+          for<'a> AddBiasBatch<'a,f32,A,NO>: Kernel<Args=AddBiasBatchArgs<'a,f32,A,NO>>,
+          for<'b> ReduceLinearBatch::<'b,f32,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,f32,A,NO>> {
     type Output = CudaTensor1dPtr<f32,A,NO>;
     type BatchOutput = CudaVec<f32,A,CudaTensor1dPtr<f32,A,NO>>;
     type LossOutput = I;
@@ -532,10 +532,10 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
           CudaVec<f64,A,CudaTensor1dPtr<f64,A,NI>>: IntoConverter,
           Self: DeviceReduce<CudaVec<f64,A,CudaTensor1dPtr<f64,A,NO>>,CudaTensor1dPtr<f64,A,NO>,f64,NO>,
           for<'a> CudaTensor1dPtrView<'a,f64,NI>: From<&'a I>,
-          for<'a> CudaVecView<'a,f64,CudaTensor1dPtr<f64,A,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
-          for<'a> AddBias<'a,f64,NO>: Kernel<Args=AddBiasArgs<'a,f64,NO>>,
-          for<'a> AddBiasBatch<'a,f64,NO>: Kernel<Args=AddBiasBatchArgs<'a,f64,NO>>,
-          for<'b> ReduceLinearBatch::<'b,f64,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,f64,NO>> {
+          for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> AddBias<'a,f64,A,NO>: Kernel<Args=AddBiasArgs<'a,f64,A,NO>>,
+          for<'a> AddBiasBatch<'a,f64,A,NO>: Kernel<Args=AddBiasBatchArgs<'a,f64,A,NO>>,
+          for<'b> ReduceLinearBatch::<'b,f64,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,f64,A,NO>> {
     type Output = CudaTensor1dPtr<f64,A,NO>;
     type BatchOutput = CudaVec<f64,A,CudaTensor1dPtr<f64,A,NO>>;
     type LossOutput = I;
@@ -909,10 +909,10 @@ impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
 impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,NI,NO>,CudaTensor1dPtr<U,A,NO>,NI,NO> for DeviceGpu<U,A>
     where U: UnitValue<U> + DataTypeInfo,
           A: CudaAllocator,
-          for<'b> ForwardLinear::<'b,U,NI,NO>: Kernel<Args=ForwardLinearArgs<'b,U,NI,NO>>,
-          for<'b> LinearGradient::<'b,U,NI,NO>: Kernel<Args=LinearGradientArgs<'b,U,NI,NO>>,
-          for<'b> ReduceLinearBatch::<'b,U,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,U,NO>>,
-          for<'b> DiffLinearForward<'b,U,NI,NO>: Kernel<Args=DiffLinearForwardArgs<'b,U,NI,NO>> {
+          for<'b> ForwardLinear::<'b,U,A,NI,NO>: Kernel<Args=ForwardLinearArgs<'b,U,A,NI,NO>>,
+          for<'b> LinearGradient::<'b,U,A,NI,NO>: Kernel<Args=LinearGradientArgs<'b,U,A,NI,NO>>,
+          for<'b> ReduceLinearBatch::<'b,U,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,U,A,NO>>,
+          for<'b> DiffLinearForward<'b,U,A,NI,NO>: Kernel<Args=DiffLinearForwardArgs<'b,U,A,NI,NO>> {
     type Output = CudaTensor1dPtr<U,A,NO>;
 
     #[inline]

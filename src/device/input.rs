@@ -58,14 +58,14 @@ impl<U,I> DeviceInput<U,I> for DeviceCpu<U>
 
 impl<U,I,A> DeviceInput<U,I> for DeviceGpu<U,A>
     where U: UnitValue<U>,
-          I: BatchDataType + ToCuda<U> + Debug + 'static,
-          <I as BatchDataType>::Type: ToCuda<U> + Debug + 'static,
-          <I as ToCuda<U>>::Output: Debug + 'static,
-          <<I as BatchDataType>::Type as ToCuda<U>>::Output: Debug + 'static,
+          I: BatchDataType + ToCuda<U,A> + Debug + 'static,
+          <I as BatchDataType>::Type: ToCuda<U,A> + Debug + 'static,
+          <I as ToCuda<U,A>>::Output: Debug + 'static,
+          <<I as BatchDataType>::Type as ToCuda<U,A>>::Output: Debug + 'static,
           A: CudaAllocator,
           DeviceGpu<U,A>: Device<U> {
-    type Output = <I as ToCuda<U>>::Output;
-    type BatchOutput = <<I as BatchDataType>::Type as ToCuda<U>>::Output;
+    type Output = <I as ToCuda<U,A>>::Output;
+    type BatchOutput = <<I as BatchDataType>::Type as ToCuda<U,A>>::Output;
 
     fn forward_input(&self,input: I) -> Result<Self::Output,TypeConvertError> {
         input.to_cuda(self)

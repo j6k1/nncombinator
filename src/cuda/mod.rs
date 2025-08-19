@@ -885,7 +885,8 @@ impl<'a,T,A,const N:usize> From<&'a mut CudaTensor1dPtr<T,A,N>> for &'a mut Cuda
     }
 }
 impl<'a,T,A,const N:usize> ToHost<T> for CudaTensor1dPtr<T,A,N>
-    where T: Default + Debug + Clone + Send + Sync + 'static {
+    where T: Default + Debug + Clone + Send + Sync + 'static,
+          CudaPtr<T,A>: ReadMemory<T> {
     type Output = Arr<T,N>;
     fn to_host(self) -> Result<Self::Output,TypeConvertError> {
         Ok(self.ptr.read_to_vec()?.try_into()?)
@@ -1673,7 +1674,8 @@ impl<U,T,A> ToHost<U> for CudaVec<U,T,A>
           SerializedVec<U,<T as ToHost<U>>::Output>: TryFrom<Box<[U]>,Error=TypeConvertError>,
           for<'a> <T as ToHost<U>>::Output: SliceSize + MakeView<'a,U>,
           for<'a> T: MemorySize + AsKernelPtr + AsConstKernelPtr + ToHost<U>,
-          A: CudaAllocator {
+          A: CudaAllocator,
+          CudaPtr<T,A>: ReadMemory<T> {
     type Output = SerializedVec<U,<T as ToHost<U>>::Output>;
     #[inline]
     fn to_host(self) -> Result<Self::Output,TypeConvertError> {
@@ -1745,67 +1747,75 @@ pub trait ToHost<T> where T: Default + Clone + Send {
     ///
     fn to_host(self) -> Result<Self::Output,TypeConvertError>;
 }
-impl<'a,T,A,const N:usize> ToCuda<T> for &'a CudaTensor1dPtr<T,A,N>
-    where T :UnitValue<T> {
+impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a CudaTensor1dPtr<T,A,N>
+    where T :UnitValue<T>,
+          A: CudaAllocator {
     type Output = CudaTensor1dPtrView<'a,T,N>;
 
-    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
         Ok(self.into())
     }
 }
-impl<T,A,const N:usize> ToCuda<T> for CudaTensor1dPtr<T,A,N>
-    where T :UnitValue<T> {
+impl<T,A,const N:usize> ToCuda<T,A> for CudaTensor1dPtr<T,A,N>
+    where T :UnitValue<T>,
+          A: CudaAllocator {
     type Output = CudaTensor1dPtr<T,A,N>;
 
-    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
         Ok(self)
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize> ToCuda<T> for &'a CudaTensor2dPtr<T,A,N1,N2>
-    where T :UnitValue<T> {
+impl<'a,T,A,const N1:usize,const N2:usize> ToCuda<T,A> for &'a CudaTensor2dPtr<T,A,N1,N2>
+    where T :UnitValue<T>,
+          A: CudaAllocator {
     type Output = CudaTensor2dPtrView<'a,T,N1,N2>;
 
-    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
         Ok(self.into())
     }
 }
-impl<T,A,const N1:usize,const N2:usize> ToCuda<T> for CudaTensor2dPtr<T,A,N1,N2>
-    where T :UnitValue<T> {
+impl<T,A,const N1:usize,const N2:usize> ToCuda<T,A> for CudaTensor2dPtr<T,A,N1,N2>
+    where T :UnitValue<T>,
+          A: CudaAllocator {
     type Output = CudaTensor2dPtr<T,A,N1,N2>;
 
-    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
         Ok(self)
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> ToCuda<T> for &'a CudaTensor3dPtr<T,A,N1,N2,N3>
-    where T :UnitValue<T> {
+impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> ToCuda<T,A> for &'a CudaTensor3dPtr<T,A,N1,N2,N3>
+    where T :UnitValue<T>,
+          A: CudaAllocator {
     type Output = CudaTensor3dPtrView<'a,T,N1,N2,N3>;
 
-    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
         Ok(self.into())
     }
 }
-impl<T,A,const N1:usize,const N2:usize,const N3:usize> ToCuda<T> for CudaTensor3dPtr<T,A,N1,N2,N3>
-    where T :UnitValue<T> {
+impl<T,A,const N1:usize,const N2:usize,const N3:usize> ToCuda<T,A> for CudaTensor3dPtr<T,A,N1,N2,N3>
+    where T :UnitValue<T>,
+          A: CudaAllocator {
     type Output = CudaTensor3dPtr<T,A,N1,N2,N3>;
 
-    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
         Ok(self)
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<T> for &'a CudaTensor4dPtr<T,A,N1,N2,N3,N4>
-    where T :UnitValue<T> {
+impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<T,A> for &'a CudaTensor4dPtr<T,A,N1,N2,N3,N4>
+    where T :UnitValue<T>,
+          A: CudaAllocator {
     type Output = CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>;
 
-    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
         Ok(self.into())
     }
 }
-impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<T> for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
-    where T :UnitValue<T> {
+impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<T,A> for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
+    where T :UnitValue<T>,
+          A: CudaAllocator {
     type Output = CudaTensor4dPtr<T,A,N1,N2,N3,N4>;
 
-    fn to_cuda(self, _: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
         Ok(self)
     }
 }

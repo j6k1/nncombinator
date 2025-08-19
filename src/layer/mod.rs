@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use crate::arr::*;
 use crate::device::*;
 use crate::{Stack};
+use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::ToCuda;
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::ope::UnitValue;
@@ -38,19 +39,23 @@ impl<T,U,const NI:usize,const NO:usize> BatchDataType for DiffInput<T,U,NI,NO>
     where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
     type Type = Vec<DiffInput<T,U,NI,NO>>;
 }
-impl<T,U,const NI:usize,const NO:usize> ToCuda<U> for DiffInput<T,U,NI,NO>
-    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
+impl<T,U,A,const NI:usize,const NO:usize> ToCuda<U,A> for DiffInput<T,U,NI,NO>
+    where U: UnitValue<U> + Clone + Copy + Debug,
+          T: Debug,
+          A: CudaAllocator {
     type Output = Self;
 
-    fn to_cuda(self, _: &DeviceGpu<U>) -> Result<Self::Output, TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<U,A>) -> Result<Self::Output, TypeConvertError> {
         Ok(self)
     }
 }
-impl<T,U,const NI:usize,const NO:usize> ToCuda<U> for Vec<DiffInput<T,U,NI,NO>>
-    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
+impl<T,U,A,const NI:usize,const NO:usize> ToCuda<U,A> for Vec<DiffInput<T,U,NI,NO>>
+    where U: UnitValue<U> + Clone + Copy + Debug,
+          T: Debug,
+          A: CudaAllocator {
     type Output = Self;
 
-    fn to_cuda(self, _: &DeviceGpu<U>) -> Result<Self::Output, TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<U,A>) -> Result<Self::Output, TypeConvertError> {
         Ok(self)
     }
 }

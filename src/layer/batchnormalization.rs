@@ -5,6 +5,7 @@ use std::str::FromStr;
 use crate::arr::{Arr};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaPtr, CudaTensor1dPtr, ReadMemory, WriteMemory};
+use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
@@ -138,15 +139,16 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,Arr<U,N>,
         Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."),b)
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
-    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+impl<U,P,OP,I,PI,A,const N:usize> BatchNormalizationLayerInstantiation<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>
+    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U> {
-    fn with_params<B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent:P,device:&DeviceGpu<U>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>,LayerInstantiationError> {
+          A: CudaAllocator,
+          OP: Optimizer<U,DeviceGpu<U,A>>,
+          DeviceGpu<U,A>: Device<U> {
+    fn with_params<B: OptimizerBuilder<U,DeviceGpu<U,A>,Output=OP>>(parent:P,device:&DeviceGpu<U,A>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
+        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>,LayerInstantiationError> {
         let mut scale_ptr = CudaTensor1dPtr::new(device.get_allocator())?;
 
         scale_ptr.memcpy(scale.as_raw_slice().as_ptr(),N)?;
@@ -164,14 +166,14 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,CudaTenso
             running_mean:CudaTensor1dPtr::with_initializer(device.get_allocator(), Default::default)?,
             running_variance:CudaTensor1dPtr::with_initializer(device.get_allocator(), || U::one())?,
             pi:PhantomData::<PI>,
-            s:PhantomData::<CudaPtr<U>>,
+            s:PhantomData::<CudaPtr<U,A>>,
             scale_optimizer:b.build(N)?,
             bias_optimizer:b.build(N)?
         })
     }
 
-    fn with_momentum<B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent:P,device:&DeviceGpu<U>,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>,LayerInstantiationError> {
+    fn with_momentum<B: OptimizerBuilder<U,DeviceGpu<U,A>,Output=OP>>(parent:P,device:&DeviceGpu<U,A>,momentum:U,b:&B)
+        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>,LayerInstantiationError> {
         let mut scale = Arr::new();
 
         for i in scale.iter_mut() {
@@ -181,8 +183,8 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,CudaTenso
         Self::with_params(parent,device,scale,Arr::new(),momentum,b)
     }
 
-    fn new<B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent:P,device:&DeviceGpu<U>,b:&B)
-        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>,LayerInstantiationError> {
+    fn new<B: OptimizerBuilder<U,DeviceGpu<U,A>,Output=OP>>(parent:P,device:&DeviceGpu<U,A>,b:&B)
+        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>,LayerInstantiationError> {
         Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."),b)
     }
 }
@@ -300,15 +302,16 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear>
         Ok(())
     }
 }
-impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized>
-    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+impl<U,P,OP,I,PI,A,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized>
+    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>
         where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
                  PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
               U: Default + Clone + Copy + UnitValue<U> + FromStr,
+              A: CudaAllocator,
               I: Debug + Send + Sync,
-              OP: Optimizer<U,DeviceGpu<U>>,
+              OP: Optimizer<U,DeviceGpu<U,A>>,
               ConfigReadError: From<<U as FromStr>::Err>,
-              DeviceGpu<U>: Device<U> {
+              DeviceGpu<U,A>: Device<U> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 
@@ -384,15 +387,16 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
         Ok(())
     }
 }
-impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear>
-    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,CudaPtr<U>,N>
+impl<T,U,P,OP,I,PI,A,const N:usize> Persistence<U,T,Linear>
+    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>
         where T: LinearPersistence<U>,
               P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
                  PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
               U: Default + Clone + Copy + UnitValue<U>,
               I: Debug + Send + Sync,
-              OP: Optimizer<U,DeviceGpu<U>>,
-              DeviceGpu<U>: Device<U> {
+              A: CudaAllocator,
+              OP: Optimizer<U,DeviceGpu<U,A>>,
+              DeviceGpu<U,A>: Device<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 

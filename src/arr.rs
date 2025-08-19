@@ -183,11 +183,13 @@ impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: D
         ShieldSlice::new(&mut arr.arr)
     }
 }
-impl<T,const N:usize> ToCuda<T> for Arr<T,N>
-    where T: UnitValue<T> {
-    type Output = CudaTensor1dPtr<T,N>;
+impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
+    where T: UnitValue<T>,
+          A: CudaAllocator,
+          CudaTensor1dPtr::<T,A,N>: WriteMemory<T> {
+    type Output = CudaTensor1dPtr<T,A,N>;
 
-    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, device: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
         let mut ptr = CudaTensor1dPtr::new(device.get_allocator())?;
 
         ptr.memcpy(self.as_ptr(),N)?;
@@ -195,11 +197,13 @@ impl<T,const N:usize> ToCuda<T> for Arr<T,N>
         Ok(ptr)
     }
 }
-impl<'a,T,const N:usize> ToCuda<T> for &'a Arr<T,N>
-    where T: UnitValue<T> {
-    type Output = CudaTensor1dPtr<T,N>;
+impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a Arr<T,N>
+    where T: UnitValue<T>,
+          A: CudaAllocator,
+          CudaTensor1dPtr::<T,A,N>: WriteMemory<T> {
+    type Output = CudaTensor1dPtr<T,A,N>;
 
-    fn to_cuda(self, device: &DeviceGpu<T>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, device: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
         let mut ptr = CudaTensor1dPtr::new(device.get_allocator())?;
 
         ptr.memcpy(self.as_ptr(),N)?;

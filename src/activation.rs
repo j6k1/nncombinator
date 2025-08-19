@@ -277,6 +277,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTenso
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'a <I as BatchDataType>::Type>,
           DeviceGpu<U,AC>: Device<U>,
+          AC: CudaAllocator,
           for<'b> SigmoidForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
           for<'b> SigmoidBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
 
@@ -357,6 +358,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,C
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I>,
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'a <I as BatchDataType>::Type>,
+          AC: CudaAllocator,
           DeviceGpu<U,AC>: Device<U>,
           for<'b> SigmoidBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> SigmoidBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
@@ -472,6 +474,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTenso
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I>,
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'a <I as BatchDataType>::Type>,
+          AC: CudaAllocator,
           for<'b> ReLuForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
           for<'b> ReLuBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
     fn apply(&self, device: &DeviceGpu<U,AC>, input: &'a I) -> Result<CudaTensor1dPtr<U,AC,N>, EvaluateError> {
@@ -551,6 +554,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,C
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I>,
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'a <I as BatchDataType>::Type>,
+          AC: CudaAllocator,
           for<'b> ReLuBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> ReLuBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
@@ -661,6 +665,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTenso
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I>,
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'a <I as BatchDataType>::Type>,
+          AC: CudaAllocator,
           for<'b> SwishForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
           for<'b> SwishBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
     fn apply(&self, device: &DeviceGpu<U,AC>, input: &'a I) -> Result<CudaTensor1dPtr<U,AC,N>, EvaluateError> {
@@ -740,6 +745,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,C
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I>,
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'a <I as BatchDataType>::Type>,
+          AC: CudaAllocator,
           for<'b> SwishBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> SwishBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
@@ -850,6 +856,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTenso
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I>,
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'a <I as BatchDataType>::Type>,
+          AC: CudaAllocator,
           for<'b> TanhForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
           for<'b> TanhBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
 
@@ -930,6 +937,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,C
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I>,
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'a <I as BatchDataType>::Type>,
+          AC: CudaAllocator,
           for<'b> TanhBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> TanhBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
@@ -1063,6 +1071,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,CudaTensor1dPtrView<'a,U,N>,CudaTenso
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I>,
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'a <I as BatchDataType>::Type>,
+          AC: CudaAllocator,
           for<'b> SoftMaxForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
           for<'b> SoftMaxBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
 
@@ -1143,6 +1152,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,C
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I>,
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'a <I as BatchDataType>::Type>,
+          AC: CudaAllocator,
           for<'b> SoftMaxBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> SoftMaxBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 

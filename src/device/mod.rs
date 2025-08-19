@@ -211,7 +211,7 @@ impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceG
           T: BatchSize,
           A: CudaAllocator,
           for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,A,N>>: TryFrom<&'a T,Error=TypeConvertError>,
-          for<'a> ReduceLinearBatch::<'a,U,N>: Kernel<Args=ReduceLinearBatchArgs<'a,U,N>> {
+          for<'a> ReduceLinearBatch::<'a,U,A,N>: Kernel<Args=ReduceLinearBatchArgs<'a,U,A,N>> {
     #[inline]
     fn reduce<'a>(&self, input: &'a T) -> Result<CudaTensor1dPtr<U,A,N>, TrainingError> {
         let input_ptr = input.try_into()?;
@@ -219,7 +219,7 @@ impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceG
 
         let mut args = ReduceLinearBatchArgs::new(&input_ptr,output_ptr,N,input.size());
 
-        let mut kernel = ReduceLinearBatch::<U,N>::new();
+        let mut kernel = ReduceLinearBatch::<U,A,N>::new();
 
         kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1 },
                       dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;

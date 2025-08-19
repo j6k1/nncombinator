@@ -8,7 +8,7 @@ use libc::{c_void};
 use rcudnn::Error;
 use rcudnn::utils::DataType;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t, cudnnDataType_t};
-use crate::arr::{Arr, IntoConverter, MakeView, MakeViewMut, SerializedVec, SliceSize};
+use crate::arr::{Arr, AsView, IntoConverter, MakeView, MakeViewMut, SerializedVec, SliceSize};
 use crate::cuda::allocator::{CudaAllocator, DeviceAllocator, HostAllocator, MemoryPoolAllocator};
 use crate::device::{DeviceGpu};
 use crate::error::{CudaError, CudaRuntimeError, SizeMismatchError, TypeConvertError};
@@ -117,6 +117,9 @@ pub trait TryClone: Sized {
     type Error;
 
     fn try_clone(&self) -> Result<Self,Self::Error>;
+}
+pub trait CudaView {
+    type Type;
 }
 impl AsVoidPtr for i32 {
     fn as_void_ptr(&self) -> *const libc::c_void {
@@ -912,6 +915,9 @@ impl<'a,T,A,const N:usize> From<&'a CudaTensor1dPtr<T,A,N>> for CudaTensor1dPtrV
         }
     }
 }
+impl<'a,T,A,const N:usize> CudaView for &'a CudaTensor1dPtr<T,A,N> {
+    type Type = CudaTensor1dPtrView<'a,T,N>;
+}
 impl<'a,T,const N:usize> From<&'a CudaTensor1dPtrView<'a,T,N>> for CudaTensor1dPtrView<'a,T,N>
     where T: Default + Debug {
     fn from(value: &'a CudaTensor1dPtrView<'a,T,N>) -> Self {
@@ -1487,13 +1493,13 @@ impl<'a,U,T,A> ToCuda<U,A> for &'a CudaVec<U,T,A>
         Ok(self.try_into()?)
     }
 }
-impl<U,T,A> ToCuda<U> for CudaVec<U,T,A>
+impl<U,T,A> ToCuda<U,A> for CudaVec<U,T,A>
     where U: UnitValue<U>,
           T: AsConstKernelPtr + AsKernelPtr + MemorySize,
           A: CudaAllocator {
     type Output = CudaVec<U,T,A>;
 
-    fn to_cuda(self, _: &DeviceGpu<U>) -> Result<Self::Output, TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<U,A>) -> Result<Self::Output, TypeConvertError> {
         Ok(self)
     }
 }
@@ -1528,8 +1534,8 @@ impl<'a,U,T> AsCudaReadOnlyPtr<T> for CudaVecView<'a,U,T>
 }
 impl<'a,U,T,R,A> TryFrom<&'a CudaVec<U,T,A>> for CudaVecView<'a,U,R>
     where U: UnitValue<U> + Default + Clone + Send,
-          T: MemorySize + AsKernelPtr + AsConstKernelPtr,
-          R: MemorySize + AsKernelPtr + AsConstKernelPtr + TryFrom<T>,
+          T: MemorySize + AsKernelPtr + AsConstKernelPtr + CudaView,
+          R: MemorySize + AsKernelPtr + AsConstKernelPtr + TryFrom<<T as CudaView>::Type>,
           A: CudaAllocator {
     type Error = TypeConvertError;
 

@@ -1,7 +1,7 @@
 //! Implementation of the calculation process for the activation layer
 use crate::activation::{Activation, BatchActivation};
-use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView};
+use crate::arr::{Arr, ArrView, AsView, IntoConverter, SerializedVec, SerializedVecView};
+use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, CudaView};
 use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu};
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
@@ -108,10 +108,10 @@ impl<'a,U,I,A,AC,const N:usize> DeviceActivation<U,I,A,N> for DeviceGpu<U,AC>
           CudaTensor1dPtr<U,AC,N>: From<I>,
           CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: IntoConverter,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
-          for<'b> A: Activation<U,CudaTensor1dPtrView<'b,U,N>,CudaTensor1dPtr<U,AC,N>,Self>,
-          for<'b> A: BatchActivation<U,CudaVecView<'b,U,CudaTensor1dPtr<U,AC,N>>,CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>,Self>,
+          for<'b> A: Activation<U,&'b I,CudaTensor1dPtr<U,AC,N>,Self>,
+          for<'b> A: BatchActivation<U,&'b <I as BatchDataType>::Type,CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>,Self>,
           for<'b> CudaTensor1dPtrView<'b,U,N>: From<&'b I>,
-          for<'b> CudaVecView<'b,U,CudaTensor1dPtr<U,AC,N>>: TryFrom<&'b <I as BatchDataType>::Type,Error=TypeConvertError> {
+          for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b CudaVec<U,AC,I>,Error=TypeConvertError> {
     #[inline]
     fn apply(&self, f: &A, input: &I) -> Result<I, EvaluateError> {
         Ok(f.apply(self, &input.into())?.into())

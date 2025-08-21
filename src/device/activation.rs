@@ -1,7 +1,7 @@
 //! Implementation of the calculation process for the activation layer
 use crate::activation::{Activation, BatchActivation};
-use crate::arr::{Arr, ArrView, AsView, IntoConverter, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, CudaView};
+use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
+use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView};
 use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu};
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};

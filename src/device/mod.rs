@@ -10,7 +10,7 @@ use std::marker::PhantomData;
 use std::{mem};
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use cuda_runtime_sys::dim3;
 use libc::{c_uint};
 use rcublas::Context;

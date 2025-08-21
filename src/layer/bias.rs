@@ -6,6 +6,7 @@ use std::str::FromStr;
 use crate::arr::{Arr, IntoConverter};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaTensor1dPtr, ReadMemory, WriteMemory};
+use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::bias::DeviceBias;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
@@ -78,14 +79,15 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
         Ok(())
     }
 }
-impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<U,P,OP,I,PI,A,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for BiasLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
           PI: Debug,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U>,
+          OP: Optimizer<U,DeviceGpu<U,A>>,
+          A: CudaAllocator,
+          DeviceGpu<U,A>: Device<U>,
           ConfigReadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
@@ -143,15 +145,16 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,Arr<U,
         Ok(())
     }
 }
-impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<T,U,P,OP,I,PI,A,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,N>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U> {
+          OP: Optimizer<U,DeviceGpu<U,A>>,
+          A: CudaAllocator,
+          DeviceGpu<U,A>: Device<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 
@@ -458,15 +461,16 @@ impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,Arr<U,N>,P,OP,DeviceCpu
         })
     }
 }
-impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N> for BiasLayer<U,Arr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
+impl<U,P,OP,I,PI,A,const N:usize> BiasLayerInstantiation<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,N> for BiasLayer<U,Arr<U,N>,P,OP,DeviceGpu<U,A>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U> {
-    fn instantiation<UI: FnMut() -> U,B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent: P, device: &DeviceGpu<U>, ui: UI, b: &B)
-        -> Result<BiasLayer<U, CudaTensor1dPtr<U,N>, P, OP, DeviceGpu<U>, I, PI, N>, LayerInstantiationError> {
+          OP: Optimizer<U,DeviceGpu<U,A>>,
+          A: CudaAllocator,
+          DeviceGpu<U,A>: Device<U> {
+    fn instantiation<UI: FnMut() -> U,B: OptimizerBuilder<U,DeviceGpu<U,A>,Output=OP>>(parent: P, device: &DeviceGpu<U,A>, ui: UI, b: &B)
+        -> Result<BiasLayer<U, CudaTensor1dPtr<U,A,N>, P, OP, DeviceGpu<U,A>, I, PI, N>, LayerInstantiationError> {
         Ok(BiasLayer {
             parent: parent,
             device: device.clone(),

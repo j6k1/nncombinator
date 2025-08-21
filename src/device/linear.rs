@@ -7,7 +7,8 @@ use libc::c_uint;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
-use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
+use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView};
+use crate::cuda::{DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator, DeviceReduce};
@@ -193,14 +194,14 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<f32,A,CudaTensor1dPtr<f32,A,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
           A: CudaAllocator,
           CudaVec<f32,A,CudaTensor1dPtr<f32,A,NI>>: IntoConverter,
-          Self: DeviceReduce<CudaVec<f32,A,CudaTensor1dPtr<f32,A,NO>>,CudaTensor1dPtr<f32,A,NO>,f32,NO>,
+          Self: DeviceReduce<CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,CudaTensor1dPtr<f32,A,NO>,f32,NO>,
           for<'a> CudaTensor1dPtrView<'a,f32,NI>: From<&'a I>,
           for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           for<'a> AddBias<'a,f32,A,NO>: Kernel<Args=AddBiasArgs<'a,f32,A,NO>>,
           for<'a> AddBiasBatch<'a,f32,A,NO>: Kernel<Args=AddBiasBatchArgs<'a,f32,A,NO>>,
           for<'b> ReduceLinearBatch::<'b,f32,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,f32,A,NO>> {
     type Output = CudaTensor1dPtr<f32,A,NO>;
-    type BatchOutput = CudaVec<f32,A,CudaTensor1dPtr<f32,A,NO>>;
+    type BatchOutput = CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>;
     type LossOutput = I;
     type BatchLossOutput = <I as BatchDataType>::Type;
     #[inline]
@@ -355,7 +356,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
                                 input: &'a <I as BatchDataType>::Type)
                                 -> Result<Self::BatchOutput,TrainingError> {
         let input_ptr = CudaVecView::<f32,CudaTensor1dPtr<f32,A,NI>>::try_from(input)?;
-        let mut output = CudaVec::<f32,A,CudaTensor1dPtr<f32,A,NO>>::new(input.size(),self.get_allocator())?;
+        let mut output = CudaVec::<f32,CudaTensor1dPtr<f32,A,NO>,A>::new(input.size(),self.get_allocator())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(0.0f32)?;
@@ -403,7 +404,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
             input.size()
         );
 
-        let mut kernel = AddBiasBatch::<'_,f32,NO>::new();
+        let mut kernel = AddBiasBatch::<'_,f32,A,NO>::new();
 
         kernel.launch(dim3 { x: (NO as std::os::raw::c_uint + 32 - 1) / 32,
                                      y: (input.size() as std::os::raw::c_uint + 32 - 1) / 32, z: 1 },
@@ -691,7 +692,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
     fn batch_forward_linear<'a>(&self,bias:&CudaTensor1dPtr<f64,A,NO>,units:&CudaTensor2dPtr<f64,A,NI,NO>,
                                 input: &'a <I as BatchDataType>::Type)
                                 -> Result<Self::BatchOutput,TrainingError> {
-        let input_ptr = CudaVecView::<f64,CudaTensor1dPtr<f64,A,NI>>::try_from(input)?;
+        let input_ptr = CudaVecView::<f64,CudaTensor1dPtrView<f64,NI>>::try_from(input)?;
         let mut output = CudaVec::<f64,A,CudaTensor1dPtr<f64,A,NO>>::new(input.size(),self.get_allocator())?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;

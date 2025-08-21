@@ -1515,7 +1515,7 @@ impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
           <T as ToCuda<U,A>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
           A: CudaAllocator,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U,A> {
-    type Output = CudaVec<U,A,<T as ToCuda<U,A>>::Output>;
+    type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;
 
     fn to_cuda(self, device: &DeviceGpu<U,A>) -> Result<Self::Output,TypeConvertError> {
         if T::slice_size() != <T as ToCuda<U,A>>::Output::size() {
@@ -1534,7 +1534,7 @@ impl<'a,U,T,A> ToCuda<U,A> for &'a SerializedVec<U,T>
           <T as ToCuda<U,A>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
           A: CudaAllocator,
           for<'b> T: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> + ToCuda<U,A> {
-    type Output = CudaVec<U,A,<T as ToCuda<U,A>>::Output>;
+    type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;
     fn to_cuda(self, device: &DeviceGpu<U,A>) -> Result<Self::Output,TypeConvertError> {
         if T::slice_size() != <T as ToCuda<U,A>>::Output::size() {
             Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U,A>>::Output::size())))

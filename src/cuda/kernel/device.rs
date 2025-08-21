@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use libc::{c_int, c_void, size_t};
-use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaMemoryPoolPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs};
+use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs};
 use crate::cuda::allocator::CudaAllocator;
 use crate::ope::UnitValue;
 

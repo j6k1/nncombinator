@@ -6,10 +6,9 @@ use std::fmt::Debug;
 use std::mem::size_of;
 use std::ops::{Deref, DerefMut, Index};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 use libc::c_void;
-use crate::cuda::{AsPtr, AsVoidPtr, CudaMemoryPoolPtr, ffi, WriteMemory};
-use crate::cuda::private::{AsMutKernelPtrBase, AsConstKernelPtrBase};
+use crate::cuda::{AsCudaMutPtr, AsCudaPtr, AsPtr, CudaMutPtr, CudaPtr, ffi, WriteMemory};
+use crate::cuda::allocator::CudaAllocator;
 use crate::error::{CudaError};
 use crate::list::ListNode;
 use crate::mem::AsRawSlice;
@@ -330,35 +329,35 @@ impl Drop for MemoryPool {
 }
 /// Mutable object that automatically updates cuda memory when exiting scope
 #[derive(Debug)]
-pub struct ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
+pub struct ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
     value: &'a mut T,
-    ptr:&'a mut CudaMemoryPoolPtr<U>
+    ptr:&'a mut CudaPtr<U,A>
 }
-impl<'a,U,T> ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
+impl<'a,U,T,A> ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
     /// Creation of ScopedMut instance
     /// # Arguments
     /// * `value` - Wrapping value
     /// * `ptr` - cuda memory whose value is reflected
-    pub fn new(value:&'a mut T, ptr:&'a mut CudaMemoryPoolPtr<U>) -> ScopedMut<'a,U,T> {
+    pub fn new(value:&'a mut T, ptr:&'a mut CudaPtr<U,A>) -> ScopedMut<'a,U,T,A> {
         ScopedMut {
             value:value,
             ptr:ptr
         }
     }
 }
-impl<'a,U,T> Deref for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
+impl<'a,U,T,A> Deref for ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.value
     }
 }
-impl<'a,U,T> DerefMut for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
+impl<'a,U,T,A> DerefMut for ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
     }
 }
-impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<U> {
+impl<'a,U,T,A> Drop for ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
     fn drop(&mut self) {
         let len = self.value.as_raw_slice().len();
 
@@ -367,11 +366,12 @@ impl<'a,U,T> Drop for ScopedMut<'a,U,T> where U: Debug + Default, T: AsRawSlice<
 }
 /// Object that collectively manages cuda memory paired with a value of a specified type
 #[derive(Debug)]
-pub struct CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+pub struct CachedTensor<U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
     value:T,
-    ptr:CudaMemoryPoolPtr<U>
+    ptr:CudaPtr<U,A>
 }
-impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+impl<U,T,A> CachedTensor<U,T,A>
+    where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
     /// Creation of CachedTensor instance
     /// # Arguments
     /// * `value` - Wrapping value
@@ -381,10 +381,10 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     ///
     /// This function may return the following errors
     /// * [`CudaError`]
-    pub fn new(value:T,memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<CachedTensor<U,T>,CudaError> {
+    pub fn new(value:T,memory_pool:&A) -> Result<CachedTensor<U,T,A>,CudaError> {
         let len = value.as_raw_slice().len();
 
-        let mut ptr = CudaMemoryPoolPtr::new(len, &memory_pool)?;
+        let mut ptr = CudaPtr::new(len, &memory_pool)?;
 
         ptr.memcpy(value.as_raw_slice().as_ptr(),len)?;
 
@@ -395,53 +395,47 @@ impl<U,T> CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
     }
 
     /// Returns the ScopedMut object associated with the value it has
-    pub fn scoped_mut<'a>(&'a mut self) -> ScopedMut<'a,U,T> {
+    pub fn scoped_mut<'a>(&'a mut self) -> ScopedMut<'a,U,T,A> {
         ScopedMut {
             value:&mut self.value,
             ptr:&mut self.ptr
         }
     }
 }
-impl<U,T> Deref for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
+impl<U,T,A> Deref for CachedTensor<U,T,A>
+    where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.value
     }
 }
-impl<U,T> Index<(usize,usize)> for CachedTensor<U,T>
-    where U: Debug + Default, T: Index<(usize,usize),Output=U> + AsRawSlice<U> {
+impl<U,T,A> Index<(usize,usize)> for CachedTensor<U,T,A>
+    where U: Debug + Default, T: Index<(usize,usize),Output=U> + AsRawSlice<U>, A: CudaAllocator {
     type Output = U;
 
     fn index(&self, index:(usize,usize)) -> &Self::Output {
         self.value.index(index)
     }
 }
-impl<U,T> AsPtr<U> for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    fn as_ptr(&self) -> *const U {
-        self.ptr.as_ptr()
+impl<U,T,A> AsCudaPtr<U,A> for CachedTensor<U,T,A>
+    where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+    fn as_cuda_ptr(&self) -> &CudaPtr<U,A> {
+        &self.ptr
     }
 }
-impl<U,T> AsVoidPtr for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    fn as_void_ptr(&self) -> *const c_void {
-        self.ptr.as_void_ptr()
+impl<U,T,A> AsCudaMutPtr<U,A> for CachedTensor<U,T,A>
+    where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+    fn as_cuda_mut_ptr<'a>(&'a mut self) -> CudaMutPtr<'a, U, A> {
+        CudaMutPtr::new(&mut self.ptr)
     }
 }
-impl<U,T> AsConstKernelPtrBase for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    fn as_const_kernel_ptr(&self) -> *mut libc::c_void {
-        self.ptr.as_const_kernel_ptr()
-    }
-}
-impl<U,T> AsMutKernelPtrBase for CachedTensor<U,T> where U: Debug + Default, T: AsRawSlice<U> {
-    fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
-        self.ptr.as_mut_kernel_ptr()
-    }
-}
-impl<'a,U,T> From<&'a mut CachedTensor<U,T>> for &'a mut [U]
+impl<'a,U,T,A> From<&'a mut CachedTensor<U,T,A>> for &'a mut [U]
     where U: Debug + Default,
           T: AsRawSlice<U>,
+          A: CudaAllocator,
           &'a mut [U]: From<&'a mut T> {
-    fn from(t: &'a mut CachedTensor<U,T>) -> Self {
+    fn from(t: &'a mut CachedTensor<U,T,A>) -> Self {
         (&mut t.value).into()
     }
 }

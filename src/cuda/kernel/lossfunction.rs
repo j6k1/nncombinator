@@ -14,7 +14,7 @@ extern "C" {
     fn loss_linear_batch_cross_entropy_multiclass_derive_double(r: *const f64, t: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int) -> c_void;
 }
 /// Define a list to be passed to the cuda kernel function during mini-batch execution as the argument of mse.
-pub struct LinearBatchMseArgs<'a,A,T,const N:usize>
+pub struct LinearBatchMseArgs<'a,T,A,const N:usize>
     where T: DataTypeInfo + UnitValue<T>,
           A: CudaAllocator {
     /// expected value

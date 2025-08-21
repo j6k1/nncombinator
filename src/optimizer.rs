@@ -89,12 +89,13 @@ impl<U> Optimizer<U,DeviceCpu<U>> for SGD<U,DeviceCpu<U>> where U: UnitValue<U>,
 }
 impl<U,A> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>>
     where U: UnitValue<U>, A: CudaAllocator, DeviceGpu<U,A>: Device<U>,
+          A: CudaAllocator + 'static,
           for<'a> kernel::optimizer::SGD<'a,U,A>: Kernel<Args=SGDArgs<'a,U,A>> {
     type InternalType = CudaPtr<U,A>;
-    type InternalUpdateType<'a> = CudaMutPtr<'a,A,CudaPtr<U,A>>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaPtr<U,A>,A>;
 
     #[inline]
-    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,A,CudaPtr<U,A>>) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,CudaPtr<U,A>,A>) -> Result<(),TrainingError> {
         let mut w = w;
         let mut args = SGDArgs::new(&mut w,e,self.size,self.lr,self.weight_decay);
 
@@ -261,14 +262,14 @@ impl<U,A> MomentumSGD<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator,
 }
 impl<U,A> Optimizer<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           DeviceGpu<U,A>: Device<U>,
           for<'a> kernel::optimizer::MomentumSGD<'a,U,A>: Kernel<Args=MomentumSGDArgs<'a,U,A>> {
     type InternalType = CudaPtr<U,A>;
-    type InternalUpdateType<'a> = CudaMutPtr<'a,A,CudaPtr<U,A>>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaPtr<U,A>,A>;
 
     #[inline]
-    fn update<'a>(&mut self, e: &CudaPtr<U,A>, w: CudaMutPtr<'a,A,CudaPtr<U,A>>) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &CudaPtr<U,A>, w: CudaMutPtr<'a,CudaPtr<U,A>,A>) -> Result<(),TrainingError> {
         let mut w = w;
         let mut args = MomentumSGDArgs::new(&mut w,e,self.size,self.lr,self.mu,self.weight_decay,&mut self.vt);
 
@@ -288,6 +289,7 @@ impl<U> OptimizerState<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>>
 }
 impl<U,A> OptimizerState<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
+          A: CudaAllocator,
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
@@ -453,14 +455,14 @@ impl<U,A> Adagrad<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator, Dev
 }
 impl<U,A> Optimizer<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           DeviceGpu<U,A>: Device<U>,
           for<'a> kernel::optimizer::Adagrad<'a,U,A>: Kernel<Args=AdagradArgs<'a,U,A>> {
     type InternalType = CudaPtr<U,A>;
-    type InternalUpdateType<'a> = CudaMutPtr<'a,A,CudaPtr<U,A>>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaPtr<U,A>,A>;
 
     #[inline]
-    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,A,CudaPtr<U,A>>) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,CudaPtr<U,A>,A>) -> Result<(),TrainingError> {
         let mut w = w;
         let mut args = AdagradArgs::new(&mut w,e,self.size,self.lr,self.weight_decay,self.eps,&mut self.gt);
 
@@ -670,14 +672,14 @@ impl<U,A> RMSprop<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator, Dev
 }
 impl<U,A> Optimizer<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           DeviceGpu<U,A>: Device<U>,
           for<'a> kernel::optimizer::RMSprop<'a,U,A>: Kernel<Args=RMSpropArgs<'a,U,A>> {
     type InternalType = CudaPtr<U,A>;
-    type InternalUpdateType<'a> = CudaMutPtr<'a,A,CudaPtr<U,A>>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaPtr<U,A>,A>;
 
     #[inline]
-    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,A,CudaPtr<U,A>>) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,CudaPtr<U,A>,A>) -> Result<(),TrainingError> {
         let mut w = w;
         let mut args = RMSpropArgs::new(&mut w,e,self.size,self.lr,self.weight_decay,self.alpha,self.mu,self.eps,&mut self.gt, &mut self.bt);
 
@@ -926,14 +928,14 @@ impl<U,A> Adam<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator, Device
 }
 impl<U,A> Optimizer<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           DeviceGpu<U,A>: Device<U>,
           for<'a> kernel::optimizer::Adam<'a,U,A>: Kernel<Args=AdamArgs<'a,U,A>> {
     type InternalType = CudaPtr<U,A>;
-    type InternalUpdateType<'a> = CudaMutPtr<'a,A,CudaPtr<U,A>>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaPtr<U,A>,A>;
 
     #[inline]
-    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,A,CudaPtr<U,A>>) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,CudaPtr<U,A>,A>) -> Result<(),TrainingError> {
         let mut w = w;
         let mut args = AdamArgs::new(&mut w,e,self.size,self.lr,self.weight_decay,self.eps,
                                                  &mut self.mt,&mut self.vt,

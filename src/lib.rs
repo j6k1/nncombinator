@@ -8,7 +8,6 @@ extern crate rcudnn;
 extern crate rcudnn_sys;
 extern crate alloc;
 extern crate core;
-extern crate core;
 
 use crate::ope::UnitValue;
 

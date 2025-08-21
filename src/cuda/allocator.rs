@@ -1,11 +1,12 @@
 use core::fmt::{Debug, Formatter};
+use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 use libc::c_uint;
 use crate::cuda::ffi;
 use crate::cuda::mem::{Alloctype, MemoryPool};
 use crate::error::CudaError;
 
-pub trait CudaAllocator: Clone {
+pub trait CudaAllocator: Clone + Debug {
    /// Allocate memory from memory pool
     ///
     /// # Arguments
@@ -69,23 +70,26 @@ impl Debug for HostAllocator {
     }
 }
 pub struct MemoryPoolAllocator<A: CudaAllocator> {
-    memory_pool:Arc<Mutex<MemoryPool>>
+    memory_pool:Arc<Mutex<MemoryPool>>,
+    allocator:PhantomData<A>
 }
 impl MemoryPoolAllocator<DeviceAllocator> {
     pub fn new(_:DeviceAllocator) -> Result<MemoryPoolAllocator<DeviceAllocator>,CudaError> {
         Ok(MemoryPoolAllocator {
-            memory_pool: Arc::new(Mutex::new(MemoryPool::new(Alloctype::Device)))?
+            memory_pool: Arc::new(Mutex::new(MemoryPool::new(Alloctype::Device)?)),
+            allocator: PhantomData::<DeviceAllocator>
         })
     }
 }
 impl MemoryPoolAllocator<HostAllocator> {
     pub fn new(HostAllocator { flags }: HostAllocator) -> Result<MemoryPoolAllocator<HostAllocator>,CudaError> {
         Ok(MemoryPoolAllocator {
-            memory_pool: Arc::new(Mutex::new(MemoryPool::new(HostAllocator::new(flags)?)?))
+            memory_pool: Arc::new(Mutex::new(MemoryPool::new(Alloctype::Host(flags))?)),
+            allocator: PhantomData::<HostAllocator>
         })
     }
 }
-impl<A: CudaAllocator> CudaAllocator for MemoryPoolAllocator<A> {
+impl<A: CudaAllocator> CudaAllocator for MemoryPoolAllocator<A> where Self: Debug {
     fn allocate<T>(&self, size: usize) -> Result<*mut T, CudaError> {
         let ptr:*mut T = match self.memory_pool.lock() {
             Ok(mut memory_pool) => {

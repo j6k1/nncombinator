@@ -238,7 +238,7 @@ impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for Devic
           CudaVec<f64,A,CudaTensor1dPtr<f64,A,N>>: IntoConverter,
           <IO as BatchDataType>::Type: TryFrom<<CudaVec<f64,A,CudaTensor1dPtr<f64,A,N>> as IntoConverter>::Converter,Error=TrainingError>,
           for<'a> CudaTensor1dPtrView<'a,f64,N>: From<&'a IO>,
-          for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<f64,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
+          for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f64,A,N>,f64,N> {
     fn forward_bias<'a>(&self, bias: &CudaTensor1dPtr<f64,A,N>, input: &'a IO) -> Result<IO, EvaluateError> {
         let input_ptr = CudaTensor1dPtrView::<'a,f64,N>::from(input);

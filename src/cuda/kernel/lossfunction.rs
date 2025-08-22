@@ -21,7 +21,7 @@ pub struct LinearBatchMseArgs<'a,T,A,const N:usize>
     expected: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
     /// actual value
     actual: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
-    pub output: CudaVec<T,A,CudaTensor1dPtr<T,A,N>>,
+    pub output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,
     out_len: usize,
     batch_len: usize,
 }
@@ -37,7 +37,7 @@ impl<'a,T,A,const N:usize> LinearBatchMseArgs<'a,T,A,N>
     /// * `out_len` - Number of scalar values in output
     /// * `batch_len` - batch count
     pub fn new(t:&'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,r:&'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,
-               output: CudaVec<T,A,CudaTensor1dPtr<T,A,N>>,out_len:usize,batch_len:usize) -> LinearBatchMseArgs<'a,T,A,N> {
+               output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,out_len:usize,batch_len:usize) -> LinearBatchMseArgs<'a,T,A,N> {
         LinearBatchMseArgs {
             expected: CudaConstPtr::new(t),
             actual: CudaConstPtr::new(r),
@@ -173,7 +173,7 @@ pub struct LinearBatchCrossEntropyArgs<'a,T,A,const N:usize>
     expected: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
     /// actual value
     actual: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
-    pub output: CudaVec<T,A,CudaTensor1dPtr<T,A,N>>,
+    pub output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,
     out_len: usize,
     batch_len: usize,
 }
@@ -190,7 +190,7 @@ impl<'a,T,A,const N:usize> LinearBatchCrossEntropyArgs<'a,T,A,N>
     /// * `batch_len` - batch count
     pub fn new(t:&'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,
                r:&'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,
-               output: CudaVec<T,A,CudaTensor1dPtr<T,A,N>>,
+               output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,
                out_len:usize,batch_len:usize) -> LinearBatchCrossEntropyArgs<'a,T,A,N> {
         LinearBatchCrossEntropyArgs {
             expected: CudaConstPtr::new(t),
@@ -328,7 +328,7 @@ pub struct LinearBatchCrossEntropyMulticlassArgs<'a,T,A,const N:usize>
     expected: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
     /// actual value
     actual: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
-    pub output: CudaVec<T,A,CudaTensor1dPtr<T,A,N>>,
+    pub output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,
     out_len: usize,
     batch_len: usize,
 }
@@ -345,7 +345,7 @@ impl<'a,T,A,const N:usize> LinearBatchCrossEntropyMulticlassArgs<'a,T,A,N>
     /// * `batch_len` - batch count
     pub fn new(t:&'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,
                r:&'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,
-               output: CudaVec<T,A,CudaTensor1dPtr<T,A,N>>,
+               output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,
                out_len:usize,batch_len:usize) -> LinearBatchCrossEntropyMulticlassArgs<'a,T,A,N> {
         LinearBatchCrossEntropyMulticlassArgs {
             expected: CudaConstPtr::new(t),

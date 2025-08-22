@@ -86,6 +86,7 @@ impl MemoryPoolAllocator<HostAllocator> {
         Ok(MemoryPoolAllocator {
             memory_pool: Arc::new(Mutex::new(MemoryPool::new(Alloctype::Host(flags))?)),
             allocator: PhantomData::<HostAllocator>
+
         })
     }
 }

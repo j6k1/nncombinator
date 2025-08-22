@@ -5,7 +5,7 @@ use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel};
+use crate::cuda::{AsConstKernelPtr, AsMutKernelPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs, LinearCrossEntropy, LinearCrossEntropyArgs, LinearCrossEntropyMulticlass, LinearCrossEntropyMulticlassArgs, LinearMse, LinearMseArgs};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
@@ -149,7 +149,8 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           DeviceGpu<U,A>:  Device<U>,
           A: CudaAllocator,
-          for<'b> CudaVecView<'b,U,CudaTensor1dPtr<U,A,N>>: TryFrom<&'b I,Error=TypeConvertError>,
+          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
+          for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchMse<'b,U,A,N>: Kernel<Args=LinearBatchMseArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
     fn batch_linear_derive<'b>(&self, device: &DeviceGpu<U,A>, expected: &'b I,
@@ -158,7 +159,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
         let actual = CudaVecView::<'b,U,CudaTensor1dPtr<U,A,N>>::try_from(actual)?;
         let expected = CudaVecView::<'b,U,CudaTensor1dPtr<U,A,N>>::try_from(expected)?;
 
-        let output = CudaVec::<U,A,CudaTensor1dPtr<U,A,N>>::new(expected.size(),device.get_allocator())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(expected.size(),device.get_allocator())?;
 
         let mut args = LinearBatchMseArgs::new(&expected, &actual, output, N, expected.size());
 
@@ -224,6 +225,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           DeviceGpu<U,A>:  Device<U>,
           A: CudaAllocator,
+          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtr<U,A,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchCrossEntropy<'b,U,A,N>: Kernel<Args=LinearBatchCrossEntropyArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
@@ -233,7 +235,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
         let actual = CudaVecView::<'b,U,CudaTensor1dPtr<U,A,N>>::try_from(actual)?;
         let expected = CudaVecView::<'b,U,CudaTensor1dPtr<U,A,N>>::try_from(expected)?;
 
-        let output = CudaVec::<U,A,CudaTensor1dPtr<U,A,N>>::new(expected.size(),device.get_allocator())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(expected.size(),device.get_allocator())?;
 
         let mut args = LinearBatchCrossEntropyArgs::new(&expected, &actual, output, N, expected.size());
 
@@ -300,6 +302,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           A: CudaAllocator,
           DeviceGpu<U,A>:  Device<U>,
           CudaPtr<U,A>: TryFrom<U,Error=CudaError>,
+          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchCrossEntropyMulticlass<'b,U,A,N>: Kernel<Args=LinearBatchCrossEntropyMulticlassArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
@@ -309,7 +312,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
         let actual = CudaVecView::<'b,U,CudaTensor1dPtr<U,A,N>>::try_from(actual)?;
         let expected = CudaVecView::<'b,U,CudaTensor1dPtr<U,A,N>>::try_from(expected)?;
 
-        let output = CudaVec::<U,A,CudaTensor1dPtr<U,A,N>>::new(expected.size(),device.get_allocator())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(expected.size(),device.get_allocator())?;
 
         let mut args = LinearBatchCrossEntropyMulticlassArgs::new(&expected, &actual, output, N, expected.size());
 

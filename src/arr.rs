@@ -188,7 +188,7 @@ impl<'a,T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
           A: CudaAllocator + 'a,
           CudaPtr<T,A>: WriteMemory<T>,
           CudaTensor1dPtr<T,A,N>: AsCudaMutPtr<'a>,
-          CudaMutPtr<'a,T,A>: WriteMemory<T> {
+          <CudaTensor1dPtr<T,A,N> as AsCudaMutPtr<'a>>::Pointer: WriteMemory<T> {
     type Output = CudaTensor1dPtr<T,A,N>;
 
     fn to_cuda(self, device: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
@@ -204,7 +204,7 @@ impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a Arr<T,N>
           A: CudaAllocator + 'a,
           CudaPtr<T,A>: WriteMemory<T>,
           CudaTensor1dPtr::<T,A,N>: AsCudaMutPtr<'a>,
-          CudaMutPtr<'a,T,A>: WriteMemory<T> {
+          <CudaTensor1dPtr<T,A,N> as AsCudaMutPtr<'a>>::Pointer: WriteMemory<T> {
     type Output = CudaTensor1dPtr<T,A,N>;
 
     fn to_cuda(self, device: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {

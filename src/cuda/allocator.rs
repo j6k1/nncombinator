@@ -69,28 +69,47 @@ impl Debug for HostAllocator {
         write!(f,"HostAllocator")
     }
 }
-pub struct MemoryPoolAllocator<A: CudaAllocator> {
+pub struct MemoryPoolAllocator<A> {
     memory_pool:Arc<Mutex<MemoryPool>>,
     allocator:PhantomData<A>
 }
-impl MemoryPoolAllocator<DeviceAllocator> {
-    pub fn new(_:DeviceAllocator) -> Result<MemoryPoolAllocator<DeviceAllocator>,CudaError> {
+#[derive(Debug,Clone)]
+pub struct DeviceAlloc;
+
+impl DeviceAlloc {
+    pub fn new() -> DeviceAlloc {
+        DeviceAlloc
+    }
+}
+#[derive(Debug,Clone)]
+pub struct HostAlloc {
+    flags:c_uint
+}
+impl HostAlloc {
+    pub fn new(flags: c_uint) -> HostAlloc {
+        HostAlloc {
+            flags
+        }
+    }
+}
+impl MemoryPoolAllocator<DeviceAlloc> {
+    pub fn new(_:DeviceAllocator) -> Result<MemoryPoolAllocator<DeviceAlloc>,CudaError> {
         Ok(MemoryPoolAllocator {
             memory_pool: Arc::new(Mutex::new(MemoryPool::new(Alloctype::Device)?)),
-            allocator: PhantomData::<DeviceAllocator>
+            allocator: PhantomData::<DeviceAlloc>
         })
     }
 }
-impl MemoryPoolAllocator<HostAllocator> {
-    pub fn new(HostAllocator { flags }: HostAllocator) -> Result<MemoryPoolAllocator<HostAllocator>,CudaError> {
+impl MemoryPoolAllocator<HostAlloc> {
+    pub fn new(HostAllocator { flags }: HostAllocator) -> Result<MemoryPoolAllocator<HostAlloc>,CudaError> {
         Ok(MemoryPoolAllocator {
             memory_pool: Arc::new(Mutex::new(MemoryPool::new(Alloctype::Host(flags))?)),
-            allocator: PhantomData::<HostAllocator>
+            allocator: PhantomData::<HostAlloc>
 
         })
     }
 }
-impl<A: CudaAllocator> CudaAllocator for MemoryPoolAllocator<A> where Self: Debug {
+impl<A> CudaAllocator for MemoryPoolAllocator<A> where Self: Debug {
     fn allocate<T>(&self, size: usize) -> Result<*mut T, CudaError> {
         let ptr:*mut T = match self.memory_pool.lock() {
             Ok(mut memory_pool) => {
@@ -119,20 +138,21 @@ impl<A: CudaAllocator> CudaAllocator for MemoryPoolAllocator<A> where Self: Debu
         Ok(())
     }
 }
-impl Debug for MemoryPoolAllocator<DeviceAllocator> {
+impl Debug for MemoryPoolAllocator<DeviceAlloc> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f,"MemoryPoolAllocator<DeviceAllocator>")
+        write!(f,"MemoryPoolAllocator<DeviceAlloc>")
     }
 }
-impl Debug for MemoryPoolAllocator<HostAllocator> {
+impl Debug for MemoryPoolAllocator<HostAlloc> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f,"MemoryPoolAllocator<HostAllocator>")
+        write!(f,"MemoryPoolAllocator<HostAlloc>")
     }
 }
-impl<A: CudaAllocator> Clone for MemoryPoolAllocator<A> {
+impl<A> Clone for MemoryPoolAllocator<A> {
     fn clone(&self) -> Self {
         MemoryPoolAllocator {
-            memory_pool: Arc::clone(&self.memory_pool)
+            memory_pool: Arc::clone(&self.memory_pool),
+            allocator: PhantomData::<A>
         }
     }
 }

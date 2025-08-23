@@ -3,7 +3,7 @@
 use core::fmt::Debug;
 use std::marker::PhantomData;
 use libc::{size_t,c_void};
-use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaPtr, CudaMutPtr, Kernel, KernelArgs};
+use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaPtr, CudaMutPtr, Kernel, KernelArgs, AsMutKernelPtr};
 use crate::cuda::allocator::CudaAllocator;
 
 extern "C" {
@@ -27,7 +27,9 @@ pub struct SGDArgs<'a,T,A> where T: Debug, A: CudaAllocator {
     weight_decay: T
 }
 /// Create an instance of an object representing the argument list of the SGD optimizer.
-impl<'a,T,A> SGDArgs<'a,T,A> where T: Debug, A: CudaAllocator {
+impl<'a,T,A> SGDArgs<'a,T,A>
+    where T: Debug, A: CudaAllocator,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a SGDArgs instance
     /// # Arguments
     /// * `weight` - unit weight
@@ -45,7 +47,10 @@ impl<'a,T,A> SGDArgs<'a,T,A> where T: Debug, A: CudaAllocator {
         }
     }
 }
-impl<'a,T,A> KernelArgs for SGDArgs<'a,T,A> where T: AsKernelPtr + Debug, A: CudaAllocator {
+impl<'a,T,A> KernelArgs for SGDArgs<'a,T,A>
+    where T: AsKernelPtr + Debug,
+          A: CudaAllocator,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             self.weight,
@@ -57,12 +62,18 @@ impl<'a,T,A> KernelArgs for SGDArgs<'a,T,A> where T: AsKernelPtr + Debug, A: Cud
     }
 }
 /// Implementation SGD optimizer
-pub struct SGD<'a,T,A> where T: Debug, A: CudaAllocator {
+pub struct SGD<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A> SGD<'a,T,A> where T: Debug, A: CudaAllocator {
+impl<'a,T,A> SGD<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a SGD optimizer instance
     pub fn new() -> SGD<'a,T,A> {
         SGD {
@@ -72,16 +83,23 @@ impl<'a,T,A> SGD<'a,T,A> where T: Debug, A: CudaAllocator {
         }
     }
 }
-impl<'a,A> Kernel for SGD<'a,f32,A> where A: CudaAllocator {
+impl<'a,A> Kernel for SGD<'a,f32,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_sgd_float as *const c_void;
     type Args = SGDArgs<'a,f32,A>;
 }
-impl<'a,A> Kernel for SGD<'a,f64,A> where A: CudaAllocator {
+impl<'a,A> Kernel for SGD<'a,f64,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_sgd_double as *const c_void;
     type Args = SGDArgs<'a,f64,A>;
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Momentum SGD optimizer.
-pub struct MomentumSGDArgs<'a,T,A> where T: Debug, A: CudaAllocator {
+pub struct MomentumSGDArgs<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     weight: &'a mut CudaMutPtr<'a,T,A>,
     grad: CudaConstPtr<'a,CudaPtr<T,A>>,
     size: usize,
@@ -91,7 +109,10 @@ pub struct MomentumSGDArgs<'a,T,A> where T: Debug, A: CudaAllocator {
     vt: &'a mut CudaPtr<T,A>
 }
 /// Create an instance of an object representing the argument list of the Momentum SGD optimizer.
-impl<'a,T,A> MomentumSGDArgs<'a,T,A> where T: Debug, A: CudaAllocator {
+impl<'a,T,A> MomentumSGDArgs<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a MomentumSGDArgs instance
     /// # Arguments
     /// * `weight` - unit weight
@@ -115,7 +136,10 @@ impl<'a,T,A> MomentumSGDArgs<'a,T,A> where T: Debug, A: CudaAllocator {
         }
     }
 }
-impl<'a,T,A> KernelArgs for MomentumSGDArgs<'a,T,A> where T: AsKernelPtr + Debug, A: CudaAllocator {
+impl<'a,T,A> KernelArgs for MomentumSGDArgs<'a,T,A>
+    where T: AsKernelPtr + Debug,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             self.weight,
@@ -129,12 +153,18 @@ impl<'a,T,A> KernelArgs for MomentumSGDArgs<'a,T,A> where T: AsKernelPtr + Debug
     }
 }
 /// Implementation Momentum SGD optimizer
-pub struct MomentumSGD<'a,T,A> where T: Debug, A: CudaAllocator {
+pub struct MomentumSGD<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A> MomentumSGD<'a,T,A> where T: Debug, A: CudaAllocator {
+impl<'a,T,A> MomentumSGD<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a Momentum SGD optimizer instance
     pub fn new() -> MomentumSGD<'a,T,A> {
         MomentumSGD {
@@ -144,16 +174,23 @@ impl<'a,T,A> MomentumSGD<'a,T,A> where T: Debug, A: CudaAllocator {
         }
     }
 }
-impl<'a,A> Kernel for MomentumSGD<'a,f32,A> where A: CudaAllocator {
+impl<'a,A> Kernel for MomentumSGD<'a,f32,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_momentum_sgd_float as *const c_void;
     type Args = MomentumSGDArgs<'a,f32,A>;
 }
-impl<'a,A> Kernel for MomentumSGD<'a,f64,A> where A: CudaAllocator {
+impl<'a,A> Kernel for MomentumSGD<'a,f64,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_momentum_sgd_double as *const c_void;
     type Args = MomentumSGDArgs<'a,f64,A>;
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Adagrad optimizer.
-pub struct AdagradArgs<'a,T,A> where T: Debug, A: CudaAllocator {
+pub struct AdagradArgs<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     weight: &'a mut CudaMutPtr<'a,T,A>,
     grad: CudaConstPtr<'a,CudaPtr<T,A>>,
     size: usize,
@@ -163,7 +200,10 @@ pub struct AdagradArgs<'a,T,A> where T: Debug, A: CudaAllocator {
     gt: &'a mut CudaPtr<T,A>
 }
 /// Create an instance of an object representing the argument list of the Adagrad optimizer.
-impl<'a,T,A> AdagradArgs<'a,T,A> where T: Debug, A: CudaAllocator {
+impl<'a,T,A> AdagradArgs<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a AdagradArgs instance
     /// # Arguments
     /// * `weight` - unit weight
@@ -187,7 +227,10 @@ impl<'a,T,A> AdagradArgs<'a,T,A> where T: Debug, A: CudaAllocator {
         }
     }
 }
-impl<'a,T,A> KernelArgs for AdagradArgs<'a,T,A> where T: AsKernelPtr + Debug, A: CudaAllocator {
+impl<'a,T,A> KernelArgs for AdagradArgs<'a,T,A>
+    where T: AsKernelPtr + Debug,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             self.weight,
@@ -201,12 +244,18 @@ impl<'a,T,A> KernelArgs for AdagradArgs<'a,T,A> where T: AsKernelPtr + Debug, A:
     }
 }
 /// Implementation Adagrad optimizer
-pub struct Adagrad<'a,T,A> where T: Debug, A: CudaAllocator {
+pub struct Adagrad<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A> Adagrad<'a,T,A> where T: Debug, A: CudaAllocator {
+impl<'a,T,A> Adagrad<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a Adagrad optimizer instance
     pub fn new() -> Adagrad<'a,T,A> {
         Adagrad {
@@ -216,16 +265,22 @@ impl<'a,T,A> Adagrad<'a,T,A> where T: Debug, A: CudaAllocator {
         }
     }
 }
-impl<'a,A> Kernel for Adagrad<'a,f32,A> where A: CudaAllocator {
+impl<'a,A> Kernel for Adagrad<'a,f32,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_adagrad_float as *const c_void;
     type Args = AdagradArgs<'a,f32,A>;
 }
-impl<'a,A> Kernel for Adagrad<'a,f64,A> where A: CudaAllocator {
+impl<'a,A> Kernel for Adagrad<'a,f64,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_adagrad_double as *const c_void;
     type Args = AdagradArgs<'a,f64,A>;
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Rmsprop optimizer.
-pub struct RMSpropArgs<'a,T,A> where T: Debug, A: CudaAllocator {
+pub struct RMSpropArgs<'a,T,A>
+    where T: Debug + 'a, A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     weight: &'a mut CudaMutPtr<'a,T,A>,
     grad: CudaConstPtr<'a,CudaPtr<T,A>>,
     size: usize,
@@ -238,7 +293,10 @@ pub struct RMSpropArgs<'a,T,A> where T: Debug, A: CudaAllocator {
     bt: &'a mut CudaPtr<T,A>
 }
 /// Create an instance of an object representing the argument list of the Rmsprop optimizer.
-impl<'a,T,A> RMSpropArgs<'a,T,A> where T: Debug, A: CudaAllocator {
+impl<'a,T,A> RMSpropArgs<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a RmspropArgs instance
     /// # Arguments
     /// * `weight` - unit weight
@@ -268,7 +326,10 @@ impl<'a,T,A> RMSpropArgs<'a,T,A> where T: Debug, A: CudaAllocator {
         }
     }
 }
-impl<'a,T,A> KernelArgs for RMSpropArgs<'a,T,A> where T: AsKernelPtr + Debug, A: CudaAllocator {
+impl<'a,T,A> KernelArgs for RMSpropArgs<'a,T,A>
+    where T: AsKernelPtr + Debug,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             self.weight,
@@ -285,12 +346,18 @@ impl<'a,T,A> KernelArgs for RMSpropArgs<'a,T,A> where T: AsKernelPtr + Debug, A:
     }
 }
 /// Implementation Rmsprop optimizer
-pub struct RMSprop<'a,T,A> where T: Debug, A: CudaAllocator {
+pub struct RMSprop<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A> RMSprop<'a,T,A> where T: Debug, A: CudaAllocator {
+impl<'a,T,A> RMSprop<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a Rmsprop optimizer instance
     pub fn new() -> RMSprop<'a,T,A> {
         RMSprop {
@@ -300,16 +367,23 @@ impl<'a,T,A> RMSprop<'a,T,A> where T: Debug, A: CudaAllocator {
         }
     }
 }
-impl<'a,A> Kernel for RMSprop<'a,f32,A> where A: CudaAllocator {
+impl<'a,A> Kernel for RMSprop<'a,f32,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_rmsprop_float as *const c_void;
     type Args = RMSpropArgs<'a,f32,A>;
 }
-impl<'a,A> Kernel for RMSprop<'a,f64,A> where A: CudaAllocator {
+impl<'a,A> Kernel for RMSprop<'a,f64,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_rmsprop_double as *const c_void;
     type Args = RMSpropArgs<'a,f64,A>;
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Adam optimizer.
-pub struct AdamArgs<'a,T,A> where T: Debug, A: CudaAllocator {
+pub struct AdamArgs<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     weight: &'a mut CudaMutPtr<'a,T,A>,
     grad: CudaConstPtr<'a,CudaPtr<T,A>>,
     size: usize,
@@ -324,7 +398,10 @@ pub struct AdamArgs<'a,T,A> where T: Debug, A: CudaAllocator {
     b2t: T
 }
 /// Create an instance of an object representing the argument list of the Adam optimizer.
-impl<'a,T,A> AdamArgs<'a,T,A> where T: Debug, A: CudaAllocator {
+impl<'a,T,A> AdamArgs<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a AdamArgs instance
     /// # Arguments
     /// * `weight` - unit weight
@@ -359,7 +436,10 @@ impl<'a,T,A> AdamArgs<'a,T,A> where T: Debug, A: CudaAllocator {
         }
     }
 }
-impl<'a,T,A> KernelArgs for AdamArgs<'a,T,A> where T: AsKernelPtr + Debug, A: CudaAllocator {
+impl<'a,T,A> KernelArgs for AdamArgs<'a,T,A>
+    where T: AsKernelPtr + Debug,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             self.weight,
@@ -378,12 +458,18 @@ impl<'a,T,A> KernelArgs for AdamArgs<'a,T,A> where T: AsKernelPtr + Debug, A: Cu
     }
 }
 /// Implementation Adam optimizer
-pub struct Adam<'a,T,A> where T: Debug, A: CudaAllocator {
+pub struct Adam<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A> Adam<'a,T,A> where T: Debug, A: CudaAllocator {
+impl<'a,T,A> Adam<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a Adam optimizer instance
     pub fn new() -> Adam<'a,T,A> {
         Adam {
@@ -393,11 +479,15 @@ impl<'a,T,A> Adam<'a,T,A> where T: Debug, A: CudaAllocator {
         }
     }
 }
-impl<'a,A> Kernel for Adam<'a,f32,A> where A: CudaAllocator {
+impl<'a,A> Kernel for Adam<'a,f32,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_adam_float as *const c_void;
     type Args = AdamArgs<'a,f32,A>;
 }
-impl<'a,A> Kernel for Adam<'a,f64,A> where A: CudaAllocator {
+impl<'a,A> Kernel for Adam<'a,f64,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_adam_double as *const c_void;
     type Args = AdamArgs<'a,f64,A>;
 }

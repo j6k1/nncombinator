@@ -1,12 +1,13 @@
 //! Definition and implementation of optimizers to be used during training
 
+use core::fmt::Debug;
 use std::marker::PhantomData;
 use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::{UnitValue};
 use crate::arr::ShieldSlice;
-use crate::cuda::{CudaMutPtr, CudaPtr, kernel, Kernel};
+use crate::cuda::{CudaMutPtr, CudaPtr, kernel, Kernel, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, MomentumSGDArgs, RMSpropArgs, SGDArgs};
 use crate::error::{OptimizerBuildError, TrainingError};
@@ -88,14 +89,15 @@ impl<U> Optimizer<U,DeviceCpu<U>> for SGD<U,DeviceCpu<U>> where U: UnitValue<U>,
     }
 }
 impl<U,A> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>>
-    where U: UnitValue<U>, A: CudaAllocator, DeviceGpu<U,A>: Device<U>,
+    where U: UnitValue<U>,
           A: CudaAllocator + 'static,
+          DeviceGpu<U,A>: Device<U>,
           for<'a> kernel::optimizer::SGD<'a,U,A>: Kernel<Args=SGDArgs<'a,U,A>> {
     type InternalType = CudaPtr<U,A>;
-    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaPtr<U,A>,A>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,U,A>;
 
     #[inline]
-    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,CudaPtr<U,A>,A>) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,U,A>) -> Result<(),TrainingError> {
         let mut w = w;
         let mut args = SGDArgs::new(&mut w,e,self.size,self.lr,self.weight_decay);
 
@@ -222,7 +224,11 @@ impl<U> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>> where U: UnitV
         Ok(())
     }
 }
-impl<U,A> MomentumSGD<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator, DeviceGpu<U,A>: Device<U> {
+impl<U,A> MomentumSGD<U,DeviceGpu<U,A>>
+    where U: UnitValue<U> + Debug + Default,
+          A: CudaAllocator,
+          DeviceGpu<U,A>: Device<U>,
+          CudaPtr<U,A>: WriteMemory<U> {
     /// Create an instance of MomentumSGD
     /// # Arguments
     /// * `device` - device
@@ -261,15 +267,16 @@ impl<U,A> MomentumSGD<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator,
     }
 }
 impl<U,A> Optimizer<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>>
-    where U: UnitValue<U>,
+    where U: UnitValue<U> + Debug + Default,
           A: CudaAllocator + 'static,
           DeviceGpu<U,A>: Device<U>,
+          CudaPtr<U,A>: WriteMemory<U>,
           for<'a> kernel::optimizer::MomentumSGD<'a,U,A>: Kernel<Args=MomentumSGDArgs<'a,U,A>> {
     type InternalType = CudaPtr<U,A>;
-    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaPtr<U,A>,A>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,U,A>;
 
     #[inline]
-    fn update<'a>(&mut self, e: &CudaPtr<U,A>, w: CudaMutPtr<'a,CudaPtr<U,A>,A>) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &CudaPtr<U,A>, w: CudaMutPtr<'a,U,A>) -> Result<(),TrainingError> {
         let mut w = w;
         let mut args = MomentumSGDArgs::new(&mut w,e,self.size,self.lr,self.mu,self.weight_decay,&mut self.vt);
 
@@ -288,8 +295,9 @@ impl<U> OptimizerState<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>>
     type Type = Box<[U]>;
 }
 impl<U,A> OptimizerState<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>>
-    where U: UnitValue<U>,
+    where U: UnitValue<U> + Debug + Default,
           A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
@@ -358,7 +366,10 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for MomentumSGDBuilder<U,DeviceCpu<U>>
     }
 }
 impl<U,A> OptimizerBuilder<U,DeviceGpu<U,A>> for MomentumSGDBuilder<U,DeviceGpu<U,A>>
-    where U: UnitValue<U>, A: CudaAllocator, DeviceGpu<U,A>: Device<U>,
+    where U: UnitValue<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U>,
           MomentumSGD<U,DeviceGpu<U,A>>: Optimizer<U,DeviceGpu<U,A>> {
     type Output = MomentumSGD<U,DeviceGpu<U,A>>;
 
@@ -425,7 +436,11 @@ impl<U> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>> where U: UnitValue
         Ok(())
     }
 }
-impl<U,A> Adagrad<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator, DeviceGpu<U,A>: Device<U> {
+impl<U,A> Adagrad<U,DeviceGpu<U,A>>
+    where U: UnitValue<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U> {
     /// Create an instance of Adagrad
     /// # Arguments
     /// * `device` - device
@@ -456,13 +471,14 @@ impl<U,A> Adagrad<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator, Dev
 impl<U,A> Optimizer<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
           A: CudaAllocator + 'static,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U>,
           for<'a> kernel::optimizer::Adagrad<'a,U,A>: Kernel<Args=AdagradArgs<'a,U,A>> {
     type InternalType = CudaPtr<U,A>;
-    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaPtr<U,A>,A>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,U,A>;
 
     #[inline]
-    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,CudaPtr<U,A>,A>) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,U,A>) -> Result<(),TrainingError> {
         let mut w = w;
         let mut args = AdagradArgs::new(&mut w,e,self.size,self.lr,self.weight_decay,self.eps,&mut self.gt);
 
@@ -483,6 +499,7 @@ impl<U> OptimizerState<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>>
 impl<U,A> OptimizerState<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
           A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
@@ -535,7 +552,10 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for AdagradBuilder<U,DeviceCpu<U>>
     }
 }
 impl<U,A> OptimizerBuilder<U,DeviceGpu<U,A>> for AdagradBuilder<U,DeviceGpu<U,A>>
-    where U: UnitValue<U>, A: CudaAllocator, DeviceGpu<U,A>: Device<U>,
+    where U: UnitValue<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U>,
           Adagrad<U,DeviceGpu<U,A>>: Optimizer<U,DeviceGpu<U,A>> {
     type Output = Adagrad<U,DeviceGpu<U,A>>;
 
@@ -623,7 +643,11 @@ impl<U> Optimizer<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>> where U: UnitValue
         Ok(())
     }
 }
-impl<U,A> RMSprop<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator, DeviceGpu<U,A>: Device<U> {
+impl<U,A> RMSprop<U,DeviceGpu<U,A>>
+    where U: UnitValue<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U> {
     /// Create an instance of RMSprop
     /// # Arguments
     /// * `device` - device
@@ -673,13 +697,14 @@ impl<U,A> RMSprop<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator, Dev
 impl<U,A> Optimizer<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
           A: CudaAllocator + 'static,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U>,
           for<'a> kernel::optimizer::RMSprop<'a,U,A>: Kernel<Args=RMSpropArgs<'a,U,A>> {
     type InternalType = CudaPtr<U,A>;
-    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaPtr<U,A>,A>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,U,A>;
 
     #[inline]
-    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,CudaPtr<U,A>,A>) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,U,A>) -> Result<(),TrainingError> {
         let mut w = w;
         let mut args = RMSpropArgs::new(&mut w,e,self.size,self.lr,self.weight_decay,self.alpha,self.mu,self.eps,&mut self.gt, &mut self.bt);
 
@@ -700,6 +725,7 @@ impl<U> OptimizerState<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>>
 impl<U,A> OptimizerState<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
           A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
@@ -786,7 +812,10 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for RMSpropBuilder<U,DeviceCpu<U>>
     }
 }
 impl<U,A> OptimizerBuilder<U,DeviceGpu<U,A>> for RMSpropBuilder<U,DeviceGpu<U,A>>
-    where U: UnitValue<U>, A: CudaAllocator, DeviceGpu<U,A>: Device<U>,
+    where U: UnitValue<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U>,
           RMSprop<U,DeviceGpu<U,A>>: Optimizer<U,DeviceGpu<U,A>> {
     type Output = RMSprop<U,DeviceGpu<U,A>>;
 
@@ -881,7 +910,11 @@ impl<U> Optimizer<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>> where U: UnitValue<U>
         Ok(())
     }
 }
-impl<U,A> Adam<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator, DeviceGpu<U,A>: Device<U> {
+impl<U,A> Adam<U,DeviceGpu<U,A>>
+    where U: UnitValue<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U> {
     /// Create an instance of Adam
     /// # Arguments
     /// * `device` - device
@@ -929,13 +962,14 @@ impl<U,A> Adam<U,DeviceGpu<U,A>> where U: UnitValue<U>, A: CudaAllocator, Device
 impl<U,A> Optimizer<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
           A: CudaAllocator + 'static,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U>,
           for<'a> kernel::optimizer::Adam<'a,U,A>: Kernel<Args=AdamArgs<'a,U,A>> {
     type InternalType = CudaPtr<U,A>;
-    type InternalUpdateType<'a> = CudaMutPtr<'a,CudaPtr<U,A>,A>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,U,A>;
 
     #[inline]
-    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,CudaPtr<U,A>,A>) -> Result<(),TrainingError> {
+    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,U,A>) -> Result<(),TrainingError> {
         let mut w = w;
         let mut args = AdamArgs::new(&mut w,e,self.size,self.lr,self.weight_decay,self.eps,
                                                  &mut self.mt,&mut self.vt,
@@ -961,6 +995,7 @@ impl<U> OptimizerState<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>>
 impl<U,A> OptimizerState<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>>
     where U: UnitValue<U>,
           A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
@@ -1047,7 +1082,10 @@ impl<U> OptimizerBuilder<U,DeviceCpu<U>> for AdamBuilder<U,DeviceCpu<U>>
     }
 }
 impl<U,A> OptimizerBuilder<U,DeviceGpu<U,A>> for AdamBuilder<U,DeviceGpu<U,A>>
-    where U: UnitValue<U>, A: CudaAllocator, DeviceGpu<U,A>: Device<U>,
+    where U: UnitValue<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U>,
           Adam<U,DeviceGpu<U,A>>: Optimizer<U,DeviceGpu<U,A>> {
     type Output = Adam<U,DeviceGpu<U,A>>;
 

@@ -115,8 +115,8 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
           <IO as BatchDataType>::Type: BatchSize + Debug,
           IO: From<CudaTensor1dPtr<f32,A,N>>,
           A: CudaAllocator,
-          CudaVec<f32,A,CudaTensor1dPtr<f32,A,N>>: IntoConverter,
-          <IO as BatchDataType>::Type: TryFrom<<CudaVec<f32,A,CudaTensor1dPtr<f32,A,N>> as IntoConverter>::Converter,Error=TrainingError>,
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: IntoConverter,
+          <IO as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
           for<'a> CudaTensor1dPtrView<'a,f32,N>: From<&'a IO>,
           for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f32,A,N>,f32,N> {
@@ -235,8 +235,8 @@ impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for Devic
           <IO as BatchDataType>::Type: BatchSize + Debug,
           IO: From<CudaTensor1dPtr<f64,A,N>>,
           A: CudaAllocator,
-          CudaVec<f64,A,CudaTensor1dPtr<f64,A,N>>: IntoConverter,
-          <IO as BatchDataType>::Type: TryFrom<<CudaVec<f64,A,CudaTensor1dPtr<f64,A,N>> as IntoConverter>::Converter,Error=TrainingError>,
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: IntoConverter,
+          <IO as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
           for<'a> CudaTensor1dPtrView<'a,f64,N>: From<&'a IO>,
           for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f64,A,N>,f64,N> {

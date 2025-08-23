@@ -106,12 +106,12 @@ impl<'a,U,I,A,AC,const N:usize> DeviceActivation<U,I,A,N> for DeviceGpu<U,AC>
           I: From<CudaTensor1dPtr<U,AC,N>>,
           DeviceGpu<U,AC>: Device<U>,
           CudaTensor1dPtr<U,AC,N>: From<I>,
-          CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>: IntoConverter,
-          <I as BatchDataType>::Type: TryFrom<<CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: IntoConverter,
+          <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC> as IntoConverter>::Converter,Error=TypeConvertError>,
           for<'b> A: Activation<U,&'b I,CudaTensor1dPtr<U,AC,N>,Self>,
-          for<'b> A: BatchActivation<U,&'b <I as BatchDataType>::Type,CudaVec<U,AC,CudaTensor1dPtr<U,AC,N>>,Self>,
+          for<'b> A: BatchActivation<U,&'b <I as BatchDataType>::Type,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,Self>,
           for<'b> CudaTensor1dPtrView<'b,U,N>: From<&'b I>,
-          for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b CudaVec<U,AC,I>,Error=TypeConvertError> {
+          for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b CudaVec<U,I,AC>,Error=TypeConvertError> {
     #[inline]
     fn apply(&self, f: &A, input: &I) -> Result<I, EvaluateError> {
         Ok(f.apply(self, &input.into())?.into())

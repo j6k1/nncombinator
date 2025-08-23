@@ -191,9 +191,9 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
 impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,I,NI,NO> for DeviceGpu<f32,A>
     where I: BatchDataType + From<CudaTensor1dPtr<f32,A,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'static,
-          <I as BatchDataType>::Type: TryFrom<<CudaVec<f32,A,CudaTensor1dPtr<f32,A,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
-          A: CudaAllocator,
-          CudaVec<f32,A,CudaTensor1dPtr<f32,A,NI>>: IntoConverter,
+          <I as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
+          A: CudaAllocator + 'static,
+          CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: IntoConverter,
           Self: DeviceReduce<CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,CudaTensor1dPtr<f32,A,NO>,f32,NO>,
           for<'a> CudaTensor1dPtrView<'a,f32,NI>: From<&'a I>,
           for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
@@ -528,17 +528,17 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
 impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,A,NI,NO>,CudaTensor1dPtr<f64,A,NO>,I,NI,NO> for DeviceGpu<f64,A>
     where I: BatchDataType + From<CudaTensor1dPtr<f64,A,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'static,
-          <I as BatchDataType>::Type: TryFrom<<CudaVec<f64,A,CudaTensor1dPtr<f64,A,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
-          A: CudaAllocator,
-          CudaVec<f64,A,CudaTensor1dPtr<f64,A,NI>>: IntoConverter,
-          Self: DeviceReduce<CudaVec<f64,A,CudaTensor1dPtr<f64,A,NO>>,CudaTensor1dPtr<f64,A,NO>,f64,NO>,
+          <I as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
+          A: CudaAllocator + 'static,
+          CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>: IntoConverter,
+          Self: DeviceReduce<CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>,CudaTensor1dPtr<f64,A,NO>,f64,NO>,
           for<'a> CudaTensor1dPtrView<'a,f64,NI>: From<&'a I>,
           for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           for<'a> AddBias<'a,f64,A,NO>: Kernel<Args=AddBiasArgs<'a,f64,A,NO>>,
           for<'a> AddBiasBatch<'a,f64,A,NO>: Kernel<Args=AddBiasBatchArgs<'a,f64,A,NO>>,
           for<'b> ReduceLinearBatch::<'b,f64,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,f64,A,NO>> {
     type Output = CudaTensor1dPtr<f64,A,NO>;
-    type BatchOutput = CudaVec<f64,A,CudaTensor1dPtr<f64,A,NO>>;
+    type BatchOutput = CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>;
     type LossOutput = I;
     type BatchLossOutput = <I as BatchDataType>::Type;
     #[inline]

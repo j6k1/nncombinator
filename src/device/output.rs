@@ -143,11 +143,11 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
           A: CudaAllocator,
           DeviceGpu<U,A>: Device<U>,
           f64: From<U>,
-          for<'b> &'b SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,A,CudaTensor1dPtr<U,A,N>>>,
+          for<'b> &'b SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
           for<'b> LossLinearBatchByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearBatchByCanonicalLinkArgs<'b,U,A,N>>,
           for<'b> LossLinearByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearByCanonicalLinkArgs<'b,U,A,N>> {
     type IO = CudaTensor1dPtr<U,A,N>;
-    type BatchIO = CudaVec<U,A,CudaTensor1dPtr<U,A,N>>;
+    type BatchIO = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
     fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,A,N>, lossf: &L)
                          -> Result<Self::IO, TrainingError>
         where L: LossFunction<U> + LossFunctionLinear<'a,U,CudaTensor1dPtr<U,A,N>,DeviceGpu<U,A>,N,Output=CudaTensor1dPtr<U,A,N>> {
@@ -185,7 +185,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
     }
 
     fn loss_linear_batch_by_canonical_link(&self, expected: &'a SerializedVec<U, Arr<U,N>>,
-                                           actual: &'a CudaVec<U,A,CudaTensor1dPtr<U,A,N>>)
+                                           actual: &'a CudaVec<U,CudaTensor1dPtr<U,A,N>,A>)
         -> Result<Self::BatchIO, TrainingError> {
         let expected_ptr = expected.to_cuda(self)?;
         let expected_ptr = (&expected_ptr).try_into()?;
@@ -213,7 +213,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
     }
 
     fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U, Arr<U,N>>,
-                               actual: &'a CudaVec<U,A,CudaTensor1dPtr<U,A,N>>, lossf: &L)
+                               actual: &'a CudaVec<U,CudaTensor1dPtr<U,A,N>,A>, lossf: &L)
                                -> Result<Self::BatchIO, TrainingError>
         where L: LossFunction<U> + BatchLossFunctionLinear<'a,U,Self::BatchIO,DeviceGpu<U,A>,N,Output=Self::BatchIO> {
         let expected = expected.to_cuda(self)?;

@@ -7,7 +7,7 @@ use std::slice::{IterMut};
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
-use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, ToHost};
+use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, ToHost, AsCudaReadOnlyPtr, DeriveCudaConstPtr, AsMutPtr, AsCudaMutPtr, CudaMutPtr, CudaPtr};
 use crate::cuda::allocator::CudaAllocator;
 use crate::device::{DeviceGpu, DeviceAllocator};
 use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
@@ -183,10 +183,12 @@ impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: D
         ShieldSlice::new(&mut arr.arr)
     }
 }
-impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
-    where T: UnitValue<T>,
-          A: CudaAllocator,
-          CudaTensor1dPtr::<T,A,N>: WriteMemory<T> {
+impl<'a,T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
+    where T: UnitValue<T> + 'a,
+          A: CudaAllocator + 'a,
+          CudaPtr<T,A>: WriteMemory<T>,
+          CudaTensor1dPtr<T,A,N>: AsCudaMutPtr<'a>,
+          CudaMutPtr<'a,T,A>: WriteMemory<T> {
     type Output = CudaTensor1dPtr<T,A,N>;
 
     fn to_cuda(self, device: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
@@ -198,9 +200,11 @@ impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
     }
 }
 impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a Arr<T,N>
-    where T: UnitValue<T>,
-          A: CudaAllocator,
-          CudaTensor1dPtr::<T,A,N>: WriteMemory<T> {
+    where T: UnitValue<T> + 'a,
+          A: CudaAllocator + 'a,
+          CudaPtr<T,A>: WriteMemory<T>,
+          CudaTensor1dPtr::<T,A,N>: AsCudaMutPtr<'a>,
+          CudaMutPtr<'a,T,A>: WriteMemory<T> {
     type Output = CudaTensor1dPtr<T,A,N>;
 
     fn to_cuda(self, device: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
@@ -1511,9 +1515,15 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
     }
 }
 impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
-    where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
-          <T as ToCuda<U,A>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
+    where U: Debug + Default + Clone + Copy + Send + UnitValue<U> + AsMutPtr<U>,
+          T: Debug + Default,
           A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          for<'a> CudaVec<U,<T as ToCuda<U,A>>::Output,A>: AsCudaMutPtr<'a> + WriteMemory<U>,
+          for<'a> T: AsCudaReadOnlyPtr<'a> + DeriveCudaConstPtr,
+          for<'a> <T as ToCuda<U,A>>::Output: Debug + Default +
+                                              MemorySize + AsConstKernelPtr + AsKernelPtr +
+                                              AsCudaReadOnlyPtr<'a> + DeriveCudaConstPtr,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U,A> {
     type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;
 
@@ -1530,10 +1540,13 @@ impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
     }
 }
 impl<'a,U,T,A> ToCuda<U,A> for &'a SerializedVec<U,T>
-    where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
-          <T as ToCuda<U,A>>::Output: MemorySize + AsConstKernelPtr + AsKernelPtr,
+    where U: Debug + Default + Clone + Copy + Send + UnitValue<U> + AsMutPtr<T>,
+          T: Debug + Default + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> +
+             AsCudaMutPtr<'a> + DeriveCudaConstPtr + ToCuda<U,A>,
           A: CudaAllocator,
-          for<'b> T: SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> + ToCuda<U,A> {
+          <T as ToCuda<U,A>>::Output: Debug + Default + MemorySize + AsConstKernelPtr + AsKernelPtr,
+          CudaPtr<U,A>: WriteMemory<U>,
+          CudaVec<U,<T as ToCuda<U,A>>::Output,A>: AsCudaMutPtr<'a> + WriteMemory<U> {
     type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;
     fn to_cuda(self, device: &DeviceGpu<U,A>) -> Result<Self::Output,TypeConvertError> {
         if T::slice_size() != <T as ToCuda<U,A>>::Output::size() {

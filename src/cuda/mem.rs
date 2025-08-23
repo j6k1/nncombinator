@@ -329,11 +329,19 @@ impl Drop for MemoryPool {
 }
 /// Mutable object that automatically updates cuda memory when exiting scope
 #[derive(Debug)]
-pub struct ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+pub struct ScopedMut<'a,U,T,A>
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U> {
     value: &'a mut T,
     ptr:&'a mut CudaPtr<U,A>
 }
-impl<'a,U,T,A> ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+impl<'a,U,T,A> ScopedMut<'a,U,T,A>
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U> {
     /// Creation of ScopedMut instance
     /// # Arguments
     /// * `value` - Wrapping value
@@ -345,19 +353,31 @@ impl<'a,U,T,A> ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A
         }
     }
 }
-impl<'a,U,T,A> Deref for ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+impl<'a,U,T,A> Deref for ScopedMut<'a,U,T,A>
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.value
     }
 }
-impl<'a,U,T,A> DerefMut for ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+impl<'a,U,T,A> DerefMut for ScopedMut<'a,U,T,A>
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
     }
 }
-impl<'a,U,T,A> Drop for ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+impl<'a,U,T,A> Drop for ScopedMut<'a,U,T,A>
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U> {
     fn drop(&mut self) {
         let len = self.value.as_raw_slice().len();
 
@@ -366,12 +386,19 @@ impl<'a,U,T,A> Drop for ScopedMut<'a,U,T,A> where U: Debug + Default, T: AsRawSl
 }
 /// Object that collectively manages cuda memory paired with a value of a specified type
 #[derive(Debug)]
-pub struct CachedTensor<U,T,A> where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+pub struct CachedTensor<U,T,A>
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U> {
     value:T,
     ptr:CudaPtr<U,A>
 }
 impl<U,T,A> CachedTensor<U,T,A>
-    where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U> {
     /// Creation of CachedTensor instance
     /// # Arguments
     /// * `value` - Wrapping value
@@ -384,7 +411,7 @@ impl<U,T,A> CachedTensor<U,T,A>
     pub fn new(value:T,memory_pool:&A) -> Result<CachedTensor<U,T,A>,CudaError> {
         let len = value.as_raw_slice().len();
 
-        let mut ptr = CudaPtr::new(len, &memory_pool)?;
+        let mut ptr = CudaPtr::new(len, memory_pool)?;
 
         ptr.memcpy(value.as_raw_slice().as_ptr(),len)?;
 
@@ -403,7 +430,10 @@ impl<U,T,A> CachedTensor<U,T,A>
     }
 }
 impl<U,T,A> Deref for CachedTensor<U,T,A>
-    where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -411,7 +441,10 @@ impl<U,T,A> Deref for CachedTensor<U,T,A>
     }
 }
 impl<U,T,A> Index<(usize,usize)> for CachedTensor<U,T,A>
-    where U: Debug + Default, T: Index<(usize,usize),Output=U> + AsRawSlice<U>, A: CudaAllocator {
+    where U: Debug + Default,
+          T: Index<(usize,usize),Output=U> + AsRawSlice<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U> {
     type Output = U;
 
     fn index(&self, index:(usize,usize)) -> &Self::Output {
@@ -419,14 +452,20 @@ impl<U,T,A> Index<(usize,usize)> for CachedTensor<U,T,A>
     }
 }
 impl<U,T,A> AsCudaPtr for CachedTensor<U,T,A>
-    where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U> {
     type Pointer = CudaPtr<U,A>;
     fn as_cuda_ptr(&self) -> &CudaPtr<U,A> {
         &self.ptr
     }
 }
-impl<'a,U,T,A> AsCudaMutPtr for CachedTensor<U,T,A>
-    where U: Debug + Default, T: AsRawSlice<U>, A: CudaAllocator {
+impl<'a,U,T,A> AsCudaMutPtr<'a> for CachedTensor<U,T,A>
+    where U: Debug + Default + 'a,
+          T: AsRawSlice<U> + 'a,
+          A: CudaAllocator + 'a,
+          CudaPtr<U,A>: WriteMemory<U> {
     type Pointer = CudaMutPtr<'a,U,A>;
     fn as_cuda_mut_ptr(&mut self) -> CudaMutPtr<'a, U, A> {
         CudaMutPtr::new(&mut self.ptr)
@@ -436,7 +475,8 @@ impl<'a,U,T,A> From<&'a mut CachedTensor<U,T,A>> for &'a mut [U]
     where U: Debug + Default,
           T: AsRawSlice<U>,
           A: CudaAllocator,
-          &'a mut [U]: From<&'a mut T> {
+          &'a mut [U]: From<&'a mut T> ,
+          CudaPtr<U,A>: WriteMemory<U>{
     fn from(t: &'a mut CachedTensor<U,T,A>) -> Self {
         (&mut t.value).into()
     }

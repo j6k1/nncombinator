@@ -320,8 +320,8 @@ impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for Devi
           A: CudaAllocator,
           I: BatchDataType + Debug + From<CudaTensor1dPtr<U,A,N>> + 'static,
           <I as BatchDataType>::Type: Debug + 'static,
-          <I as BatchDataType>::Type: TryFrom<<CudaVec<U,A,CudaTensor1dPtr<U,A,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
-          CudaVec<U,A,CudaTensor1dPtr<U,A,N>>: IntoConverter,
+          <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,A,N>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
+          CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: IntoConverter,
           for<'a> CudaTensor1dPtrView<'a,U,N>: From<&'a I>,
           for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,A,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           f64: From<U> {

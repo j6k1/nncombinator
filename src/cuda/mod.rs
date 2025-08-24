@@ -759,7 +759,7 @@ impl<T: Default + Debug> MemoryMoveToAsync<T,CudaPtr<T,MemoryPoolAllocator<HostA
         Ok(len)
     }
 }
-#[derive(Copy)]
+#[derive(Debug,Copy)]
 pub struct CudaPtrRef<'a,T> {
     ptr:&'a *mut T
 }
@@ -882,7 +882,7 @@ impl<'a,T,A,const N:usize> AsCudaReadOnlyPtr<'a> for CudaTensor1dPtr<T,A,N>
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
@@ -1010,7 +1010,7 @@ impl<'a,T,const N:usize> AsCudaReadOnlyPtr<'a> for CudaTensor1dPtrView<'a,T,N> w
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.clone()
     }
 }
@@ -1088,7 +1088,7 @@ impl<'a,T,A,const N1:usize,const N2:usize> AsCudaReadOnlyPtr<'a> for CudaTensor2
           A: CudaAllocator + 'a {
     type Pointer = CudaPtrRef<'a,T>;
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
@@ -1163,7 +1163,7 @@ impl<'a,T,const N1:usize,const N2:usize> AsCudaReadOnlyPtr<'a> for CudaTensor2dP
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.clone()
     }
 }
@@ -1259,7 +1259,7 @@ impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaReadOnlyPtr<'a> 
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
@@ -1337,7 +1337,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsCudaReadOnlyPtr<'a> fo
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         CudaPtrRef::from(self.ptr)
     }
 }
@@ -1442,7 +1442,7 @@ impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaR
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
@@ -1512,7 +1512,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaRea
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         CudaPtrRef::from(self.ptr)
     }
 }
@@ -1633,7 +1633,7 @@ impl<'a,U,T,A> AsCudaReadOnlyPtr<'a> for CudaVec<U,T,A>
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
@@ -1715,7 +1715,7 @@ impl<'a,U,T> AsCudaReadOnlyPtr<'a> for CudaVecView<'a,U,T>
     type Pointer = CudaPtrRef<'a,U>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,U> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,U> {
         self.as_cuda_read_only_ptr()
     }
 }
@@ -2019,7 +2019,7 @@ impl<'a,T,A,const N:usize> AsCudaReadOnlyPtr<'a> for &'a CudaTensor1dPtr<T,A,N>
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
@@ -2029,7 +2029,7 @@ impl<'a,T,A,const N1:usize,const N2:usize> AsCudaReadOnlyPtr<'a> for &'a CudaTen
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
@@ -2040,7 +2040,7 @@ impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaReadOnlyPtr<'a> 
     type Pointer = CudaPtrRef<'a,T>;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
@@ -2050,7 +2050,7 @@ impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaR
 
     type Pointer = CudaPtrRef<'a,T>;
     #[inline]
-    fn as_cuda_read_only_ptr(&self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }

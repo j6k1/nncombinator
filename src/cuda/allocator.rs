@@ -30,6 +30,11 @@ pub trait CudaAllocator: Clone + Debug {
 }
 #[derive(Clone)]
 pub struct DeviceAllocator;
+impl DeviceAllocator  {
+    pub fn new() -> DeviceAllocator {
+        DeviceAllocator
+    }
+}
 impl CudaAllocator for DeviceAllocator {
     fn allocate<T>(&self, size: usize) -> Result<*mut T, CudaError> {
         Ok(ffi::malloc(size)?)

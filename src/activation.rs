@@ -143,7 +143,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator {
 
-    fn apply(&self, _: &DeviceGpu<U,AC>, input: &'a I) -> Result<CudaTensor1dPtr<U,AC,N>, EvaluateError> {
+    fn apply(&self, _: &DeviceGpu<U,AC>, input: &I) -> Result<CudaTensor1dPtr<U,AC,N>, EvaluateError> {
         Ok(input.try_into()?)
     }
 
@@ -184,26 +184,26 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         Ok(loss.into())
     }
 }
-impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
+impl<'a,U,I,AC,const N:usize> BatchActivation<U,I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Identity<U,DeviceGpu<U,AC>>
     where U: UnitValue<U>,
-          I: BatchDataType + 'a,
+          I: BatchDataType + BatchSize + 'a,
           <I as BatchDataType>::Type: Clone + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<&'a <I as BatchDataType>::Type,Error=TrainingError>,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator {
 
-    fn batch_apply(&self, _: &DeviceGpu<U,AC>, input: &'a <I as BatchDataType>::Type)
+    fn batch_apply(&self, _: &DeviceGpu<U,AC>, input: &I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,TrainingError> {
         Ok(input.try_into()?)
     }
 
     fn batch_derive(&self, _: &DeviceGpu<U,AC>,
-                    _: &'a <I as BatchDataType>::Type,
-                    loss: &'a <I as BatchDataType>::Type,
-                    _: &'a <I as BatchDataType>::Type) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
+                    _: &I,
+                    loss: &I,
+                    _: &I) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         Ok(loss.try_into()?)
     }
 }
@@ -277,7 +277,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=EvaluateError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=EvaluateError>,
-          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<&'a <I as BatchDataType>::Type,Error=EvaluateError>,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<&'a I,Error=EvaluateError>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator,
           for<'b> SigmoidForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
@@ -351,21 +351,21 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
+impl<'a,U,I,AC,const N:usize> BatchActivation<U,I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Sigmoid<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
-          I: BatchDataType + 'a,
+          I: BatchDataType + BatchSize + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TrainingError>,
+          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator,
           for<'b> SigmoidBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> SigmoidBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &'a <I as BatchDataType>::Type) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
+    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &I) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         let len = input.size();
         let output = CudaVec::<U,CudaTensor1dPtr<U,AC,N>,AC>::new(len,device.get_allocator())?;
 
@@ -382,9 +382,9 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,C
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U,AC>,
-                    o: &'a <I as BatchDataType>::Type,
-                    loss: &'a <I as BatchDataType>::Type,
-                    u: &'a <I as BatchDataType>::Type) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
+                    o: &I,
+                    loss: &I,
+                    u: &I) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         let len = loss.size();
 
         let output = CudaVec::<U,CudaTensor1dPtr<U,AC,N>,AC>::new(len,device.get_allocator())?;
@@ -476,7 +476,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=EvaluateError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=EvaluateError>,
           <I as BatchDataType>::Type: IntoConverter,
-          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<&'a <I as BatchDataType>::Type,Error=EvaluateError>,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<&'a I,Error=EvaluateError>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator,
           for<'b> ReLuForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
@@ -549,21 +549,21 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
+impl<'a,U,I,AC,const N:usize> BatchActivation<U,I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for ReLu<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
-          I: BatchDataType + 'a,
+          I: BatchDataType + BatchSize + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TrainingError>,
+          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator,
           for<'b> ReLuBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> ReLuBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &'a <I as BatchDataType>::Type)
+    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         let len = input.size();
 
@@ -582,9 +582,9 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,C
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U,AC>,
-                    o: &'a <I as BatchDataType>::Type,
-                    loss: &'a <I as BatchDataType>::Type,
-                    u: &'a <I as BatchDataType>::Type) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
+                    o: &I,
+                    loss: &I,
+                    u: &I) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         let len = loss.size();
 
         let output = CudaVec::<U,CudaTensor1dPtr<U,AC,N>,AC>::new(len,device.get_allocator())?;
@@ -669,7 +669,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=EvaluateError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=EvaluateError>,
-          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<&'a <I as BatchDataType>::Type,Error=EvaluateError>,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<&'a I,Error=EvaluateError>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator,
           for<'b> SwishForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
@@ -742,21 +742,21 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
+impl<'a,U,I,AC,const N:usize> BatchActivation<U,I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Swish<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
-          I: BatchDataType + 'a,
+          I: BatchDataType + BatchSize + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TrainingError>,
+          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator,
           for<'b> SwishBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> SwishBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &'a <I as BatchDataType>::Type)
+    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         let len = input.size();
 
@@ -775,9 +775,9 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,C
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U,AC>,
-                    o: &'a <I as BatchDataType>::Type,
-                    loss: &'a <I as BatchDataType>::Type,
-                    u: &'a <I as BatchDataType>::Type) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
+                    o: &I,
+                    loss: &I,
+                    u: &I) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         let len = loss.size();
 
         let output = CudaVec::<U,CudaTensor1dPtr<U,AC,N>,AC>::new(len,device.get_allocator())?;
@@ -935,21 +935,21 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
+impl<'a,U,I,AC,const N:usize> BatchActivation<U,I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Tanh<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
-          I: BatchDataType + 'a,
+          I: BatchDataType + BatchSize + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TrainingError>,
+          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator,
           for<'b> TanhBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> TanhBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &'a <I as BatchDataType>::Type)
+    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         let len = input.size();
 
@@ -968,9 +968,9 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,C
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U,AC>,
-                    o: &'a <I as BatchDataType>::Type,
-                    loss: &'a <I as BatchDataType>::Type,
-                    u: &'a <I as BatchDataType>::Type) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
+                    o: &I,
+                    loss: &I,
+                    u: &I) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         let len = loss.size();
 
         let output = CudaVec::<U,CudaTensor1dPtr<U,AC,N>,AC>::new(len,device.get_allocator())?;
@@ -1152,21 +1152,21 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
-impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
+impl<'a,U,I,AC,const N:usize> BatchActivation<U,I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for SoftMax<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
-          I: BatchDataType + 'a,
+          I: BatchDataType + BatchSize + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TrainingError>,
+          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator,
           for<'b> SoftMaxBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> SoftMaxBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
-    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &'a <I as BatchDataType>::Type)
+    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         let len = input.size();
 
@@ -1184,9 +1184,9 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a <I as BatchDataType>::Type,C
     }
 
     fn batch_derive(&self, device: &DeviceGpu<U,AC>,
-                    o: &'a <I as BatchDataType>::Type,
-                    loss: &'a <I as BatchDataType>::Type,
-                    u: &'a <I as BatchDataType>::Type) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
+                    o: &I,
+                    loss: &I,
+                    u: &I) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         let len = loss.size();
 
         let output = CudaVec::<U,CudaTensor1dPtr<U,AC,N>,AC>::new(len,device.get_allocator())?;

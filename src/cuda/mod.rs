@@ -792,13 +792,6 @@ impl<'a,T> AsPtr<T> for CudaPtrRef<'a,T> {
         *self.ptr as *const T
     }
 }
-impl<'a,T> Clone for CudaPtrRef<'a,T> {
-    fn clone(&self) -> Self {
-        CudaPtrRef {
-            ptr:self.ptr
-        }
-    }
-}
 impl<T,A: CudaAllocator> Drop for CudaPtr<T,A> {
     fn drop(&mut self) {
         self.allocator.deallocate(self.ptr).unwrap()

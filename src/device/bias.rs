@@ -6,7 +6,7 @@ use libc::c_int;
 use rcublas_sys::{cublasDaxpy_v2, cublasSaxpy_v2, cublasStatus_t};
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::collection::Broadcast;
-use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo};
+use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsConstKernelPtr, AsKernelPtr, MemorySize};
 use crate::cuda::allocator::CudaAllocator;
 use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator, DeviceReduce};
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
@@ -115,6 +115,7 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
           <IO as BatchDataType>::Type: BatchSize + Debug,
           IO: From<CudaTensor1dPtr<f32,A,N>>,
           A: CudaAllocator,
+          CudaTensor1dPtr<f32,A,N>: ReadMemory<f32> + MemoryMoveTo<f32,CudaTensor1dPtr<f32,A,N>>,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: IntoConverter,
           <IO as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
           for<'a> CudaTensor1dPtrView<'a,f32,N>: From<&'a IO>,
@@ -181,8 +182,8 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
             .take(input.size()).collect::<Vec<Vec<f32>>>()
             .into_iter().flatten().collect::<Vec<f32>>();
 
-        let input_ptr = CudaVecView::<'a,f32,CudaTensor1dPtr<f32,A,N>>::try_from(input)?;
-        let mut output_ptr = CudaVec::<f32,A,CudaTensor1dPtr::<f32,A,N>>::new(len,self.get_allocator())?;
+        let input_ptr = CudaVecView::<'a,f32,CudaTensor1dPtrView<f32,N>>::try_from(input)?;
+        let mut output_ptr = CudaVec::<f32,CudaTensor1dPtr::<f32,A,N>,A>::new(len,self.get_allocator())?;
 
         output_ptr.memcpy(bias.as_ptr(),N * len)?;
 
@@ -235,6 +236,7 @@ impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for Devic
           <IO as BatchDataType>::Type: BatchSize + Debug,
           IO: From<CudaTensor1dPtr<f64,A,N>>,
           A: CudaAllocator,
+          CudaTensor1dPtr<f64,A,N>: ReadMemory<f64> + MemoryMoveTo<f64,CudaTensor1dPtr<f64,A,N>>,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: IntoConverter,
           <IO as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
           for<'a> CudaTensor1dPtrView<'a,f64,N>: From<&'a IO>,
@@ -302,8 +304,8 @@ impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for Devic
             .take(input.size()).collect::<Vec<Vec<f64>>>()
             .into_iter().flatten().collect::<Vec<f64>>();
 
-        let input_ptr = CudaVecView::<'a,f64,CudaTensor1dPtr<f64,A,N>>::try_from(input)?;
-        let mut output_ptr = CudaVec::<f64,A,CudaTensor1dPtr<f64,A,N>>::new(len,&self.allocator)?;
+        let input_ptr = CudaVecView::<'a,f64,CudaTensor1dPtrView<f64,N>>::try_from(input)?;
+        let mut output_ptr = CudaVec::<f64,CudaTensor1dPtr<f64,A,N>,A>::new(len,&self.allocator)?;
 
         output_ptr.memcpy(bias.as_ptr(),N * len)?;
 

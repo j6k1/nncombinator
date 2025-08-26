@@ -8,7 +8,7 @@ use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
-use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, WriteMemory, ReadMemory, MemoryMoveTo};
+use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, WriteMemory, ReadMemory, MemoryMoveTo, AsCudaMutPtr, AsKernelPtr, AsConstKernelPtr, MemorySize};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
 use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator};
@@ -316,14 +316,17 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu<U>
     }
 }
 impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for DeviceGpu<U,A>
-    where U: UnitValue<U> + DataTypeInfo + AsVoidPtr,
+    where U: UnitValue<U> + Debug + Default + DataTypeInfo + AsVoidPtr,
           A: CudaAllocator,
           I: BatchDataType + Debug + From<CudaTensor1dPtr<U,A,N>> + 'static,
           <I as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,A,N>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
+          CudaTensor1dPtr<U,A,N>: AsMutVoidPtr + ReadMemory<U> + MemoryMoveTo<U,CudaTensor1dPtr<U,A,N>>,
           CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: IntoConverter,
+          for<'a> CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsKernelPtr + MemorySize + AsCudaMutPtr<'a>,
+          for<'a> <CudaTensor1dPtr<U,A,N> as AsCudaMutPtr<'a>>::Pointer: WriteMemory<U>,
           for<'a> CudaTensor1dPtrView<'a,U,N>: From<&'a I>,
-          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,A,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           f64: From<U> {
     fn forward_batch_norm<'a>(&self, input: &'a I, scale: &CudaTensor1dPtr<U,A,N>, bias: &CudaTensor1dPtr<U,A,N>,
                           estimated_mean: &CudaTensor1dPtr<U,A,N>, estimated_variance: &CudaTensor1dPtr<U,A,N>)
@@ -474,11 +477,11 @@ impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for Devi
                                     bias: &CudaTensor1dPtr<U,A,N>,
                                     estimated_mean: &CudaTensor1dPtr<U,A,N>, estimated_variance: &CudaTensor1dPtr<U,A,N>)
         -> Result<<I as BatchDataType>::Type, EvaluateError> {
-        let input = CudaVecView::<'a,U,CudaTensor1dPtr<U,A,N>>::try_from(input)?;
+        let input = CudaVecView::<'a,U,CudaTensor1dPtrView<U,N>>::try_from(input)?;
 
         let len = input.size();
 
-        let mut output_ptr = CudaVec::<U,A,CudaTensor1dPtr<U,A,N>>::new(len,&self.allocator)?;
+        let mut output_ptr = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(len,&self.allocator)?;
 
         let len = len as i32;
 
@@ -547,11 +550,11 @@ impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for Devi
                    CudaTensor1dPtr<U,A,N>,
                    CudaTensor1dPtr<U,A,N>,
                    CudaTensor1dPtr<U,A,N>), TrainingError> {
-        let input = CudaVecView::<'a,U,CudaTensor1dPtr<U,A,N>>::try_from(input)?;
+        let input = CudaVecView::<'a,U,CudaTensor1dPtrView<U,N>>::try_from(input)?;
 
         let len = input.size();
 
-        let mut output_ptr = CudaVec::<U,A,CudaTensor1dPtr<U,A,N>>::new(len,self.get_allocator())?;
+        let mut output_ptr = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(len,self.get_allocator())?;
 
         let len = len as i32;
 
@@ -709,12 +712,12 @@ impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for Devi
                                  saved_mean: &CudaTensor1dPtr<U,A,N>, saved_inv_variance: &CudaTensor1dPtr<U,A,N>)
         -> Result<(<I as BatchDataType>::Type, CudaTensor1dPtr<U,A,N>, CudaTensor1dPtr<U,A,N>), TrainingError> {
 
-        let loss = CudaVecView::<'a,U,CudaTensor1dPtr<U,A,N>>::try_from(loss)?;
-        let input = CudaVecView::<'a,U,CudaTensor1dPtr<U,A,N>>::try_from(input)?;
+        let loss = CudaVecView::<'a,U,CudaTensor1dPtrView<U,N>>::try_from(loss)?;
+        let input = CudaVecView::<'a,U,CudaTensor1dPtrView<U,N>>::try_from(input)?;
 
         let len = input.size();
 
-        let mut output_ptr = CudaVec::<U,A,CudaTensor1dPtr<U,A,N>>::new(len,self.get_allocator())?;
+        let mut output_ptr = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(len,self.get_allocator())?;
 
         let be_scale_bias_diff_desc = API::create_tensor_descriptor()?;
         let xd = CudnnTensor4dDescriptor::<U>::new(len as usize,N,1,1)?;

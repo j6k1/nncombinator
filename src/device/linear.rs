@@ -6,6 +6,7 @@ use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
+use rcudnn::Error;
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
 use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView};
 use crate::cuda::{DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
@@ -194,9 +195,11 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
           A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: IntoConverter,
+          CudaTensor1dPtr::<f32,A,NO>: MemoryMoveTo<f32,CudaTensor1dPtr::<f32,A,NO>>,
           Self: DeviceReduce<CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,CudaTensor1dPtr<f32,A,NO>,f32,NO>,
           for<'a> CudaTensor1dPtrView<'a,f32,NI>: From<&'a I>,
           for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NO>>: TryFrom<&'a CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,Error=TypeConvertError>,
           for<'a> AddBias<'a,f32,A,NO>: Kernel<Args=AddBiasArgs<'a,f32,A,NO>>,
           for<'a> AddBiasBatch<'a,f32,A,NO>: Kernel<Args=AddBiasBatchArgs<'a,f32,A,NO>>,
           for<'b> ReduceLinearBatch::<'b,f32,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,f32,A,NO>> {
@@ -355,7 +358,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
     fn batch_forward_linear<'a>(&self,bias:&CudaTensor1dPtr<f32,A,NO>,units:&CudaTensor2dPtr<f32,A,NI,NO>,
                                 input: &'a <I as BatchDataType>::Type)
                                 -> Result<Self::BatchOutput,TrainingError> {
-        let input_ptr = CudaVecView::<f32,CudaTensor1dPtr<f32,A,NI>>::try_from(input)?;
+        let input_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NI>>::try_from(input)?;
         let mut output = CudaVec::<f32,CudaTensor1dPtr<f32,A,NO>,A>::new(input.size(),self.get_allocator())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
@@ -420,8 +423,8 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
                                  -> Result<<I as BatchDataType>::Type, TrainingError> {
         let n = input.size();
 
-        let input = CudaVecView::<f32,CudaTensor1dPtr<f32,A,NO>>::try_from(input)?;
-        let mut output = CudaVec::<f32,A,CudaTensor1dPtr<f32,A,NI>>::new(n,self.get_allocator())?;
+        let input = CudaVecView::<f32,CudaTensor1dPtrView<f32,NO>>::try_from(input)?;
+        let mut output = CudaVec::<f32,CudaTensor1dPtr<f32,A,NI>,A>::new(n,self.get_allocator())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(0.0f32)?;
@@ -472,8 +475,8 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
                                           -> Result<CudaTensor2dPtr<f32,A, NI, NO>, TrainingError> {
         let n = loss.size();
 
-        let o_ptr = CudaVecView::<f32,CudaTensor1dPtr<f32,A,NI>>::try_from(o)?;
-        let loss_ptr = CudaVecView::<f32,CudaTensor1dPtr<f32,A,NO>>::try_from(loss)?;
+        let o_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NI>>::try_from(o)?;
+        let loss_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NO>>::try_from(loss)?;
         let mut output_ptr = CudaTensor2dPtr::<f32,A,NI,NO>::new(self.get_allocator())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
@@ -530,9 +533,11 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
           <I as BatchDataType>::Type: BatchSize + Debug + 'static,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
           A: CudaAllocator + 'static,
+          CudaTensor1dPtr<f64,A,NO>: MemoryMoveTo<f64,CudaTensor1dPtr<f64,A,NO>>,
           CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>: IntoConverter,
           Self: DeviceReduce<CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>,CudaTensor1dPtr<f64,A,NO>,f64,NO>,
           for<'a> CudaTensor1dPtrView<'a,f64,NI>: From<&'a I>,
+          for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,NO>>: TryFrom<&'a CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>,Error=TypeConvertError>,
           for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           for<'a> AddBias<'a,f64,A,NO>: Kernel<Args=AddBiasArgs<'a,f64,A,NO>>,
           for<'a> AddBiasBatch<'a,f64,A,NO>: Kernel<Args=AddBiasBatchArgs<'a,f64,A,NO>>,
@@ -693,7 +698,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
                                 input: &'a <I as BatchDataType>::Type)
                                 -> Result<Self::BatchOutput,TrainingError> {
         let input_ptr = CudaVecView::<f64,CudaTensor1dPtrView<f64,NI>>::try_from(input)?;
-        let mut output = CudaVec::<f64,A,CudaTensor1dPtr<f64,A,NO>>::new(input.size(),self.get_allocator())?;
+        let mut output = CudaVec::<f64,CudaTensor1dPtr<f64,A,NO>,A>::new(input.size(),self.get_allocator())?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(0.0f64)?;
@@ -741,7 +746,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
             input.size()
         );
 
-        let mut kernel = AddBiasBatch::<'_,f64,NO>::new();
+        let mut kernel = AddBiasBatch::<'_,f64,A,NO>::new();
 
         kernel.launch(dim3 { x: (NO as std::os::raw::c_uint + 32 - 1) / 32,
                                      y: (input.size() as std::os::raw::c_uint + 32 - 1) / 32, z: 1 },
@@ -757,8 +762,8 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
                                  -> Result<<I as BatchDataType>::Type, TrainingError> {
         let n = input.size();
 
-        let input = CudaVecView::<f64,CudaTensor1dPtr<f64,A,NO>>::try_from(input)?;
-        let mut output = CudaVec::<f64,A,CudaTensor1dPtr<f64,A,NI>>::new(n,self.get_allocator())?;
+        let input = CudaVecView::<f64,CudaTensor1dPtrView<f64,NO>>::try_from(input)?;
+        let mut output = CudaVec::<f64,CudaTensor1dPtr<f64,A,NI>,A>::new(n,self.get_allocator())?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
         let beta = CudaPtr::try_from(0.0f64)?;
@@ -809,8 +814,8 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
                                           -> Result<CudaTensor2dPtr<f64, A, NI, NO>, TrainingError> {
         let n = loss.size();
 
-        let o_ptr = CudaVecView::<f64,CudaTensor1dPtr<f64,A,NI>>::try_from(o)?;
-        let loss_ptr = CudaVecView::<f64,CudaTensor1dPtr<f64,A,NO>>::try_from(loss)?;
+        let o_ptr = CudaVecView::<f64,CudaTensor1dPtrView<f64,NI>>::try_from(o)?;
+        let loss_ptr = CudaVecView::<f64,CudaTensor1dPtrView<f64,NO>>::try_from(loss)?;
         let mut output_ptr = CudaTensor2dPtr::<f64,A,NI,NO>::new(self.get_allocator())?;
 
         let alpha = CudaPtr::try_from(1.0f64)?;
@@ -910,6 +915,8 @@ impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
 impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,NI,NO>,CudaTensor1dPtr<U,A,NO>,NI,NO> for DeviceGpu<U,A>
     where U: UnitValue<U> + DataTypeInfo,
           A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          CudaPtr<usize,A>: WriteMemory<usize>,
           for<'b> ForwardLinear::<'b,U,A,NI,NO>: Kernel<Args=ForwardLinearArgs<'b,U,A,NI,NO>>,
           for<'b> LinearGradient::<'b,U,A,NI,NO>: Kernel<Args=LinearGradientArgs<'b,U,A,NI,NO>>,
           for<'b> ReduceLinearBatch::<'b,U,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,U,A,NO>>,
@@ -964,7 +971,7 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
                     bias,
                     output);
 
-                let mut kernel = ForwardLinear::<U, NI, NO>::new();
+                let mut kernel = ForwardLinear::<U,A,NI,NO>::new();
 
                 kernel.launch(dim3 { x: NO as c_uint, y: 1, z: (NI as c_uint + 1023) / 1024 },
                               dim3 { x: 1024, y: 1, z: 1 }, &mut args, 32 * 2 * mem::size_of::<U>())?;
@@ -998,7 +1005,7 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
                     output
                 );
 
-                let mut kernel = LinearGradient::<U, NI, NO>::new();
+                let mut kernel = LinearGradient::<U,A,NI,NO>::new();
 
                 kernel.launch(dim3 { x: (NI * NO) as c_uint, y: 1, z: 1 },
                               dim3 { x: 1024, y: 1, z: 1 }, &mut args, 32 * mem::size_of::<U>())?;

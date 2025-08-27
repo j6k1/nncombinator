@@ -20,7 +20,7 @@ use rcublas::api::PointerMode;
 use rcudnn::{Cudnn};
 use rcudnn_sys::cudnnHandle_t;
 use crate::arr::{Arr, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaVecView, DataTypeInfo, Kernel};
+use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVecView, DataTypeInfo, Kernel};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::error::{DeviceError, TrainingError, TypeConvertError};
@@ -210,7 +210,7 @@ impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceG
     where U: UnitValue<U> + DataTypeInfo,
           T: BatchSize,
           A: CudaAllocator,
-          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,A,N>>: TryFrom<&'a T,Error=TypeConvertError>,
+          for<'a> CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a T,Error=TypeConvertError>,
           for<'a> ReduceLinearBatch::<'a,U,A,N>: Kernel<Args=ReduceLinearBatchArgs<'a,U,A,N>> {
     #[inline]
     fn reduce<'a>(&self, input: &'a T) -> Result<CudaTensor1dPtr<U,A,N>, TrainingError> {
@@ -235,7 +235,7 @@ impl<U,A> Clone for DeviceGpu<U,A> where U: UnitValue<U> + Debug, A: CudaAllocat
             u:PhantomData::<U>,
             cublas:self.cublas.clone(),
             cudnn:self.cudnn.clone(),
-            allocator:Arc::clone(&self.allocator)
+            allocator:self.allocator.clone()
         }
     }
 }

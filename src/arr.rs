@@ -1520,10 +1520,8 @@ impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'a> CudaVec<U,<T as ToCuda<U,A>>::Output,A>: AsCudaMutPtr<'a> + WriteMemory<U>,
-          for<'a> T: AsCudaReadOnlyPtr<'a> + DeriveCudaConstPtr,
           for<'a> <T as ToCuda<U,A>>::Output: Debug + Default +
-                                              MemorySize + AsConstKernelPtr + AsKernelPtr +
-                                              AsCudaReadOnlyPtr<'a> + DeriveCudaConstPtr,
+                                              MemorySize + AsConstKernelPtr + AsKernelPtr,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U,A> {
     type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;
 

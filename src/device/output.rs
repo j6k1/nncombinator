@@ -1,5 +1,6 @@
 //! Implementation of the calculation process for output layers
 
+use core::fmt::Debug;
 use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use num_traits::FromPrimitive;
@@ -7,11 +8,11 @@ use rayon::iter::ParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IndexedParallelIterator;
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory, AsCudaMutPtr, WriteMemory};
+use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory, AsCudaMutPtr, WriteMemory, CudaPtr, AsCudaReadOnlyPtr, DeriveCudaConstPtr, MemorySize, AsConstKernelPtr, AsKernelPtr, AsMutPtr};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, LossLinearByCanonicalLink, LossLinearByCanonicalLinkArgs};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
-use crate::error::{TrainingError};
+use crate::error::{TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;
@@ -139,11 +140,17 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
     }
 }
 impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
-    where U: DataTypeInfo + UnitValue<U>,
+    where U: DataTypeInfo + UnitValue<U> + AsMutPtr<U>,
           A: CudaAllocator,
           DeviceGpu<U,A>: Device<U>,
+          Arr<U,N>: ToCuda<U,A,Output=CudaTensor1dPtr<U,A,N>>,
+          SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
+          CudaPtr<U,A>: WriteMemory<U>,
+          CudaTensor1dPtr<U,A,N>: Debug + Default + ReadMemory<U> + WriteMemory<U>,
+          CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: ReadMemory<U>,
           f64: From<U>,
           for<'b> &'b SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
+          for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b CudaVec<U,CudaTensor1dPtr<U,A,N>,A>,Error=TypeConvertError>,
           for<'b> LossLinearBatchByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearBatchByCanonicalLinkArgs<'b,U,A,N>>,
           for<'b> LossLinearByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearByCanonicalLinkArgs<'b,U,A,N>> {
     type IO = CudaTensor1dPtr<U,A,N>;
@@ -176,8 +183,6 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
     fn loss_linear_total<L: LossFunction<U>>(&self, exptected: &'a Arr<U,N>,
                                                 actual: &'a CudaTensor1dPtr<U,A,N>, lossf: &L)
         -> Result<U, TrainingError> {
-        let actual = CudaTensor1dPtrView::<'a,U,N>::from(actual);
-
         Ok(actual.read_to_vec()?.iter().zip(exptected.iter()).fold(U::default(), |mut acc, (&a, &e)| {
             acc += lossf.apply(a, e);
             acc
@@ -194,7 +199,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
 
         let actual = actual.try_into()?;
 
-        let output = CudaVec::<U,A,CudaTensor1dPtr<U,A,N>>::new(len, self.get_allocator())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(len, self.get_allocator())?;
 
         let mut args = LossLinearBatchByCanonicalLinkArgs::new(
             &expected_ptr,
@@ -204,7 +209,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
             expected.len()
         );
 
-        let mut kernel = LossLinearBatchByCanonicalLink::<'a, U, N>::new();
+        let mut kernel = LossLinearBatchByCanonicalLink::<'a,U,A,N>::new();
 
         kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (expected.len() as c_uint + 32 - 1) / 32, z: 1 },
                       dim3 { x: 32, y: 32, z: 1 }, &mut args, 0)?;
@@ -224,7 +229,6 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
                                                       actual: &'a Self::BatchIO,
                                                       lossf: &L)
                                                       -> Result<U, TrainingError> {
-        let actual = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(actual)?;
         let actual = SerializedVec::<U,Arr<U,N>>::try_from(actual.read_to_vec()?.into_boxed_slice())?;
 
         let n = f64::from_usize(exptected.len()).ok_or(TrainingError::TypeCastError(

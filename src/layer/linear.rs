@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::arr::{Arr, Arr2, DiffArr, IntoConverter};
 use crate::{Cons, Stack};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor2dPtr, ReadMemory, WriteMemory};
+use crate::cuda::{CudaPtr, CudaTensor1dPtr, CudaTensor2dPtr, ReadMemory, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
@@ -81,7 +81,8 @@ impl<U,P,I,PI,A,OP,const NI:usize,const NO:usize> LinearLayer<U,CudaTensor2dPtr<
           PI: Debug,
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
-          DeviceGpu<U,A>: Device<U> {
+          DeviceGpu<U,A>: Device<U>,
+          CudaPtr<U,A>: WriteMemory<U> {
     /// Attempt to create and return an instance of LinearLayer.
     /// # Arguments
     /// * `parent` - upper layer
@@ -165,6 +166,7 @@ impl<U,P,I,PI,A,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePersiste
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
           DeviceGpu<U,A>: Device<U>,
+          CudaPtr<U,A>: ReadMemory<U>,
           ConfigReadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
@@ -261,7 +263,9 @@ impl<T,U,P,I,PI,A,OP,const NI:usize,const NO:usize> Persistence<U,T,Linear>
           PI: Debug,
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
-          DeviceGpu<U,A>: Device<U> {
+          DeviceGpu<U,A>: Device<U>,
+          CudaPtr<U,A>: ReadMemory<U>,
+          CudaTensor2dPtr<U,A,NI,NO>: ReadMemory<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 
@@ -656,6 +660,7 @@ impl<U,P,I,PI,A,OP,const NI:usize,const NO:usize> LinearLayerInstantiation<U,Cud
           PI: Debug,
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     fn instantiation<B: OptimizerBuilder<U,DeviceGpu<U,A>,Output=OP>>(parent: P, device:&DeviceGpu<U,A>, ui: impl FnMut() -> U, bi: impl FnMut() -> U, b: &B)
         -> Result<LinearLayer<U,CudaTensor2dPtr<U,A,NI,NO>,CudaTensor1dPtr<U,A,NO>,P,DeviceGpu<U,A>,I,PI,OP,NI,NO>,LayerInstantiationError> {
@@ -766,6 +771,7 @@ impl<U,P,I,A,OP,const NI:usize,const NO:usize> DiffLinearLayer<U,CudaTensor2dPtr
           I: Debug + Send + Sync,
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     /// Attempt to create and return an instance of DiffLinearLayer.
     /// # Arguments
@@ -847,6 +853,7 @@ impl<U,P,I,A,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence
           I: Debug + Send + Sync,
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
+          CudaPtr<U,A>: ReadMemory<U>,
           DeviceGpu<U,A>: Device<U>,
           ConfigReadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
@@ -946,6 +953,7 @@ impl<T,U,P,I,A,OP,const NI:usize,const NO:usize> Persistence<U,T,Linear>
           I: Debug + Send + Sync,
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
+          CudaPtr<U,A>: ReadMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
@@ -1118,6 +1126,7 @@ impl<U,C,BC,P,I,A,OP,const NI:usize,const NO:usize> AskDiffInput<U> for DiffLine
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
           Arr<U,NO>: TryFrom<Vec<U>,Error=TypeConvertError>,
+          CudaPtr<U,A>: ReadMemory<U>,
           Self: PreTrain<U,OutStack=Cons<<P as PreTrain<U>>::OutStack,CudaTensor1dPtr<U,A,NO>>> {
     type DiffInput = Arr<U,NO>;
 
@@ -1183,6 +1192,7 @@ impl<U,P,I,A,OP,const NI:usize,const NO:usize> DiffLinearLayerInstantiation<U,Cu
           I: Debug + Send + Sync,
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     fn instantiation<UI: FnMut() -> U, BI: FnMut() -> U, B: OptimizerBuilder<U,DeviceGpu<U,A>,Output=OP>>(parent: P, device:&DeviceGpu<U,A>, ui: UI, bi: BI, b: &B)
         -> Result<DiffLinearLayer<U,CudaTensor2dPtr<U,A,NI,NO>,CudaTensor1dPtr<U,A,NO>,P,OP,DeviceGpu<U,A>,I,NI,NO>,LayerInstantiationError> {

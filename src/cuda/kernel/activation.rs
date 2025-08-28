@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 use libc::{c_void, size_t};
-use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaMutPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs};
+use crate::cuda::{AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaMutPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs};
 use crate::cuda::allocator::CudaAllocator;
 use crate::ope::UnitValue;
 
@@ -48,7 +48,7 @@ impl<'a,T,A,const N:usize> ActivationForwardArgs<'a,T,A,N>
     /// * `output` - Output buffer
     pub fn new(input:&'a CudaTensor1dPtrView<'a,T,N>,output:CudaTensor1dPtr<T,A,N>) -> ActivationForwardArgs<'a,T,A,N> {
         ActivationForwardArgs {
-            input: CudaConstPtr::new(input),
+            input: CudaConstPtr::new(&input),
             output: output,
             units_len: N,
             batch_size: 1
@@ -94,9 +94,9 @@ impl<'a,T,A,const N:usize> ActivationBackwardArgs<'a,T,A,N>
                loss: &'a CudaTensor1dPtrView<'a,T,N>,
                output: CudaTensor1dPtr<T,A,N>) -> ActivationBackwardArgs<'a,T,A,N> {
         ActivationBackwardArgs {
-            o: CudaConstPtr::new(o),
-            u: CudaConstPtr::new(u),
-            loss: CudaConstPtr::new(loss),
+            o: CudaConstPtr::new(&o),
+            u: CudaConstPtr::new(&u),
+            loss: CudaConstPtr::new(&loss),
             output: output,
             units_len: N,
             batch_size: 1
@@ -145,7 +145,7 @@ impl<'a,T,A,const N:usize> ActivationBatchForwardArgs<'a,T,A,N>
     pub fn new(input:&'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,output:CudaVec<T,CudaTensor1dPtr<T,A,N>,A>, batch_size: usize)
         -> ActivationBatchForwardArgs<'a,T,A,N> {
         ActivationBatchForwardArgs {
-            input: CudaConstPtr::new(input),
+            input: CudaConstPtr::new(&input),
             output: output,
             units_len: N,
             batch_size: batch_size
@@ -200,9 +200,9 @@ impl<'a,T,A,const N:usize> ActivationBatchBackwardArgs<'a,T,A,N>
                loss: &'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,
                output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,batch_size: usize) -> ActivationBatchBackwardArgs<'a,T,A,N> {
         ActivationBatchBackwardArgs {
-            o: CudaConstPtr::new(o),
-            u: CudaConstPtr::new(u),
-            loss: CudaConstPtr::new(loss),
+            o: CudaConstPtr::new(&o),
+            u: CudaConstPtr::new(&u),
+            loss: CudaConstPtr::new(&loss),
             output: output,
             units_len: N,
             batch_size: batch_size

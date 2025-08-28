@@ -146,6 +146,7 @@ impl<U,P,OP,I,PI,A,const N:usize> BatchNormalizationLayerInstantiation<U,CudaTen
           I: Debug + Send + Sync,
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
+          CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     fn with_params<B: OptimizerBuilder<U,DeviceGpu<U,A>,Output=OP>>(parent:P,device:&DeviceGpu<U,A>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
         -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>,LayerInstantiationError> {
@@ -310,6 +311,7 @@ impl<U,P,OP,I,PI,A,const N:usize> Persistence<U,TextFilePersistence<U>,Specializ
               A: CudaAllocator,
               I: Debug + Send + Sync,
               OP: Optimizer<U,DeviceGpu<U,A>>,
+              CudaPtr<U,A>: ReadMemory<U>,
               ConfigReadError: From<<U as FromStr>::Err>,
               DeviceGpu<U,A>: Device<U> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
@@ -396,6 +398,7 @@ impl<T,U,P,OP,I,PI,A,const N:usize> Persistence<U,T,Linear>
               I: Debug + Send + Sync,
               A: CudaAllocator,
               OP: Optimizer<U,DeviceGpu<U,A>>,
+              CudaPtr<U,A>: ReadMemory<U>,
               DeviceGpu<U,A>: Device<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;

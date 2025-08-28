@@ -461,13 +461,14 @@ impl<U,T,A> AsCudaPtr for CachedTensor<U,T,A>
         &self.ptr
     }
 }
-impl<'a,U,T,A> AsCudaMutPtr<'a> for CachedTensor<U,T,A>
-    where U: Debug + Default + 'a,
-          T: AsRawSlice<U> + 'a,
-          A: CudaAllocator + 'a,
+impl<U,T,A> AsCudaMutPtr<'_> for CachedTensor<U,T,A>
+    where U: Debug + Default,
+          T: AsRawSlice<U>,
+          A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
-    type Pointer = CudaMutPtr<'a,U,A>;
-    fn as_cuda_mut_ptr(&mut self) -> CudaMutPtr<'a, U, A> {
+    type Pointer = CudaMutPtr<'_,U,A>;
+    #[inline]
+    fn as_cuda_mut_ptr(&mut self) -> CudaMutPtr<'_,U,A> {
         CudaMutPtr::new(&mut self.ptr)
     }
 }

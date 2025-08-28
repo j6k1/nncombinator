@@ -1620,7 +1620,7 @@ impl<U,T,A> BatchSize for CudaVec<U,T,A>
           A: CudaAllocator {
     fn size(&self) -> usize {
         self.len
-    } 
+    }
 }
 impl<U,T,A> PointerElement for CudaVec<U,T,A>
     where U: UnitValue<U>,

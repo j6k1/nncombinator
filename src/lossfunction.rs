@@ -36,7 +36,7 @@ pub trait LossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Send + S
     /// # Arguments
     /// * `actual` - actual value
     /// * `expected` - expected value
-    fn linear_derive<'b>(&self,device:&D,actual:&'b I,expected:&'b I) -> Result<Self::Output,TrainingError>;
+    fn linear_derive(&self,device:&D,actual:&'a I,expected:&'a I) -> Result<Self::Output,TrainingError>;
 }
 /// Trait defining the implementation of a linear layer loss function with batch processing
 pub trait BatchLossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Send + Sync + 'static
@@ -47,7 +47,7 @@ pub trait BatchLossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Sen
     /// # Arguments
     /// * `expected` - expected value
     /// * `actual` - actual value
-    fn batch_linear_derive<'b>(&self,_: &D,expected: &'b I, actual: &'b I)
+    fn batch_linear_derive(&self,_: &D,expected: &'a I, actual: &'a I)
         -> Result<Self::Output, TrainingError>;
 }
 impl<'a,T,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for T
@@ -55,10 +55,10 @@ impl<'a,T,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for T
           U: UnitValue<U>,
           for<'b> ArrView<'b,U,N>: From<&'b I> {
     type Output = Arr<U,N>;
-    fn linear_derive<'b>(&self,_:&DeviceCpu<U>,actual: &'b I, expected: &'b I)
+    fn linear_derive(&self,_:&DeviceCpu<U>,actual: &'a I, expected: &'a I)
         -> Result<Arr<U,N>,TrainingError> {
-        let actual = ArrView::<'b,U,N>::from(actual);
-        let expected = ArrView::<'b,U,N>::from(expected);
+        let actual = ArrView::<'a,U,N>::from(actual);
+        let expected = ArrView::<'a,U,N>::from(expected);
 
         let mut loss = Arr::new();
 
@@ -75,11 +75,10 @@ impl<'a,T,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for 
           I: BatchSize,
           for<'b> SerializedVecView<'b,U,Arr<U,N>>: TryFrom<&'b I,Error=TypeConvertError> {
     type Output = SerializedVec<U,Arr<U,N>>;
-    fn batch_linear_derive<'b>(&self,_: &DeviceCpu<U>,expected: &'b I,
-                               actual: &'b I)
+    fn batch_linear_derive(&self,_: &DeviceCpu<U>,expected: &'a I, actual: &'a I)
         -> Result<SerializedVec<U,Arr<U, N>>, TrainingError> {
-        let actual = SerializedVecView::<'b,U,Arr<U,N>>::try_from(actual)?;
-        let expected = SerializedVecView::<'b,U,Arr<U,N>>::try_from(expected)?;
+        let actual = SerializedVecView::<'a,U,Arr<U,N>>::try_from(actual)?;
+        let expected = SerializedVecView::<'a,U,Arr<U,N>>::try_from(expected)?;
 
         let n = U::from_usize(actual.len()).ok_or(TrainingError::TypeCastError(
             String::from("An error occurred when casting the batch size data type to U.")
@@ -130,10 +129,10 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse
           for<'b> LinearMse<'b,U,A,N>: Kernel<Args=LinearMseArgs<'b,U,A,N>> {
     type Output = CudaTensor1dPtr<U,A,N>;
 
-    fn linear_derive<'b>(&self,device:&DeviceGpu<U,A>,actual: &'b I, expected: &'b I)
+    fn linear_derive(&self,device:&DeviceGpu<U,A>,actual: &'a I, expected: &'a I)
         -> Result<Self::Output,TrainingError> {
-        let actual = CudaTensor1dPtrView::<'b,U,N>::from(actual);
-        let expected = CudaTensor1dPtrView::<'b,U,N>::from(expected);
+        let actual = CudaTensor1dPtrView::<'a,U,N>::from(actual);
+        let expected = CudaTensor1dPtrView::<'a,U,N>::from(expected);
 
         let output = CudaTensor1dPtr::<U,A,N>::new(device.get_allocator())?;
 
@@ -157,11 +156,10 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchMse<'b,U,A,N>: Kernel<Args=LinearBatchMseArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
-    fn batch_linear_derive<'b>(&self, device: &DeviceGpu<U,A>, expected: &'b I,
-                                      actual: &'b I)
+    fn batch_linear_derive(&self, device: &DeviceGpu<U,A>, expected: &'a I, actual: &'a I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,A,N>,A>, TrainingError> {
-        let actual = CudaVecView::<'b,U,CudaTensor1dPtrView<'b,U,N>>::try_from(actual)?;
-        let expected = CudaVecView::<'b,U,CudaTensor1dPtrView<'b,U,N>>::try_from(expected)?;
+        let actual = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(actual)?;
+        let expected = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(expected)?;
 
         let output = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(expected.size(),device.get_allocator())?;
 
@@ -211,9 +209,9 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
           for<'b> LinearCrossEntropy<'b,U,A,N>: Kernel<Args=LinearCrossEntropyArgs<'b,U,A,N>> {
     type Output = CudaTensor1dPtr<U,A,N>;
 
-    fn linear_derive<'b>(&self,device:&DeviceGpu<U,A>,actual: &'b I, expected: &'b I) -> Result<Self::Output,TrainingError> {
-        let actual = CudaTensor1dPtrView::<'b,U,N>::from(actual);
-        let expected = CudaTensor1dPtrView::<'b,U,N>::from(expected);
+    fn linear_derive(&self,device:&DeviceGpu<U,A>,actual: &'a I, expected: &'a I) -> Result<Self::Output,TrainingError> {
+        let actual = CudaTensor1dPtrView::<'a,U,N>::from(actual);
+        let expected = CudaTensor1dPtrView::<'a,U,N>::from(expected);
 
         let output = CudaTensor1dPtr::<U,A,N>::new(device.get_allocator())?;
 
@@ -237,11 +235,10 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchCrossEntropy<'b,U,A,N>: Kernel<Args=LinearBatchCrossEntropyArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
-    fn batch_linear_derive<'b>(&self, device: &DeviceGpu<U,A>, expected: &'b I,
-                                      actual: &'b I)
+    fn batch_linear_derive(&self, device: &DeviceGpu<U,A>, expected: &'a I, actual: &'a I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,A,N>,A>, TrainingError> {
-        let actual = CudaVecView::<'b,U,CudaTensor1dPtrView<'b,U,N>>::try_from(actual)?;
-        let expected = CudaVecView::<'b,U,CudaTensor1dPtrView<'b,U,N>>::try_from(expected)?;
+        let actual = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(actual)?;
+        let expected = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(expected)?;
 
         let output = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(expected.size(),device.get_allocator())?;
 
@@ -291,9 +288,9 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
           for<'b> LinearCrossEntropyMulticlass<'b,U,A,N>: Kernel<Args=LinearCrossEntropyMulticlassArgs<'b,U,A,N>> {
     type Output = CudaTensor1dPtr<U,A,N>;
 
-    fn linear_derive<'b>(&self,device:&DeviceGpu<U,A>,actual: &'b I,expected: &'b I) -> Result<Self::Output,TrainingError> {
-        let actual = CudaTensor1dPtrView::<'b,U,N>::from(actual);
-        let expected = CudaTensor1dPtrView::<'b,U,N>::from(expected);
+    fn linear_derive(&self,device:&DeviceGpu<U,A>,actual: &'a I,expected: &'a I) -> Result<Self::Output,TrainingError> {
+        let actual = CudaTensor1dPtrView::<'a,U,N>::from(actual);
+        let expected = CudaTensor1dPtrView::<'a,U,N>::from(expected);
 
         let output = CudaTensor1dPtr::<U,A,N>::new(device.get_allocator())?;
 
@@ -317,11 +314,10 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchCrossEntropyMulticlass<'b,U,A,N>: Kernel<Args=LinearBatchCrossEntropyMulticlassArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
-    fn batch_linear_derive<'b>(&self, device: &DeviceGpu<U,A>, expected: &'b I,
-                               actual: &'b I)
+    fn batch_linear_derive(&self, device: &DeviceGpu<U,A>, expected: &'a I, actual: &'a I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,A,N>,A>, TrainingError> {
-        let actual = CudaVecView::<'b,U,CudaTensor1dPtrView<'b,U,N>>::try_from(actual)?;
-        let expected = CudaVecView::<'b,U,CudaTensor1dPtrView<'b,U,N>>::try_from(expected)?;
+        let actual = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(actual)?;
+        let expected = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(expected)?;
 
         let output = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(expected.size(),device.get_allocator())?;
 

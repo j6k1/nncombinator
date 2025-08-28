@@ -76,23 +76,23 @@ impl<'a,U,I,A,const N:usize> DeviceActivation<U,I,A,N> for DeviceCpu<U>
           for<'b> SerializedVecView<'b,U,Arr<U,N>>: TryFrom<&'b <I as BatchDataType>::Type,Error=TypeConvertError> {
     #[inline]
     fn apply(&self, f: &A, input: &I) -> Result<I, EvaluateError> {
-        Ok(f.apply(self, &input.into())?.into())
+        Ok(f.apply(self, input.into())?.into())
     }
 
     #[inline]
     fn derive(&self, f: &A, o: &I, loss: &I, u: &I) -> Result<I, TrainingError> {
-        Ok(f.derive(self, &o.into(), &loss.into(), &u.into())?.into())
+        Ok(f.derive(self, o.into(), loss.into(), u.into())?.into())
     }
 
     #[inline]
     fn batch_apply(&self, f: &A, input: &<I as BatchDataType>::Type) -> Result<<I as BatchDataType>::Type, TrainingError> {
-        Ok(f.batch_apply(self, &input.try_into()?)?.into_converter().try_into()?)
+        Ok(f.batch_apply(self, input.try_into()?)?.into_converter().try_into()?)
     }
 
     #[inline]
     fn batch_derive(&self, f: &A, o: &<I as BatchDataType>::Type, loss: &<I as BatchDataType>::Type, u: &<I as BatchDataType>::Type)
         -> Result<<I as BatchDataType>::Type, TrainingError> {
-        Ok(f.batch_derive(self, &o.try_into()?, &loss.try_into()?, &u.try_into()?).unwrap().into_converter().try_into()?)
+        Ok(f.batch_derive(self, o.try_into()?, loss.try_into()?, u.try_into()?).unwrap().into_converter().try_into()?)
     }
 
     fn is_canonical_link<L: LossFunction<U>>(&self, f: &A, l: &L) -> bool {
@@ -109,8 +109,8 @@ impl<'a,U,I,A,AC,const N:usize> DeviceActivation<U,I,A,N> for DeviceGpu<U,AC>
           CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: IntoConverter,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC> as IntoConverter>::Converter,Error=TypeConvertError>,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b <I as BatchDataType>::Type,Error=TypeConvertError>,
-          for<'b> A: Activation<U,I,CudaTensor1dPtr<U,AC,N>,Self>,
-          for<'b> A: BatchActivation<U,<I as BatchDataType>::Type,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,Self>,
+          for<'b> A: Activation<U,&'b I,CudaTensor1dPtr<U,AC,N>,Self>,
+          for<'b> A: BatchActivation<U,&'b <I as BatchDataType>::Type,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,Self>,
           for<'b> CudaTensor1dPtrView<'b,U,N>: From<&'b I>,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b CudaVec<U,I,AC>,Error=TypeConvertError> {
     #[inline]

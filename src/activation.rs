@@ -8,7 +8,7 @@ use cuda_runtime_sys::dim3;
 use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::UnitValue;
 use crate::arr::*;
-use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, MemorySize, WriteMemory};
+use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, MemorySize, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationBatchBackwardArgs, ActivationBatchForwardArgs, ActivationForwardArgs, ReLuBackward, ReLuBatchBackward, ReLuForward, ReLuBatchForward, SigmoidBackward, SigmoidBatchBackward, SigmoidForward, SigmoidBatchForward, SoftMaxBackward, SoftMaxBatchBackward, SoftMaxForward, SoftMaxBatchForward, SwishBackward, SwishBatchBackward, SwishForward, TanhBackward, TanhBatchBackward, TanhForward, TanhBatchForward, SwishBatchForward};
 use crate::device::*;
@@ -359,12 +359,14 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
     for Sigmoid<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           I: BatchDataType + BatchSize + 'a,
+          AC: CudaAllocator + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
+          DeviceGpu<U,AC>: Device<U>,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator + 'a,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: AsCudaMutPtr<Pointee=U,Allocator=AC>,
+          for<'b> CudaMutPtr<'b,U,AC>: AsMutKernelPtr,
           for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
           for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TrainingError>,
           for<'b> SigmoidBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
@@ -567,12 +569,14 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
     for ReLu<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           I: BatchDataType + BatchSize + 'a,
+          AC: CudaAllocator + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
+          DeviceGpu<U,AC>: Device<U>,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator + 'a,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: AsCudaMutPtr<Pointee=U,Allocator=AC>,
+          for<'b> CudaMutPtr<'b,U,AC>: AsMutKernelPtr,
           for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
           for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TrainingError>,
           for<'b> ReLuBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
@@ -769,12 +773,14 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
     for Swish<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           I: BatchDataType + BatchSize + 'a,
+          AC: CudaAllocator + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
+          DeviceGpu<U,AC>: Device<U>,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator + 'a,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: AsCudaMutPtr<Pointee=U,Allocator=AC>,
+          for<'b> CudaMutPtr<'b,U,AC>: AsMutKernelPtr,
           for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
           for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TrainingError>,
           for<'b> SwishBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
@@ -974,12 +980,14 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
     for Tanh<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           I: BatchDataType + BatchSize + 'a,
+          AC: CudaAllocator + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
+          DeviceGpu<U,AC>: Device<U>,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator + 'a,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: AsCudaMutPtr<Pointee=U,Allocator=AC>,
+          for<'b> CudaMutPtr<'b,U,AC>: AsMutKernelPtr,
           for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
           for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TrainingError>,
           for<'b> TanhBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
@@ -1200,12 +1208,14 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
     for SoftMax<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           I: BatchDataType + BatchSize + 'a,
+          AC: CudaAllocator + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
+          DeviceGpu<U,AC>: Device<U>,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator + 'a,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: AsCudaMutPtr<Pointee=U,Allocator=AC>,
+          for<'b> CudaMutPtr<'b,U,AC>: AsMutKernelPtr,
           for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
           for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TrainingError>,
           for<'b> SoftMaxBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,

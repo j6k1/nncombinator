@@ -8,7 +8,7 @@ use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
-use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, WriteMemory, ReadMemory, MemoryMoveTo, AsCudaMutPtr, AsKernelPtr, AsConstKernelPtr, MemorySize};
+use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, WriteMemory, ReadMemory, MemoryMoveTo, AsCudaMutPtr, AsKernelPtr, AsConstKernelPtr, MemorySize, CudaMutPtr};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
 use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator};
@@ -323,8 +323,8 @@ impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for Devi
           <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,A,N>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
           CudaTensor1dPtr<U,A,N>: AsMutVoidPtr + ReadMemory<U> + MemoryMoveTo<U,CudaTensor1dPtr<U,A,N>>,
           CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: IntoConverter,
-          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsKernelPtr + MemorySize + AsCudaMutPtr,
-          <CudaTensor1dPtr<U,A,N> as AsCudaMutPtr>::Pointer: WriteMemory<U>,
+          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsKernelPtr + MemorySize + AsCudaMutPtr<Pointee=U,Allocator=A>,
+          for<'a> CudaMutPtr<'a,U,A>: WriteMemory<U>,
           for<'a> CudaTensor1dPtrView<'a,U,N>: From<&'a I>,
           for<'a> CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           f64: From<U> {

@@ -239,9 +239,7 @@ impl<'a,A,const N:usize> Kernel for LossLinearByCanonicalLink<'a,f64,A,N> where 
 /// Defines the list that is passed to the cuda kernel function as arguments for forward propagation difference calculations.
 pub struct DiffLinearForwardArgs<'a,T,A,const NI:usize,const NO:usize>
     where T: Debug + Default,
-          A: CudaAllocator,
-          CudaTensor2dPtr<T,A,NI,NO>: AsCudaReadOnlyPtr,
-          <CudaTensor2dPtr<T,A,NI,NO> as AsCudaReadOnlyPtr>::Pointer: AsConstKernelPtr {
+          A: CudaAllocator {
     indexes: CudaPtr<usize,A>,
     input: CudaPtr<T,A>,
     units: CudaConstPtr<'a,CudaTensor2dPtr<T,A,NI,NO>>,

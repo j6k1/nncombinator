@@ -183,12 +183,12 @@ impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: D
         ShieldSlice::new(&mut arr.arr)
     }
 }
-impl<'a,T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
-    where T: UnitValue<T> + 'a,
-          A: CudaAllocator + 'a,
+impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
+    where T: UnitValue<T>,
+          A: CudaAllocator,
           CudaPtr<T,A>: WriteMemory<T>,
-          CudaTensor1dPtr<T,A,N>: AsCudaMutPtr,
-          <CudaTensor1dPtr<T,A,N> as AsCudaMutPtr>::Pointer: WriteMemory<T> {
+          CudaTensor1dPtr<T,A,N>: AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'a> CudaMutPtr<'a,T,A>: WriteMemory<T> {
     type Output = CudaTensor1dPtr<T,A,N>;
 
     fn to_cuda(self, device: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
@@ -203,8 +203,8 @@ impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a Arr<T,N>
     where T: UnitValue<T> + 'a,
           A: CudaAllocator + 'a,
           CudaPtr<T,A>: WriteMemory<T>,
-          CudaTensor1dPtr::<T,A,N>: AsCudaMutPtr,
-          <CudaTensor1dPtr<T,A,N> as AsCudaMutPtr>::Pointer: WriteMemory<T> {
+          CudaTensor1dPtr::<T,A,N>: AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'b> CudaMutPtr<'b,T,A>: WriteMemory<T> {
     type Output = CudaTensor1dPtr<T,A,N>;
 
     fn to_cuda(self, device: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
@@ -1543,7 +1543,7 @@ impl<'a,U,T,A> ToCuda<U,A> for &'a SerializedVec<U,T>
           CudaPtr<U,A>: WriteMemory<U>,
           for<'b> T: Debug + Default + SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> +
                      AsCudaMutPtr + DeriveCudaConstPtr + ToCuda<U,A>,
-          for<'b> <T as ToCuda<U,A>>::Output: Debug + Default + MemorySize + AsConstKernelPtr<'b> + AsKernelPtr<'b>,
+          for<'b> <T as ToCuda<U,A>>::Output: Debug + Default + MemorySize + AsConstKernelPtr + AsKernelPtr,
           for<'b> CudaVec<U,<T as ToCuda<U,A>>::Output,A>: AsCudaMutPtr + WriteMemory<U> {
     type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;
     fn to_cuda(self, device: &DeviceGpu<U,A>) -> Result<Self::Output,TypeConvertError> {

@@ -6,7 +6,7 @@ use libc::c_int;
 use rcublas_sys::{cublasDaxpy_v2, cublasSaxpy_v2, cublasStatus_t};
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::collection::Broadcast;
-use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsConstKernelPtr, AsKernelPtr, MemorySize};
+use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsConstKernelPtr, AsKernelPtr, MemorySize, AsCudaMutPtr, CudaMutPtr, AsCudaPtr};
 use crate::cuda::allocator::CudaAllocator;
 use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator, DeviceReduce};
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
@@ -113,11 +113,16 @@ impl<U,IO,const N:usize> DeviceBias<U,Arr<U,N>,IO,N> for DeviceCpu<U>
 impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for DeviceGpu<f32,A>
     where IO: BatchDataType + Debug,
           <IO as BatchDataType>::Type: BatchSize + Debug,
-          IO: From<CudaTensor1dPtr<f32,A,N>>,
+          IO: From<CudaTensor1dPtr<f32,A,N>> + AsCudaMutPtr<Pointee=f32,Allocator=A>,
           A: CudaAllocator,
-          CudaTensor1dPtr<f32,A,N>: ReadMemory<f32> + MemoryMoveTo<f32,CudaTensor1dPtr<f32,A,N>>,
+          CudaTensor1dPtr<f32,A,N>: ReadMemory<f32> +
+                                    AsCudaMutPtr<Pointee=f32,Allocator=A> +
+                                    AsMutPtr<f32> +
+                                    MemoryMoveTo<f32,CudaTensor1dPtr<f32,A,N>>,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: IntoConverter,
           <IO as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
+          for<'a> IO: AsCudaPtr<'a>,
+          for<'a> CudaMutPtr<'a,f32,A>: WriteMemory<f32> + AsMutPtr<f32>,
           for<'a> CudaTensor1dPtrView<'a,f32,N>: From<&'a IO>,
           for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f32,A,N>,f32,N> {
@@ -166,11 +171,9 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
     }
 
     fn backward_bias_weight_gradient<'a>(&self, loss: &'a IO) -> Result<CudaTensor1dPtr<f32,A,N>, TrainingError> {
-        let loss = CudaTensor1dPtrView::<f32,N>::from(loss);
-
         let mut p = CudaTensor1dPtr::<f32,A,N>::new(self.get_allocator())?;
 
-        p.memcpy(loss.as_ptr(),N)?;
+        loss.as_cuda_ptr().memcpy_to(&mut p.as_cuda_mut_ptr(),N)?;
 
         Ok(p)
     }

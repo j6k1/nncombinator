@@ -30,8 +30,8 @@ extern "C" {
 }
 /// Defines the list of passed to the cuda kernel function for the arguments of the activation function.
 pub struct ActivationForwardArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
-          A: CudaAllocator {
+    where T: DataTypeInfo + UnitValue<T> +'a,
+          A: CudaAllocator +'a {
     input: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
     /// Output buffer
     pub output: CudaTensor1dPtr<T,A,N>,
@@ -40,15 +40,15 @@ pub struct ActivationForwardArgs<'a,T,A,const N:usize>
 }
 /// Create an instance of an object representing the argument list at the time of activation function forward.
 impl<'a,T,A,const N:usize> ActivationForwardArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
-          A: CudaAllocator {
+    where T: DataTypeInfo + UnitValue<T> +'a,
+          A: CudaAllocator +'a {
     /// Create a ActivationForwardArgs instance
     /// # Arguments
     /// * `input` - Input buffer
     /// * `output` - Output buffer
     pub fn new(input:&'a CudaTensor1dPtrView<'a,T,N>,output:CudaTensor1dPtr<T,A,N>) -> ActivationForwardArgs<'a,T,A,N> {
         ActivationForwardArgs {
-            input: CudaConstPtr::new(&input),
+            input: CudaConstPtr::new(input),
             output: output,
             units_len: N,
             batch_size: 1
@@ -56,8 +56,8 @@ impl<'a,T,A,const N:usize> ActivationForwardArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for ActivationForwardArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
-          A: CudaAllocator {
+    where T: DataTypeInfo + UnitValue<T> + 'a,
+          A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             &mut self.input,
@@ -69,8 +69,8 @@ impl<'a,T,A,const N:usize> KernelArgs for ActivationForwardArgs<'a,T,A,N>
 }
 /// Create an instance of an object representing the argument list during error back propagation of the activation function.
 pub struct ActivationBackwardArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
-          A: CudaAllocator {
+    where T: DataTypeInfo + UnitValue<T> +'a,
+          A: CudaAllocator +'a {
     o: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
     u: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
     loss: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
@@ -81,8 +81,8 @@ pub struct ActivationBackwardArgs<'a,T,A,const N:usize>
 }
 /// Create an instance of an object representing the list of arguments during error back propagation of the activation function.
 impl<'a,T,A,const N:usize> ActivationBackwardArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
-          A: CudaAllocator {
+    where T: DataTypeInfo + UnitValue<T> +'a,
+          A: CudaAllocator +'a {
     /// Create a ActivationBackwardArgs instance
     /// # Arguments
     /// * `o` - Output values
@@ -94,9 +94,9 @@ impl<'a,T,A,const N:usize> ActivationBackwardArgs<'a,T,A,N>
                loss: &'a CudaTensor1dPtrView<'a,T,N>,
                output: CudaTensor1dPtr<T,A,N>) -> ActivationBackwardArgs<'a,T,A,N> {
         ActivationBackwardArgs {
-            o: CudaConstPtr::new(&o),
-            u: CudaConstPtr::new(&u),
-            loss: CudaConstPtr::new(&loss),
+            o: CudaConstPtr::new(o),
+            u: CudaConstPtr::new(u),
+            loss: CudaConstPtr::new(loss),
             output: output,
             units_len: N,
             batch_size: 1
@@ -104,7 +104,7 @@ impl<'a,T,A,const N:usize> ActivationBackwardArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for ActivationBackwardArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: DataTypeInfo + UnitValue<T> + 'a,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -120,10 +120,10 @@ impl<'a,T,A,const N:usize> KernelArgs for ActivationBackwardArgs<'a,T,A,N>
 /// Defines the list of arguments passed to the cuda kernel function as arguments
 /// to the activation function during batch execution.
 pub struct ActivationBatchForwardArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
-          A: CudaAllocator,
-          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+    where T: DataTypeInfo + UnitValue<T> +'a,
+          A: CudaAllocator +'a,
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     input: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
     /// Output buffer
     pub output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,
@@ -133,10 +133,10 @@ pub struct ActivationBatchForwardArgs<'a,T,A,const N:usize>
 /// Create an instance of an object representing the argument list
 /// of the forward propagation of the activation function during batch execution.
 impl<'a,T,A,const N:usize> ActivationBatchForwardArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: DataTypeInfo + UnitValue<T> + 'a,
           A: CudaAllocator + 'a,
-          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     /// Create a ActivationBatchForwardArgs instance
     /// # Arguments
     /// * `input` - Input buffer
@@ -145,7 +145,7 @@ impl<'a,T,A,const N:usize> ActivationBatchForwardArgs<'a,T,A,N>
     pub fn new(input:&'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,output:CudaVec<T,CudaTensor1dPtr<T,A,N>,A>, batch_size: usize)
         -> ActivationBatchForwardArgs<'a,T,A,N> {
         ActivationBatchForwardArgs {
-            input: CudaConstPtr::new(&input),
+            input: CudaConstPtr::new(input),
             output: output,
             units_len: N,
             batch_size: batch_size
@@ -153,10 +153,10 @@ impl<'a,T,A,const N:usize> ActivationBatchForwardArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for ActivationBatchForwardArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: DataTypeInfo + UnitValue<T> + 'a,
           A: CudaAllocator + 'a,
-          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             &mut self.input,
@@ -169,10 +169,10 @@ impl<'a,T,A,const N:usize> KernelArgs for ActivationBatchForwardArgs<'a,T,A,N>
 /// Create an instance of an object representing the list of arguments during error back propagation
 /// of the activation function during batch execution.
 pub struct ActivationBatchBackwardArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: DataTypeInfo + UnitValue<T> +'a,
           A: CudaAllocator + 'a,
-          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     o: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
     u: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
     loss: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
@@ -184,10 +184,10 @@ pub struct ActivationBatchBackwardArgs<'a,T,A,const N:usize>
 /// Instantiate an object representing the list of arguments during error back propagation
 /// of the activation function during batch execution.
 impl<'a,T,A,const N:usize> ActivationBatchBackwardArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: DataTypeInfo + UnitValue<T> +'a,
           A: CudaAllocator + 'a,
-          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     /// Create a ActivationBatchBackwardArgs instance
     /// # Arguments
     /// * `o` - Output values
@@ -200,9 +200,9 @@ impl<'a,T,A,const N:usize> ActivationBatchBackwardArgs<'a,T,A,N>
                loss: &'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,
                output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,batch_size: usize) -> ActivationBatchBackwardArgs<'a,T,A,N> {
         ActivationBatchBackwardArgs {
-            o: CudaConstPtr::new(&o),
-            u: CudaConstPtr::new(&u),
-            loss: CudaConstPtr::new(&loss),
+            o: CudaConstPtr::new(o),
+            u: CudaConstPtr::new(u),
+            loss: CudaConstPtr::new(loss),
             output: output,
             units_len: N,
             batch_size: batch_size
@@ -210,10 +210,10 @@ impl<'a,T,A,const N:usize> ActivationBatchBackwardArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for ActivationBatchBackwardArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: DataTypeInfo + UnitValue<T> +'a,
           A: CudaAllocator + 'a,
-          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<T,CudaTensor1dPtr<T,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             &mut self.o,
@@ -292,15 +292,15 @@ impl<'a,T,A,const N:usize> SigmoidBatchForward<'a,T,A,N> where T: DataTypeInfo +
 impl<'a,A,const N:usize> Kernel for SigmoidBatchForward<'a,f32,A,N>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr{
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr{
     const FUNC_PTR: *const c_void = sigmoid_forward_float as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
 }
 impl<'a,A,const N:usize> Kernel for SigmoidBatchForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr{
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr{
     const FUNC_PTR: *const c_void = sigmoid_forward_double as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
 }
@@ -322,15 +322,15 @@ impl<'a,T,A,const N:usize> SigmoidBatchBackward<'a,T,A,N> where T: DataTypeInfo 
 }
 impl<'a,A,const N:usize> Kernel for SigmoidBatchBackward<'a,f32,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = sigmoid_backward_float as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
 }
 impl<'a,A,const N:usize> Kernel for SigmoidBatchBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = sigmoid_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
 }
@@ -414,15 +414,15 @@ impl<'a,T,A,const N:usize> ReLuBatchForward<'a,T,A,N> where T: DataTypeInfo + Un
 }
 impl<'a,A,const N:usize> Kernel for ReLuBatchForward<'a,f32,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_forward_float as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
 }
 impl<'a,A,const N:usize> Kernel for ReLuBatchForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_forward_double as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
 }
@@ -444,15 +444,15 @@ impl<'a,T,A,const N:usize> ReLuBatchBackward<'a,T,A,N> where T: DataTypeInfo + U
 }
 impl<'a,A,const N:usize> Kernel for ReLuBatchBackward<'a,f32,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_float as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
 }
 impl<'a,A,const N:usize> Kernel for ReLuBatchBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
 }
@@ -530,15 +530,15 @@ impl<'a,T,A,const N:usize> SwishBatchForward<'a,T,A,N> where T: DataTypeInfo + U
 }
 impl<'a,A,const N:usize> Kernel for SwishBatchForward<'a,f32,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_forward_float as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
 }
 impl<'a,A,const N:usize> Kernel for SwishBatchForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_forward_double as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
 }
@@ -560,15 +560,15 @@ impl<'a,T,A,const N:usize> SwishBatchBackward<'a,T,A,N> where T: DataTypeInfo + 
 }
 impl<'a,A,const N:usize> Kernel for SwishBatchBackward<'a,f32,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_backward_float as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
 }
 impl<'a,A,const N:usize> Kernel for SwishBatchBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
 }
@@ -646,15 +646,15 @@ impl<'a,T,A,const N:usize> TanhBatchForward<'a,T,A,N> where T: DataTypeInfo + Un
 }
 impl<'a,A,const N:usize> Kernel for TanhBatchForward<'a,f32,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_forward_float as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
 }
 impl<'a,A,const N:usize> Kernel for TanhBatchForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_forward_double as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
 }
@@ -676,15 +676,15 @@ impl<'a,T,A,const N:usize> TanhBatchBackward<'a,T,A,N> where T: DataTypeInfo + U
 }
 impl<'a,A,const N:usize> Kernel for TanhBatchBackward<'a,f32,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_backward_float as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
 }
 impl<'a,A,const N:usize> Kernel for TanhBatchBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
 }
@@ -762,15 +762,15 @@ impl<'a,T,A,const N:usize> SoftMaxBatchForward<'a,T,A,N> where T: DataTypeInfo +
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBatchForward<'a,f32,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_forward_float as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBatchForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_forward_double as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
 }
@@ -792,15 +792,15 @@ impl<'a,T,A,const N:usize> SoftMaxBatchBackward<'a,T,A,N> where T: DataTypeInfo 
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBatchBackward<'a,f32,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_backward_float as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBatchBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<'a>,
-          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr<'a>>::Pointer: AsMutKernelPtr {
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr,
+          <CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as AsCudaMutPtr>::Pointer: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
 }

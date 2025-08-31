@@ -152,7 +152,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           DeviceGpu<U,A>:  Device<U>,
           for<'b> A: CudaAllocator + 'b,
           CudaPtr<U,A>: WriteMemory<U>,
-          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
+          for<'b> CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchMse<'b,U,A,N>: Kernel<Args=LinearBatchMseArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
@@ -231,7 +231,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           DeviceGpu<U,A>:  Device<U>,
           for<'b> A: CudaAllocator + 'b,
           CudaPtr<U,A>: WriteMemory<U>,
-          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
+          for<'b> CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchCrossEntropy<'b,U,A,N>: Kernel<Args=LinearBatchCrossEntropyArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
@@ -310,7 +310,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           for<'b> A: CudaAllocator + 'b,
           DeviceGpu<U,A>:  Device<U>,
           CudaPtr<U,A>: WriteMemory<U> + TryFrom<U,Error=CudaError>,
-          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
+          for<'b> CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
           for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchCrossEntropyMulticlass<'b,U,A,N>: Kernel<Args=LinearBatchCrossEntropyMulticlassArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;

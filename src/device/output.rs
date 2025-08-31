@@ -20,8 +20,8 @@ use crate::ope::UnitValue;
 /// Trait that defines the implementation of various calculation processes in the linear output layer
 pub trait DeviceLinearOutput<'a,U,const N:usize>: Device<U>
     where U: UnitValue<U> {
-    type IO: BatchDataType;
-    type BatchIO: BatchSize;
+    type IO: BatchDataType + 'static;
+    type BatchIO: BatchSize + 'static;
     /// Calculation of Losses
     /// # Arguments
     /// * `expected` - expected value
@@ -141,15 +141,15 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
 }
 impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
     where U: DataTypeInfo + UnitValue<U> + AsMutPtr<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           DeviceGpu<U,A>: Device<U>,
           Arr<U,N>: ToCuda<U,A,Output=CudaTensor1dPtr<U,A,N>>,
           SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
           CudaPtr<U,A>: WriteMemory<U>,
           CudaTensor1dPtr<U,A,N>: Debug + Default + ReadMemory<U> + WriteMemory<U>,
-          CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: ReadMemory<U>,
+          CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: ReadMemory<U> + 'a,
+          SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
           f64: From<U>,
-          for<'b> &'b SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b CudaVec<U,CudaTensor1dPtr<U,A,N>,A>,Error=TypeConvertError>,
           for<'b> LossLinearBatchByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearBatchByCanonicalLinkArgs<'b,U,A,N>>,
           for<'b> LossLinearByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearByCanonicalLinkArgs<'b,U,A,N>> {

@@ -11,7 +11,7 @@ use rcudnn::utils::DataType;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t, cudnnDataType_t};
 use crate::arr::{Arr, AsView, IntoConverter, MakeView, MakeViewMut, SerializedVec, SliceSize};
 use crate::cuda::allocator::{CudaAllocator, DeviceAlloc, DeviceAllocator, HostAlloc, HostAllocator, MemoryPoolAllocator};
-use crate::cuda::private::AsConstKernelPtrBase;
+use crate::cuda::private::{AsConstKernelPtrBase, AsKernelPtrBase, AsMutKernelPtrBase};
 use crate::device::{DeviceGpu};
 use crate::error::{CudaError, CudaRuntimeError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
@@ -69,22 +69,22 @@ pub(crate) mod private {
     }
 }
 /// Trait defining the conversion to an immutable pointer type passed to the cuda kernel
-pub trait AsConstKernelPtr: private::AsConstKernelPtrBase {
+pub trait AsConstKernelPtr: AsConstKernelPtrBase {
 }
 /// Trait defining the conversion to an mutable pointer type passed to the cuda kernel
-pub trait AsMutKernelPtr: private::AsMutKernelPtrBase {
+pub trait AsMutKernelPtr: AsMutKernelPtrBase {
 }
 /// Trait defining the conversion to an pointer type passed to the cuda kernel
-pub trait AsKernelPtr: private::AsKernelPtrBase {
+pub trait AsKernelPtr: AsKernelPtrBase {
 }
-impl<T> AsConstKernelPtr for T where T: private::AsConstKernelPtrBase {}
-impl<T> AsMutKernelPtr for T where T: private::AsMutKernelPtrBase {}
-impl<T> private::AsKernelPtrBase for T where T: AsMutKernelPtr {
+impl<'a,T> AsConstKernelPtr for T where T: AsConstKernelPtrBase {}
+impl<'a,T> AsMutKernelPtr for T where T: AsMutKernelPtrBase {}
+impl<'a,T> AsKernelPtrBase for T where T: AsMutKernelPtr {
     fn as_kernel_ptr(&mut self) -> *mut c_void {
         self.as_mut_kernel_ptr()
     }
 }
-impl<T> AsKernelPtr for T where T: private::AsKernelPtrBase {
+impl<'a,T> AsKernelPtr for T where T: AsKernelPtrBase {
 
 }
 /// Obtaining an immutable void pointer
@@ -104,16 +104,16 @@ pub trait AsMutPtr<T> {
     fn as_mut_ptr(&mut self) -> *mut T;
 }
 /// Trait that defines the ability to get a reference to a cuda read only pointer.
-pub trait AsCudaReadOnlyPtr<'a> {
-    /// Returned const cuda pointer reference
-    type Pointer;
-    fn as_cuda_read_only_ptr(&'a self) -> Self::Pointer;
+pub trait AsCudaReadOnlyPtr {
+    /// The type of the elements in the referenced CudaPtr
+    type Pointee;
+    fn as_cuda_read_only_ptr<'a>(&'a self) -> CudaPtrRef<'a,Self::Pointee>;
 }
 /// Trait that defines the ability to get a reference to a cuda smart pointer.
-pub trait AsCudaPtr {
+pub trait AsCudaPtr<'a> {
     /// Returned const cuda pointer reference
     type Pointer: AsConstKernelPtr;
-    fn as_cuda_ptr(&self) -> &Self::Pointer;
+    fn as_cuda_ptr(&'a self) -> &'a Self::Pointer;
 }
 pub trait DeriveCudaConstPtr {}
 pub trait TryClone: Sized {
@@ -121,8 +121,8 @@ pub trait TryClone: Sized {
 
     fn try_clone(&self) -> Result<Self,Self::Error>;
 }
-pub trait CudaView {
-    type Type;
+pub trait CudaView<'a> {
+    type Type: 'a;
 }
 impl AsVoidPtr for i32 {
     fn as_void_ptr(&self) -> *const libc::c_void {
@@ -194,37 +194,37 @@ impl AsMutVoidPtr for f64 {
         self as *mut f64 as *mut libc::c_void
     }
 }
-impl private::AsMutKernelPtrBase for i32 {
+impl AsMutKernelPtrBase for i32 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut i32 as *mut libc::c_void
     }
 }
-impl private::AsMutKernelPtrBase for u32 {
+impl AsMutKernelPtrBase for u32 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut u32 as *mut libc::c_void
     }
 }
-impl private::AsMutKernelPtrBase for i64 {
+impl AsMutKernelPtrBase for i64 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut i64 as *mut libc::c_void
     }
 }
-impl private::AsMutKernelPtrBase for u64 {
+impl AsMutKernelPtrBase for u64 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut u64 as *mut libc::c_void
     }
 }
-impl private::AsMutKernelPtrBase for usize {
+impl AsMutKernelPtrBase for usize {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
        self as *mut usize as *mut libc::c_void
     }
 }
-impl private::AsMutKernelPtrBase for f32 {
+impl AsMutKernelPtrBase for f32 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         self as *mut f32 as *mut libc::c_void
     }
 }
-impl private::AsMutKernelPtrBase for f64 {
+impl AsMutKernelPtrBase for f64 {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         self as *mut f64 as *mut libc::c_void
     }
@@ -430,12 +430,12 @@ impl<T,A> CudaPtr<T,A>
         Ok(ptr)
     }
 }
-impl<T,A> private::AsConstKernelPtrBase for CudaPtr<T,A> where A: CudaAllocator {
+impl<T,A> AsConstKernelPtrBase for CudaPtr<T,A> where A: CudaAllocator {
     fn as_const_kernel_ptr(&self) -> *mut libc::c_void {
         &self.ptr as *const *mut T as *mut libc::c_void
     }
 }
-impl<T,A> private::AsMutKernelPtrBase for CudaPtr<T,A> where A: CudaAllocator  {
+impl<T,A> AsMutKernelPtrBase for CudaPtr<T,A> where A: CudaAllocator  {
     fn as_mut_kernel_ptr(&mut self) -> *mut libc::c_void {
         &mut self.ptr as *mut *mut T as *mut libc::c_void
     }
@@ -460,9 +460,9 @@ impl<T,A> AsMutPtr<T> for CudaPtr<T,A> where A: CudaAllocator  {
         self.ptr
     }
 }
-impl<'a,T,A> AsCudaReadOnlyPtr<'a> for CudaPtr<T,A> where T: Default + Debug + 'a, A: CudaAllocator + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a, T> {
+impl<'a,T,A> AsCudaReadOnlyPtr for CudaPtr<T,A> where T: Default + Debug + 'a, A: CudaAllocator + 'a {
+    type Pointee = T;
+    fn as_cuda_read_only_ptr<'b>(&'b self) -> CudaPtrRef<'b,T> {
         CudaPtrRef::from(&self.ptr)
     }
 }
@@ -777,7 +777,7 @@ impl<'a,T> From<&'a *mut T> for CudaPtrRef<'a,T> {
         }
     }
 }
-impl<'a,T> private::AsConstKernelPtrBase for CudaPtrRef<'a,T> {
+impl<'a,T> AsConstKernelPtrBase for CudaPtrRef<'a,T> {
     fn as_const_kernel_ptr(&self) -> *mut libc::c_void {
         self.ptr as *const *mut T as *mut libc::c_void
     }
@@ -814,7 +814,7 @@ impl<'a,T> CudaConstPtr<'a,T> where T: AsConstKernelPtr {
         }
     }
 }
-impl<'a,T> private::AsKernelPtrBase for CudaConstPtr<'a,T> where T: AsConstKernelPtr {
+impl<'a,T> AsKernelPtrBase for CudaConstPtr<'a,T> where T: AsConstKernelPtr {
     fn as_kernel_ptr(&mut self) -> *mut c_void {
         self.ptr.as_const_kernel_ptr()
     }
@@ -876,17 +876,17 @@ impl<T,A,const N:usize> BatchDataType for CudaTensor1dPtr<T,A,N>
           A: CudaAllocator {
     type Type = CudaVec<T,CudaTensor1dPtr<T,A,N>,A>;
 }
-impl<'a,T,A,const N:usize> AsCudaReadOnlyPtr<'a> for CudaTensor1dPtr<T,A,N>
-    where T: Default + Debug + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
+impl<T,A,const N:usize> AsCudaReadOnlyPtr for CudaTensor1dPtr<T,A,N>
+    where T: Default + Debug,
+          A: CudaAllocator {
+    type Pointee = T;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'a>(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
-impl<T,A,const N:usize> AsCudaPtr for CudaTensor1dPtr<T,A,N>
+impl<T,A,const N:usize> AsCudaPtr<'_> for CudaTensor1dPtr<T,A,N>
     where T: Default + Debug,
           A: CudaAllocator {
     type Pointer = CudaPtr<T,A>;
@@ -894,22 +894,23 @@ impl<T,A,const N:usize> AsCudaPtr for CudaTensor1dPtr<T,A,N>
         &self.ptr
     }
 }
-impl<'a,T,A,const N:usize> AsCudaMutPtr<'a> for CudaTensor1dPtr<T,A,N>
-    where T: Default + Debug + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaMutPtr<'a,T,A>;
+impl<T,A,const N:usize> AsCudaMutPtr for CudaTensor1dPtr<T,A,N>
+    where T: Default + Debug,
+          A: CudaAllocator {
+    type Pointee = T;
+    type Allocator = A;
 
     #[inline]
-    fn as_cuda_mut_ptr(&mut self) -> CudaMutPtr<'a,T,A> {
+    fn as_cuda_mut_ptr<'a>(&'a mut self) -> CudaMutPtr<'a,T,A> {
         CudaMutPtr::new(&mut self.ptr)
     }
 }
 impl<'a,T,A,const N:usize> TryFrom<&'a CudaTensor1dPtr<T,A,N>> for CudaTensor1dPtr<T,A,N>
     where T: Default + Debug,
           A: CudaAllocator,
-          Self: AsPtr<T> + AsCudaPtr + AsCudaMutPtr<'a>,
-          <Self as AsCudaPtr>::Pointer: AsPtr<T> + MemoryMoveTo<T,<Self as AsCudaMutPtr<'a>>::Pointer>,
-          <Self as AsCudaMutPtr<'a>>::Pointer: AsMutPtr<T>,
+          Self: AsPtr<T> + AsCudaPtr<'a> + AsCudaMutPtr<Pointee=T,Allocator=A>,
+          <Self as AsCudaPtr<'a>>::Pointer: AsPtr<T> + MemoryMoveTo<T,CudaMutPtr<'a,T,A>>,
+          CudaMutPtr<'a,T,A>: AsMutPtr<T>,
           CudaPtr<T,A>: WriteMemory<T> {
     type Error = CudaError;
     fn try_from(src: &'a CudaTensor1dPtr<T,A,N>) -> Result<Self, Self::Error> {
@@ -920,13 +921,13 @@ impl<'a,T,A,const N:usize> TryFrom<&'a CudaTensor1dPtr<T,A,N>> for CudaTensor1dP
         Ok(dst)
     }
 }
-impl<'a,T,A,const N:usize> TryClone for CudaTensor1dPtr<T,A,N>
+impl<T,A,const N:usize> TryClone for CudaTensor1dPtr<T,A,N>
     where T: Default + Debug,
           A: CudaAllocator,
-          Self: AsPtr<T> + AsCudaPtr + AsCudaMutPtr<'a>,
-          <Self as AsCudaPtr>::Pointer: AsPtr<T> + MemoryMoveTo<T,<Self as AsCudaMutPtr<'a>>::Pointer>,
-          <Self as AsCudaMutPtr<'a>>::Pointer: AsMutPtr<T>,
-          CudaPtr<T,A>: WriteMemory<T> {
+          CudaPtr<T,A>: WriteMemory<T>,
+          for<'a> Self: AsPtr<T> + AsCudaPtr<'a> + AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'a> <Self as AsCudaPtr<'a>>::Pointer: AsPtr<T> + MemoryMoveTo<T,CudaMutPtr<'a,T,A>>,
+          for<'a> CudaMutPtr<'a,T,A>: AsMutPtr<T> {
     type Error = CudaError;
     fn try_clone(&self) -> Result<Self,CudaError> {
         let mut dst = CudaTensor1dPtr::new(&self.ptr.allocator)?;
@@ -990,7 +991,7 @@ impl<'a,T,A,const N:usize> From<&'a CudaTensor1dPtr<T,A,N>> for CudaTensor1dPtrV
         }
     }
 }
-impl<'a,T,A,const N:usize> CudaView for &'a CudaTensor1dPtr<T,A,N>
+impl<'a,T,A,const N:usize> CudaView<'a> for &'a CudaTensor1dPtr<T,A,N>
     where T: Debug + Default,
           A: CudaAllocator {
     type Type = CudaTensor1dPtrView<'a,T,N>;
@@ -1006,11 +1007,11 @@ impl<'a,T,const N:usize> From<&'a CudaTensor1dPtrView<'a,T,N>> for CudaTensor1dP
 impl<'a,T,const N:usize> PointerElement for CudaTensor1dPtrView<'a,T,N> where T: Default + Debug {
     type Element = T;
 }
-impl<'a,T,const N:usize> AsCudaReadOnlyPtr<'a> for CudaTensor1dPtrView<'a,T,N> where T: Default + Debug + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
+impl<'a,T,const N:usize> AsCudaReadOnlyPtr for CudaTensor1dPtrView<'a,T,N> where T: Default + Debug + 'a {
+    type Pointee = T;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'b>(&'b self) -> CudaPtrRef<'b,T> {
         self.ptr.clone()
     }
 }
@@ -1083,16 +1084,16 @@ impl<T,A,const N1:usize,const N2:usize> PointerElement for CudaTensor2dPtr<T,A,N
           A: CudaAllocator {
     type Element = T;
 }
-impl<'a,T,A,const N1:usize,const N2:usize> AsCudaReadOnlyPtr<'a> for CudaTensor2dPtr<T,A,N1,N2>
-    where T: Default + Debug + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
+impl<T,A,const N1:usize,const N2:usize> AsCudaReadOnlyPtr for CudaTensor2dPtr<T,A,N1,N2>
+    where T: Default + Debug,
+          A: CudaAllocator {
+    type Pointee = T;
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'a>(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
-impl<T,A,const N1:usize,const N2:usize> AsCudaPtr for CudaTensor2dPtr<T,A,N1,N2>
+impl<T,A,const N1:usize,const N2:usize> AsCudaPtr<'_> for CudaTensor2dPtr<T,A,N1,N2>
     where T: Default + Debug,
           A: CudaAllocator {
     type Pointer = CudaPtr<T,A>;
@@ -1101,23 +1102,24 @@ impl<T,A,const N1:usize,const N2:usize> AsCudaPtr for CudaTensor2dPtr<T,A,N1,N2>
         &self.ptr
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize> AsCudaMutPtr<'a> for CudaTensor2dPtr<T,A,N1,N2>
-    where T: Default + Debug + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaMutPtr<'a,T,A>;
+impl<T,A,const N1:usize,const N2:usize> AsCudaMutPtr for CudaTensor2dPtr<T,A,N1,N2>
+    where T: Default + Debug,
+          A: CudaAllocator {
+    type Pointee = T;
+    type Allocator = A;
 
     #[inline]
-    fn as_cuda_mut_ptr(&mut self) -> CudaMutPtr<'a,T,A> {
+    fn as_cuda_mut_ptr<'a>(&'a mut self) -> CudaMutPtr<'a,T,A> {
         CudaMutPtr::new(&mut self.ptr)
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize> TryClone for CudaTensor2dPtr<T,A,N1,N2>
+impl<T,A,const N1:usize,const N2:usize> TryClone for CudaTensor2dPtr<T,A,N1,N2>
     where T: Default + Debug,
           A: CudaAllocator,
-          Self: AsPtr<T> + AsCudaPtr + AsCudaMutPtr<'a>,
-          <Self as AsCudaPtr>::Pointer: AsPtr<T> + MemoryMoveTo<T,<Self as AsCudaMutPtr<'a>>::Pointer>,
-          <Self as AsCudaMutPtr<'a>>::Pointer: AsMutPtr<T>,
-          CudaPtr<T,A>: WriteMemory<T> {
+          CudaMutPtr<'a,T,A>: AsMutPtr<T>,
+          CudaPtr<T,A>: WriteMemory<T>,
+          for<'a> Self: AsPtr<T> + AsCudaPtr<'a> + AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'a> <Self as AsCudaPtr<'a>>::Pointer: AsPtr<T> + MemoryMoveTo<T,A> {
     type Error = CudaError;
     fn try_clone(&self) -> Result<Self,CudaError> {
         let mut dst = CudaTensor2dPtr::new(&self.ptr.allocator)?;
@@ -1161,11 +1163,11 @@ pub struct CudaTensor2dPtrView<'a,T,const N1:usize,const N2:usize>
 impl<'a,T,const N1:usize,const N2:usize> PointerElement for CudaTensor2dPtrView<'a,T,N1,N2> where T: Default + Debug {
     type Element = T;
 }
-impl<'a,T,const N1:usize,const N2:usize> AsCudaReadOnlyPtr<'a> for CudaTensor2dPtrView<'a,T,N1,N2> where T: Default + Debug + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
+impl<'a,T,const N1:usize,const N2:usize> AsCudaReadOnlyPtr for CudaTensor2dPtrView<'a,T,N1,N2> where T: Default + Debug + 'a {
+    type Pointee = T;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'b>(&'b self) -> CudaPtrRef<'b,T> {
         self.ptr.clone()
     }
 }
@@ -1255,17 +1257,17 @@ impl<T,A,const N1:usize,const N2:usize,const N3:usize> PointerElement for CudaTe
           A: CudaAllocator {
     type Element = T;
 }
-impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaReadOnlyPtr<'a> for CudaTensor3dPtr<T,A,N1,N2,N3>
-    where T: Default + Debug + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
+impl<T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaReadOnlyPtr for CudaTensor3dPtr<T,A,N1,N2,N3>
+    where T: Default + Debug,
+          A: CudaAllocator {
+    type Pointee = T;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'a>(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
-impl<T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaPtr for CudaTensor3dPtr<T,A,N1,N2,N3>
+impl<T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaPtr<'_> for CudaTensor3dPtr<T,A,N1,N2,N3>
     where T: Default + Debug,
           A: CudaAllocator {
     type Pointer = CudaPtr<T,A>;
@@ -1274,23 +1276,24 @@ impl<T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaPtr for CudaTensor3
         &self.ptr
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaMutPtr<'a> for CudaTensor3dPtr<T,A,N1,N2,N3>
-    where T: Default + Debug + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaMutPtr<'a,T,A>;
+impl<T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaMutPtr for CudaTensor3dPtr<T,A,N1,N2,N3>
+    where T: Default + Debug,
+          A: CudaAllocator {
+    type Pointee = T;
+    type Allocator = A;
 
     #[inline]
-    fn as_cuda_mut_ptr(&mut self) -> CudaMutPtr<'a,T,A> {
+    fn as_cuda_mut_ptr<'a>(&'a mut self) -> CudaMutPtr<'a,T,A> {
         CudaMutPtr::new(&mut self.ptr)
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> TryClone for CudaTensor3dPtr<T,A,N1,N2,N3>
+impl<T,A,const N1:usize,const N2:usize,const N3:usize> TryClone for CudaTensor3dPtr<T,A,N1,N2,N3>
     where T: Default + Debug,
           A: CudaAllocator,
-          Self: AsPtr<T> + AsCudaPtr + AsCudaMutPtr<'a>,
-          <Self as AsCudaPtr>::Pointer: AsPtr<T> + MemoryMoveTo<T,<Self as AsCudaMutPtr<'a>>::Pointer>,
-          <Self as AsCudaMutPtr<'a>>::Pointer: AsMutPtr<T>,
-          CudaPtr<T,A>: WriteMemory<T> {
+          CudaPtr<T,A>: WriteMemory<T>,
+          for<'a> Self: AsPtr<T> + AsCudaPtr<'a> + AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'a> <Self as AsCudaPtr<'a>>::Pointer: AsPtr<T> + MemoryMoveTo<T,CudaMutPtr<'a,T,A>>,
+          for<'a> CudaMutPtr<'a,T,A>: AsMutPtr<T> {
     type Error = CudaError;
     fn try_clone(&self) -> Result<Self,CudaError> {
         let mut dst = CudaTensor3dPtr::new(&self.ptr.allocator)?;
@@ -1335,12 +1338,12 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> PointerElement for CudaT
     where T: Default + Debug {
     type Element = T;
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsCudaReadOnlyPtr<'a> for CudaTensor3dPtrView<'a,T,N1,N2,N3>
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsCudaReadOnlyPtr for CudaTensor3dPtrView<'a,T,N1,N2,N3>
     where T: Default + Debug + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
+    type Pointee = T;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'b>(&'b self) -> CudaPtrRef<'b,T> {
         self.ptr.clone()
     }
 }
@@ -1439,17 +1442,17 @@ impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> PointerEle
           A: CudaAllocator {
     type Element = T;
 }
-impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaReadOnlyPtr<'a> for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
-    where T: Default + Debug + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
+impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaReadOnlyPtr for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
+    where T: Default + Debug,
+          A: CudaAllocator {
+    type Pointee = T;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'a>(&'a self) -> CudaPtrRef<'a,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
-impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaPtr for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
+impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaPtr<'_> for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
     where T: Default + Debug,
           A: CudaAllocator {
     type Pointer = CudaPtr<T,A>;
@@ -1458,23 +1461,24 @@ impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaPtr 
         &self.ptr
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaMutPtr<'a> for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
-    where T: Default + Debug + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaMutPtr<'a,T,A>;
+impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaMutPtr for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
+    where T: Default + Debug,
+          A: CudaAllocator {
+    type Pointee = T;
+    type Allocator = A;
 
     #[inline]
-    fn as_cuda_mut_ptr(&mut self) -> CudaMutPtr<'a,T,A> {
+    fn as_cuda_mut_ptr<'a>(&'a mut self) -> CudaMutPtr<'a,T,A> {
         CudaMutPtr::new(&mut self.ptr)
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> TryClone for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
+impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> TryClone for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
     where T: Default + Debug,
           A: CudaAllocator,
-          Self: AsPtr<T> + AsCudaPtr + AsCudaMutPtr<'a>,
-          <Self as AsCudaPtr>::Pointer: AsPtr<T> + MemoryMoveTo<T,<Self as AsCudaMutPtr<'a>>::Pointer>,
-          <Self as AsCudaMutPtr<'a>>::Pointer: AsMutPtr<T>,
-          CudaPtr<T,A>: WriteMemory<T> {
+          CudaPtr<T,A>: WriteMemory<T>,
+          for<'a> Self: AsPtr<T> + AsCudaPtr<'a> + AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'a> <Self as AsCudaPtr<'a>>::Pointer: AsPtr<T> + MemoryMoveTo<T,CudaMutPtr<'a,T,A>>,
+          for<'a> CudaMutPtr<'a,T,A>: AsMutPtr<T> {
     type Error = CudaError;
     fn try_clone(&self) -> Result<Self,CudaError> {
         let mut dst = CudaTensor4dPtr::new(&self.ptr.allocator)?;
@@ -1511,12 +1515,12 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> PointerEl
     where T: Default + Debug{
     type Element = T;
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaReadOnlyPtr<'a> for CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaReadOnlyPtr for CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>
     where T: Default + Debug + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
+    type Pointee = T;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'b>(&'b self) -> CudaPtrRef<'b,T> {
         self.ptr.clone()
     }
 }
@@ -1562,8 +1566,8 @@ pub struct CudaVec<U,T,A>
 }
 impl<U,T,A> CudaVec<U,T,A>
     where U: UnitValue<U>,
-          T: AsConstKernelPtr + AsKernelPtr + MemorySize,
-          A: CudaAllocator + Debug {
+          A: CudaAllocator + Debug,
+          for<'a> T: AsConstKernelPtr + AsKernelPtr + MemorySize {
     /// Create an instance of CudaVec
     /// # Arguments
     /// * `size`- Number of value elements to be allocated
@@ -1585,9 +1589,9 @@ impl<U,T,A> CudaVec<U,T,A>
 }
 impl<U,T,A> CudaVec<U,T,A>
     where U: UnitValue<U>,
-          T: AsConstKernelPtr + AsKernelPtr + MemorySize,
           A: CudaAllocator + Debug,
-          CudaPtr<U,A>: WriteMemory<U> {
+          CudaPtr<U,A>: WriteMemory<U>,
+          for<'a> T: AsConstKernelPtr + AsKernelPtr + MemorySize {
     /// Create an instance of CudaVec
     /// # Arguments
     /// * `size`- Number of value elements to be allocated
@@ -1616,52 +1620,53 @@ impl<U,T,A> CudaVec<U,T,A>
 }
 impl<U,T,A> BatchSize for CudaVec<U,T,A>
     where U: UnitValue<U>,
-          T: AsConstKernelPtr + AsKernelPtr + MemorySize,
-          A: CudaAllocator {
+          A: CudaAllocator,
+          for<'a> T: AsConstKernelPtr + AsKernelPtr + MemorySize {
     fn size(&self) -> usize {
         self.len
     }
 }
 impl<U,T,A> PointerElement for CudaVec<U,T,A>
     where U: UnitValue<U>,
-          T: AsConstKernelPtr + AsKernelPtr,
           A: CudaAllocator,
-          CudaPtr<U,A>: WriteMemory<U> {
+          CudaPtr<U,A>: WriteMemory<U>,
+          for<'a> T: AsConstKernelPtr + AsKernelPtr + MemorySize {
     type Element = U;
 }
-impl<'a,U,T,A> AsCudaReadOnlyPtr<'a> for CudaVec<U,T,A>
-    where U: UnitValue<U> + 'a,
-          T: AsConstKernelPtr + AsKernelPtr + MemorySize + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaPtrRef<'a,U>;
+impl<U,T,A> AsCudaReadOnlyPtr for CudaVec<U,T,A>
+    where U: UnitValue<U>,
+          T: AsConstKernelPtr + AsKernelPtr + MemorySize,
+          A: CudaAllocator {
+    type Pointee = U;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,U> {
+    fn as_cuda_read_only_ptr<'a>(&'a self) -> CudaPtrRef<'a,U> {
         CudaPtrRef::from(self.ptr.as_cuda_read_only_ptr())
     }
 }
-impl<'a,U,T,A> AsCudaMutPtr<'a> for CudaVec<U,T,A>
-    where U: UnitValue<U> + 'a,
-          T: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaMutPtr<'a,U,A>;
+impl<U,T,A> AsCudaMutPtr for CudaVec<U,T,A>
+    where U: UnitValue<U>,
+          T: AsConstKernelPtr + AsKernelPtr + Debug,
+          A: CudaAllocator {
+    type Pointee = T;
+    type Allocator = A;
 
     #[inline]
-    fn as_cuda_mut_ptr(&mut self) -> CudaMutPtr<'a,U,A> {
+    fn as_cuda_mut_ptr<'a>(&'a mut self) -> CudaMutPtr<'a,U,A> {
         CudaMutPtr::new(&mut self.ptr)
     }
 }
-impl<'a,U,T,A> TryClone for CudaVec<U,T,A>
+impl<U,T,A> TryClone for CudaVec<U,T,A>
     where U: Default + Debug + UnitValue<U>,
-          T: AsConstKernelPtr + AsKernelPtr + MemorySize,
           A: CudaAllocator,
-          Self: AsPtr<U> + AsCudaPtr + AsCudaMutPtr<'a>,
-          <Self as AsCudaPtr>::Pointer: AsPtr<U> + MemoryMoveTo<U,<Self as AsCudaMutPtr<'a>>::Pointer>,
-          <Self as AsCudaMutPtr<'a>>::Pointer: AsMutPtr<U>,
-          CudaPtr<U,A>: WriteMemory<U> {
+          T: AsConstKernelPtr + AsKernelPtr + MemorySize,
+          CudaPtr<U,A>: WriteMemory<U>,
+          for<'a> Self: AsPtr<U> + AsCudaPtr<'a> + AsCudaMutPtr<Pointee=U,Allocator=A>,
+          for<'a> <Self as AsCudaPtr<'a>>::Pointer: AsPtr<U> + MemoryMoveTo<U,CudaMutPtr<'a,T,A>>,
+          for<'a> CudaMutPtr<'a,U,A>: AsMutPtr<U> {
     type Error = CudaError;
     fn try_clone(&self) -> Result<Self,CudaError> {
-        let mut dst = CudaVec::<U,T,A>::new(self.len * T::size(),&self.ptr.allocator)?;
+        let mut dst = CudaVec::<U,T,A>::new(self.len,&self.ptr.allocator)?;
 
         self.memcpy_to(&mut dst,self.len * T::size())?;
 
@@ -1669,13 +1674,14 @@ impl<'a,U,T,A> TryClone for CudaVec<U,T,A>
     }
 }
 impl<'a,U,T,A> ToCuda<U,A> for &'a CudaVec<U,T,A>
-    where U: UnitValue<U>,
+    where U: UnitValue<U> + 'a,
           T: AsConstKernelPtr + AsKernelPtr + MemorySize +
-             CudaView,
-          A: CudaAllocator,
+             CudaView<'a> + 'a,
+          A: CudaAllocator + 'a,
           CudaPtr<U,A>: WriteMemory<U>,
-          <T as CudaView>::Type: AsConstKernelPtr + AsKernelPtr + MemorySize {
-    type Output = CudaVecView<'a,U,<T as CudaView>::Type>;
+          CudaVecView<'a,U,<T as CudaView<'a>>::Type>: TryFrom<&'a CudaVec<U,T,A>,Error=TypeConvertError>,
+          <T as CudaView<'a>>::Type: AsConstKernelPtr + AsKernelPtr + MemorySize + 'a {
+    type Output = CudaVecView<'a,U,<T as CudaView<'a>>::Type>;
 
     fn to_cuda(self, _: &DeviceGpu<U,A>) -> Result<Self::Output, TypeConvertError> {
         Ok(self.try_into()?)
@@ -1683,9 +1689,9 @@ impl<'a,U,T,A> ToCuda<U,A> for &'a CudaVec<U,T,A>
 }
 impl<U,T,A> ToCuda<U,A> for CudaVec<U,T,A>
     where U: UnitValue<U>,
-          T: AsConstKernelPtr + AsKernelPtr + MemorySize,
           A: CudaAllocator,
-          CudaPtr<U,A>: WriteMemory<U> {
+          CudaPtr<U,A>: WriteMemory<U>,
+          for<'a> T: AsConstKernelPtr + AsKernelPtr + MemorySize {
     type Output = CudaVec<U,T,A>;
 
     fn to_cuda(self, _: &DeviceGpu<U,A>) -> Result<Self::Output, TypeConvertError> {
@@ -1713,21 +1719,21 @@ impl<'a,U,T> PointerElement for CudaVecView<'a,U,T>
           T: AsConstKernelPtr + AsKernelPtr {
     type Element = U;
 }
-impl<'a,U,T> AsCudaReadOnlyPtr<'a> for CudaVecView<'a,U,T>
+impl<'a,U,T> AsCudaReadOnlyPtr for CudaVecView<'a,U,T>
     where U: UnitValue<U> + 'a,
           T: AsConstKernelPtr + MemorySize {
-    type Pointer = CudaPtrRef<'a,U>;
+    type Pointee = U;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,U> {
+    fn as_cuda_read_only_ptr<'b>(&'b self) -> CudaPtrRef<'b,U> {
         self.ptr.clone()
     }
 }
 impl<'a,U,T,R,A> TryFrom<&'a CudaVec<U,T,A>> for CudaVecView<'a,U,R>
     where U: UnitValue<U> + Default + Clone + Send,
-          T: MemorySize + AsKernelPtr + AsConstKernelPtr + CudaView,
-          R: MemorySize + AsKernelPtr + AsConstKernelPtr + TryFrom<<T as CudaView>::Type>,
-          A: CudaAllocator {
+          A: CudaAllocator,
+          for<'b> T: MemorySize + AsKernelPtr + AsConstKernelPtr + CudaView<'b>,
+          for<'b> R: MemorySize + AsKernelPtr + AsConstKernelPtr + TryFrom<<T as CudaView<'b>>::Type> {
     type Error = TypeConvertError;
 
     fn try_from(value: &'a CudaVec<U,T,A>) -> Result<Self, Self::Error> {
@@ -1786,11 +1792,11 @@ impl<'a,U,T,R> TryFrom<CudaVecViewConverter<'a,U,T>> for CudaVecView<'a,U,R>
 impl<'a,U,T> DeriveCudaConstPtr for CudaVecView<'a,U,T>
     where U: UnitValue<U>,
           T: Debug + AsConstKernelPtrBase + AsConstKernelPtr +
-             AsCudaReadOnlyPtr<'a> + DeriveCudaConstPtr {}
+             AsCudaReadOnlyPtr + DeriveCudaConstPtr {}
 pub struct CudaVecConverter<U,T,A>
     where U: UnitValue<U> + Debug + Default + Clone + Send,
-          T: MemorySize + AsKernelPtr + AsConstKernelPtr,
-          A: CudaAllocator {
+          A: CudaAllocator,
+          for<'a> T: AsConstKernelPtr + AsKernelPtr + MemorySize {
     len:usize,
     ptr:CudaPtr<U,A>,
     u:PhantomData<U>,
@@ -1798,8 +1804,8 @@ pub struct CudaVecConverter<U,T,A>
 }
 impl<U,T,A> IntoConverter for CudaVec<U,T,A>
     where U: UnitValue<U> + Debug + Default + Clone + Send,
-          T: MemorySize + AsKernelPtr + AsConstKernelPtr,
-          A: CudaAllocator {
+          A: CudaAllocator,
+          for<'a> T: AsConstKernelPtr + AsKernelPtr + MemorySize {
     type Converter = CudaVecConverter<U,T,A>;
 
     fn into_converter(self) -> Self::Converter {
@@ -1813,25 +1819,25 @@ impl<U,T,A> IntoConverter for CudaVec<U,T,A>
 }
 impl<U,T,A> BatchSize for CudaVecConverter<U,T,A>
     where U: UnitValue<U> + Default + Clone + Send,
-          T: MemorySize + AsKernelPtr + AsConstKernelPtr,
-          A: CudaAllocator {
+          A: CudaAllocator,
+          for<'a> T: AsConstKernelPtr + AsKernelPtr + MemorySize {
     fn size(&self) -> usize {
         self.len
     }
 }
 impl<U,T,A> From<CudaVecConverter<U,T,A>> for CudaPtr<U,A>
     where U: UnitValue<U> + Default + Clone + Send,
-          T: MemorySize + AsKernelPtr + AsConstKernelPtr,
-          A: CudaAllocator {
+          A: CudaAllocator,
+          for<'a> T: AsConstKernelPtr + AsKernelPtr + MemorySize {
     fn from(value: CudaVecConverter<U,T,A>) -> Self {
         value.ptr
     }
 }
 impl<U,T,R,A> TryFrom<CudaVecConverter<U,T,A>> for CudaVec<U,R,A>
     where U: UnitValue<U> + Default + Clone + Send,
-          T: MemorySize + AsKernelPtr + AsConstKernelPtr,
-          R: MemorySize + AsKernelPtr + AsConstKernelPtr + From<T>,
-          A: CudaAllocator {
+          A: CudaAllocator,
+          for<'a> T: MemorySize + AsKernelPtr + AsConstKernelPtr,
+          for<'a> R: MemorySize + AsKernelPtr + AsConstKernelPtr + From<T> {
     type Error = TypeConvertError;
 
     #[inline]
@@ -2020,74 +2026,74 @@ impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<T,A
         Ok(self)
     }
 }
-impl<'a,T,A,const N:usize> AsCudaReadOnlyPtr<'a> for &'a CudaTensor1dPtr<T,A,N>
-    where T: Default + Debug + 'a,
-          A: CudaAllocator + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
+impl<'a,T,A,const N:usize> AsCudaReadOnlyPtr for &'a CudaTensor1dPtr<T,A,N>
+    where T: Default + Debug,
+          A: CudaAllocator {
+    type Pointee = T;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'b>(&'b self) -> CudaPtrRef<'b,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize> AsCudaReadOnlyPtr<'a> for &'a CudaTensor2dPtr<T,A,N1,N2>
+impl<'a,T,A,const N1:usize,const N2:usize> AsCudaReadOnlyPtr for &'a CudaTensor2dPtr<T,A,N1,N2>
     where T: Default + Debug + 'a,
           A: CudaAllocator + 'a {
-    type Pointer = CudaPtrRef<'a,T>;
+    type Pointee = T;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'b>(&'b self) -> CudaPtrRef<'b,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaReadOnlyPtr<'a> for &'a CudaTensor3dPtr<T,A,N1,N2,N3>
+impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaReadOnlyPtr for &'a CudaTensor3dPtr<T,A,N1,N2,N3>
     where T: Default + Debug + 'a,
           A: CudaAllocator + 'a,
           CudaPtr<T,A>: WriteMemory<T> {
-    type Pointer = CudaPtrRef<'a,T>;
+    type Pointee = T;
 
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'b>(&'b self) -> CudaPtrRef<'b,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
-impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaReadOnlyPtr<'a> for &'a CudaTensor4dPtr<T,A,N1,N2,N3,N4>
+impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaReadOnlyPtr for &'a CudaTensor4dPtr<T,A,N1,N2,N3,N4>
     where T: Default + Debug + 'a,
           A: CudaAllocator + 'a {
 
-    type Pointer = CudaPtrRef<'a,T>;
+    type Pointee = T;
     #[inline]
-    fn as_cuda_read_only_ptr(&'a self) -> CudaPtrRef<'a,T> {
+    fn as_cuda_read_only_ptr<'b>(&'b self) -> CudaPtrRef<'b,T> {
         self.ptr.as_cuda_read_only_ptr()
     }
 }
 impl<'a,CP> AsConstKernelPtrBase for CP
-    where CP: AsCudaReadOnlyPtr<'a> + DeriveCudaConstPtr,
-          <CP as AsCudaReadOnlyPtr<'a>>::Pointer: AsConstKernelPtr {
+    where CP: AsCudaReadOnlyPtr + DeriveCudaConstPtr,
+          for<'a> CudaPtrRef<'a,<CP as AsCudaReadOnlyPtr>::Pointee>: AsConstKernelPtr {
     #[inline]
     fn as_const_kernel_ptr(&self) -> *mut c_void {
         self.as_cuda_read_only_ptr().as_const_kernel_ptr()
     }
 }
 impl<'a,CP> AsVoidPtr for CP
-    where CP: AsCudaReadOnlyPtr<'a> + DeriveCudaConstPtr,
-          <CP as AsCudaReadOnlyPtr<'a>>::Pointer: AsVoidPtr {
+    where CP: AsCudaReadOnlyPtr + DeriveCudaConstPtr,
+          for<'a> CudaPtrRef<'a,<CP as AsCudaReadOnlyPtr>::Pointee>: AsVoidPtr {
     #[inline]
     fn as_void_ptr(&self) -> *const c_void {
         self.as_cuda_read_only_ptr().as_void_ptr()
     }
 }
 impl<'a,CP,T> AsPtr<T> for CP
-    where CP: AsCudaReadOnlyPtr<'a> + DeriveCudaConstPtr,
-          <CP as AsCudaReadOnlyPtr<'a>>::Pointer: AsPtr<T> {
+    where CP: AsCudaReadOnlyPtr + DeriveCudaConstPtr,
+          for<'a> CudaPtrRef<'a,<CP as AsCudaReadOnlyPtr>::Pointee>: AsPtr<T> {
     #[inline]
     fn as_ptr(&self) -> *const T {
         self.as_cuda_read_only_ptr().as_ptr()
     }
 }
 impl<CP,T> ReadMemory<T> for CP
-    where CP: AsCudaPtr + PointerElement<Element=T>,
-          <CP as AsCudaPtr>::Pointer: ReadMemory<T>,
+    where for<'a> CP: AsCudaPtr<'a> + PointerElement<Element=T>,
+          for<'a> <CP as AsCudaPtr<'a>>::Pointer: ReadMemory<T>,
           T: Debug + Default {
     #[inline]
     fn read_to_vec(&self) -> Result<Vec<T>, Error> {
@@ -2100,8 +2106,8 @@ impl<CP,T> ReadMemory<T> for CP
     }
 }
 impl<CP,T> ReadMemoryAsync<T> for CP
-    where CP: AsCudaPtr + PointerElement<Element=T>,
-          <CP as AsCudaPtr>::Pointer: ReadMemoryAsync<T>,
+    where for<'a> CP: AsCudaPtr<'a> + PointerElement<Element=T>,
+          for<'a> <CP as AsCudaPtr<'a>>::Pointer: ReadMemoryAsync<T>,
           T: Debug + Default {
     #[inline]
     fn read_to_vec_async(&self, stream: cudaStream_t) -> Result<Vec<T>, Error> {
@@ -2112,34 +2118,34 @@ impl<CP,T> ReadMemoryAsync<T> for CP
         self.as_cuda_ptr().read_to_vec_with_size_async(stream, size)
     }
 }
-impl<'a,CP,T> WriteMemory<T> for CP
-    where CP: AsCudaMutPtr<'a> + AsMutPtr<T>,
+impl<CP,T> WriteMemory<T> for CP
+    where CP: AsCudaMutPtr + AsMutPtr<T>,
           T: Debug + Default {
     fn memcpy(&mut self, p: *const T, len: usize) -> Result<usize, Error> {
-        self.memcpy(p,len)
+        self.as_cuda_mut_ptr().memcpy(p,len)
     }
 
     fn memcpy_repeat(&mut self, p: *const T, len: usize, count: usize) -> Result<usize, Error> {
-        self.memcpy_repeat(p,len,count)
+        self.as_cuda_mut_ptr().memcpy_repeat(p,len,count)
     }
 }
-impl<'a,CP,T> WriteMemoryAsync<T> for CP
-    where CP: AsCudaMutPtr<'a> + AsMutPtr<T>,
+impl<CP,T> WriteMemoryAsync<T> for CP
+    where CP: AsCudaMutPtr + AsMutPtr<T>,
           T: Debug + Default {
     fn memcpy_async(&mut self, p: *const T, len: usize, stream: cudaStream_t) -> Result<usize, Error> {
-        self.memcpy_async(p,len,stream)
+        self.as_cuda_mut_ptr().memcpy_async(p,len,stream)
     }
 
     fn memcpy_async_repeat(&mut self, p: *const T, len: usize, count: usize, stream: cudaStream_t) -> Result<usize, Error> {
-        self.memcpy_async_repeat(p,len,count,stream)
+        self.as_cuda_mut_ptr().memcpy_async_repeat(p,len,count,stream)
     }
 }
 impl<'a,CP,T,D> MemoryMoveTo<T,D> for CP
     where T: Debug + Default,
-          CP: AsCudaPtr + AsPtr<T>,
-          D: AsMutPtr<T> + AsCudaMutPtr<'a>,
-          <CP as AsCudaPtr>::Pointer: AsPtr<T> + MemoryMoveTo<T,<D as AsCudaMutPtr<'a>>::Pointer>,
-          <D as AsCudaMutPtr<'a>>::Pointer: AsMutPtr<T> {
+          CP: AsCudaPtr<'a> + AsPtr<T>,
+          D: AsMutPtr<T> + AsCudaMutPtr,
+          <CP as AsCudaPtr<'a>>::Pointer: AsPtr<T> + MemoryMoveTo<T,<D as AsCudaMutPtr>::Pointer>,
+          CudaMutPtr<'a,<D as AsCudaMutPtr>::Pointee,<D as AsCudaMutPtr>::Allocator>: AsMutPtr<T> {
     fn memcpy_to(&self, dst: &mut D, len: usize) -> Result<usize, Error> {
         self.as_cuda_ptr().memcpy_to(&mut dst.as_cuda_mut_ptr(),len)
     }
@@ -2155,7 +2161,7 @@ impl<'a,T,A: CudaAllocator> CudaMutPtr<'a,T,A> where T: Debug, A: CudaAllocator 
         }
     }
 }
-impl<'a,T,A> private::AsMutKernelPtrBase for CudaMutPtr<'a,T,A>
+impl<'a,T,A> AsMutKernelPtrBase for CudaMutPtr<'a,T,A>
     where T: Debug + Default,
           A: CudaAllocator {
     #[inline]
@@ -2215,30 +2221,32 @@ impl<'a,T,A> WriteMemoryAsync<T> for CudaMutPtr<'a,T,A>
     }
 }
 /// Characteristic that defines the ability to obtain a reference to a writable cuda smart pointer
-pub trait AsCudaMutPtr<'a> {
-    /// Returned Cuda smart pointer type
-    type Pointer;
-    fn as_cuda_mut_ptr(&mut self) -> Self::Pointer;
+pub trait AsCudaMutPtr {
+    /// The type of the elements in the referenced CudaPtr
+    type Pointee;
+    /// The type of the CudaPtr allocator being referenced
+    type Allocator;
+    fn as_cuda_mut_ptr<'a>(&'a mut self) -> CudaMutPtr<'a,Self::Pointer,Self::Allocator>;
 }
-impl<'a,CP> private::AsMutKernelPtrBase for CP
-    where CP: AsCudaMutPtr<'a>,
-          <CP as AsCudaMutPtr<'a>>::Pointer: private::AsMutKernelPtrBase {
+impl<'a,CP> AsMutKernelPtrBase for CP
+    where CP: AsCudaMutPtr,
+          for<'a> CudaMutPtr<'a,<CP as AsCudaMutPtr>::Pointee,<CP as AsCudaMutPtr>::Allocator>: AsMutKernelPtrBase {
     #[inline]
     fn as_mut_kernel_ptr(&mut self) -> *mut c_void {
         self.as_cuda_mut_ptr().as_mut_kernel_ptr()
     }
 }
 impl<'a,CP> AsMutVoidPtr for CP
-    where CP: AsCudaMutPtr<'a>,
-          <CP as AsCudaMutPtr<'a>>::Pointer: AsMutVoidPtr {
+    where CP: AsCudaMutPtr,
+          for<'a> CudaMutPtr<'a,<CP as AsCudaMutPtr>::Pointee,<CP as AsCudaMutPtr>::Allocator>: AsMutVoidPtr {
     #[inline]
     fn as_mut_void_ptr(&mut self) -> *mut c_void {
         self.as_cuda_mut_ptr().as_mut_void_ptr()
     }
 }
 impl<'a,CP,T> AsMutPtr<T> for CP
-    where CP: AsCudaMutPtr<'a>,
-          <CP as AsCudaMutPtr<'a>>::Pointer: AsMutPtr<T> {
+    where CP: AsCudaMutPtr,
+          for<'a> CudaMutPtr<'a,<CP as AsCudaMutPtr>::Pointee,<CP as AsCudaMutPtr>::Allocator>: AsMutPtr<T> {
     #[inline]
     fn as_mut_ptr(&mut self) -> *mut T {
         self.as_cuda_mut_ptr().as_mut_ptr()

@@ -451,7 +451,7 @@ impl<U,T,A> Index<(usize,usize)> for CachedTensor<U,T,A>
         self.value.index(index)
     }
 }
-impl<U,T,A> AsCudaPtr for CachedTensor<U,T,A>
+impl<U,T,A> AsCudaPtr<'_> for CachedTensor<U,T,A>
     where U: Debug + Default,
           T: AsRawSlice<U>,
           A: CudaAllocator,
@@ -461,14 +461,15 @@ impl<U,T,A> AsCudaPtr for CachedTensor<U,T,A>
         &self.ptr
     }
 }
-impl<U,T,A> AsCudaMutPtr<'_> for CachedTensor<U,T,A>
-    where U: Debug + Default,
-          T: AsRawSlice<U>,
-          A: CudaAllocator,
+impl<'a,U,T,A> AsCudaMutPtr for CachedTensor<U,T,A>
+    where U: Debug + Default + 'a,
+          T: AsRawSlice<U> + 'a,
+          A: CudaAllocator + 'a,
           CudaPtr<U,A>: WriteMemory<U> {
-    type Pointer = CudaMutPtr<'_,U,A>;
+    type Pointee = U;
+    type Allocator = A;
     #[inline]
-    fn as_cuda_mut_ptr(&mut self) -> CudaMutPtr<'_,U,A> {
+    fn as_cuda_mut_ptr<'b>(&'b mut self) -> CudaMutPtr<'b,U,A> {
         CudaMutPtr::new(&mut self.ptr)
     }
 }

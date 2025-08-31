@@ -240,8 +240,8 @@ impl<'a,A,const N:usize> Kernel for LossLinearByCanonicalLink<'a,f64,A,N> where 
 pub struct DiffLinearForwardArgs<'a,T,A,const NI:usize,const NO:usize>
     where T: Debug + Default,
           A: CudaAllocator,
-          CudaTensor2dPtr<T,A,NI,NO>: AsCudaReadOnlyPtr<'a>,
-          <CudaTensor2dPtr<T,A,NI,NO> as AsCudaReadOnlyPtr<'a>>::Pointer: AsConstKernelPtr {
+          CudaTensor2dPtr<T,A,NI,NO>: AsCudaReadOnlyPtr,
+          <CudaTensor2dPtr<T,A,NI,NO> as AsCudaReadOnlyPtr>::Pointer: AsConstKernelPtr {
     indexes: CudaPtr<usize,A>,
     input: CudaPtr<T,A>,
     units: CudaConstPtr<'a,CudaTensor2dPtr<T,A,NI,NO>>,

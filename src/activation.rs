@@ -8,7 +8,7 @@ use cuda_runtime_sys::dim3;
 use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::UnitValue;
 use crate::arr::*;
-use crate::cuda::{CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, WriteMemory};
+use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, MemorySize, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationBatchBackwardArgs, ActivationBatchForwardArgs, ActivationForwardArgs, ReLuBackward, ReLuBatchBackward, ReLuForward, ReLuBatchForward, SigmoidBackward, SigmoidBatchBackward, SigmoidForward, SigmoidBatchForward, SoftMaxBackward, SoftMaxBatchBackward, SoftMaxForward, SoftMaxBatchForward, SwishBackward, SwishBatchBackward, SwishForward, TanhBackward, TanhBatchBackward, TanhForward, TanhBatchForward, SwishBatchForward};
 use crate::device::*;
@@ -363,9 +363,10 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator,
+          AC: CudaAllocator + 'a,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
+          for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TrainingError>,
           for<'b> SigmoidBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> SigmoidBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
@@ -396,7 +397,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         let u = u.try_into()?;
         let loss = loss.try_into()?;
 
-        let mut args = ActivationBatchBackwardArgs::new(&o, &u, &loss, output, len);
+        let mut args = ActivationBatchBackwardArgs::new(&o,&u,&loss,output,len);
 
         let mut kernel = SigmoidBatchBackward::<'_,U,AC,N>::new();
 
@@ -477,7 +478,7 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,
 }
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for ReLu<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
-          I: BatchDataType + 'a,
+          I: BatchDataType + BatchSize + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=EvaluateError>,
@@ -485,7 +486,8 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
           <I as BatchDataType>::Type: IntoConverter,
           CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<&'a I,Error=EvaluateError>,
           DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator,
+          AC: CudaAllocator + 'a,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
           for<'b> ReLuForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
           for<'b> ReLuBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
     fn apply(&self, device: &DeviceGpu<U,AC>, input: &'a I) -> Result<CudaTensor1dPtr<U,AC,N>, EvaluateError> {
@@ -569,9 +571,10 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator,
+          AC: CudaAllocator + 'a,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
+          for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TrainingError>,
           for<'b> ReLuBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> ReLuBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
@@ -604,7 +607,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         let u = u.try_into()?;
         let loss = loss.try_into()?;
 
-        let mut args = ActivationBatchBackwardArgs::new(&o, &u, &loss, output, len);
+        let mut args = ActivationBatchBackwardArgs::new(&o,&u,&loss,output,len);
 
         let mut kernel = ReLuBatchBackward::<'_,U,AC,N>::new();
 
@@ -770,9 +773,10 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator,
+          AC: CudaAllocator + 'a,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
+          for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TrainingError>,
           for<'b> SwishBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> SwishBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
@@ -808,7 +812,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         let u = u.try_into()?;
         let loss = loss.try_into()?;
 
-        let mut args = ActivationBatchBackwardArgs::new(&o, &u, &loss, output, len);
+        let mut args = ActivationBatchBackwardArgs::new(&o,&u,&loss,output,len);
 
         let mut kernel = SwishBatchBackward::<'_,U,AC,N>::new();
 
@@ -974,9 +978,10 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator,
+          AC: CudaAllocator + 'a,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
+          for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TrainingError>,
           for<'b> TanhBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> TanhBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
@@ -1009,7 +1014,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         let u = u.try_into()?;
         let loss = loss.try_into()?;
 
-        let mut args = ActivationBatchBackwardArgs::new(&o, &u, &loss, output, len);
+        let mut args = ActivationBatchBackwardArgs::new(&o,&u,&loss,output,len);
 
         let mut kernel = TanhBatchBackward::<'_,U,AC,N>::new();
 
@@ -1199,9 +1204,10 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
           CudaPtr<U,AC>: WriteMemory<U>,
           CudaTensor1dPtrView<'a,U,N>: TryFrom<&'a I,Error=TrainingError>,
           CudaTensor1dPtr<U,AC,N>: TryFrom<&'a I,Error=TrainingError>,
-          CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a I,Error=TrainingError>,
           DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator,
+          AC: CudaAllocator + 'a,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
+          for<'b> CudaVecView<'a,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TrainingError>,
           for<'b> SoftMaxBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
           for<'b> SoftMaxBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
 
@@ -1233,7 +1239,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         let u = u.try_into()?;
         let loss = loss.try_into()?;
 
-        let mut args = ActivationBatchBackwardArgs::new(&o, &u, &loss, output, len);
+        let mut args = ActivationBatchBackwardArgs::new(&o,&u,&loss,output,len);
 
         let mut kernel = SoftMaxBatchBackward::<'_,U,AC,N>::new();
 

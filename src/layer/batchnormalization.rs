@@ -311,7 +311,7 @@ impl<U,P,OP,I,PI,A,const N:usize> Persistence<U,TextFilePersistence<U>,Specializ
               A: CudaAllocator,
               I: Debug + Send + Sync,
               OP: Optimizer<U,DeviceGpu<U,A>>,
-              CudaPtr<U,A>: ReadMemory<U>,
+              CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
               ConfigReadError: From<<U as FromStr>::Err>,
               DeviceGpu<U,A>: Device<U> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
@@ -398,7 +398,7 @@ impl<T,U,P,OP,I,PI,A,const N:usize> Persistence<U,T,Linear>
               I: Debug + Send + Sync,
               A: CudaAllocator,
               OP: Optimizer<U,DeviceGpu<U,A>>,
-              CudaPtr<U,A>: ReadMemory<U>,
+              CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
               DeviceGpu<U,A>: Device<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;

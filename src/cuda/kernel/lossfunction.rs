@@ -2,7 +2,7 @@
 use core::fmt::Debug;
 use std::marker::PhantomData;
 use libc::{c_int, c_void};
-use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaMutPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs, WriteMemory};
+use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaMutPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs};
 use crate::cuda::allocator::CudaAllocator;
 use crate::ope::UnitValue;
 

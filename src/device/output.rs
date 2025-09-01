@@ -8,7 +8,7 @@ use rayon::iter::ParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IndexedParallelIterator;
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory, AsCudaMutPtr, WriteMemory, CudaPtr, AsCudaReadOnlyPtr, DeriveCudaConstPtr, MemorySize, AsConstKernelPtr, AsKernelPtr, AsMutPtr};
+use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory, WriteMemory, CudaPtr, AsMutPtr};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, LossLinearByCanonicalLink, LossLinearByCanonicalLinkArgs};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
@@ -28,7 +28,7 @@ pub trait DeviceLinearOutput<'a,U,const N:usize>: Device<U>
     /// * `actual` - actual value
     /// * `lossf` - loss function
     fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a Self::IO, lossf: &L) -> Result<Self::IO,TrainingError>
-        where L: LossFunction<U> + LossFunctionLinear<'a,U,Self::IO,Self,N,Output=Self::IO>;
+        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,Self::IO,Self,N,Output=Self::IO>;
     /// Calculation of Losses by canonical link
     /// # Arguments
     /// * `expected` - expected value
@@ -60,7 +60,7 @@ pub trait DeviceLinearOutput<'a,U,const N:usize>: Device<U>
     fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
                                actual: &'a Self::BatchIO, lossf: &L)
                                -> Result<Self::BatchIO,TrainingError>
-        where L: LossFunction<U> + BatchLossFunctionLinear<'a,U,Self::BatchIO,Self,N,Output=Self::BatchIO>;
+        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self::BatchIO,Self,N,Output=Self::BatchIO>;
     /// Calculation of total Losses (all batch)
     /// # Arguments
     /// * `expected` - expected value
@@ -75,7 +75,7 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
     type IO = Arr<U,N>;
     type BatchIO = SerializedVec<U,Arr<U,N>>;
     fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a Arr<U,N>, lossf: &L) -> Result<Arr<U,N>,TrainingError>
-        where L: LossFunction<U> + LossFunctionLinear<'a,U,Arr<U,N>,DeviceCpu<U>,N,Output=Arr<U,N>> {
+        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,Arr<U,N>,DeviceCpu<U>,N,Output=Arr<U,N>> {
         Ok(lossf.linear_derive(self,actual,expected)?)
     }
 
@@ -114,7 +114,7 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
     fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
                                actual: &'a SerializedVec<U,Arr<U,N>>, lossf: &L)
         -> Result<SerializedVec<U,Arr<U,N>>, TrainingError>
-        where L: LossFunction<U> + BatchLossFunctionLinear<'a,U,Self::BatchIO,DeviceCpu<U>,N,Output=Self::BatchIO> {
+        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self::BatchIO,DeviceCpu<U>,N,Output=Self::BatchIO> {
         lossf.batch_linear_derive(self,expected,actual)
     }
 
@@ -144,12 +144,12 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
           A: CudaAllocator + 'static,
           DeviceGpu<U,A>: Device<U>,
           Arr<U,N>: ToCuda<U,A,Output=CudaTensor1dPtr<U,A,N>>,
-          SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
           CudaPtr<U,A>: WriteMemory<U>,
           CudaTensor1dPtr<U,A,N>: Debug + Default + ReadMemory<U> + WriteMemory<U>,
           CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: ReadMemory<U> + 'a,
           SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
           f64: From<U>,
+          for<'b> &'b SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b CudaVec<U,CudaTensor1dPtr<U,A,N>,A>,Error=TypeConvertError>,
           for<'b> LossLinearBatchByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearBatchByCanonicalLinkArgs<'b,U,A,N>>,
           for<'b> LossLinearByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearByCanonicalLinkArgs<'b,U,A,N>> {
@@ -157,7 +157,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
     type BatchIO = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
     fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,A,N>, lossf: &L)
                          -> Result<Self::IO, TrainingError>
-        where L: LossFunction<U> + LossFunctionLinear<'a,U,CudaTensor1dPtr<U,A,N>,DeviceGpu<U,A>,N,Output=CudaTensor1dPtr<U,A,N>> {
+        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,CudaTensor1dPtr<U,A,N>,DeviceGpu<U,A>,N,Output=CudaTensor1dPtr<U,A,N>> {
         Ok(lossf.linear_derive(self,&actual, &expected.to_cuda(self)?)?)
     }
 
@@ -189,7 +189,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
         }))
     }
 
-    fn loss_linear_batch_by_canonical_link(&self, expected: &'a SerializedVec<U, Arr<U,N>>,
+    fn loss_linear_batch_by_canonical_link(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
                                            actual: &'a CudaVec<U,CudaTensor1dPtr<U,A,N>,A>)
         -> Result<Self::BatchIO, TrainingError> {
         let expected_ptr = expected.to_cuda(self)?;
@@ -220,7 +220,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
     fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U, Arr<U,N>>,
                                actual: &'a CudaVec<U,CudaTensor1dPtr<U,A,N>,A>, lossf: &L)
                                -> Result<Self::BatchIO, TrainingError>
-        where L: LossFunction<U> + BatchLossFunctionLinear<'a,U,Self::BatchIO,DeviceGpu<U,A>,N,Output=Self::BatchIO> {
+        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self::BatchIO,DeviceGpu<U,A>,N,Output=Self::BatchIO> {
         let expected = expected.to_cuda(self)?;
 
         Ok(lossf.batch_linear_derive(self, &expected, actual)?)

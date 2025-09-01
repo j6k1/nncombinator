@@ -7,7 +7,7 @@ use std::mem::size_of;
 use std::ops::{Deref, DerefMut, Index};
 use std::rc::Rc;
 use libc::c_void;
-use crate::cuda::{AsCudaMutPtr, AsCudaPtr, AsPtr, CudaMutPtr, CudaPtr, ffi, WriteMemory};
+use crate::cuda::{AsCudaMutPtr, AsCudaPtr, CudaMutPtr, CudaPtr, ffi, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::error::{CudaError};
 use crate::list::ListNode;

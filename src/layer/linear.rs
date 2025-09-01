@@ -166,7 +166,7 @@ impl<U,P,I,PI,A,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePersiste
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
           DeviceGpu<U,A>: Device<U>,
-          CudaPtr<U,A>: ReadMemory<U>,
+          CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           ConfigReadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
@@ -264,8 +264,7 @@ impl<T,U,P,I,PI,A,OP,const NI:usize,const NO:usize> Persistence<U,T,Linear>
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
           DeviceGpu<U,A>: Device<U>,
-          CudaPtr<U,A>: ReadMemory<U>,
-          CudaTensor2dPtr<U,A,NI,NO>: ReadMemory<U> {
+          CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;
 
@@ -853,7 +852,7 @@ impl<U,P,I,A,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence
           I: Debug + Send + Sync,
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
-          CudaPtr<U,A>: ReadMemory<U>,
+          CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           DeviceGpu<U,A>: Device<U>,
           ConfigReadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
@@ -953,7 +952,7 @@ impl<T,U,P,I,A,OP,const NI:usize,const NO:usize> Persistence<U,T,Linear>
           I: Debug + Send + Sync,
           A: CudaAllocator,
           OP: Optimizer<U,DeviceGpu<U,A>>,
-          CudaPtr<U,A>: ReadMemory<U>,
+          CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;

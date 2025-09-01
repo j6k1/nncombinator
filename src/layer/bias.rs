@@ -87,7 +87,7 @@ impl<U,P,OP,I,PI,A,const N:usize> Persistence<U,TextFilePersistence<U>,Specializ
           PI: Debug,
           OP: Optimizer<U,DeviceGpu<U,A>>,
           A: CudaAllocator,
-          CudaPtr<U,A>: ReadMemory<U>,
+          CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           DeviceGpu<U,A>: Device<U>,
           ConfigReadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
@@ -155,7 +155,7 @@ impl<T,U,P,OP,I,PI,A,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,Cuda
           PI: Debug,
           OP: Optimizer<U,DeviceGpu<U,A>>,
           A: CudaAllocator,
-          CudaPtr<U,A>: ReadMemory<U>,
+          CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
         self.parent.load(persistence)?;

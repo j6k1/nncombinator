@@ -6,7 +6,7 @@ use libc::c_int;
 use rcublas_sys::{cublasDaxpy_v2, cublasSaxpy_v2, cublasStatus_t};
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::collection::Broadcast;
-use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsConstKernelPtr, AsKernelPtr, MemorySize, AsCudaMutPtr, CudaMutPtr, AsCudaPtr};
+use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsCudaMutPtr, CudaMutPtr, AsCudaPtr};
 use crate::cuda::allocator::CudaAllocator;
 use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator, DeviceReduce};
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
@@ -122,6 +122,7 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: IntoConverter,
           <IO as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
           for<'a> IO: AsCudaPtr<'a>,
+          for<'a> <IO as AsCudaPtr<'a>>::Pointer: AsPtr<f32> + MemoryMoveTo<f32,CudaMutPtr<'a,f32,A>>,
           for<'a> CudaMutPtr<'a,f32,A>: WriteMemory<f32> + AsMutPtr<f32>,
           for<'a> CudaTensor1dPtrView<'a,f32,N>: From<&'a IO>,
           for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
@@ -237,11 +238,17 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
 impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for DeviceGpu<f64,A>
     where IO: BatchDataType + Debug,
           <IO as BatchDataType>::Type: BatchSize + Debug,
-          IO: From<CudaTensor1dPtr<f64,A,N>>,
+          IO: From<CudaTensor1dPtr<f64,A,N>> + AsCudaMutPtr<Pointee=f64,Allocator=A>,
           A: CudaAllocator,
-          CudaTensor1dPtr<f64,A,N>: ReadMemory<f64> + MemoryMoveTo<f64,CudaTensor1dPtr<f64,A,N>>,
+          CudaTensor1dPtr<f64,A,N>: ReadMemory<f64> +
+          AsCudaMutPtr<Pointee=f64,Allocator=A> +
+          AsMutPtr<f64> +
+          MemoryMoveTo<f64,CudaTensor1dPtr<f64,A,N>>,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: IntoConverter,
           <IO as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
+          for<'a> IO: AsCudaPtr<'a>,
+          for<'a> <IO as AsCudaPtr<'a>>::Pointer: AsPtr<f64> + MemoryMoveTo<f64,CudaMutPtr<'a,f64,A>>,
+          for<'a> CudaMutPtr<'a,f64,A>: WriteMemory<f64> + AsMutPtr<f64>,
           for<'a> CudaTensor1dPtrView<'a,f64,N>: From<&'a IO>,
           for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f64,A,N>,f64,N> {

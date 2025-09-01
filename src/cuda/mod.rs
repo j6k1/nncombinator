@@ -1,6 +1,5 @@
 //! Function to wrap and handle cuda kernel
 
-use core::fmt::Pointer;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
@@ -9,7 +8,7 @@ use libc::{c_void};
 use rcudnn::Error;
 use rcudnn::utils::DataType;
 use rcudnn_sys::{cudaMemcpyKind, cudaStream_t, cudnnDataType_t};
-use crate::arr::{Arr, AsView, IntoConverter, MakeView, MakeViewMut, SerializedVec, SliceSize};
+use crate::arr::{Arr, IntoConverter, MakeView, MakeViewMut, SerializedVec, SliceSize};
 use crate::cuda::allocator::{CudaAllocator, DeviceAlloc, DeviceAllocator, HostAlloc, HostAllocator, MemoryPoolAllocator};
 use crate::cuda::private::{AsConstKernelPtrBase, AsKernelPtrBase, AsMutKernelPtrBase};
 use crate::device::{DeviceGpu};
@@ -909,8 +908,8 @@ impl<'a,T,A,const N:usize> TryFrom<&'a CudaTensor1dPtr<T,A,N>> for CudaTensor1dP
     where T: Default + Debug,
           A: CudaAllocator,
           Self: AsPtr<T> + AsCudaPtr<'a> + AsCudaMutPtr<Pointee=T,Allocator=A>,
-          <Self as AsCudaPtr<'a>>::Pointer: AsPtr<T> + MemoryMoveTo<T,CudaMutPtr<'a,T,A>>,
-          CudaMutPtr<'a,T,A>: AsMutPtr<T>,
+          for<'b> <Self as AsCudaPtr<'a>>::Pointer: AsPtr<T> + MemoryMoveTo<T,CudaMutPtr<'b,T,A>>,
+          for<'b> CudaMutPtr<'b,T,A>: AsMutPtr<T>,
           CudaPtr<T,A>: WriteMemory<T> {
     type Error = CudaError;
     fn try_from(src: &'a CudaTensor1dPtr<T,A,N>) -> Result<Self, Self::Error> {
@@ -2146,9 +2145,9 @@ impl<CP,T,A> WriteMemoryAsync<T> for CP
 }
 impl<'a,CP,T,D> MemoryMoveTo<T,D> for CP
     where T: Debug + Default,
-          CP: AsCudaPtr<'a> + AsPtr<T>,
           D: AsMutPtr<T> + AsCudaMutPtr<Pointee=T>,
-          for<'b> <CP as AsCudaPtr<'a>>::Pointer: AsPtr<T> + MemoryMoveTo<T,CudaMutPtr<'b,T,<D as AsCudaMutPtr>::Allocator>>,
+          for<'b> CP: AsCudaPtr<'b> + AsPtr<T>,
+          for<'b> <CP as AsCudaPtr<'b>>::Pointer: AsPtr<T> + MemoryMoveTo<T,CudaMutPtr<'b,T,<D as AsCudaMutPtr>::Allocator>>,
           for<'b> CudaMutPtr<'b,T,<D as AsCudaMutPtr>::Allocator>: AsMutPtr<T> {
     fn memcpy_to(&self, dst: &mut D, len: usize) -> Result<usize, Error> {
         self.as_cuda_ptr().memcpy_to(&mut dst.as_cuda_mut_ptr(),len)

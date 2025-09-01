@@ -98,7 +98,7 @@ impl HostAlloc {
     }
 }
 impl MemoryPoolAllocator<DeviceAlloc> {
-    pub fn new(_:DeviceAllocator) -> Result<MemoryPoolAllocator<DeviceAlloc>,CudaError> {
+    pub fn new(_:DeviceAlloc) -> Result<MemoryPoolAllocator<DeviceAlloc>,CudaError> {
         Ok(MemoryPoolAllocator {
             memory_pool: Arc::new(Mutex::new(MemoryPool::new(Alloctype::Device)?)),
             allocator: PhantomData::<DeviceAlloc>
@@ -106,7 +106,7 @@ impl MemoryPoolAllocator<DeviceAlloc> {
     }
 }
 impl MemoryPoolAllocator<HostAlloc> {
-    pub fn new(HostAllocator { flags }: HostAllocator) -> Result<MemoryPoolAllocator<HostAlloc>,CudaError> {
+    pub fn new(HostAlloc { flags }: HostAlloc) -> Result<MemoryPoolAllocator<HostAlloc>,CudaError> {
         Ok(MemoryPoolAllocator {
             memory_pool: Arc::new(Mutex::new(MemoryPool::new(Alloctype::Host(flags))?)),
             allocator: PhantomData::<HostAlloc>

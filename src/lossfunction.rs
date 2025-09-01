@@ -5,7 +5,7 @@ use cuda_runtime_sys::dim3;
 use libc::c_uint;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
-use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, WriteMemory};
+use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs, LinearCrossEntropy, LinearCrossEntropyArgs, LinearCrossEntropyMulticlass, LinearCrossEntropyMulticlassArgs, LinearMse, LinearMseArgs};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};

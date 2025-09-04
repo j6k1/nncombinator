@@ -1515,12 +1515,12 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
     }
 }
 impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
-    where U: Debug + Default + Clone + Copy + Send + UnitValue<U> + AsMutPtr<U>,
-          T: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
+          T: Debug,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'a> CudaVec<U,<T as ToCuda<U,A>>::Output,A>: AsCudaMutPtr + WriteMemory<U>,
-          for<'a> <T as ToCuda<U,A>>::Output: Debug + Default +
+          for<'a> <T as ToCuda<U,A>>::Output: Debug +
                                               MemorySize + AsConstKernelPtr + AsKernelPtr,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U,A> {
     type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;

@@ -7,7 +7,7 @@ use libc::c_uint;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
-use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView};
+use crate::cuda::{AsConstKernelPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize};
 use crate::cuda::{DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
@@ -189,19 +189,26 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
     }
 }
 impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,I,NI,NO> for DeviceGpu<f32,A>
-    where I: BatchDataType + From<CudaTensor1dPtr<f32,A,NI>> + Debug + 'static,
-          <I as BatchDataType>::Type: BatchSize + Debug + 'static,
+    where I: BatchDataType + MemorySize + AsConstKernelPtr + AsKernelPtr + From<CudaTensor1dPtr<f32,A,NI>> + Debug + 'static,
+          <I as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
           A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: IntoConverter,
-          CudaTensor1dPtr::<f32,A,NO>: MemoryMoveTo<f32,CudaTensor1dPtr::<f32,A,NO>>,
+          CudaTensor1dPtr<f32,A,NO>: MemoryMoveTo<f32,CudaTensor1dPtr::<f32,A,NO>>,
           Self: DeviceReduce<CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,CudaTensor1dPtr<f32,A,NO>,f32,NO>,
-          for<'a> CudaTensor1dPtrView<'a,f32,NI>: From<&'a I>,
-          for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> I: CudaView<'a>,
+          for<'a> <I as BatchDataType>::Type: CudaView<'a>,
+          for<'a> &'a I: AsCudaView<'a>,
+          for<'a> &'a <I as BatchDataType>::Type: AsCudaView<'a>,
+          for<'a> CudaTensor1dPtrView<'a,f32,NI>: MemorySize + AsConstKernelPtr + From<<I as CudaView<'a>>::Type> + From<<&'a I as CudaView<'a>>::Type>,
+          for<'a> CudaTensor1dPtrView<'a,f32,NO>: From<&'a CudaTensor1dPtr<f32,A,NO>>,
+          for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NI>>: TryFrom<&'a <&'a <I as BatchDataType>::Type as CudaView<'a>>::Type,Error=TypeConvertError>,
+          for<'a> <&'a <I as BatchDataType>::Type as CudaView<'a>>::Type: IntoConverter,
+          for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NI>>: TryFrom<<<&'a <I as BatchDataType>::Type as CudaView<'a>>::Type as IntoConverter>::Converter,Error=TypeConvertError>,
           for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NO>>: TryFrom<&'a CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,Error=TypeConvertError>,
           for<'a> AddBias<'a,f32,A,NO>: Kernel<Args=AddBiasArgs<'a,f32,A,NO>>,
           for<'a> AddBiasBatch<'a,f32,A,NO>: Kernel<Args=AddBiasBatchArgs<'a,f32,A,NO>>,
-          for<'b> ReduceLinearBatch::<'b,f32,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,f32,A,NO>> {
+          for<'a> ReduceLinearBatch::<'a,f32,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'a,f32,A,NO>> {
     type Output = CudaTensor1dPtr<f32,A,NO>;
     type BatchOutput = CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>;
     type LossOutput = I;
@@ -209,7 +216,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
     #[inline]
     fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<f32,A,NO>, units: &CudaTensor2dPtr<f32,A,NI,NO>, input: &'a I)
                           -> Result<CudaTensor1dPtr<f32,A,NO>, EvaluateError> {
-        let input = CudaTensor1dPtrView::<f32,NI>::from(input);
+        let input = CudaTensor1dPtrView::<f32,NI>::from(input.as_cuda_view());
         let mut output = CudaTensor1dPtr::<f32,A,NO>::new(self.get_allocator())?;
         bias.memcpy_to(&mut output,NO)?;
 
@@ -303,7 +310,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
 
     #[inline]
     fn backward_weight_gradient<'a>(&self, o: &'a I, loss: &'a Self::Output) -> Result<CudaTensor2dPtr<f32,A,NI,NO>, TrainingError> {
-        let o_ptr = CudaTensor1dPtrView::<f32,NI>::from(o);
+        let o_ptr = CudaTensor1dPtrView::<f32,NI>::from(o.as_cuda_view());
         let loss_ptr = CudaTensor1dPtrView::<f32,NO>::from(loss);
         let mut output_ptr = CudaTensor2dPtr::<f32,A,NI,NO>::new(self.get_allocator())?;
 
@@ -357,8 +364,10 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
     fn batch_forward_linear<'a>(&self,bias:&CudaTensor1dPtr<f32,A,NO>,units:&CudaTensor2dPtr<f32,A,NI,NO>,
                                 input: &'a <I as BatchDataType>::Type)
                                 -> Result<Self::BatchOutput,TrainingError> {
-        let input_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NI>>::try_from(input)?;
-        let mut output = CudaVec::<f32,CudaTensor1dPtr<f32,A,NO>,A>::new(input.size(),self.get_allocator())?;
+        let size = input.size();
+        let converter = input.as_cuda_view().into_converter();
+        let input_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NI>>::try_from(converter)?;
+        let mut output = CudaVec::<f32,CudaTensor1dPtr<f32,A,NO>,A>::new(size,self.get_allocator())?;
 
         let alpha = CudaPtr::try_from(1.0f32)?;
         let beta = CudaPtr::try_from(0.0f32)?;
@@ -368,7 +377,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
                            cublasOperation_t::CUBLAS_OP_N,
                            cublasOperation_t::CUBLAS_OP_N,
                            NO as ::libc::c_int,
-                           input.size() as libc::c_int,
+                           size as libc::c_int,
                            NI as ::libc::c_int,
                            alpha.as_ptr(),
                            units.as_ptr(),
@@ -403,13 +412,13 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
         let mut args = AddBiasBatchArgs::new(
             bias,
             output,
-            input.size()
+            size
         );
 
         let mut kernel = AddBiasBatch::<'_,f32,A,NO>::new();
 
         kernel.launch(dim3 { x: (NO as std::os::raw::c_uint + 32 - 1) / 32,
-                                     y: (input.size() as std::os::raw::c_uint + 32 - 1) / 32, z: 1 },
+                                     y: (size as std::os::raw::c_uint + 32 - 1) / 32, z: 1 },
                       dim3 { x: 32, y: 32, z: 1 },
                       &mut args, 0).unwrap();
 
@@ -474,7 +483,8 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
                                           -> Result<CudaTensor2dPtr<f32,A, NI, NO>, TrainingError> {
         let n = loss.size();
 
-        let o_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NI>>::try_from(o)?;
+        let converter = o.as_cuda_view().into_converter();
+        let o_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NI>>::try_from(converter)?;
         let loss_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NO>>::try_from(loss)?;
         let mut output_ptr = CudaTensor2dPtr::<f32,A,NI,NO>::new(self.get_allocator())?;
 

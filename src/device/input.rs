@@ -2,7 +2,7 @@
 
 use std::fmt::Debug;
 use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::ToCuda;
+use crate::cuda::{ToCuda, WriteMemory};
 use crate::device::{Device, DeviceCpu, DeviceGpu};
 use crate::error::{TypeConvertError};
 use crate::layer::BatchDataType;
@@ -61,7 +61,8 @@ impl<U,I,A> DeviceInput<U,I> for DeviceGpu<U,A>
           I: BatchDataType + ToCuda<U,A> + Debug + 'static,
           <I as BatchDataType>::Type: ToCuda<U,A> + Debug + 'static,
           <I as ToCuda<U,A>>::Output: Debug + 'static,
-          <<I as BatchDataType>::Type as ToCuda<U,A>>::Output: Debug + 'static,
+          <<I as BatchDataType>::Type as ToCuda<U,A>>::Output: Debug +
+                                                               WriteMemory<U> + 'static,
           A: CudaAllocator,
           DeviceGpu<U,A>: Device<U> {
     type Output = <I as ToCuda<U,A>>::Output;

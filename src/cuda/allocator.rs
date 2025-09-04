@@ -104,6 +104,13 @@ impl MemoryPoolAllocator<DeviceAlloc> {
             allocator: PhantomData::<DeviceAlloc>
         })
     }
+
+    pub fn with_size(size:usize, _:DeviceAlloc) -> Result<MemoryPoolAllocator<DeviceAlloc>,CudaError> {
+        Ok(MemoryPoolAllocator {
+            memory_pool: Arc::new(Mutex::new(MemoryPool::with_size(size,Alloctype::Device)?)),
+            allocator: PhantomData::<DeviceAlloc>
+        })
+    }
 }
 impl MemoryPoolAllocator<HostAlloc> {
     pub fn new(HostAlloc { flags }: HostAlloc) -> Result<MemoryPoolAllocator<HostAlloc>,CudaError> {
@@ -111,6 +118,13 @@ impl MemoryPoolAllocator<HostAlloc> {
             memory_pool: Arc::new(Mutex::new(MemoryPool::new(Alloctype::Host(flags))?)),
             allocator: PhantomData::<HostAlloc>
 
+        })
+    }
+
+    pub fn with_size(size:usize, HostAlloc { flags }: HostAlloc) -> Result<MemoryPoolAllocator<HostAlloc>,CudaError> {
+        Ok(MemoryPoolAllocator {
+            memory_pool: Arc::new(Mutex::new(MemoryPool::with_size(size,Alloctype::Host(flags))?)),
+            allocator: PhantomData::<HostAlloc>
         })
     }
 }

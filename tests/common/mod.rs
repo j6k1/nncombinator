@@ -5,9 +5,10 @@ use nncombinator::cuda::mem::{Alloctype, MemoryPool};
 use nncombinator::device::input::DeviceInput;
 use nncombinator::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchPreTrain, ForwardAll, ForwardDiff, Loss, PreTrain, UpdateWeight};
 use nncombinator::ope::UnitValue;
+use nncombinator::cuda::allocator::{DeviceAlloc, MemoryPoolAllocator};
 
 lazy_static! {
-    pub static ref SHARED_MEMORY_POOL:Arc<Mutex<MemoryPool>> = Arc::new(Mutex::new(MemoryPool::with_size(8 * 1024 * 1024 * 1024,Alloctype::Device).unwrap()));
+    pub static ref SHARED_MEMORY_POOL:MemoryPoolAllocator<DeviceAlloc> = MemoryPoolAllocator::with_size(8 * 1024 * 1024 * 1024,DeviceAlloc).unwrap();
 }
 pub fn assert_device<U,I,D: DeviceInput<U,I>>(_:&D)
     where U: UnitValue<U>,

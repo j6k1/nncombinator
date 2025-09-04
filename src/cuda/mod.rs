@@ -123,6 +123,9 @@ pub trait TryClone: Sized {
 pub trait CudaView<'a> {
     type Type: 'a;
 }
+pub trait AsCudaView<'a>: CudaView<'a> {
+    fn as_cuda_view(&self) -> Self::Type;
+}
 impl AsVoidPtr for i32 {
     fn as_void_ptr(&self) -> *const libc::c_void {
         self as *const i32 as *const libc::c_void
@@ -975,6 +978,23 @@ impl<T,A,const N:usize> PointerElement for CudaTensor1dPtr<T,A,N>
 impl<T,A,const N:usize> DeriveCudaConstPtr for CudaTensor1dPtr<T,A,N>
     where T: Debug + Default,
           A: CudaAllocator {}
+impl<'a,T,A,const N:usize> CudaView<'a> for CudaTensor1dPtr<T,A,N>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    type Type = CudaTensor1dPtrView<'a,T,N>;
+}
+impl<'a,T,A,const N:usize> CudaView<'a> for &'a CudaTensor1dPtr<T,A,N>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    type Type = CudaTensor1dPtrView<'a,T,N>;
+}
+impl<'a,T,A,const N:usize> AsCudaView<'a> for &'a CudaTensor1dPtr<T,A,N>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    fn as_cuda_view(&self) -> Self::Type {
+        (*self).into()
+    }
+}
 /// View into a Cuda memory object representing a 1D array with dimension number as a type parameter
 #[derive(Debug)]
 pub struct CudaTensor1dPtrView<'a,T,const N:usize>
@@ -989,11 +1009,6 @@ impl<'a,T,A,const N:usize> From<&'a CudaTensor1dPtr<T,A,N>> for CudaTensor1dPtrV
             ptr:value.as_cuda_read_only_ptr()
         }
     }
-}
-impl<'a,T,A,const N:usize> CudaView<'a> for &'a CudaTensor1dPtr<T,A,N>
-    where T: Debug + Default,
-          A: CudaAllocator {
-    type Type = CudaTensor1dPtrView<'a,T,N>;
 }
 impl<'a,T,const N:usize> From<&'a CudaTensor1dPtrView<'a,T,N>> for CudaTensor1dPtrView<'a,T,N>
     where T: Default + Debug {
@@ -1153,6 +1168,23 @@ impl<T,A,const N1:usize,const N2:usize> MemorySize for CudaTensor2dPtr<T,A,N1,N2
 impl<T,A,const N1:usize,const N2:usize> DeriveCudaConstPtr for CudaTensor2dPtr<T,A,N1,N2>
     where T: Debug + Default,
           A: CudaAllocator {}
+impl<'a,T,A,const N1:usize,const N2:usize> CudaView<'a> for CudaTensor2dPtr<T,A,N1,N2>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    type Type = CudaTensor2dPtrView<'a,T,N1,N2>;
+}
+impl<'a,T,A,const N1:usize,const N2:usize> CudaView<'a> for &'a CudaTensor2dPtr<T,A,N1,N2>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    type Type = CudaTensor2dPtrView<'a,T,N1,N2>;
+}
+impl<'a,T,A,const N1:usize,const N2:usize> AsCudaView<'a> for &'a CudaTensor2dPtr<T,A,N1,N2>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    fn as_cuda_view(&self) -> Self::Type {
+        (*self).into()
+    }
+}
 /// View into a Cuda memory object representing a 2D array with dimension number as a type parameter
 #[derive(Debug)]
 pub struct CudaTensor2dPtrView<'a,T,const N1:usize,const N2:usize>
@@ -1327,6 +1359,23 @@ impl<T,A,const N1:usize,const N2:usize,const N3:usize> MemorySize for CudaTensor
 impl<T,A,const N1:usize,const N2:usize,const N3:usize> DeriveCudaConstPtr for CudaTensor3dPtr<T,A,N1,N2,N3>
     where T: Debug + Default,
           A: CudaAllocator {}
+impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> CudaView<'a> for CudaTensor3dPtr<T,A,N1,N2,N3>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    type Type = CudaTensor3dPtrView<'a,T,N1,N2,N3>;
+}
+impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> CudaView<'a> for &'a CudaTensor3dPtr<T,A,N1,N2,N3>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    type Type = CudaTensor3dPtrView<'a,T,N1,N2,N3>;
+}
+impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> AsCudaView<'a> for &'a CudaTensor3dPtr<T,A,N1,N2,N3>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    fn as_cuda_view(&self) -> Self::Type {
+        (*self).into()
+    }
+}
 /// View into a Cuda memory object representing a 3D array with dimension number as a type parameter
 #[derive(Debug)]
 pub struct CudaTensor3dPtrView<'a,T,const N1:usize,const N2:usize,const N3:usize>
@@ -1504,6 +1553,23 @@ impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> From<&'
 impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> DeriveCudaConstPtr for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
     where T: Debug + Default,
           A: CudaAllocator {}
+impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> CudaView<'a> for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    type Type = CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>;
+}
+impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> CudaView<'a> for &'a CudaTensor4dPtr<T,A,N1,N2,N3,N4>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    type Type = CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>;
+}
+impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsCudaView<'a> for &'a CudaTensor4dPtr<T,A,N1,N2,N3,N4>
+    where T: Debug + Default + 'a,
+          A: CudaAllocator {
+    fn as_cuda_view(&self) -> Self::Type {
+        (*self).into()
+    }
+}
 /// View into a Cuda memory object representing a 4D array with dimension number as a type parameter
 #[derive(Debug)]
 pub struct CudaTensor4dPtrView<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize>
@@ -1634,7 +1700,6 @@ impl<U,T,A> PointerElement for CudaVec<U,T,A>
 }
 impl<U,T,A> AsCudaReadOnlyPtr for CudaVec<U,T,A>
     where U: UnitValue<U>,
-          T: AsConstKernelPtr + AsKernelPtr + MemorySize,
           A: CudaAllocator {
     type Pointee = U;
 
@@ -1698,6 +1763,33 @@ impl<U,T,A> ToCuda<U,A> for CudaVec<U,T,A>
     }
 }
 impl<U,T,A> DeriveCudaConstPtr for CudaVec<U,T,A> where U: UnitValue<U>, T: Debug, A: CudaAllocator {}
+impl<'a,U,T,A> CudaView<'a> for CudaVec<U,T,A>
+    where U: UnitValue<U> + 'a,
+          T: Debug + Default + CudaView<'a> + 'a,
+          A: CudaAllocator,
+          <T as CudaView<'a>>::Type: AsCudaReadOnlyPtr + DeriveCudaConstPtr {
+    type Type = CudaVecView<'a,U,<T as CudaView<'a>>::Type>;
+}
+impl<'a,U,T,A> CudaView<'a> for &'a CudaVec<U,T,A>
+    where U: UnitValue<U> + 'a,
+          T: Debug + Default + CudaView<'a> + 'a,
+          A: CudaAllocator + 'a,
+          <T as CudaView<'a>>::Type: AsCudaReadOnlyPtr + DeriveCudaConstPtr + 'a {
+    type Type = CudaVecView<'a,U,<T as CudaView<'a>>::Type>;
+}
+impl<'a,U,T,A> AsCudaView<'a> for &'a CudaVec<U,T,A>
+    where U: UnitValue<U> + 'a,
+          T: Debug + Default + CudaView<'a> + 'a,
+          A: CudaAllocator + 'a,
+          <T as CudaView<'a>>::Type: AsCudaReadOnlyPtr + DeriveCudaConstPtr + 'a {
+    fn as_cuda_view(&self) -> Self::Type {
+        CudaVecView {
+            len: self.len,
+            ptr: self.as_cuda_read_only_ptr(),
+            t:PhantomData::<<T as CudaView<'a>>::Type>
+        }
+    }
+}
 #[derive(Debug)]
 pub struct CudaVecView<'a,U,T>
     where U: UnitValue<U>,
@@ -1732,7 +1824,7 @@ impl<'a,U,T,R,A> TryFrom<&'a CudaVec<U,T,A>> for CudaVecView<'a,U,R>
     where U: UnitValue<U> + Default + Clone + Send,
           A: CudaAllocator,
           for<'b> T: MemorySize + AsKernelPtr + AsConstKernelPtr + CudaView<'b>,
-          for<'b> R: MemorySize + AsKernelPtr + AsConstKernelPtr + TryFrom<<T as CudaView<'b>>::Type> {
+          for<'b> R: MemorySize + AsConstKernelPtr + From<<T as CudaView<'b>>::Type> {
     type Error = TypeConvertError;
 
     fn try_from(value: &'a CudaVec<U,T,A>) -> Result<Self, Self::Error> {

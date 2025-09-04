@@ -631,6 +631,17 @@ impl<T,SA,DA> MemoryMoveTo<T,CudaPtr<T,DA>> for CudaPtr<T,SA>
         MemoryWriter::<T,<SA as MemoryType>::Type,<DA as MemoryType>::Type>::memcpy(self.as_ptr(),dst.as_mut_ptr(),len)
     }
 }
+impl<'a,T,SA,DA> MemoryMoveTo<T,CudaMutPtr<'a,T,DA>> for CudaPtr<T,SA>
+    where T: Debug + Default + AsPtr<T> + AsMutPtr<T>,
+          SA: MemoryType + CudaAllocator,
+          DA: MemoryType + CudaAllocator,
+          CudaPtr<T,SA>: AsPtr<T>,
+          CudaMutPtr<'a,T,DA>: AsMutPtr<T>,
+          MemoryWriter<T,<SA as MemoryType>::Type,<DA as MemoryType>::Type>: WriteCudaMemory<T,<SA as MemoryType>::Type,<DA as MemoryType>::Type> {
+    fn memcpy_to(&self, dst: &mut CudaMutPtr<'a,T,DA>, len: usize) -> Result<usize, Error> {
+        MemoryWriter::<T,<SA as MemoryType>::Type,<DA as MemoryType>::Type>::memcpy(self.as_ptr(),dst.as_mut_ptr(),len)
+    }
+}
 impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,HostAllocator> where Self: AsPtr<T> + AsMutVoidPtr {
     fn memcpy(&mut self, p:*const T,len:usize) -> Result<usize,rcudnn::Error> {
         ffi::memcpy(self.ptr,
@@ -1764,24 +1775,24 @@ impl<U,T,A> ToCuda<U,A> for CudaVec<U,T,A>
 }
 impl<U,T,A> DeriveCudaConstPtr for CudaVec<U,T,A> where U: UnitValue<U>, T: Debug, A: CudaAllocator {}
 impl<'a,U,T,A> CudaView<'a> for CudaVec<U,T,A>
-    where U: UnitValue<U> + 'a,
-          T: Debug + Default + CudaView<'a> + 'a,
+    where U: UnitValue<U>,
+          T: Debug + CudaView<'a>,
           A: CudaAllocator,
           <T as CudaView<'a>>::Type: AsCudaReadOnlyPtr + DeriveCudaConstPtr {
     type Type = CudaVecView<'a,U,<T as CudaView<'a>>::Type>;
 }
 impl<'a,U,T,A> CudaView<'a> for &'a CudaVec<U,T,A>
-    where U: UnitValue<U> + 'a,
-          T: Debug + Default + CudaView<'a> + 'a,
-          A: CudaAllocator + 'a,
-          <T as CudaView<'a>>::Type: AsCudaReadOnlyPtr + DeriveCudaConstPtr + 'a {
+    where U: UnitValue<U>,
+          T: Debug + CudaView<'a>,
+          A: CudaAllocator,
+          <T as CudaView<'a>>::Type: AsCudaReadOnlyPtr + DeriveCudaConstPtr {
     type Type = CudaVecView<'a,U,<T as CudaView<'a>>::Type>;
 }
 impl<'a,U,T,A> AsCudaView<'a> for &'a CudaVec<U,T,A>
     where U: UnitValue<U> + 'a,
-          T: Debug + Default + CudaView<'a> + 'a,
-          A: CudaAllocator + 'a,
-          <T as CudaView<'a>>::Type: AsCudaReadOnlyPtr + DeriveCudaConstPtr + 'a {
+          T: Debug + CudaView<'a> + 'a,
+          A: CudaAllocator,
+          <T as CudaView<'a>>::Type: AsCudaReadOnlyPtr + DeriveCudaConstPtr {
     fn as_cuda_view(&self) -> Self::Type {
         CudaVecView {
             len: self.len,
@@ -1823,8 +1834,8 @@ impl<'a,U,T> AsCudaReadOnlyPtr for CudaVecView<'a,U,T>
 impl<'a,U,T,R,A> TryFrom<&'a CudaVec<U,T,A>> for CudaVecView<'a,U,R>
     where U: UnitValue<U> + Default + Clone + Send,
           A: CudaAllocator,
-          for<'b> T: MemorySize + AsKernelPtr + AsConstKernelPtr + CudaView<'b>,
-          for<'b> R: MemorySize + AsConstKernelPtr + From<<T as CudaView<'b>>::Type> {
+          T: MemorySize + AsKernelPtr + AsConstKernelPtr + CudaView<'a>,
+          R: MemorySize + AsConstKernelPtr + From<<T as CudaView<'a>>::Type> {
     type Error = TypeConvertError;
 
     fn try_from(value: &'a CudaVec<U,T,A>) -> Result<Self, Self::Error> {

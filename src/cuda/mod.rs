@@ -136,6 +136,16 @@ impl AsMutVoidPtr for i32 {
         self as *mut i32 as *mut libc::c_void
     }
 }
+impl AsPtr<i32> for i32 {
+    fn as_ptr(&self) -> *const i32 {
+        self as *const i32
+    }
+}
+impl AsMutPtr<i32> for i32 {
+    fn as_mut_ptr(&mut self) -> *mut i32 {
+        self as *mut i32
+    }
+}
 impl AsVoidPtr for u32 {
     fn as_void_ptr(&self) -> *const libc::c_void {
         self as *const u32 as *const libc::c_void
@@ -144,6 +154,16 @@ impl AsVoidPtr for u32 {
 impl AsMutVoidPtr for u32 {
     fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self as *mut u32 as *mut libc::c_void
+    }
+}
+impl AsPtr<u32> for u32 {
+    fn as_ptr(&self) -> *const u32 {
+        self as *const u32
+    }
+}
+impl AsMutPtr<u32> for u32 {
+    fn as_mut_ptr(&mut self) -> *mut u32 {
+        self as *mut u32
     }
 }
 impl AsVoidPtr for i64 {
@@ -166,6 +186,16 @@ impl AsMutVoidPtr for u64 {
         self as *mut u64 as *mut libc::c_void
     }
 }
+impl AsPtr<u64> for u64 {
+    fn as_ptr(&self) -> *const u64 {
+        self as *const u64
+    }
+}
+impl AsMutPtr<u64> for u64 {
+    fn as_mut_ptr(&mut self) -> *mut u64 {
+        self as *mut u64
+    }
+}
 impl AsVoidPtr for usize {
     fn as_void_ptr(&self) -> *const libc::c_void {
         self as *const usize as *const libc::c_void
@@ -174,6 +204,16 @@ impl AsVoidPtr for usize {
 impl AsMutVoidPtr for usize {
     fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self as *mut usize as *mut libc::c_void
+    }
+}
+impl AsPtr<usize> for usize {
+    fn as_ptr(&self) -> *const usize {
+        self as *const usize
+    }
+}
+impl AsMutPtr<usize> for usize {
+    fn as_mut_ptr(&mut self) -> *mut usize {
+        self as *mut usize
     }
 }
 impl AsVoidPtr for f32 {
@@ -186,6 +226,16 @@ impl AsMutVoidPtr for f32 {
         self as *mut f32 as *mut libc::c_void
     }
 }
+impl AsPtr<f32> for f32 {
+    fn as_ptr(&self) -> *const f32 {
+        self as *const f32
+    }
+}
+impl AsMutPtr<f32> for f32 {
+    fn as_mut_ptr(&mut self) -> *mut f32 {
+        self as *mut f32
+    }
+}
 impl AsVoidPtr for f64 {
     fn as_void_ptr(&self) -> *const libc::c_void {
         self as *const f64 as *const libc::c_void
@@ -194,6 +244,16 @@ impl AsVoidPtr for f64 {
 impl AsMutVoidPtr for f64 {
     fn as_mut_void_ptr(&mut self) -> *mut libc::c_void {
         self as *mut f64 as *mut libc::c_void
+    }
+}
+impl AsPtr<f64> for f64 {
+    fn as_ptr(&self) -> *const f64 {
+        self as *const f64
+    }
+}
+impl AsMutPtr<f64> for f64 {
+    fn as_mut_ptr(&mut self) -> *mut f64 {
+        self as *mut f64
     }
 }
 impl AsMutKernelPtrBase for i32 {
@@ -562,7 +622,7 @@ impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,DeviceAllocator> where Sel
     }
 }
 /// Implementation of memory write processing between Cuda smart points
-struct MemoryWriter<T,S,D> where T: Debug + Default + AsPtr<T> + AsMutPtr<T> {
+pub struct MemoryWriter<T,S,D> where T: Debug + Default + AsPtr<T> + AsMutPtr<T> {
     t:PhantomData<T>,
     s:PhantomData<S>,
     d:PhantomData<D>

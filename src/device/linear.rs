@@ -7,7 +7,7 @@ use libc::c_uint;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
-use crate::cuda::{AsConstKernelPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize};
+use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaPtr, AsCudaReadOnlyPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize, MemoryType, MemoryWriter, WriteCudaMemory};
 use crate::cuda::{DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
@@ -192,13 +192,15 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
     where I: BatchDataType + MemorySize + AsConstKernelPtr + AsKernelPtr + From<CudaTensor1dPtr<f32,A,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
-          A: CudaAllocator + 'static,
-          CudaPtr<f32,A>: WriteMemory<f32>,
+          A: CudaAllocator + MemoryType + 'static,
+          CudaPtr<f32,A>: AsPtr<f32> + WriteMemory<f32>,
           CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: IntoConverter,
           CudaTensor1dPtr<f32,A,NO>: AsConstKernelPtr + AsKernelPtr + MemorySize + MemoryMoveTo<f32,CudaTensor1dPtr<f32,A,NO>>,
           Self: DeviceReduce<CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,CudaTensor1dPtr<f32,A,NO>,f32,NO>,
           for<'a> I: CudaView<'a>,
           for<'a> <I as BatchDataType>::Type: CudaView<'a>,
+          for<'a> CudaTensor1dPtr<f32,A,NI>: AsCudaPtr<'a> + AsCudaMutPtr<Pointee=f32,Allocator=A> + AsCudaReadOnlyPtr<Pointee=f32>,
+          for<'a> CudaMutPtr<'a,f32,A>: AsMutPtr<f32>,
           for<'a> CudaTensor1dPtr<f32,A,NO>: CudaView<'a>,
           for<'a> &'a I: AsCudaView<'a>,
           for<'a> &'a <I as BatchDataType>::Type: AsCudaView<'a>,

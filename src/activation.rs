@@ -277,7 +277,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
           for<'b> I: CudaView<'b>,
           for<'b> &'b I: AsCudaView<'b>,
           for<'b> CudaTensor1dPtrView<'b,U,N>: From<<&'b I as CudaView<'b>>::Type>,
-          for<'b> CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: From<&'b I>,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
           for<'b> SigmoidForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
           for<'b> SigmoidBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
 
@@ -676,15 +676,13 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Swish<U
 }
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for Swish<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
-          I: BatchDataType + 'a,
-          <I as BatchDataType>::Type: BatchSize + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
-          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: From<&'a I>,
           DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator,
+          AC: CudaAllocator + 'a,
           for<'b> I: CudaView<'b>,
           for<'b> &'b I: AsCudaView<'b>,
           for<'b> CudaTensor1dPtrView<'b,U,N>: From<<&'b I as CudaView<'b>>::Type>,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
           for<'b> SwishForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
           for<'b> SwishBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
     fn apply(&self, device: &DeviceGpu<U,AC>, input: &'a I) -> Result<CudaTensor1dPtr<U,AC,N>, EvaluateError> {
@@ -884,11 +882,12 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
           I: BatchDataType + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
+          DeviceGpu<U,AC>: Device<U>,
+          AC: CudaAllocator,
           for<'b> I: CudaView<'b>,
           for<'b> &'b I: AsCudaView<'b>,
           for<'b> CudaTensor1dPtrView<'b,U,N>: From<<&'b I as CudaView<'b>>::Type>,
-          DeviceGpu<U,AC>: Device<U>,
-          AC: CudaAllocator,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
           for<'b> TanhForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
           for<'b> TanhBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
 
@@ -1115,6 +1114,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
           for<'b> I: CudaView<'b>,
           for<'b> &'b I: AsCudaView<'b>,
           for<'b> CudaTensor1dPtrView<'b,U,N>: From<<&'b I as CudaView<'b>>::Type>,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
           for<'b> SoftMaxForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
           for<'b> SoftMaxBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
 

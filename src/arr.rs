@@ -7,7 +7,7 @@ use std::slice::{IterMut};
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
-use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, ToHost, DeriveCudaConstPtr, AsMutPtr, AsCudaMutPtr, CudaMutPtr, CudaPtr};
+use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, ToHost, AsMutPtr, AsCudaMutPtr, CudaMutPtr, CudaPtr};
 use crate::cuda::allocator::CudaAllocator;
 use crate::device::{DeviceGpu, DeviceAllocator};
 use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};

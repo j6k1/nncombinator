@@ -209,8 +209,6 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
           CudaPtr<U,A>: WriteMemory<U>,
           for<'b> CudaTensor1dPtrView<'b,U,N>: From<&'b I>,
           for<'b> CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
-          for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
-          for<'b> CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: AsCudaMutPtr<Pointee=U,Allocator=A>,
           for<'b> CudaMutPtr<'b,U,A>: AsMutKernelPtr,
           for<'b> LinearCrossEntropy<'b,U,A,N>: Kernel<Args=LinearCrossEntropyArgs<'b,U,A,N>> {
     type Output = CudaTensor1dPtr<U,A,N>;

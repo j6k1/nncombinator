@@ -2,7 +2,7 @@
 
 use std::fmt::Debug;
 use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::{ToCuda, WriteMemory};
+use crate::cuda::{ToCuda};
 use crate::device::{Device, DeviceCpu, DeviceGpu};
 use crate::error::{TypeConvertError};
 use crate::layer::BatchDataType;

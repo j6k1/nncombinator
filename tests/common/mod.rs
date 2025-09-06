@@ -1,7 +1,5 @@
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
-use nncombinator::cuda::mem::{Alloctype, MemoryPool};
 use nncombinator::device::input::DeviceInput;
 use nncombinator::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchPreTrain, ForwardAll, ForwardDiff, Loss, PreTrain, UpdateWeight};
 use nncombinator::ope::UnitValue;

@@ -887,7 +887,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
 /// Trait that defines the implementation of various computational processes in the differentially applicable linear layer
 pub trait DeviceDiffLinear<U,T,B,const NI: usize,const NO: usize>
     where U: UnitValue<U> {
-    type Output;
+    type Output: Debug + 'static;
     fn forward_diff_linear<'a>(&self,units: &T,bias: &B, input: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>) -> Result<Self::Output,EvaluateError>;
     fn backward_diff_weight_gradient<'a>(&self, o: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>, loss: &'a Self::Output) -> Result<T, TrainingError>;
 }
@@ -931,9 +931,12 @@ impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
 }
 impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,NI,NO>,CudaTensor1dPtr<U,A,NO>,NI,NO> for DeviceGpu<U,A>
     where U: UnitValue<U> + DataTypeInfo,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U>,
           CudaPtr<usize,A>: WriteMemory<usize>,
+          CudaTensor1dPtr<U,A,NI>: WriteMemory<U>,
+          CudaTensor1dPtr<U,A,NO>: WriteMemory<U>,
+          for<'b> CudaTensor1dPtrView<'b,U,NI>: From<&'b CudaTensor1dPtr<U,A,NI>>,
           for<'b> ForwardLinear::<'b,U,A,NI,NO>: Kernel<Args=ForwardLinearArgs<'b,U,A,NI,NO>>,
           for<'b> LinearGradient::<'b,U,A,NI,NO>: Kernel<Args=LinearGradientArgs<'b,U,A,NI,NO>>,
           for<'b> ReduceLinearBatch::<'b,U,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,U,A,NO>>,

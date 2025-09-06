@@ -1004,8 +1004,7 @@ impl<U,C,BC,P,OP,D,I,const NI:usize,const NO:usize> ForwardAll for DiffLinearLay
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO>,
-          <D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output: Debug + 'static {
+          D: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO> {
     type Input = I;
     type Output = <D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output;
 

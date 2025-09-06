@@ -61,7 +61,7 @@ impl<U,I,A> DeviceInput<U,I> for DeviceGpu<U,A>
           I: BatchDataType + ToCuda<U,A> + Debug + 'static,
           <I as BatchDataType>::Type: ToCuda<U,A> + Debug + 'static,
           <I as ToCuda<U,A>>::Output: Debug + 'static,
-          <<I as BatchDataType>::Type as ToCuda<U,A>>::Output: Debug + WriteMemory<U> + 'static,
+          <<I as BatchDataType>::Type as ToCuda<U,A>>::Output: Debug + 'static,
           A: CudaAllocator,
           DeviceGpu<U,A>: Device<U> {
     type Output = <I as ToCuda<U,A>>::Output;

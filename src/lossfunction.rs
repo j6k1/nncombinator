@@ -9,7 +9,7 @@ use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsMutKernelPtr, CudaMutPtr, Cu
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs, LinearCrossEntropy, LinearCrossEntropyArgs, LinearCrossEntropyMulticlass, LinearCrossEntropyMulticlassArgs, LinearMse, LinearMseArgs};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
-use crate::error::{CudaError, TrainingError, TypeConvertError};
+use crate::error::{TrainingError, TypeConvertError};
 use crate::layer::{BatchSize};
 use crate::UnitValue;
 
@@ -318,7 +318,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           I: 'a,
           A: CudaAllocator + 'a,
           DeviceGpu<U,A>:  Device<U>,
-          CudaPtr<U,A>: WriteMemory<U> + TryFrom<U,Error=CudaError>,
+          CudaPtr<U,A>: WriteMemory<U>,
           for<'b> CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: AsCudaMutPtr<Pointee=U,Allocator=A>,

@@ -5,7 +5,7 @@ use nncombinator::cuda::mem::{Alloctype, MemoryPool};
 use nncombinator::device::input::DeviceInput;
 use nncombinator::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchPreTrain, ForwardAll, ForwardDiff, Loss, PreTrain, UpdateWeight};
 use nncombinator::ope::UnitValue;
-use nncombinator::cuda::allocator::{DeviceAlloc, MemoryPoolAllocator};
+use nncombinator::cuda::allocator::{DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
 
 lazy_static! {
     pub static ref SHARED_MEMORY_POOL:MemoryPoolAllocator<DeviceAlloc> = MemoryPoolAllocator::with_size(8 * 1024 * 1024 * 1024,DeviceAlloc).unwrap();

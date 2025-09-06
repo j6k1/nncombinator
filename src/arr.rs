@@ -1520,8 +1520,7 @@ impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'a> CudaVec<U,<T as ToCuda<U,A>>::Output,A>: AsCudaMutPtr + WriteMemory<U>,
-          for<'a> <T as ToCuda<U,A>>::Output: Debug +
-                                              MemorySize + AsConstKernelPtr + AsKernelPtr,
+          for<'a> <T as ToCuda<U,A>>::Output: Debug + MemorySize + AsConstKernelPtr + AsKernelPtr,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U,A> {
     type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;
 
@@ -1538,12 +1537,11 @@ impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
     }
 }
 impl<'a,U,T,A> ToCuda<U,A> for &'a SerializedVec<U,T>
-    where U: Debug + Default + Clone + Copy + Send + UnitValue<U> + AsMutPtr<T>,
+    where U: Debug + Default + Clone + Copy + Send + UnitValue<U> + AsMutPtr<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
-          for<'b> T: Debug + Default + SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> +
-                     AsCudaMutPtr + DeriveCudaConstPtr + ToCuda<U,A>,
-          for<'b> <T as ToCuda<U,A>>::Output: Debug + Default + MemorySize + AsConstKernelPtr + AsKernelPtr,
+          for<'b> T: Debug + Default + SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> + ToCuda<U,A>,
+          for<'b> <T as ToCuda<U,A>>::Output: Debug + MemorySize + AsConstKernelPtr + AsKernelPtr,
           for<'b> CudaVec<U,<T as ToCuda<U,A>>::Output,A>: AsCudaMutPtr + WriteMemory<U> {
     type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;
     fn to_cuda(self, device: &DeviceGpu<U,A>) -> Result<Self::Output,TypeConvertError> {

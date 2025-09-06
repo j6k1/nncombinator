@@ -1833,6 +1833,16 @@ impl<U,T,A> ToCuda<U,A> for CudaVec<U,T,A>
         Ok(self)
     }
 }
+impl<'a,U,T,A> AsCudaPtr<'a> for CudaVec<U,T,A>
+    where U: UnitValue<U>,
+          A: CudaAllocator + Debug,
+          T: AsConstKernelPtr + AsKernelPtr + MemorySize {
+    type Pointer = CudaPtr<U,A>;
+
+    fn as_cuda_ptr(&'a self) -> &'a Self::Pointer {
+        &self.ptr
+    } 
+}
 impl<U,T,A> DeriveCudaConstPtr for CudaVec<U,T,A> where U: UnitValue<U>, T: Debug, A: CudaAllocator {}
 impl<'a,U,T,A> CudaView<'a> for CudaVec<U,T,A>
     where U: UnitValue<U>,

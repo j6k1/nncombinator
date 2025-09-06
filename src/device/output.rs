@@ -8,7 +8,7 @@ use rayon::iter::ParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IndexedParallelIterator;
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory, WriteMemory, CudaPtr, AsMutPtr};
+use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory, WriteMemory, CudaPtr, AsMutPtr, AsCudaPtr};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, LossLinearByCanonicalLink, LossLinearByCanonicalLinkArgs};
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
@@ -145,11 +145,12 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
           DeviceGpu<U,A>: Device<U>,
           Arr<U,N>: ToCuda<U,A,Output=CudaTensor1dPtr<U,A,N>>,
           CudaPtr<U,A>: WriteMemory<U>,
-          CudaTensor1dPtr<U,A,N>: Debug + Default + ReadMemory<U> + WriteMemory<U>,
+          CudaTensor1dPtr<U,A,N>: Debug + ReadMemory<U> + WriteMemory<U>,
           CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: ReadMemory<U> + 'a,
           SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
           f64: From<U>,
           for<'b> &'b SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
+          for<'b> CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: AsCudaPtr<'b>,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b CudaVec<U,CudaTensor1dPtr<U,A,N>,A>,Error=TypeConvertError>,
           for<'b> LossLinearBatchByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearBatchByCanonicalLinkArgs<'b,U,A,N>>,
           for<'b> LossLinearByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearByCanonicalLinkArgs<'b,U,A,N>> {

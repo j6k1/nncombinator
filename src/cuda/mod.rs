@@ -719,6 +719,28 @@ impl<T: Default + Debug> WriteMemoryAsync<T> for CudaPtr<T,HostAllocator> where 
 
     }
 }
+impl<T: Default + Debug> WriteMemoryAsync<T> for CudaPtr<T,MemoryPoolAllocator<HostAlloc>> where Self: AsPtr<T> {
+    fn memcpy_async(&mut self, p:*const T,len:usize,stream:cudaStream_t) -> Result<usize,rcudnn::Error> {
+        ffi::memcpy_async(self.ptr,
+                          p,
+                          len,
+                          cudaMemcpyKind::cudaMemcpyHostToHost,stream)?;
+        Ok(len)
+    }
+
+    fn memcpy_async_repeat(&mut self, p: *const T, len: usize, count: usize, stream: cudaStream_t) -> Result<usize, Error> {
+        for i in 0..count {
+            unsafe {
+                ffi::memcpy_async(self.ptr.add(i * len),
+                                  p,
+                                  len,
+                                  cudaMemcpyKind::cudaMemcpyHostToHost,stream)?;
+            }
+        }
+        Ok(len * count)
+
+    }
+}
 impl<T: Default + Debug> MemoryMoveToAsync<T,CudaPtr<T,HostAllocator>> for CudaPtr<T,HostAllocator>
     where Self: AsPtr<T> + AsMutPtr<T> {
     fn memcpy_to_async(&self, dst: &mut CudaPtr<T,HostAllocator>, len: usize,stream:cudaStream_t) -> Result<usize, Error> {
@@ -1859,7 +1881,7 @@ impl<U,T,A> TryClone for CudaVec<U,T,A>
           for<'a> CudaMutPtr<'a,U,A>: AsMutPtr<U> {
     type Error = CudaError;
     fn try_clone(&self) -> Result<Self,CudaError> {
-        let mut dst = CudaVec::<U,T,A>::new(self.len,&self.ptr.allocator)?;
+        let mut dst = CudaVec::<U,T,A>::new(self.len * T::size(),&self.ptr.allocator)?;
 
         self.as_cuda_ptr().memcpy_to(&mut dst.as_cuda_mut_ptr(),self.len * T::size())?;
 

@@ -1881,8 +1881,7 @@ impl<U,T,A> TryClone for CudaVec<U,T,A>
           for<'a> CudaMutPtr<'a,U,A>: AsMutPtr<U> {
     type Error = CudaError;
     fn try_clone(&self) -> Result<Self,CudaError> {
-        let mut dst = CudaVec::<U,T,A>::new(self.len * T::size(),&self.ptr.allocator)?;
-
+        let mut dst = CudaVec::<U,T,A>::new(self.len,&self.ptr.allocator)?;
         self.as_cuda_ptr().memcpy_to(&mut dst.as_cuda_mut_ptr(),self.len * T::size())?;
 
         Ok(dst)
@@ -1988,6 +1987,7 @@ impl<'a,U,T,R,A> TryFrom<&'a CudaVec<U,T,A>> for CudaVecView<'a,U,R>
           R: MemorySize + AsConstKernelPtr + From<<T as CudaView<'a>>::Type> {
     type Error = TypeConvertError;
 
+    #[inline]
     fn try_from(value: &'a CudaVec<U,T,A>) -> Result<Self, Self::Error> {
         if T::size() != R::size() {
             Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::size(),R::size())))

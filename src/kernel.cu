@@ -747,10 +747,10 @@ __device__ void update_with_adam(T *weight, const T *grad, const size_t size,
 
         e += weight_decay * w;
 
-        _mt = b1 * _mt + (1 - b1) * e;
-        _vt = b2 * _vt + (1 - b2) * e * e;
+        _mt = b1 * _mt + (1.0 - b1) * e;
+        _vt = b2 * _vt + (1.0 - b2) * e * e;
 
-        w = w - a * (_mt / (1 - b1t)) / _sqrt((_vt / (1 - b2t)) + eps);
+        w = w - a * ((_mt / (1.0 - b1t)) / _sqrt((_vt / (1.0 - b2t)) + eps));
 
         weight[index] = w;
         mt[index] = _mt;

@@ -633,7 +633,7 @@ impl<T: Default + Debug> ReadMemory<T> for CudaPtr<T,MemoryPoolAllocator<HostAll
         Ok(r)
     }
 }
-impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,DeviceAllocator> where Self: AsPtr<T> + AsMutVoidPtr {
+impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,DeviceAllocator> {
     fn memcpy(&mut self, p:*const T,len:usize) -> Result<usize,rcudnn::Error> {
         ffi::memcpy(self.ptr,
                     p,
@@ -654,7 +654,7 @@ impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,DeviceAllocator> where Sel
         Ok(len * count)
     }
 }
-impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,HostAllocator> where Self: AsPtr<T> + AsMutVoidPtr {
+impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,HostAllocator> {
     fn memcpy(&mut self, p:*const T,len:usize) -> Result<usize,rcudnn::Error> {
         ffi::memcpy(self.ptr,
                     p,
@@ -675,8 +675,7 @@ impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,HostAllocator> where Self:
         Ok(len * count)
     }
 }
-impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,MemoryPoolAllocator<DeviceAlloc>>
-    where Self: AsPtr<T> + AsMutVoidPtr {
+impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,MemoryPoolAllocator<DeviceAlloc>> {
     fn memcpy(&mut self, p:*const T,len:usize) -> Result<usize,rcudnn::Error> {
         ffi::memcpy(self.ptr,
                     p,
@@ -697,7 +696,28 @@ impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,MemoryPoolAllocator<Device
         Ok(len * count)
     }
 }
-impl<T: Default + Debug> WriteMemoryAsync<T> for CudaPtr<T,HostAllocator> where Self: AsPtr<T> {
+impl<T: Default + Debug> WriteMemory<T> for CudaPtr<T,MemoryPoolAllocator<HostAlloc>> {
+    fn memcpy(&mut self, p:*const T,len:usize) -> Result<usize,rcudnn::Error> {
+        ffi::memcpy(self.ptr,
+                    p,
+                    len,
+                    cudaMemcpyKind::cudaMemcpyHostToDevice)?;
+        Ok(len)
+    }
+
+    fn memcpy_repeat(&mut self, p: *const T, len: usize, count: usize) -> Result<usize, Error> {
+        for i in 0..count {
+            unsafe {
+                ffi::memcpy(self.ptr.add(i * len),
+                            p,
+                            len,
+                            cudaMemcpyKind::cudaMemcpyHostToDevice)?;
+            }
+        }
+        Ok(len * count)
+    }
+}
+impl<T: Default + Debug> WriteMemoryAsync<T> for CudaPtr<T,HostAllocator> {
     fn memcpy_async(&mut self, p:*const T,len:usize,stream:cudaStream_t) -> Result<usize,rcudnn::Error> {
         ffi::memcpy_async(self.ptr,
                           p,
@@ -719,7 +739,7 @@ impl<T: Default + Debug> WriteMemoryAsync<T> for CudaPtr<T,HostAllocator> where 
 
     }
 }
-impl<T: Default + Debug> WriteMemoryAsync<T> for CudaPtr<T,MemoryPoolAllocator<HostAlloc>> where Self: AsPtr<T> {
+impl<T: Default + Debug> WriteMemoryAsync<T> for CudaPtr<T,MemoryPoolAllocator<HostAlloc>> {
     fn memcpy_async(&mut self, p:*const T,len:usize,stream:cudaStream_t) -> Result<usize,rcudnn::Error> {
         ffi::memcpy_async(self.ptr,
                           p,

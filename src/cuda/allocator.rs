@@ -137,7 +137,7 @@ impl<A> CudaAllocator for MemoryPoolAllocator<A> where Self: Debug {
     fn allocate<T>(&self, size: usize) -> Result<*mut T, CudaError> {
         let ptr:*mut T = match self.memory_pool.lock() {
             Ok(mut memory_pool) => {
-                memory_pool.alloc_device(size)?
+                memory_pool.allocate(size)?
             },
             Err(_) => {
                 return Err(CudaError::InvalidState(String::from(
@@ -164,12 +164,12 @@ impl<A> CudaAllocator for MemoryPoolAllocator<A> where Self: Debug {
 }
 impl Debug for MemoryPoolAllocator<DeviceAlloc> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f,"MemoryPoolAllocator<DeviceAlloc>")
+        write!(f,"MemoryPoolAllocator<DeviceAlloc> strong_count: {}",Arc::strong_count(&self.memory_pool))
     }
 }
 impl Debug for MemoryPoolAllocator<HostAlloc> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f,"MemoryPoolAllocator<HostAlloc>")
+        write!(f,"MemoryPoolAllocator<HostAlloc> strong_count: {}",Arc::strong_count(&self.memory_pool))
     }
 }
 impl<A> Clone for MemoryPoolAllocator<A> {

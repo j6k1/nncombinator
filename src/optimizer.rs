@@ -103,8 +103,8 @@ impl<U,A> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>>
 
         let mut kernel = kernel::optimizer::SGD::<'_,U,A>::new();
 
-        kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
+        kernel.launch(dim3 { x: (self.size as c_uint + 512 - 1) / 512, y: 1, z: 1 },
+                      dim3 { x: 512, y: 1, z: 1 },
                       &mut args, 0)?;
 
         Ok(())

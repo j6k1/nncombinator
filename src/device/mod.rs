@@ -7,11 +7,8 @@ pub mod output;
 pub mod input;
 
 use std::marker::PhantomData;
-use std::{mem};
 use std::fmt::Debug;
 use std::rc::Rc;
-use cuda_runtime_sys::dim3;
-use libc::{c_uint};
 use rcublas::Context;
 use rcublas_sys::{cublasHandle_t};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -220,8 +217,7 @@ impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceG
 
         let mut kernel = ReduceLinearBatch::<U,A,N>::new();
 
-        kernel.launch(dim3 { x: N as c_uint, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }

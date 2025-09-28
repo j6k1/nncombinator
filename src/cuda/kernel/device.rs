@@ -1,9 +1,12 @@
 //! Implementation of a device that performs various calculations for neural networks
 
+use std::ffi::c_uint;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::mem;
+use cuda_runtime_sys::dim3;
 use libc::{c_int, c_void, size_t};
-use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs};
+use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs, KernelLaunchConfig};
 use crate::cuda::allocator::CudaAllocator;
 use crate::ope::UnitValue;
 
@@ -90,10 +93,26 @@ impl<'a,T,A,const N:usize> ReduceLinearBatch<'a,T,A,N>
 impl<'a,A,const N:usize> Kernel for ReduceLinearBatch<'a,f32,A,N> where A: CudaAllocator {
     const FUNC_PTR: *const c_void = reduce_linear_batch_float as *const c_void;
     type Args = ReduceLinearBatchArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: N as c_uint, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 32 * mem::size_of::<f32>()
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for ReduceLinearBatch<'a,f64,A,N> where A: CudaAllocator {
     const FUNC_PTR: *const c_void = reduce_linear_batch_double as *const c_void;
     type Args = ReduceLinearBatchArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: N as c_uint, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 32 * mem::size_of::<f64>()
+        }
+    }
 }
 /// Defines the list that is passed to the cuda kernel function as arguments
 /// for the calculation that applies the canonical link during the mini-batch execution.
@@ -163,10 +182,26 @@ impl<'a,T,A,const N:usize> LossLinearBatchByCanonicalLink<'a,T,A,N>
 impl<'a,A,const N:usize> Kernel for LossLinearBatchByCanonicalLink<'a,f32,A,N> where A: CudaAllocator {
     const FUNC_PTR: *const c_void = loss_linear_batch_by_canonical_link_float as *const c_void;
     type Args = LossLinearBatchByCanonicalLinkArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_len + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for LossLinearBatchByCanonicalLink<'a,f64,A,N> where A: CudaAllocator {
     const FUNC_PTR: *const c_void = loss_linear_batch_by_canonical_link_double as *const c_void;
     type Args = LossLinearBatchByCanonicalLinkArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_len + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list that is passed to the cuda kernel function as the argument for the calculation of applying canonical link.
 pub struct LossLinearByCanonicalLinkArgs<'a,T,A,const N:usize>
@@ -231,10 +266,26 @@ impl<'a,T,A,const N:usize> LossLinearByCanonicalLink<'a,T,A,N>
 impl<'a,A,const N:usize> Kernel for LossLinearByCanonicalLink<'a,f32,A,N> where A: CudaAllocator {
     const FUNC_PTR: *const c_void = loss_linear_batch_by_canonical_link_float as *const c_void;
     type Args = LossLinearByCanonicalLinkArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for LossLinearByCanonicalLink<'a,f64,A,N> where A: CudaAllocator {
     const FUNC_PTR: *const c_void = loss_linear_batch_by_canonical_link_double as *const c_void;
     type Args = LossLinearByCanonicalLinkArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list that is passed to the cuda kernel function as arguments for forward propagation difference calculations.
 pub struct DiffLinearForwardArgs<'a,T,A,const NI:usize,const NO:usize>
@@ -311,10 +362,26 @@ impl<'a,T,A,const NI:usize,const NO:usize> DiffLinearForward<'a,T,A,NI,NO>
 impl<'a,A,const NI:usize,const NO:usize> Kernel for DiffLinearForward<'a,f32,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = forward_diff_linear_float as *const c_void;
     type Args = DiffLinearForwardArgs<'a,f32,A,NI,NO>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NO + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 1024 * mem::size_of::<f32>()
+        }
+    }
 }
 impl<'a,A,const NI:usize,const NO:usize> Kernel for DiffLinearForward<'a,f64,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = forward_diff_linear_double as *const c_void;
     type Args = DiffLinearForwardArgs<'a,f64,A,NI,NO>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NO + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 1024 * mem::size_of::<f64>()
+        }
+    }
 }
 /// Defines the list that is passed to the cuda kernel function
 /// as arguments for the mini-batch computation
@@ -399,10 +466,26 @@ impl<'a,T,A,const NI:usize,const NO:usize> ForwardLinearBatch<'a,T,A,NI,NO,>
 impl<'a,A,const NI:usize,const NO:usize> Kernel for ForwardLinearBatch<'a,f32,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = forward_linear_batch_float as *const c_void;
     type Args = ForwardLinearBatchArgs<'a,f32,A,NI,NO>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NI + 15) as c_uint / 16, y: (args.batch_size + 15) as c_uint / 16, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 impl<'a,A,const NI:usize,const NO:usize> Kernel for ForwardLinearBatch<'a,f64,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = forward_linear_batch_double as *const c_void;
     type Args = ForwardLinearBatchArgs<'a,f64,A,NI,NO>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NI + 15) as c_uint / 16, y: (args.batch_size + 15) as c_uint / 16, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 /// Defines the list that is passed to the cuda kernel function as arguments for the computation
 /// of the forward propagation of the linear layer.
@@ -485,10 +568,26 @@ impl<'a,T,A,const NI:usize,const NO:usize> ForwardLinear<'a,T,A,NI,NO>
 impl<'a,A,const NI:usize,const NO:usize> Kernel for ForwardLinear<'a,f32,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = forward_linear_batch_float as *const c_void;
     type Args = ForwardLinearArgs<'a,f32,A,NI,NO>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NI + 15) as c_uint / 16, y: 1, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 impl<'a,A,const NI:usize,const NO:usize> Kernel for ForwardLinear<'a,f64,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = forward_linear_batch_double as *const c_void;
     type Args = ForwardLinearArgs<'a,f64,A,NI,NO>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NI + 15) as c_uint / 16, y: 1, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 /// Defines the list passed to the cuda kernel function as arguments
 /// for the computation of the error back propagation of a mini-batch of linear layers.
@@ -567,10 +666,26 @@ impl<'a,T,A,const NI:usize,const NO:usize> BackwardLinearBatch<'a,T,A,NI,NO,>
 impl<'a,A,const NI:usize,const NO:usize> Kernel for BackwardLinearBatch<'a,f32,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = backward_linear_batch_float as *const c_void;
     type Args = BackwardLinearBatchArgs<'a,f32,A,NI,NO>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (args.batch_size + 15) as c_uint / 16, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 impl<'a,A,const NI:usize,const NO:usize> Kernel for BackwardLinearBatch<'a,f64,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = backward_linear_batch_double as *const c_void;
     type Args = BackwardLinearBatchArgs<'a,f64,A,NI,NO>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (args.batch_size + 15) as c_uint / 16, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 /// Defines the list that is passed to the cuda kernel function as arguments for
 /// the computation of the error back propagation of the linear layer.
@@ -648,10 +763,26 @@ impl<'a,T,A,const NI:usize,const NO:usize> BackwardLinear<'a,T,A,NI,NO>
 impl<'a,A,const NI:usize,const NO:usize> Kernel for BackwardLinear<'a,f32,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = backward_linear_batch_float as *const c_void;
     type Args = BackwardLinearArgs<'a,f32,A,NI,NO>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: 1, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 impl<'a,A,const NI:usize,const NO:usize> Kernel for BackwardLinear<'a,f64,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = backward_linear_batch_double as *const c_void;
     type Args = BackwardLinearArgs<'a,f64,A,NI,NO>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: 1, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 /// Defines the list that is passed to the cuda kernel function as arguments
 /// for the calculation of the amount of update of the linear layer weights during the mini-batch.
@@ -732,10 +863,26 @@ impl<'a,T,A,const NI:usize,const NO:usize> LinearGradientBatch<'a,T,A,NI,NO,>
 impl<'a,A,const NI:usize,const NO:usize> Kernel for LinearGradientBatch<'a,f32,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = linear_gradient_batch_float as *const c_void;
     type Args = LinearGradientBatchArgs<'a,f32,A,NI,NO>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (NI + 15) as c_uint / 16, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 impl<'a,A,const NI:usize,const NO:usize> Kernel for LinearGradientBatch<'a,f64,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = linear_gradient_batch_double as *const c_void;
     type Args = LinearGradientBatchArgs<'a,f64,A,NI,NO>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (NI + 15) as c_uint / 16, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 /// Defines the list that is passed to the cuda kernel function as arguments
 /// for the computation of the amount of update of the linear layer weights.
@@ -815,10 +962,26 @@ impl<'a,T,A,const NI:usize,const NO:usize> LinearGradient<'a,T,A,NI,NO>
 impl<'a,A,const NI:usize,const NO:usize> Kernel for LinearGradient<'a,f32,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = linear_gradient_batch_float as *const c_void;
     type Args = LinearGradientArgs<'a,f32,A,NI,NO>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (NI + 15) as c_uint / 16, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 impl<'a,A,const NI:usize,const NO:usize> Kernel for LinearGradient<'a,f64,A,NI,NO> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = linear_gradient_batch_double as *const c_void;
     type Args = LinearGradientArgs<'a,f64,A,NI,NO>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (NI + 15) as c_uint / 16, z: 1 },
+            block_dim: dim3 { x: 16, y: 16, z: 1 },
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+        }
+    }
 }
 /// Defines the list of arguments passed to the cuda function
 /// that performs the addition of the bias to the mini-batch.
@@ -887,10 +1050,26 @@ impl<'a,T,A,const N:usize> AddBiasBatch<'a,T,A,N>
 impl<'a,A,const N:usize> Kernel for AddBiasBatch<'a,f32,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = addbias_batch_float as *const c_void;
     type Args = AddBiasBatchArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0,
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for AddBiasBatch<'a,f64,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = addbias_batch_double as *const c_void;
     type Args = AddBiasBatchArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0,
+        }
+    }
 }
 /// Defines the type of the argument list passed to the kernel as arguments for bias addition.
 pub struct AddBiasArgs<'a,T,A,const N:usize>
@@ -956,8 +1135,24 @@ impl<'a,T,A,const N:usize> AddBias<'a,T,A,N>
 impl<'a,A,const N:usize> Kernel for AddBias<'a,f32,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = addbias_batch_float as *const c_void;
     type Args = AddBiasArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0,
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for AddBias<'a,f64,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = addbias_batch_double as *const c_void;
     type Args = AddBiasArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0,
+        }
+    }
 }

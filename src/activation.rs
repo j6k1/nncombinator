@@ -2,9 +2,6 @@
 
 use std::collections::HashSet;
 use std::marker::PhantomData;
-use std::mem;
-use std::os::raw::c_uint;
-use cuda_runtime_sys::dim3;
 use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::UnitValue;
 use crate::arr::*;
@@ -290,9 +287,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 
         let mut kernel = SigmoidForward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -309,9 +304,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 
         let mut kernel = SigmoidBackward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -378,10 +371,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
         let mut kernel = SigmoidBatchForward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                             y: (len as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -399,10 +389,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
         let mut kernel = SigmoidBatchBackward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -494,9 +481,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 
         let mut kernel = ReLuForward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -513,9 +498,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 
         let mut kernel = ReLuBackward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -584,10 +567,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
         let mut kernel = ReLuBatchForward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-            y: (len as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -605,10 +585,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
         let mut kernel = ReLuBatchBackward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -694,9 +671,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 
         let mut kernel = SwishForward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -713,9 +688,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 
         let mut kernel = SwishBackward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -784,10 +757,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
         let mut kernel = SwishBatchForward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -808,10 +778,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
         let mut kernel = SwishBatchBackward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -900,9 +867,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 
         let mut kernel = TanhForward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -919,9 +884,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 
         let mut kernel = TanhBackward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -990,10 +953,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
         let mut kernel = TanhBatchForward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -1011,10 +971,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
         let mut kernel = TanhBatchBackward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (len as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -1127,9 +1084,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 
         let mut kernel = SoftMaxForward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: 1, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 32 * mem::size_of::<U>() * 2)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -1146,9 +1101,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 
         let mut kernel = SoftMaxBackward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: 1, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>())?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -1217,9 +1170,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
         let mut kernel = SoftMaxBatchForward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: len as c_uint, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 32 * mem::size_of::<U>() * 2)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -1237,9 +1188,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
         let mut kernel = SoftMaxBatchBackward::<'_,U,AC,N>::new();
 
-        kernel.launch(dim3 { x: len as c_uint, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 1024 * mem::size_of::<U>())?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }

@@ -1,9 +1,11 @@
 //! Implementation of various optimizers using Cuda
 
 use core::fmt::Debug;
+use std::ffi::c_uint;
 use std::marker::PhantomData;
-use libc::{size_t,c_void};
-use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaPtr, CudaMutPtr, Kernel, KernelArgs, AsMutKernelPtr};
+use cuda_runtime_sys::dim3;
+use libc::{size_t, c_void};
+use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaPtr, CudaMutPtr, Kernel, KernelArgs, AsMutKernelPtr, KernelLaunchConfig};
 use crate::cuda::allocator::CudaAllocator;
 
 extern "C" {
@@ -88,12 +90,28 @@ impl<'a,A> Kernel for SGD<'a,f32,A>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_sgd_float as *const c_void;
     type Args = SGDArgs<'a,f32,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A> Kernel for SGD<'a,f64,A>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_sgd_double as *const c_void;
     type Args = SGDArgs<'a,f64,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Momentum SGD optimizer.
 pub struct MomentumSGDArgs<'a,T,A>
@@ -179,12 +197,28 @@ impl<'a,A> Kernel for MomentumSGD<'a,f32,A>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_momentum_sgd_float as *const c_void;
     type Args = MomentumSGDArgs<'a,f32,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A> Kernel for MomentumSGD<'a,f64,A>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_momentum_sgd_double as *const c_void;
     type Args = MomentumSGDArgs<'a,f64,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Adagrad optimizer.
 pub struct AdagradArgs<'a,T,A>
@@ -270,12 +304,28 @@ impl<'a,A> Kernel for Adagrad<'a,f32,A>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_adagrad_float as *const c_void;
     type Args = AdagradArgs<'a,f32,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A> Kernel for Adagrad<'a,f64,A>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_adagrad_double as *const c_void;
     type Args = AdagradArgs<'a,f64,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Rmsprop optimizer.
 pub struct RMSpropArgs<'a,T,A>
@@ -372,12 +422,28 @@ impl<'a,A> Kernel for RMSprop<'a,f32,A>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_rmsprop_float as *const c_void;
     type Args = RMSpropArgs<'a,f32,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A> Kernel for RMSprop<'a,f64,A>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_rmsprop_double as *const c_void;
     type Args = RMSpropArgs<'a,f64,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Adam optimizer.
 pub struct AdamArgs<'a,T,A>
@@ -484,10 +550,26 @@ impl<'a,A> Kernel for Adam<'a,f32,A>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_adam_float as *const c_void;
     type Args = AdamArgs<'a,f32,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A> Kernel for Adam<'a,f64,A>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_adam_double as *const c_void;
     type Args = AdamArgs<'a,f64,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }

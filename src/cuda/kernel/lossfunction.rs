@@ -1,8 +1,10 @@
 //! Implementation of various loss functions
 use core::fmt::Debug;
+use std::ffi::c_uint;
 use std::marker::PhantomData;
+use cuda_runtime_sys::dim3;
 use libc::{c_int, c_void};
-use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaMutPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs};
+use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaMutPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs, KernelLaunchConfig};
 use crate::cuda::allocator::CudaAllocator;
 use crate::ope::UnitValue;
 
@@ -103,6 +105,14 @@ impl<'a,A,const N:usize> Kernel for LinearBatchMse<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = loss_linear_batch_mse_derive_float as *const c_void;
     type Args = LinearBatchMseArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_len + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for LinearBatchMse<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -111,6 +121,14 @@ impl<'a,A,const N:usize> Kernel for LinearBatchMse<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = loss_linear_batch_mse_derive_double as *const c_void;
     type Args = LinearBatchMseArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_len + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list passed to the cuda kernel function as the argument of mse.
 pub struct LinearMseArgs<'a,T,A,const N:usize>
@@ -183,10 +201,26 @@ impl<'a,T,A,const N:usize> LinearMse<'a,T,A,N>
 impl<'a,A,const N:usize> Kernel for LinearMse<'a,f32,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = loss_linear_batch_mse_derive_float as *const c_void;
     type Args = LinearMseArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for LinearMse<'a,f64,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = loss_linear_batch_mse_derive_double as *const c_void;
     type Args = LinearMseArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list that is passed to the cuda kernel function as cross-entropy arguments during mini-batch execution.
 pub struct LinearBatchCrossEntropyArgs<'a,T,A,const N:usize>
@@ -280,6 +314,14 @@ impl<'a,A,const N:usize> Kernel for LinearBatchCrossEntropy<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = loss_linear_batch_cross_entropy_derive_float as *const c_void;
     type Args = LinearBatchCrossEntropyArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_len + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for LinearBatchCrossEntropy<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -288,6 +330,14 @@ impl<'a,A,const N:usize> Kernel for LinearBatchCrossEntropy<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = loss_linear_batch_cross_entropy_derive_double as *const c_void;
     type Args = LinearBatchCrossEntropyArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_len + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list passed to the cuda kernel function as the argument of cross entropy.
 pub struct LinearCrossEntropyArgs<'a,T,A,const N:usize>
@@ -360,10 +410,26 @@ impl<'a,T,A,const N:usize> LinearCrossEntropy<'a,T,A,N>
 impl<'a,A,const N:usize> Kernel for LinearCrossEntropy<'a,f32,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = loss_linear_batch_cross_entropy_derive_float as *const c_void;
     type Args = LinearCrossEntropyArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for LinearCrossEntropy<'a,f64,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = loss_linear_batch_cross_entropy_derive_double as *const c_void;
     type Args = LinearCrossEntropyArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list that is passed to the cuda kernel function as arguments
 /// to the croos entropy multiclass during mini-batch execution.
@@ -458,6 +524,14 @@ impl<'a,A,const N:usize> Kernel for LinearBatchCrossEntropyMulticlass<'a,f32,A,N
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = loss_linear_batch_cross_entropy_multiclass_derive_float as *const c_void;
     type Args = LinearBatchCrossEntropyMulticlassArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_len + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for LinearBatchCrossEntropyMulticlass<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -466,6 +540,14 @@ impl<'a,A,const N:usize> Kernel for LinearBatchCrossEntropyMulticlass<'a,f64,A,N
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = loss_linear_batch_cross_entropy_multiclass_derive_double as *const c_void;
     type Args = LinearBatchCrossEntropyMulticlassArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_len + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Defines the list passed to the cuda kernel function as the argument of croos entropy multiclass
 pub struct LinearCrossEntropyMulticlassArgs<'a,T,A,const N:usize>
@@ -538,8 +620,24 @@ impl<'a,T,A,const N:usize> LinearCrossEntropyMulticlass<'a,T,A,N>
 impl<'a,A,const N:usize> Kernel for LinearCrossEntropyMulticlass<'a,f32,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = loss_linear_batch_cross_entropy_multiclass_derive_float as *const c_void;
     type Args = LinearCrossEntropyMulticlassArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for LinearCrossEntropyMulticlass<'a,f64,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = loss_linear_batch_cross_entropy_multiclass_derive_double as *const c_void;
     type Args = LinearCrossEntropyMulticlassArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }

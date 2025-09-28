@@ -2547,6 +2547,15 @@ pub trait KernelArgs {
     /// which is converted to a data type that can be passed to the cuda kernel in subsequent processing.
     fn as_vec(&mut self) ->  Vec<&mut dyn AsKernelPtr>;
 }
+/// cuda kernel launch config
+pub struct  KernelLaunchConfig {
+    /// number of grid dim instances used at launch
+    pub grid_dim: dim3,
+    /// number of block dim instances used at launch
+    pub block_dim: dim3,
+    /// the size of shared memory used by the CUDA kernel.
+    pub shared_memory_size: usize
+}
 /// Trait defining cuda kernel functions
 pub trait Kernel {
     /// Object to be converted into a list of arguments to be passed to the cuda kernel function
@@ -2566,14 +2575,20 @@ pub trait Kernel {
     ///
     /// This function may return the following errors
     /// * [`CudaRuntimeError`]
-    fn launch(&mut self,grid_dim:dim3,block_dim:dim3,args:&mut Self::Args,shared_mem:usize) -> Result<(),CudaRuntimeError> {
+    fn launch(&mut self,args:&mut Self::Args) -> Result<(),CudaRuntimeError> {
+        let KernelLaunchConfig {
+            grid_dim,
+            block_dim,
+            shared_memory_size
+        } = self.launch_config(args);
+
         ffi::launch(Self::FUNC_PTR,
                     grid_dim,
                     block_dim,
                     &mut args.as_vec().into_iter()
                         .map(|p| p.as_kernel_ptr())
                         .collect::<Vec<*mut c_void>>().as_mut_slice(),
-                    shared_mem
+                    shared_memory_size
         )
     }
 
@@ -2586,6 +2601,11 @@ pub trait Kernel {
     fn device_synchronize(&self) -> Result<(),CudaRuntimeError> {
         ffi::device_synchronize()
     }
+
+    /// Function to get CUDA kernel launch configuration
+    /// # Arguments
+    /// * `args` - cuda kernel launch arguments
+    fn launch_config(&self,args: &Self::Args) -> KernelLaunchConfig;
 }
 /// Trait defining cuda cooperative kernel functions
 pub trait CooperativeKernel {
@@ -2607,14 +2627,20 @@ pub trait CooperativeKernel {
     ///
     /// This function may return the following errors
     /// * [`CudaRuntimeError`]
-    fn launch(&mut self,grid_dim:dim3,block_dim:dim3,args:&mut Self::Args,shared_mem:usize) -> Result<(),CudaRuntimeError> {
+    fn launch(&mut self,args:&mut Self::Args) -> Result<(),CudaRuntimeError> {
+        let KernelLaunchConfig {
+            grid_dim,
+            block_dim,
+            shared_memory_size
+        } = self.launch_config(args);
+
         ffi::launch_cooperative(Self::FUNC_PTR,
                     grid_dim,
                     block_dim,
                     &mut args.as_vec().into_iter()
                         .map(|p| p.as_kernel_ptr())
                         .collect::<Vec<*mut c_void>>().as_mut_slice(),
-                    shared_mem
+                    shared_memory_size
         )
     }
 
@@ -2627,4 +2653,9 @@ pub trait CooperativeKernel {
     fn device_synchronize(&self) -> Result<(),CudaRuntimeError> {
         ffi::device_synchronize()
     }
+
+    /// Function to get CUDA kernel launch configuration
+    /// # Arguments
+    /// * `args` - cuda kernel launch arguments
+    fn launch_config(&self,args: &Self::Args) -> KernelLaunchConfig;
 }

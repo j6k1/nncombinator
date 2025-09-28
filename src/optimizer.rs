@@ -2,8 +2,6 @@
 
 use core::fmt::Debug;
 use std::marker::PhantomData;
-use cuda_runtime_sys::dim3;
-use libc::c_uint;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::{UnitValue};
 use crate::arr::ShieldSlice;
@@ -103,9 +101,7 @@ impl<U,A> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>>
 
         let mut kernel = kernel::optimizer::SGD::<'_,U,A>::new();
 
-        kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0)?;
+        kernel.launch(&mut args)?;
 
         Ok(())
     }
@@ -282,9 +278,7 @@ impl<U,A> Optimizer<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>>
 
         let mut kernel = kernel::optimizer::MomentumSGD::<'_,U,A>::new();
 
-        kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0)?;
+        kernel.launch(&mut args)?;
 
         Ok(())
     }
@@ -484,9 +478,7 @@ impl<U,A> Optimizer<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>>
 
         let mut kernel = kernel::optimizer::Adagrad::<'_,U,A>::new();
 
-        kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0)?;
+        kernel.launch(&mut args)?;
 
         Ok(())
     }
@@ -710,9 +702,7 @@ impl<U,A> Optimizer<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>>
 
         let mut kernel = kernel::optimizer::RMSprop::<'_,U,A>::new();
 
-        kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0)?;
+        kernel.launch(&mut args)?;
 
         Ok(())
     }
@@ -977,9 +967,7 @@ impl<U,A> Optimizer<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>>
 
         let mut kernel = kernel::optimizer::Adam::<'_,U,A>::new();
 
-        kernel.launch(dim3 { x: (self.size as c_uint + 1023) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 },
-                      &mut args, 0)?;
+        kernel.launch(&mut args)?;
 
         self.b1t = self.b1t * self.b1;
         self.b2t = self.b2t * self.b2;

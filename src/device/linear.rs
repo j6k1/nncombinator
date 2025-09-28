@@ -1,9 +1,6 @@
 //! Implementation of the calculation process for full connected layers
 
 use std::fmt::Debug;
-use std::mem;
-use cuda_runtime_sys::dim3;
-use libc::c_uint;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
@@ -425,10 +422,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
 
         let mut kernel = AddBiasBatch::<'_,f32,A,NO>::new();
 
-        kernel.launch(dim3 { x: (NO as std::os::raw::c_uint + 32 - 1) / 32,
-                                     y: (size as std::os::raw::c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.input_output)
 
@@ -765,10 +759,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
 
         let mut kernel = AddBiasBatch::<'_,f64,A,NO>::new();
 
-        kernel.launch(dim3 { x: (NO as std::os::raw::c_uint + 32 - 1) / 32,
-                                     y: (input.size() as std::os::raw::c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 },
-                      &mut args, 0).unwrap();
+        kernel.launch(&mut args)?;
 
         Ok(args.input_output)
 
@@ -971,8 +962,7 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
 
                 let mut kernel = DiffLinearForward::new();
 
-                kernel.launch(dim3 { x: NO as c_uint, y: 1, z: 1 },
-                              dim3 { x: 1024, y: 1, z: 1 }, &mut args, 1024 * mem::size_of::<U>())?;
+                kernel.launch(&mut args)?;
 
                 Ok(args.output)
             },
@@ -993,8 +983,7 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
 
                 let mut kernel = ForwardLinear::<U,A,NI,NO>::new();
 
-                kernel.launch(dim3 { x: NO as c_uint, y: 1, z: (NI as c_uint + 1023) / 1024 },
-                              dim3 { x: 1024, y: 1, z: 1 }, &mut args, 32 * 2 * mem::size_of::<U>())?;
+                kernel.launch(&mut args)?;
 
                 Ok(args.output)
             }
@@ -1027,8 +1016,7 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
 
                 let mut kernel = LinearGradient::<U,A,NI,NO>::new();
 
-                kernel.launch(dim3 { x: (NI * NO) as c_uint, y: 1, z: 1 },
-                              dim3 { x: 1024, y: 1, z: 1 }, &mut args, 32 * mem::size_of::<U>())?;
+                kernel.launch(&mut args)?;
 
                 Ok(args.output)
             }

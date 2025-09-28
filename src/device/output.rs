@@ -1,8 +1,6 @@
 //! Implementation of the calculation process for output layers
 
 use core::fmt::Debug;
-use cuda_runtime_sys::dim3;
-use libc::c_uint;
 use num_traits::FromPrimitive;
 use rayon::iter::ParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
@@ -175,8 +173,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
 
         let mut kernel = LossLinearByCanonicalLink::<'a,U,A,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 - 1) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 }, &mut args, 0)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -212,8 +209,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
 
         let mut kernel = LossLinearBatchByCanonicalLink::<'a,U,A,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (expected.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 }, &mut args, 0)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }

@@ -1397,7 +1397,7 @@ impl<U,T> SerializedVec<U,T>
     }
 
     /// Obtaining a immutable iterator
-    pub fn iter(&self) -> SerializedVecIter<U,T> {
+    pub fn iter(&self) -> SerializedVecIter<'_,U,T> {
         SerializedVecIter {
             arr:&*self.arr,
             u:PhantomData::<U>,
@@ -1418,7 +1418,7 @@ impl<U,T> SerializedVec<U,T>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + MakeView<'a,U> + MakeViewMut<'a,U> {
     /// Obtaining a mutable iterator
-    pub fn iter_mut(&mut self) -> SerializedVecIterMut<U,T> {
+    pub fn iter_mut(&mut self) -> SerializedVecIterMut<'_,U,T> {
         SerializedVecIterMut {
             arr:&mut self.arr,
             u:PhantomData::<U>,

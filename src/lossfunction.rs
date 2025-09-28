@@ -1,8 +1,6 @@
 //! Implementing the loss function of a neural network
 
 use std::marker::PhantomData;
-use cuda_runtime_sys::dim3;
-use libc::c_uint;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
 use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, WriteMemory};
@@ -140,8 +138,7 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse
 
         let mut kernel = LinearMse::<'a,U,A,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 - 1) / 1024, y: 1, z: 1},
-                      dim3 { x: 1024, y: 32, z: 1 },&mut args,0)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -169,9 +166,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
 
         let mut kernel = LinearBatchMse::<'a,U,A,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (expected.size() as c_uint + 32 - 1) / 32, z: 1},
-                      dim3 { x: 32, y: 32, z: 1 },&mut args,0)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -223,8 +218,7 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
 
         let mut kernel = LinearCrossEntropy::<'a,U,A,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 - 1) / 1024, y: 1, z: 1},
-                      dim3 { x: 1024, y: 32, z: 1 },&mut args,0)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -253,9 +247,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
 
         let mut kernel = LinearBatchCrossEntropy::<'_,U,A,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (expected.size() as c_uint + 32 - 1) / 32, z: 1},
-                      dim3 { x: 32, y: 32, z: 1 },&mut args,0)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -305,8 +297,7 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
 
         let mut kernel = LinearCrossEntropyMulticlass::<'a,U,A,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 - 1) / 1024, y: 1, z: 1},
-                      dim3 { x: 1024, y: 32, z: 1 },&mut args,0)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
@@ -334,9 +325,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
 
         let mut kernel = LinearBatchCrossEntropyMulticlass::<'_,U,A,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32,
-                                     y: (expected.size() as c_uint + 32 - 1) / 32, z: 1},
-                      dim3 { x: 32, y: 32, z: 1 },&mut args,0)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }

@@ -1,8 +1,11 @@
 //! This module is related to the cuda implementation of the activation function
 
+use std::ffi::c_uint;
 use std::marker::PhantomData;
+use std::mem;
+use cuda_runtime_sys::dim3;
 use libc::{c_void, size_t};
-use crate::cuda::{AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaMutPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs};
+use crate::cuda::{AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaMutPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs, KernelLaunchConfig};
 use crate::cuda::allocator::CudaAllocator;
 use crate::ope::UnitValue;
 
@@ -244,10 +247,26 @@ impl<'a,T,A,const N:usize> SigmoidForward<'a,T,A,N> where T: DataTypeInfo + Unit
 impl<'a,A,const N:usize> Kernel for SigmoidForward<'a,f32,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = sigmoid_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SigmoidForward<'a,f64,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = sigmoid_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implementation of derivatives of the sigmoid activation function
 pub struct SigmoidBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -268,10 +287,26 @@ impl<'a,T,A,const N:usize> SigmoidBackward<'a,T,A,N> where T: DataTypeInfo + Uni
 impl<'a,A,const N:usize> Kernel for SigmoidBackward<'a,f32,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = sigmoid_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SigmoidBackward<'a,f64,A,N> where A: CudaAllocator + 'a {
     const FUNC_PTR: *const c_void = sigmoid_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implementation of sigmoid activation functions for batch execution
 pub struct SigmoidBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -295,6 +330,14 @@ impl<'a,A,const N:usize> Kernel for SigmoidBatchForward<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = sigmoid_forward_float as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SigmoidBatchForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -302,6 +345,14 @@ impl<'a,A,const N:usize> Kernel for SigmoidBatchForward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = sigmoid_forward_double as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implement derivatives of the sigmoid activation function for batch execution
 pub struct SigmoidBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -325,6 +376,14 @@ impl<'a,A,const N:usize> Kernel for SigmoidBatchBackward<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = sigmoid_backward_float as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SigmoidBatchBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -332,6 +391,14 @@ impl<'a,A,const N:usize> Kernel for SigmoidBatchBackward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = sigmoid_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// ReLu activation function implementation activation function implementation
 pub struct ReLuForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -354,12 +421,28 @@ impl<'a,A,const N:usize> Kernel for ReLuForward<'a,f32,A,N>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for ReLuForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implementation of derivatives of the ReLu activation function
 pub struct ReLuBackward<'a,T,A,const N:usize>
@@ -388,12 +471,28 @@ impl<'a,A,const N:usize> Kernel for ReLuBackward<'a,f32,A,N>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for ReLuBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implementation of ReLu activation functions for batch execution
 pub struct ReLuBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -417,6 +516,14 @@ impl<'a,A,const N:usize> Kernel for ReLuBatchForward<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_forward_float as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for ReLuBatchForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -424,6 +531,14 @@ impl<'a,A,const N:usize> Kernel for ReLuBatchForward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_forward_double as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implement derivatives of the ReLu activation function for batch execution
 pub struct ReLuBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -447,6 +562,14 @@ impl<'a,A,const N:usize> Kernel for ReLuBatchBackward<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_float as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for ReLuBatchBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -454,6 +577,14 @@ impl<'a,A,const N:usize> Kernel for ReLuBatchBackward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Swish activation function implementation
 pub struct SwishForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -476,12 +607,28 @@ impl<'a,A,const N:usize> Kernel for SwishForward<'a,f32,A,N>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SwishForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implementation of derivatives of the Swish activation function
 pub struct SwishBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -504,12 +651,28 @@ impl<'a,A,const N:usize> Kernel for SwishBackward<'a,f32,A,N>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SwishBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implementation of Swish activation functions for batch execution
 pub struct SwishBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -533,6 +696,14 @@ impl<'a,A,const N:usize> Kernel for SwishBatchForward<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_forward_float as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SwishBatchForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -540,6 +711,14 @@ impl<'a,A,const N:usize> Kernel for SwishBatchForward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_forward_double as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implement derivatives of the Swish activation function for batch execution
 pub struct SwishBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -563,6 +742,14 @@ impl<'a,A,const N:usize> Kernel for SwishBatchBackward<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_backward_float as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SwishBatchBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -570,6 +757,14 @@ impl<'a,A,const N:usize> Kernel for SwishBatchBackward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Tanh activation function implementation
 pub struct TanhForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -592,12 +787,28 @@ impl<'a,A,const N:usize> Kernel for TanhForward<'a,f32,A,N>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for TanhForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implementation of derivatives of the Tanh activation function
 pub struct TanhBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -620,12 +831,28 @@ impl<'a,A,const N:usize> Kernel for TanhBackward<'a,f32,A,N>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for TanhBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implementation of Tanh activation functions for batch execution
 pub struct TanhBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -649,6 +876,14 @@ impl<'a,A,const N:usize> Kernel for TanhBatchForward<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_forward_float as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for TanhBatchForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -656,6 +891,14 @@ impl<'a,A,const N:usize> Kernel for TanhBatchForward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_forward_double as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// Implement derivatives of the Tanh activation function for batch execution
 pub struct TanhBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -679,6 +922,14 @@ impl<'a,A,const N:usize> Kernel for TanhBatchBackward<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_backward_float as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for TanhBatchBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -686,6 +937,14 @@ impl<'a,A,const N:usize> Kernel for TanhBatchBackward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
 }
 /// SoftMax activation function implementation
 pub struct SoftMaxForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -708,12 +967,28 @@ impl<'a,A,const N:usize> Kernel for SoftMaxForward<'a,f32,A,N>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: 1, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 32 * mem::size_of::<f32>() * 2
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: 1, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 32 * mem::size_of::<f64>() * 2
+        }
+    }
 }
 /// Implementation of derivatives of the softmax activation function
 pub struct SoftMaxBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -736,12 +1011,28 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBackward<'a,f32,A,N>
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: 1, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 1024 * mem::size_of::<f32>()
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: 1, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 1024 * mem::size_of::<f64>()
+        }
+    }
 }
 /// Implementation of Softmax activation functions for batch execution
 pub struct SoftMaxBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -765,6 +1056,14 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBatchForward<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_forward_float as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: args.batch_size as c_uint, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 32 * mem::size_of::<f32>() * 2
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBatchForward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -772,6 +1071,14 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBatchForward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_forward_double as *const c_void;
     type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: args.batch_size as c_uint, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 32 * mem::size_of::<f64>() * 2
+        }
+    }
 }
 /// Implement derivatives of the Softmax activation function for batch execution
 pub struct SoftMaxBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
@@ -795,6 +1102,14 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBatchBackward<'a,f32,A,N>
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_backward_float as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: args.batch_size as c_uint, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 1024 * mem::size_of::<f32>()
+        }
+    }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBatchBackward<'a,f64,A,N>
     where A: CudaAllocator + 'a,
@@ -802,4 +1117,12 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBatchBackward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: args.batch_size as c_uint, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 1024 * mem::size_of::<f64>()
+        }
+    }
 }

@@ -471,7 +471,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for ForwardLinearBatch<'a,f32,A,
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NI + 15) as c_uint / 16, y: (args.batch_size + 15) as c_uint / 16, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -483,7 +483,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for ForwardLinearBatch<'a,f64,A,
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NI + 15) as c_uint / 16, y: (args.batch_size + 15) as c_uint / 16, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -573,7 +573,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for ForwardLinear<'a,f32,A,NI,NO
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NI + 15) as c_uint / 16, y: 1, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -585,7 +585,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for ForwardLinear<'a,f64,A,NI,NO
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NI + 15) as c_uint / 16, y: 1, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -671,7 +671,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for BackwardLinearBatch<'a,f32,A
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (args.batch_size + 15) as c_uint / 16, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -683,7 +683,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for BackwardLinearBatch<'a,f64,A
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (args.batch_size + 15) as c_uint / 16, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -768,7 +768,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for BackwardLinear<'a,f32,A,NI,N
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: 1, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -780,7 +780,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for BackwardLinear<'a,f64,A,NI,N
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: 1, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -868,7 +868,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for LinearGradientBatch<'a,f32,A
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (NI + 15) as c_uint / 16, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -880,7 +880,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for LinearGradientBatch<'a,f64,A
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (NI + 15) as c_uint / 16, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -967,7 +967,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for LinearGradient<'a,f32,A,NI,N
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (NI + 15) as c_uint / 16, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }
@@ -979,7 +979,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for LinearGradient<'a,f64,A,NI,N
         KernelLaunchConfig {
             grid_dim: dim3 { x: (NO + 15) as c_uint / 16, y: (NI + 15) as c_uint / 16, z: 1 },
             block_dim: dim3 { x: 16, y: 16, z: 1 },
-            shared_memory_size: 2 * 256 * mem::size_of::<f32>() + 256 * mem::size_of::<f32>() / 2,
+            shared_memory_size: 2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>(),
         }
     }
 }

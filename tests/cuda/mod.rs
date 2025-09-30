@@ -1,6 +1,8 @@
 use nncombinator::cuda::{CudaPtr, ReadMemory};
 use crate::common::SHARED_MEMORY_POOL;
 
+mod kernel;
+
 #[test]
 fn test_cudamemorypoolptr_with_initializer_zeros() {
     let memory_pool = &SHARED_MEMORY_POOL.clone();

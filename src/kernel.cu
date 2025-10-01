@@ -451,20 +451,20 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
     __syncthreads();
 
     for (int k = 0; k <= input_len; k += TILE_SIZE) {
-        if (k + tx < input_len && by + ty < batch_size) {
-            sdata_a[ty * TILE_SIZE + tx] = _to_half(input[calc_index(k+tx,by+ty,input_len)]);
-        } else if (k + tx == input_len && by + ty < batch_size) {
-            sdata_a[ty * TILE_SIZE + tx] = __float2half(1.0f);
+        if (k + ty < input_len && bx + tx < batch_size) {
+            sdata_a[tx * TILE_SIZE + ty] = _to_half(input[calc_index(k+ty,bx+tx,input_len)]);
+        } else if (k + ty == input_len && bx + tx < batch_size) {
+            sdata_a[tx * TILE_SIZE + ty] = __float2half(1.0f);
         } else {
-            sdata_a[ty * TILE_SIZE + tx] = __float2half(0.0f);
+            sdata_a[tx * TILE_SIZE + ty] = __float2half(0.0f);
         }
 
-        if (k + ty <= input_len && bx + tx < output_len) {
-            sdata_b[ty * TILE_SIZE + tx] = _to_half(units[calc_index(bx+tx,k+ty,output_len)]);
-        } else if (k + ty == input_len && bx + tx < output_len) {
-            sdata_b[ty * TILE_SIZE + tx] = _to_half(bias[bx + tx]);
+        if (k + tx < input_len && by + ty < output_len) {
+            sdata_b[tx * TILE_SIZE + ty] = _to_half(units[calc_index(by+ty,k+tx,output_len)]);
+        } else if (k + tx == input_len && by + ty < output_len) {
+            sdata_b[tx * TILE_SIZE + ty] = _to_half(bias[by + ty]);
         } else {
-            sdata_b[ty * TILE_SIZE + tx] = __float2half(0.0f);
+            sdata_b[tx * TILE_SIZE + ty] = __float2half(0.0f);
         }
 
         __syncthreads();
@@ -477,14 +477,12 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
         __syncthreads();
     }
 
-    if (ty < 2) {
-        wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
-    }
+    wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
 
     __syncthreads();
 
-    if (tx + bx < output_len && ty + by < batch_size) {
-        output[calc_index(tx+bx,ty+by,output_len)] = (T)sdata_c[ty * TILE_SIZE + tx];
+    if (ty + by < output_len && tx + bx < batch_size) {
+        output[calc_index(ty+by,tx+bx,output_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
     }
 }
 
@@ -512,14 +510,14 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
     __syncthreads();
 
     for (int k = 0; k < output_len; k += TILE_SIZE) {
-        if (k + tx < output_len && by + ty < batch_size) {
-            sdata_a[ty * TILE_SIZE + tx] = _to_half(loss[calc_index(k+tx,by+ty,output_len)]);
+        if (k + ty < output_len && bx + tx < batch_size) {
+            sdata_a[tx * TILE_SIZE + ty] = _to_half(loss[calc_index(k+ty,bx+tx,output_len)]);
         } else {
-            sdata_a[ty * TILE_SIZE + tx] = __float2half(0.0f);
+            sdata_a[tx * TILE_SIZE + ty] = __float2half(0.0f);
         }
 
-        if (k + tx < output_len && bx + ty < input_len) {
-            sdata_b[tx * TILE_SIZE + ty] = _to_half(units[calc_transposed_index(bx+ty,k+tx,output_len)]);
+        if (k + tx < output_len && by + ty < input_len) {
+            sdata_b[tx * TILE_SIZE + ty] = _to_half(units[calc_transposed_index(by+ty,k+tx,output_len)]);
         } else {
             sdata_b[tx * TILE_SIZE + ty] = __float2half(0.0f);
         }
@@ -534,14 +532,12 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
         __syncthreads();
     }
 
-    if (ty < 2) {
-        wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
-    }
+    wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
 
     __syncthreads();
 
-    if (tx + bx < input_len && ty + by < batch_size) {
-        output[calc_index(tx+bx,ty+by,input_len)] = (T)sdata_c[ty * TILE_SIZE + tx];
+    if (ty + by < input_len && tx + bx < batch_size) {
+        output[calc_index(ty+by,tx+bx,input_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
     }
 }
 

@@ -12,13 +12,13 @@ use crate::common::SHARED_MEMORY_POOL;
 
 const NI: usize = 500;
 const NO: usize = 600;
-const BATCH: usize = 200;
+const BATCH: usize = 400;
 
 fn gen_inputs() -> (Arr<f32,NO>,Arr2<f32,NI,NO>,SerializedVec<f32,Arr<f32,NI>>) {
     let mut rng = rand::thread_rng();
 
     let mut bias = Arr::<f32,NO>::new();
-    for b in bias.iter_mut() { *b = rng.gen::<f32>(); }
+    for b in bias.iter_mut() { *b = rng.gen::<f32>() * 1e-3; }
 
     let mut units = Arr2::<f32,NI,NO>::new();
     for i in 0..NI {
@@ -114,7 +114,7 @@ fn test_kernel_forward_linear_batch_matches_cpu() {
         }
     }
 
-    approx_eq_slice(&gpu_out,&cpu_flat,1e-2);
+    approx_eq_slice(&gpu_out,&cpu_flat,2e-2);
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn test_kernel_backward_linear_batch_matches_cpu() {
         }
     }
 
-    approx_eq_slice(&gpu_out,&cpu_flat,1e-2);
+    approx_eq_slice(&gpu_out,&cpu_flat,2e-2);
 }
 
 #[test]

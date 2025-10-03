@@ -189,7 +189,7 @@ impl<U> LossFunction<U> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U>
     }
 
     fn apply(&self, r: U, t: U) -> U {
-        -t * r.max(&U::from_f64(1e-7).unwrap()).ln() + (U::one() - t) * (U::one() - r).max(&U::from_f64(1e-7).unwrap()).ln()
+        -t * r.max(&U::from_f64(1e-7).unwrap()).ln() - (U::one() - t) * (U::one() - r).max(&U::from_f64(1e-7).unwrap()).ln()
     }
 
     fn name(&self) -> &'static str {

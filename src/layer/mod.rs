@@ -20,10 +20,10 @@ pub mod bias;
 
 /// Differential input
 #[derive(Debug)]
-pub enum DiffInput<T,U,const NI:usize,const NO:usize>
+pub enum DiffInput<'a,T,U,const NI:usize,const NO:usize>
     where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
     /// diff input
-    Diff(T,Arr<U,NO>),
+    Diff(T,&'a Arr<U,NO>),
     /// fully input
     NotDiff(Arr<U,NI>)
 }
@@ -35,11 +35,11 @@ impl BatchDataType for () {
     type Type = ();
 }
 
-impl<T,U,const NI:usize,const NO:usize> BatchDataType for DiffInput<T,U,NI,NO>
+impl<'a,T,U,const NI:usize,const NO:usize> BatchDataType for DiffInput<'a,T,U,NI,NO>
     where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
-    type Type = Vec<DiffInput<T,U,NI,NO>>;
+    type Type = Vec<DiffInput<'a,T,U,NI,NO>>;
 }
-impl<T,U,A,const NI:usize,const NO:usize> ToCuda<U,A> for DiffInput<T,U,NI,NO>
+impl<'a,T,U,A,const NI:usize,const NO:usize> ToCuda<U,A> for DiffInput<'a,T,U,NI,NO>
     where U: UnitValue<U> + Clone + Copy + Debug,
           T: Debug,
           A: CudaAllocator {
@@ -49,7 +49,7 @@ impl<T,U,A,const NI:usize,const NO:usize> ToCuda<U,A> for DiffInput<T,U,NI,NO>
         Ok(self)
     }
 }
-impl<T,U,A,const NI:usize,const NO:usize> ToCuda<U,A> for Vec<DiffInput<T,U,NI,NO>>
+impl<'a,T,U,A,const NI:usize,const NO:usize> ToCuda<U,A> for Vec<DiffInput<'a,T,U,NI,NO>>
     where U: UnitValue<U> + Clone + Copy + Debug,
           T: Debug,
           A: CudaAllocator {
@@ -162,18 +162,6 @@ pub trait UpdateWeight<U> where U: UnitValue<U> {
     /// * [`TrainingError`]
     fn update_weight(&mut self, stack:Self::GradientStack) -> Result<(), TrainingError>;
 }
-/// Trait that defines the function of differential application of inputs in the process of forward propagation to neural networks.
-pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
-    /// Forward propagation (differential application)
-    /// # Arguments
-    /// * `input` - input
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`EvaluateError`]
-    fn forward_diff(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError>;
-}
 /// Trait that defines the learning process of a neural network.
 pub trait Train<U,L>: PreTrain<U>
     where U: UnitValue<U> {
@@ -189,14 +177,12 @@ pub trait Train<U,L>: PreTrain<U>
     /// * [`TrainingError`]
     fn train(&mut self, expected:Self::Output, input:Self::Input, lossf:&L) -> Result<U, TrainingError>;
 }
-/// Trait that defines the function to query information to calculate the difference when applying the difference of neural networks.
-pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
-    /// Diff Input to this layer of the neural network
-    type DiffInput: Debug;
-    /// Data inquiry for creating difference information
-    /// # Arguments
-    /// * `stack` - Stack to store calculation results at upper layers
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError>;
+/// Implementation of a function to return the intermediate results of forward propagation for difference calculation
+pub trait PartialForward: ForwardAll {
+    /// Data type of intermediate results during forward propagation processing
+    type PartialOutput: Debug;
+
+    fn partial_foward(&self,input:Self::Input) -> Result<Self::PartialOutput, EvaluateError>;
 }
 /// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForwardBase: ForwardAll {
@@ -319,10 +305,5 @@ pub trait TryAddLayer: ForwardAll where Self: Sized {
 impl<T> TryAddLayer for T where T: ForwardAll + Sized {
     fn try_add_layer<C,F,E>(self, f: F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E> {
         f(self)
-    }
-}
-impl<T,U> ForwardDiff<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
-    fn forward_diff(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
-        self.pre_train(input)
     }
 }

@@ -8,8 +8,8 @@ use crate::cuda::{CudaPtr, CudaTensor1dPtr, ReadMemory, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::batchnormalization::DeviceBatchNorm;
-use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
+use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
@@ -603,9 +603,9 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> UpdateWeight<U> for BatchNormalizationLaye
         Ok(self.parent.update_weight(s)?)
     }
 }
-impl<U,P,OP,C,I,PI,S,const N:usize> AskDiffInput<U> for BatchNormalizationLayer<U,C,P,OP,DeviceCpu<U>,I,PI,S,N>
+impl<U,P,OP,C,I,PI,S,const N:usize> PartialForward for BatchNormalizationLayer<U,C,P,OP,DeviceCpu<U>,I,PI,S,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,OutStack = <<<Self as PreTrain<U>>::OutStack as Stack>::Remaining as Stack>::Remaining> + Loss<U> + AskDiffInput<U>,
+             PreTrain<U,OutStack = <<<Self as PreTrain<U>>::OutStack as Stack>::Remaining as Stack>::Remaining> + Loss<U> + PartialForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
@@ -613,11 +613,12 @@ impl<U,P,OP,C,I,PI,S,const N:usize> AskDiffInput<U> for BatchNormalizationLayer<
           C: Debug,
           OP: Optimizer<U,DeviceCpu<U>>,
           <PI as BatchDataType>::Type: Debug + 'static,
-          Self: PreTrain<U,PreOutput=PI> {
-    type DiffInput = P::DiffInput;
+          Self: ForwardAll<Input=I>,
+          Self: PreTrain<U> {
+    type PartialOutput = <P as PartialForward>::PartialOutput;
 
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
-        stack.map_remaining(|s| s.map_remaining(|s| self.parent.ask_diff_input(s)))
+    fn partial_foward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        self.parent.partial_foward(input)
     }
 }
 impl<U,C,P,OP,D,I,PI,S,const N:usize> Loss<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>

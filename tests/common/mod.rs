@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use lazy_static::lazy_static;
 use nncombinator::device::input::DeviceInput;
-use nncombinator::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchPreTrain, ForwardAll, ForwardDiff, Loss, PreTrain, UpdateWeight};
+use nncombinator::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchPreTrain, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
 use nncombinator::ope::UnitValue;
 use nncombinator::cuda::allocator::{DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
 
@@ -28,12 +28,7 @@ pub fn assert_loss<U: UnitValue<U>,T: Loss<U>>(_:&T) {
 pub fn assert_update_weight<U: UnitValue<U>,T: UpdateWeight<U>>(_:&T) {
 
 }
-pub fn assert_foward_diff<U: UnitValue<U>,T: ForwardDiff<U>>(_:&T) {
-
-}
-pub fn assert_ask_diff_input<U: UnitValue<U>,T: AskDiffInput<U>>(_:&T) {
-
-}
+pub fn assert_partial_foward<T: PartialForward>(_:&T) {}
 pub fn assert_batch_forward<T: BatchForward>(_:&T) {
 
 }

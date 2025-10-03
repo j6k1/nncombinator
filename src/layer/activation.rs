@@ -5,8 +5,8 @@ use std::marker::PhantomData;
 use crate::{Cons, Stack};
 use crate::device::activation::DeviceActivation;
 use crate::device::Device;
-use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
+use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -151,17 +151,17 @@ impl<U,P,A,I,PI,D,const N:usize> UpdateWeight<U> for ActivationLayer<U,P,A,I,PI,
         Ok(self.parent.update_weight(stack)?)
     }
 }
-impl<U,P,A,I,PI,D,const N:usize> AskDiffInput<U> for ActivationLayer<U,P,A,I,PI,D,N>
+impl<U,P,A,I,PI,D,const N:usize> PartialForward for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> + AskDiffInput<U>,
+             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType,
           I: Debug + Send + Sync {
-    type DiffInput = P::DiffInput;
+    type PartialOutput = <P as PartialForward>::PartialOutput;
 
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
-        stack.map_remaining(|s| self.parent.ask_diff_input(s))
+    fn partial_foward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_foward(input)?)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,PI,D,N>

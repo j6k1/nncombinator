@@ -889,7 +889,7 @@ impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
     fn forward_diff_linear<'a>(&self, units: &Arr2<U, NI, NO>, bias: &Arr<U,NO>, input: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>) -> Result<Arr<U, NO>,EvaluateError> {
         match input {
             DiffInput::Diff(d,output) => {
-                let mut output:Arr<U,NO> = output.clone();
+                let mut output = (*output).clone();
 
                 for &(i,d) in d.iter() {
                     for (o,j) in output.iter_mut().zip(0..NO) {

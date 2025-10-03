@@ -160,8 +160,8 @@ impl<U,P,A,I,PI,D,const N:usize> PartialForward for ActivationLayer<U,P,A,I,PI,D
           I: Debug + Send + Sync {
     type PartialOutput = <P as PartialForward>::PartialOutput;
 
-    fn partial_foward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
-        Ok(self.parent.partial_foward(input)?)
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward(input)?)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,PI,D,N>

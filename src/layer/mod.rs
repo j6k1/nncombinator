@@ -182,7 +182,7 @@ pub trait PartialForward: ForwardAll {
     /// Data type of intermediate results during forward propagation processing
     type PartialOutput: Debug;
 
-    fn partial_foward(&self,input:Self::Input) -> Result<Self::PartialOutput, EvaluateError>;
+    fn partial_forward(&self, input:Self::Input) -> Result<Self::PartialOutput, EvaluateError>;
 }
 /// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForwardBase: ForwardAll {

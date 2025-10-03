@@ -617,8 +617,8 @@ impl<U,P,OP,C,I,PI,S,const N:usize> PartialForward for BatchNormalizationLayer<U
           Self: PreTrain<U> {
     type PartialOutput = <P as PartialForward>::PartialOutput;
 
-    fn partial_foward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
-        self.parent.partial_foward(input)
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        self.parent.partial_forward(input)
     }
 }
 impl<U,C,P,OP,D,I,PI,S,const N:usize> Loss<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>

@@ -422,8 +422,8 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PartialForward for Linear
           Self: PreTrain<U> {
     type PartialOutput = <P as PartialForward>::PartialOutput;
 
-    fn partial_foward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
-        Ok(self.parent.partial_foward(input)?)
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward(input)?)
     }
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
@@ -1112,7 +1112,7 @@ impl<'a,U,C,BC,P,OP,I,const NI:usize,const NO:usize> PartialForward for DiffLine
           Self: PreTrain<U> {
     type PartialOutput = Arr<U,NO>;
 
-    fn partial_foward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         let input = self.parent.forward_all(input)?;
 
         Ok(self.device.forward_diff_linear(&self.units,&self.bias,&input)?)
@@ -1133,7 +1133,7 @@ impl<'a,U,C,BC,P,I,A,OP,const NI:usize,const NO:usize> PartialForward for DiffLi
           Self: PreTrain<U> {
     type PartialOutput = Arr<U,NO>;
 
-    fn partial_foward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         let input = self.parent.forward_all(input)?;
 
         Ok(self.device.forward_diff_linear(&self.units,&self.bias,&input)?.to_host()?)

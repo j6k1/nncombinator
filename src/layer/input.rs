@@ -67,7 +67,7 @@ impl<U,O,LI,D> PartialForward for InputLayer<U,O,LI,D>
       D: Device<U> + DeviceInput<U,O>,
       <O as BatchDataType>::Type: Debug + 'static {
     type PartialOutput = O;
-    fn partial_foward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         Ok(input)
     }
 }

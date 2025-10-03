@@ -28,7 +28,7 @@ pub fn assert_loss<U: UnitValue<U>,T: Loss<U>>(_:&T) {
 pub fn assert_update_weight<U: UnitValue<U>,T: UpdateWeight<U>>(_:&T) {
 
 }
-pub fn assert_partial_foward<T: PartialForward>(_:&T) {}
+pub fn assert_partial_forward<T: PartialForward>(_:&T) {}
 pub fn assert_batch_forward<T: BatchForward>(_:&T) {
 
 }

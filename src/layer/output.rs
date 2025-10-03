@@ -149,8 +149,8 @@ impl<U,P,D,I,PI,const N:usize> PartialForward for LinearOutputLayer<U,P,D,I,PI,N
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
     type PartialOutput = <P as PartialForward>::PartialOutput;
 
-    fn partial_foward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
-        Ok(self.parent.partial_foward(input)?)
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward(input)?)
     }
 }
 impl<U,P,D,I,PI,L,const N:usize> Train<U,L> for LinearOutputLayer<U,P,D,I,PI,N>

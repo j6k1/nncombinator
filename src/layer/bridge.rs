@@ -126,8 +126,8 @@ impl<U,P,I,PI,CI,D> PartialForward for BridgeLayer<U,P,I,PI,CI,D>
           I: Debug + Send + Sync {
     type PartialOutput = <P as PartialForward>::PartialOutput;
 
-    fn partial_foward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
-        self.parent.partial_foward(input)
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        self.parent.partial_forward(input)
     }
 }
 impl<U,P,I,PI,CI,D> Loss<U> for BridgeLayer<U,P,I,PI,CI,D>

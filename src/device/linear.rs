@@ -9,7 +9,7 @@ use crate::cuda::{DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator, DeviceReduce};
-use crate::error::{EvaluateError, TrainingError, TypeConvertError, UnsupportedOperationError};
+use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize, DiffInput};
 use crate::ope::UnitValue;
 use crate::ope::Product;
@@ -879,45 +879,21 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
 pub trait DeviceDiffLinear<U,T,B,const NI: usize,const NO: usize>
     where U: UnitValue<U> {
     type Output: Debug + 'static;
-    fn forward_diff_linear<'a>(&self,units: &T,bias: &B, input: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>) -> Result<Self::Output,EvaluateError>;
-    fn backward_diff_weight_gradient<'a>(&self, o: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>, loss: &'a Self::Output) -> Result<T, TrainingError>;
+    fn forward_diff_linear<'a>(&self, units: &T, bias: &B, input: &'a DiffInput<DiffArr<U, NI>, Arr<U, NO>>) -> Result<Self::Output, EvaluateError>;
 }
 impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO> for DeviceCpu<U>
     where U: UnitValue<U> {
     type Output = Arr<U,NO>;
     #[inline]
-    fn forward_diff_linear<'a>(&self, units: &Arr2<U, NI, NO>, bias: &Arr<U,NO>, input: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>) -> Result<Arr<U, NO>,EvaluateError> {
-        match input {
-            DiffInput::Diff(d,output) => {
-                let mut output = (*output).clone();
+    fn forward_diff_linear<'a>(&self, units: &Arr2<U, NI, NO>, _: &Arr<U,NO>, input: &'a DiffInput<DiffArr<U,NI>,Arr<U,NO>>) -> Result<Arr<U, NO>,EvaluateError> {
+        let mut output = input.output.clone();
 
-                for &(i,d) in d.iter() {
-                    for (o,j) in output.iter_mut().zip(0..NO) {
-                        *o += units[(i,j)] * d;
-                    }
-                }
-                Ok(output)
-            },
-            DiffInput::NotDiff(input) => {
-                Ok(ArrView::<'a,U,NI>::from(input).product(units) + bias)
+        for &(i,d) in input.diff.iter() {
+            for (o,j) in output.iter_mut().zip(0..NO) {
+                *o += units[(i,j)] * d;
             }
         }
-    }
-
-    #[inline]
-    fn backward_diff_weight_gradient<'a>(&self, o: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>, loss: &'a Arr<U,NO>) -> Result<Arr2<U,NI,NO>, TrainingError> {
-        match o {
-            DiffInput::Diff(_,_) => {
-                Err(TrainingError::UnsupportedOperationError(UnsupportedOperationError(
-                    String::from("Training from difference information is not supported.")
-                )))
-            },
-            DiffInput::NotDiff(o) => {
-                Ok(ArrView::<'a,U,NI>::from(o).iter().cloned().map(|o| {
-                    loss.iter().cloned().map(|l| o * l).collect::<Vec<U>>().try_into()
-                }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.try_into().map_err(|e| TrainingError::from(e))?)
-            }
-        }
+        Ok(output)
     }
 }
 impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,NI,NO>,CudaTensor1dPtr<U,A,NO>,NI,NO> for DeviceGpu<U,A>
@@ -935,91 +911,34 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
     type Output = CudaTensor1dPtr<U,A,NO>;
 
     #[inline]
-    fn forward_diff_linear<'a>(&self, units: &CudaTensor2dPtr<U,A,NI,NO>, bias: &CudaTensor1dPtr<U,A,NO>, input: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>)
+    fn forward_diff_linear<'a>(&self, units: &CudaTensor2dPtr<U,A,NI,NO>, _: &CudaTensor1dPtr<U,A,NO>, input: &'a DiffInput<DiffArr<U,NI>,Arr<U,NO>>)
         -> Result<CudaTensor1dPtr<U,A,NO>,EvaluateError> {
-        match input {
-            DiffInput::Diff(d, output) => {
-                let len = d.len();
+        let len = input.diff.len();
+        let output = input.output;
 
-                let (indexes, input) = d.iter().fold((Vec::new(), Vec::new()), |mut acc, &(i, d)| {
-                    acc.0.push(i);
-                    acc.1.push(d);
+        let (indexes, input) = input.diff.iter().fold((Vec::new(), Vec::new()), |mut acc, &(i, d)| {
+            acc.0.push(i);
+            acc.1.push(d);
 
-                    acc
-                });
+            acc
+        });
 
-                let mut indexes_ptr = CudaPtr::new(len, self.get_allocator())?;
-                let mut input_ptr = CudaPtr::new(len, self.get_allocator())?;
+        let mut indexes_ptr = CudaPtr::new(len, self.get_allocator())?;
+        let mut input_ptr = CudaPtr::new(len, self.get_allocator())?;
 
-                indexes_ptr.memcpy(indexes.as_ptr(), len)?;
-                input_ptr.memcpy(input.as_ptr(), len)?;
+        indexes_ptr.memcpy(indexes.as_ptr(), len)?;
+        input_ptr.memcpy(input.as_ptr(), len)?;
 
-                let mut output_ptr = CudaTensor1dPtr::<U,A,NO>::new(self.get_allocator())?;
+        let mut output_ptr = CudaTensor1dPtr::<U,A,NO>::new(self.get_allocator())?;
 
-                output_ptr.memcpy(output.as_ptr(), NO)?;
+        output_ptr.memcpy(output.as_ptr(), NO)?;
 
-                let mut args = DiffLinearForwardArgs::new(indexes_ptr, input_ptr, units, output_ptr, NO, len);
+        let mut args = DiffLinearForwardArgs::new(indexes_ptr, input_ptr, units, output_ptr, NO, len);
 
-                let mut kernel = DiffLinearForward::new();
+        let mut kernel = DiffLinearForward::new();
 
-                kernel.launch(&mut args)?;
+        kernel.launch(&mut args)?;
 
-                Ok(args.output)
-            },
-            DiffInput::NotDiff(input) => {
-                let output = CudaTensor1dPtr::<U,A,NO>::with_initializer(self.get_allocator(), Default::default)?;
-
-                let mut input_ptr = CudaTensor1dPtr::<U,A,NI>::new(self.get_allocator())?;
-
-                input_ptr.memcpy(input.as_ptr(),NI)?;
-
-                let input_ptr = (&input_ptr).into();
-
-                let mut args = ForwardLinearArgs::new(
-                    &input_ptr,
-                    units,
-                    bias,
-                    output);
-
-                let mut kernel = ForwardLinear::<U,A,NI,NO>::new();
-
-                kernel.launch(&mut args)?;
-
-                Ok(args.output)
-            }
-        }
-    }
-
-    #[inline]
-    fn backward_diff_weight_gradient<'a>(&self, o: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>, loss: &'a Self::Output) -> Result<CudaTensor2dPtr<U,A,NI,NO>, TrainingError> {
-        match o {
-            DiffInput::Diff(_, _) => {
-                Err(TrainingError::UnsupportedOperationError(UnsupportedOperationError(
-                    String::from("Training from difference information is not supported.")
-                )))
-            },
-            DiffInput::NotDiff(o) => {
-                let mut input_ptr = CudaTensor1dPtr::<U,A,NI>::new(self.get_allocator())?;
-
-                input_ptr.memcpy(o.as_ptr(),NI)?;
-
-                let input_ptr = (&input_ptr).into();
-
-                let loss_ptr = loss.into();
-                let output = CudaTensor2dPtr::<U,A,NI,NO>::with_initializer(self.get_allocator(), Default::default)?;
-
-                let mut args = LinearGradientArgs::new(
-                    &loss_ptr,
-                    &input_ptr,
-                    output
-                );
-
-                let mut kernel = LinearGradient::<U,A,NI,NO>::new();
-
-                kernel.launch(&mut args)?;
-
-                Ok(args.output)
-            }
-        }
+        Ok(args.output)
     }
 }

@@ -1,7 +1,6 @@
 //! The various layers that make up a neural network and the traits they implement
 
 use std::fmt::Debug;
-use crate::arr::*;
 use crate::device::*;
 use crate::{Stack};
 use crate::cuda::allocator::CudaAllocator;
@@ -20,12 +19,22 @@ pub mod bias;
 
 /// Differential input
 #[derive(Debug)]
-pub enum DiffInput<'a,T,U,const NI:usize,const NO:usize>
-    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
+pub struct DiffInput<'a,T,O>
+    where T: Debug,
+          O: Debug {
     /// diff input
-    Diff(T,&'a Arr<U,NO>),
-    /// fully input
-    NotDiff(Arr<U,NI>)
+    pub diff: T,
+    pub output: &'a O
+}
+impl<'a,T,O> Clone for DiffInput<'a,T,O>
+    where T: Debug + Clone,
+          O: Debug{
+    fn clone(&self) -> Self {
+        DiffInput {
+            diff: self.diff.clone(),
+            output: self.output
+        }
+    }
 }
 /// Trait that defines the data type during batch training corresponding to the data type
 pub trait BatchDataType {
@@ -35,13 +44,15 @@ impl BatchDataType for () {
     type Type = ();
 }
 
-impl<'a,T,U,const NI:usize,const NO:usize> BatchDataType for DiffInput<'a,T,U,NI,NO>
-    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
-    type Type = Vec<DiffInput<'a,T,U,NI,NO>>;
+impl<'a,T,O> BatchDataType for DiffInput<'a,T,O>
+    where T: Debug,
+          O: Debug + 'a {
+    type Type = Vec<DiffInput<'a,T,O>>;
 }
-impl<'a,T,U,A,const NI:usize,const NO:usize> ToCuda<U,A> for DiffInput<'a,T,U,NI,NO>
+impl<'a,T,O,U,A> ToCuda<U,A> for DiffInput<'a,T,O>
     where U: UnitValue<U> + Clone + Copy + Debug,
           T: Debug,
+          O: Debug + 'a,
           A: CudaAllocator {
     type Output = Self;
 
@@ -49,9 +60,10 @@ impl<'a,T,U,A,const NI:usize,const NO:usize> ToCuda<U,A> for DiffInput<'a,T,U,NI
         Ok(self)
     }
 }
-impl<'a,T,U,A,const NI:usize,const NO:usize> ToCuda<U,A> for Vec<DiffInput<'a,T,U,NI,NO>>
+impl<'a,T,O,U,A> ToCuda<U,A> for Vec<DiffInput<'a,T,O>>
     where U: UnitValue<U> + Clone + Copy + Debug,
           T: Debug,
+          O: Debug + 'a,
           A: CudaAllocator {
     type Output = Self;
 
@@ -183,6 +195,13 @@ pub trait PartialForward: ForwardAll {
     type PartialOutput: Debug;
 
     fn partial_forward(&self, input:Self::Input) -> Result<Self::PartialOutput, EvaluateError>;
+}
+/// Implementation of a process performing forward propagation calculations from differential input values
+pub trait ForwardDiff: PartialForward {
+    /// Forward Propagation Differential Input Information
+    type DiffInput: Debug;
+
+    fn forward_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>) -> Result<Self::Output, EvaluateError>;
 }
 /// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForwardBase: ForwardAll {

@@ -6,7 +6,7 @@ use crate::{Cons, Stack};
 use crate::device::activation::DeviceActivation;
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, DiffInput, Forward, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, DiffInput, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -153,21 +153,35 @@ impl<U,P,A,I,PI,D,const N:usize> UpdateWeight<U> for ActivationLayer<U,P,A,I,PI,
 }
 impl<U,P,A,I,PI,D,const N:usize> PartialForward for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward,
+             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward<DiffOutput=PI>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType,
           I: Debug + Send + Sync {
     type PartialOutput = <P as PartialForward>::PartialOutput;
     type DiffInput = <P as PartialForward>::DiffInput;
+    type DiffOutput = PI;
 
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         Ok(self.parent.partial_forward(input)?)
     }
 
     fn partial_forward_by_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>)
-        -> Result<Self::Output, EvaluateError> {
+        -> Result<Self::DiffOutput, EvaluateError> {
         let input = self.parent.partial_forward_by_diff(input)?;
+
+        Ok(self.forward(&input)?)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> ForwardDiff for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward<DiffOutput=PI> + ForwardDiff,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync {
+    fn forward_diff(&self, input: DiffInput<'_, Self::DiffInput, Self::PartialOutput>) -> Result<Self::DiffOutput, EvaluateError> {
+        let input = self.parent.forward_diff(input)?;
 
         Ok(self.forward(&input)?)
     }

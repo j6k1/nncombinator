@@ -195,13 +195,15 @@ pub trait PartialForward: ForwardAll {
     type PartialOutput: Debug;
     /// Forward Propagation Differential Input Information
     type DiffInput: Debug;
+    /// Forward Propagation Differential Output Information
+    type DiffOutput: Debug;
 
     fn partial_forward(&self, input:Self::Input) -> Result<Self::PartialOutput, EvaluateError>;
-    fn partial_forward_by_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>) -> Result<Self::Output, EvaluateError>;
+    fn partial_forward_by_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>) -> Result<Self::DiffOutput, EvaluateError>;
 }
 /// Implementation of a process performing forward propagation calculations from differential input values
 pub trait ForwardDiff: PartialForward {
-    fn forward_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>) -> Result<Self::Output, EvaluateError>;
+    fn forward_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>) -> Result<Self::DiffOutput, EvaluateError>;
 }
 /// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForwardBase: ForwardAll {

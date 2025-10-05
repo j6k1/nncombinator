@@ -8,7 +8,7 @@ use crate::cuda::ToHost;
 use crate::device::{Device};
 use crate::device::output::DeviceLinearOutput;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, DiffInput, ForwardAll, Loss, PartialForward, PreTrain, Train, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, DiffInput, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, Train, UpdateWeight};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -141,21 +141,37 @@ impl<U,P,D,I,PI,const N:usize> UpdateWeight<U> for LinearOutputLayer<U,P,D,I,PI,
 }
 impl<U,P,D,I,PI,const N:usize> PartialForward for LinearOutputLayer<U,P,D,I,PI,N>
     where P: BackwardAll<U,LossInput=PI> +
-             ForwardAll<Input=I,Output=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + PartialForward,
+             ForwardAll<Input=I,Output=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
+             PartialForward<DiffOutput=PI>,
           U: Default + Clone + Copy + UnitValue<U>,
           PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
-          for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
+          for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI>{
     type PartialOutput = <P as PartialForward>::PartialOutput;
     type DiffInput = <P as PartialForward>::DiffInput;
+    type DiffOutput = <PI as ToHost<U>>::Output;
 
-    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput,EvaluateError> {
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: DiffInput<'_, Self::DiffInput, Self::PartialOutput>) -> Result<Self::Output, EvaluateError> {
+    fn partial_forward_by_diff(&self, input: DiffInput<'_, Self::DiffInput, Self::PartialOutput>) -> Result<Self::DiffOutput,EvaluateError> {
         Ok(self.parent.partial_forward_by_diff(input)?.to_host()?)
+    }
+}
+impl<U,P,D,I,PI,const N:usize> ForwardDiff for LinearOutputLayer<U,P,D,I,PI,N>
+    where P: BackwardAll<U,LossInput=PI> +
+          ForwardAll<Input=I,Output=PI> + ForwardDiff +
+          PreTrain<U,PreOutput=PI> + Loss<U> +
+          PartialForward<DiffOutput=PI>,
+      U: Default + Clone + Copy + UnitValue<U>,
+      PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+      I: Debug + Send + Sync,
+      <PI as ToHost<U>>::Output: Debug + 'static,
+      for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
+    fn forward_diff(&self, input: DiffInput<'_, Self::DiffInput, Self::PartialOutput>) -> Result<Self::DiffOutput, EvaluateError> {
+        Ok(self.parent.forward_diff(input)?.to_host()?)
     }
 }
 impl<U,P,D,I,PI,L,const N:usize> Train<U,L> for LinearOutputLayer<U,P,D,I,PI,N>

@@ -879,7 +879,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
 pub trait DeviceDiffLinear<U,T,B,const NI: usize,const NO: usize>
     where U: UnitValue<U> {
     type Output: Debug + 'static;
-    fn forward_diff_linear<'a>(&self, units: &T, input: &'a DiffInput<DiffArr<U, NI>, Arr<U, NO>>) -> Result<Self::Output, EvaluateError>;
+    fn forward_diff_linear<'a>(&self, units: &T, input: &'a DiffInput<DiffArr<U, NI>, Self::Output>) -> Result<Self::Output, EvaluateError>;
 }
 impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO> for DeviceCpu<U>
     where U: UnitValue<U> {
@@ -902,7 +902,7 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
           CudaPtr<U,A>: WriteMemory<U>,
           CudaPtr<usize,A>: WriteMemory<usize>,
           CudaTensor1dPtr<U,A,NI>: WriteMemory<U>,
-          CudaTensor1dPtr<U,A,NO>: WriteMemory<U>,
+          CudaTensor1dPtr<U,A,NO>: WriteMemory<U> + MemoryMoveTo<U,CudaTensor1dPtr<U,A,NO>>,
           for<'b> CudaTensor1dPtrView<'b,U,NI>: From<&'b CudaTensor1dPtr<U,A,NI>>,
           for<'b> ForwardLinear::<'b,U,A,NI,NO>: Kernel<Args=ForwardLinearArgs<'b,U,A,NI,NO>>,
           for<'b> LinearGradient::<'b,U,A,NI,NO>: Kernel<Args=LinearGradientArgs<'b,U,A,NI,NO>>,
@@ -911,7 +911,7 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
     type Output = CudaTensor1dPtr<U,A,NO>;
 
     #[inline]
-    fn forward_diff_linear<'a>(&self, units: &CudaTensor2dPtr<U,A,NI,NO>, input: &'a DiffInput<DiffArr<U,NI>,Arr<U,NO>>)
+    fn forward_diff_linear<'a>(&self, units: &CudaTensor2dPtr<U,A,NI,NO>, input: &'a DiffInput<DiffArr<U,NI>,CudaTensor1dPtr<U,A,NO>>)
         -> Result<CudaTensor1dPtr<U,A,NO>,EvaluateError> {
         let len = input.diff.len();
         let output = input.output;
@@ -931,7 +931,7 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
 
         let mut output_ptr = CudaTensor1dPtr::<U,A,NO>::new(self.get_allocator())?;
 
-        output_ptr.memcpy(output.as_ptr(), NO)?;
+        output.memcpy_to(&mut output_ptr,NO)?;
 
         let mut args = DiffLinearForwardArgs::new(indexes_ptr, input_ptr, units, output_ptr, NO, len);
 

@@ -9,7 +9,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, DiffInput, Forward, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, DiffInput, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
@@ -409,7 +409,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for Linear
     }
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PartialForward for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
-    where P: ForwardAll<Input=I,Output=PI> + PartialForward +
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> +
              BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
@@ -421,15 +421,33 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PartialForward for Linear
           Self: PreTrain<U> {
     type PartialOutput = <P as PartialForward>::PartialOutput;
     type DiffInput = <P as PartialForward>::DiffInput;
+    type DiffOutput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
 
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>) -> Result<Self::Output, EvaluateError> {
+    fn partial_forward_by_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>) -> Result<Self::DiffOutput, EvaluateError> {
         let input = self.parent.partial_forward_by_diff(input)?;
 
-        Ok(self.forward(&input)?)
+        Ok(self.device.forward_linear(&self.bias,&self.units,&input.into())?)
+    }
+}
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ForwardDiff for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> + ForwardDiff +
+          BackwardAll<U,LossInput=PI> +
+          PreTrain<U,PreOutput=PI> + Loss<U>,
+      U: Default + Clone + Copy + Send + UnitValue<U>,
+      I: Debug + Send + Sync,
+      PI: Debug + BatchDataType,
+      OP: Optimizer<U,D>,
+      D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+      Self: ForwardAll<Input=I>,
+      Self: PreTrain<U> {
+    fn forward_diff(&self, input: DiffInput<'_, Self::DiffInput, Self::PartialOutput>) -> Result<Self::DiffOutput, EvaluateError> {
+        let input = self.parent.forward_diff(input)?;
+
+        Ok(self.device.forward_linear(&self.bias,&self.units,&input.into())?)
     }
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
@@ -1116,17 +1134,20 @@ impl<U,C,BC,P,D,OP,I,PI,const NI:usize,const NO:usize> UpdateWeight<U> for DiffL
 }
 impl<U,C,BC,P,D,OP,I,PI,const NI:usize,const NO:usize> PartialForward for DiffLinearLayer<U,C,BC,P,OP,D,I,PI,NI,NO>
     where P: BackwardAll<U,LossInput=()> +
-             ForwardAll<Input=I,Output=PI> + PartialForward<PartialOutput=PI> +
+             ForwardAll<Input=I,Output=PI> +
+             PartialForward<PartialOutput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO,Output=Arr<U,NO>>,
+          D: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO> +
+             DeviceLinear<U,C,BC,PI,NI,NO,Output=<D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
-          Self: ForwardAll<Input=I,Output=<D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output> +
+          Self: ForwardAll<Input=I> +
                 PreTrain<U> {
-    type PartialOutput = Arr<U,NO>;
+    type PartialOutput = <D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output;
     type DiffInput = DiffArr<U,NI>;
+    type DiffOutput = <D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output;
 
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         let input = self.parent.partial_forward(input)?;
@@ -1134,7 +1155,23 @@ impl<U,C,BC,P,D,OP,I,PI,const NI:usize,const NO:usize> PartialForward for DiffLi
         Ok(self.device.forward_linear(&self.bias,&self.units,&input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: DiffInput<'_, Self::DiffInput, Self::PartialOutput>) -> Result<Self::Output, EvaluateError> {
+    fn partial_forward_by_diff(&self, input: DiffInput<'_, Self::DiffInput, Self::PartialOutput>) -> Result<Self::DiffOutput, EvaluateError> {
+        Ok(self.device.forward_diff_linear(&self.units,&input)?)
+    }
+}
+impl<U,C,BC,P,D,OP,I,PI,const NI:usize,const NO:usize> ForwardDiff for DiffLinearLayer<U,C,BC,P,OP,D,I,PI,NI,NO>
+    where P: BackwardAll<U,LossInput=()> +
+             ForwardAll<Input=I,Output=PI> + PartialForward<PartialOutput=PI> + ForwardDiff +
+             PreTrain<U,PreOutput=PI> + Loss<U>,
+      U: Default + Clone + Copy + UnitValue<U>,
+      D: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO> +
+         DeviceLinear<U,C,BC,PI,NI,NO,Output=<D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output>,
+      I: Debug + Send + Sync,
+      PI: Debug + BatchDataType,
+      OP: Optimizer<U,D>,
+      Self: ForwardAll<Input=I> +
+      PreTrain<U> {
+    fn forward_diff(&self, input: DiffInput<'_, Self::DiffInput, Self::PartialOutput>) -> Result<Self::DiffOutput, EvaluateError> {
         Ok(self.device.forward_diff_linear(&self.units,&input)?)
     }
 }

@@ -30,7 +30,7 @@ use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLu, Sigmoid, SoftMax, Swish, Tanh};
 use nncombinator::arr::{Arr, DiffArr};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
-use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, DiffInput, ForwardAll, ForwardDiff, PartialForward, Train};
+use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, DiffInput, ForwardAll, ForwardDiff, PartialForward, ContinueForward, Train};
 use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::input::{DiffInputLayer, InputLayer};
 use nncombinator::layer::linear::{DiffLinearLayerBuilder, LinearLayerBuilder};
@@ -39,7 +39,7 @@ use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{AdagradBuilder, AdamBuilder, MomentumSGDBuilder, SGDBuilder};
 use nncombinator::cuda::allocator::{DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
 use nncombinator::cuda::{CudaTensor1dPtr, ReadMemory};
-use crate::common::{assert_backward_all, assert_forward_all, assert_loss, assert_partial_forward, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
+use crate::common::{assert_backward_all, assert_continue_forward, assert_forward_all, assert_loss, assert_partial_forward, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
 
 #[test]
 fn test_mnist_for_cpu() {
@@ -2937,6 +2937,233 @@ fn test_weather_by_forward_diff_for_gpu() {
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }
 #[test]
+fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
+    let mut rnd = prelude::thread_rng();
+    let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
+
+    let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
+
+    let device = DeviceGpu::new(&SHARED_MEMORY_POOL.clone()).unwrap();
+
+    type A = MemoryPoolAllocator<DeviceAlloc>;
+
+    let net:DiffInputLayer<f32,Arr<f32,14>,DiffInput<'_,DiffArr<f32,14>,CudaTensor1dPtr<f32,A,100>>,CudaTensor1dPtr<f32,A,100>,_,_> = DiffInputLayer::new(&device);
+
+    let rnd = rnd_base.clone();
+
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
+
+    let mut net = net.add_layer(|l| {
+        let rnd = rnd.clone();
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device,
+                                                      move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                      &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+        assert_continue_forward(&l);
+
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+        assert_continue_forward(&l);
+
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+                                                 move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                 &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+        assert_continue_forward(&l);
+
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+        assert_continue_forward(&l);
+
+        LinearOutputLayer::new(l,&device)
+    });
+
+    let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
+
+    let mut reader =  BufReader::new(
+        File::open(Path::new("data")
+            .join("weather")
+            .join("training")
+            .join("weather.csv")).unwrap());
+
+    let mut line:String = String::new();
+
+    loop {
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+
+        let columns = line.trim().split(',').map(|c| c.to_string()).collect::<Vec<String>>();
+
+        line.clear();
+
+        if columns.len() != 16 {
+            continue;
+        }
+
+        let t = columns[1].find("晴").is_some();
+
+        let columns = columns.iter().skip(2)
+            .filter(|c| !c.parse::<f32>().is_err())
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
+            .collect::<Vec<f32>>();
+        if columns.len() < 14 {
+            continue;
+        }
+
+        teachers.push((t,columns));
+    }
+
+    let mut rng = rand::thread_rng();
+
+    let mut correct_answers = 0;
+
+    teachers.shuffle(&mut rng);
+
+    for _ in 0..1 {
+        teachers.shuffle(&mut rng);
+
+        for (t, columns) in teachers.iter() {
+            let t = *t;
+
+            let mut input = Arr::<f32,14>::new();
+
+            for (it, p) in input.iter_mut().zip(columns.iter()) {
+                *it = *p;
+            }
+
+            let mut expected = Arr::new();
+
+            expected[0] = if t {
+                1.
+            } else {
+                0.
+            };
+
+            let lossf = CrossEntropy::new();
+
+            net.train(expected, input, &lossf).unwrap();
+        }
+    }
+
+    let mut tests:Vec<(bool,Vec<f32>)> = Vec::new();
+
+    let mut reader =  BufReader::new(
+        File::open(Path::new("data")
+            .join("weather")
+            .join("testing")
+            .join("weather.csv")).unwrap());
+
+    let mut line:String = String::new();
+
+    loop {
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+
+        let columns = line.trim().split(',').map(|c| c.to_string()).collect::<Vec<String>>();
+
+        line.clear();
+
+        if columns.len() != 16 {
+            continue;
+        }
+
+        let t = columns[1].find("晴").is_some();
+
+        let columns = columns.iter().skip(2)
+            .filter(|c| !c.parse::<f32>().is_err())
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
+            .collect::<Vec<f32>>();
+        if columns.len() < 14 {
+            continue;
+        }
+
+        tests.push((t,columns));
+    }
+
+    let mut prev:CudaTensor1dPtr<f32,A,100> = CudaTensor1dPtr::<f32,A,100>::new(&SHARED_MEMORY_POOL).unwrap();
+
+    let mut initial = true;
+
+    for (t, columns) in tests.iter() {
+        let t = *t;
+
+        let mut input = Arr::<f32, 14>::new();
+
+        for (it, p) in input.iter_mut().zip(columns.iter()) {
+            *it = *p;
+        }
+
+        if initial {
+            let po = {
+                let input = input.clone();
+                net.partial_forward(input).unwrap()
+            };
+
+            let r = net.forward_all(input).unwrap()[0];
+
+            if (t && r >= 0.5) || !t && r < 0.5 {
+                correct_answers += 1;
+            }
+
+            prev = po;
+            initial = false;
+        } else {
+            let p = Arr::<f32,100>::try_from(prev.read_to_vec().unwrap()).unwrap();
+
+            let d = input.iter().enumerate().zip(p.iter())
+                .filter(|((_, &input), &p)| input != p)
+                .map(|((index, &input), &p)| (index, input - p))
+                .fold(DiffArr::new(), |mut acc, (i, d)| {
+                    acc.push(i, d).unwrap();
+                    acc
+                });
+
+            let po = net.partial_forward_by_diff(DiffInput::new(d, &prev)).unwrap();
+
+            let r = net.continue_forward(&po).unwrap()[0];
+
+            if (t && r >= 0.5) || !t && r < 0.5 {
+                correct_answers += 1;
+            }
+
+            prev = po;
+        }
+    }
+
+    println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
+    debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
+}
+#[test]
 fn test_penguins_for_gpu_double() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -4878,6 +5105,246 @@ fn test_weather_by_forward_diff_in_thread() {
 
         handle.join().unwrap()
     };
+
+    println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
+    debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
+}
+#[test]
+fn test_weather_by_forward_diff_for_continue_forward() {
+    let mut rnd = prelude::thread_rng();
+    let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
+
+    let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
+
+    let device = DeviceCpu::new().unwrap();
+
+    let net:DiffInputLayer<f32,Arr<f32,14>,DiffInput<'_,DiffArr<f32,14>,Arr<f32,100>>,Arr<f32,100>,_,_> = DiffInputLayer::new(&device);
+
+    let rnd = rnd_base.clone();
+
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
+
+    let mut net = net.add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+
+        let rnd = rnd.clone();
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device,
+                                                      move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                      &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+        assert_continue_forward(&l);
+
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+        assert_continue_forward(&l);
+
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+                                                 move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                 &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+        assert_continue_forward(&l);
+
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+        assert_continue_forward(&l);
+
+        LinearOutputLayer::new(l,&device)
+    });
+
+    assert_forward_all(&net);
+    assert_pre_train(&net);
+    assert_backward_all(&net);
+    assert_update_weight(&net);
+    assert_partial_forward(&net);
+    assert_continue_forward(&net);
+
+    let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
+
+    let mut reader =  BufReader::new(
+        File::open(Path::new("data")
+            .join("weather")
+            .join("training")
+            .join("weather.csv")).unwrap());
+
+    let mut line:String = String::new();
+
+    loop {
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+
+        let columns = line.trim().split(',').map(|c| c.to_string()).collect::<Vec<String>>();
+
+        line.clear();
+
+        if columns.len() != 16 {
+            continue;
+        }
+
+        let t = columns[1].find("晴").is_some();
+
+        let columns = columns.iter().skip(2)
+            .filter(|c| !c.parse::<f32>().is_err())
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
+            .collect::<Vec<f32>>();
+        if columns.len() < 14 {
+            continue;
+        }
+
+        teachers.push((t,columns));
+    }
+
+    let mut rng = rand::thread_rng();
+
+    let mut correct_answers = 0;
+
+    teachers.shuffle(&mut rng);
+
+    for _ in 0..1 {
+        teachers.shuffle(&mut rng);
+
+        for (t, columns) in teachers.iter() {
+            let t = *t;
+
+            let mut input = Arr::<f32,14>::new();
+
+            for (it, p) in input.iter_mut().zip(columns.iter()) {
+                *it = *p;
+            }
+
+            let mut expected = Arr::new();
+
+            expected[0] = if t {
+                1.
+            } else {
+                0.
+            };
+
+            let lossf = CrossEntropy::new();
+
+            net.train(expected, input, &lossf).unwrap();
+        }
+    }
+
+    let mut tests:Vec<(bool,Vec<f32>)> = Vec::new();
+
+    let mut reader =  BufReader::new(
+        File::open(Path::new("data")
+            .join("weather")
+            .join("testing")
+            .join("weather.csv")).unwrap());
+
+    let mut line:String = String::new();
+
+    loop {
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+
+        let columns = line.trim().split(',').map(|c| c.to_string()).collect::<Vec<String>>();
+
+        line.clear();
+
+        if columns.len() != 16 {
+            continue;
+        }
+
+        let t = columns[1].find("晴").is_some();
+
+        let columns = columns.iter().skip(2)
+            .filter(|c| !c.parse::<f32>().is_err())
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
+            .collect::<Vec<f32>>();
+        if columns.len() < 14 {
+            continue;
+        }
+
+        tests.push((t,columns));
+    }
+
+    let mut initial = true;
+    let mut prev = Arr::new();
+
+    for (t, columns) in tests.iter() {
+        let t = *t;
+
+        let mut input = Arr::<f32, 14>::new();
+
+        for (it, p) in input.iter_mut().zip(columns.iter()) {
+            *it = *p;
+        }
+
+        if initial {
+            let po = {
+                let input = input.clone();
+
+                net.partial_forward(input).unwrap()
+            };
+
+            let r = net.forward_all(input).unwrap()[0];
+
+            if (t && r >= 0.5) || !t && r < 0.5 {
+                correct_answers += 1;
+            }
+
+            prev = po;
+
+            initial = false;
+        } else {
+            let d = input.iter().enumerate().zip(prev.iter())
+                .filter(|((_, &input), &p)| input != p)
+                .map(|((index, &input), &p)| (index, input - p))
+                .fold(DiffArr::new(), |mut acc, (i, d)| {
+                    acc.push(i, d).unwrap();
+                    acc
+                });
+
+            let po =  net.partial_forward_by_diff(DiffInput::new(d, &prev)).unwrap();
+
+            {
+                let r = net.continue_forward(&prev).unwrap()[0];
+
+                if (t && r >= 0.5) || !t && r < 0.5 {
+                    correct_answers += 1;
+                }
+            }
+
+            prev = po;
+        };
+    }
 
     println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);

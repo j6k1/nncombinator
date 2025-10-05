@@ -217,6 +217,12 @@ pub trait PartialForward: ForwardAll {
 pub trait ForwardDiff: PartialForward {
     fn forward_diff(&self, input:Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError>;
 }
+/// Implementation of the process for performing forward propagation calculations from precomputed values
+pub trait ContinueForward: PartialForward {
+    /// The data type of the result value when recalculating the overall result from the precomputed result
+    type ConinueOutput;
+    fn continue_forward(&self, input:&Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError>;
+}
 /// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForwardBase: ForwardAll {
     /// Input to this layer of the neural network for batch execution

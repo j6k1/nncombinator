@@ -9,7 +9,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
@@ -628,8 +628,8 @@ impl<U,P,OP,D,C,I,PI,S,const N:usize> PartialForward for BatchNormalizationLayer
     }
 }
 impl<U,P,OP,D,C,I,PI,S,const N:usize> ForwardDiff for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
-where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-         PartialForward<DiffOutput=PI> + ForwardDiff + PreTrain<U,PreOutput=PI> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+          PartialForward<DiffOutput=PI> + ForwardDiff + PreTrain<U,PreOutput=PI> + Loss<U>,
       U: Default + Clone + Copy + Send + UnitValue<U>,
       D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
       I: Debug + Send + Sync,
@@ -640,6 +640,24 @@ where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
       Self: ForwardAll<Input=I,Output=PI> + PreTrain<U> {
     fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
         let input = self.parent.forward_diff(input)?;
+
+        Ok(self.forward(&input)?)
+    }
+}
+impl<U,P,OP,D,C,I,PI,S,const N:usize> ContinueForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+          PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+      U: Default + Clone + Copy + Send + UnitValue<U>,
+      D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+      I: Debug + Send + Sync,
+      PI: BatchDataType + Debug + 'static,
+      S: Debug + Sized + 'static,
+      OP: Optimizer<U,D>,
+      <PI as BatchDataType>::Type: Debug + 'static,
+      Self: ForwardAll<Input=I,Output=PI> + PreTrain<U> {
+    type ConinueOutput = Self::Output;
+    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+        let input = self.parent.continue_forward(input)?;
 
         Ok(self.forward(&input)?)
     }

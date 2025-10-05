@@ -10,7 +10,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::bias::DeviceBias;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
@@ -331,6 +331,24 @@ impl<U,C,P,OP,D,I,PI,const N:usize> ForwardDiff for BiasLayer<U,C,P,OP,D,I,PI,N>
       Self: PreTrain<U> {
     fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
         let input = self.parent.forward_diff(input)?;
+
+        Ok(self.forward(&input)?)
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> ContinueForward for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI> +
+          BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+      D: Device<U> + DeviceBias<U,C,PI,N>,
+      U: Default + Clone + Copy + Send + UnitValue<U>,
+      I: Debug + Send + Sync,
+      PI: Debug + BatchDataType + 'static,
+      OP: Optimizer<U,D>,
+      <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+      Self: ForwardAll<Input=I,Output=PI>,
+      Self: PreTrain<U> {
+    type ConinueOutput = Self::Output;
+    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+        let input = self.parent.continue_forward(input)?;
 
         Ok(self.forward(&input)?)
     }

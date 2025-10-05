@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use crate::arr::{IntoConverter, MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SliceSize};
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
@@ -148,6 +148,20 @@ impl<U,P,I,PI,CI,D> ForwardDiff for BridgeLayer<U,P,I,PI,CI,D>
       I: Debug + Send + Sync {
     fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
         Ok(self.parent.forward_diff(input)?)
+    }
+}
+impl<U,P,I,PI,CI,D> ContinueForward for BridgeLayer<U,P,I,PI,CI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+          PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI> +
+          BackwardAll<U,LossInput=PI> + Loss<U>,
+      U: Default + Clone + Copy + UnitValue<U>,
+      D: Device<U>,
+      PI: Debug + From<CI>,
+      CI: Debug + 'static,
+      I: Debug + Send + Sync {
+    type ConinueOutput = Self::Output;
+    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+        Ok(self.parent.continue_forward(input)?)
     }
 }
 impl<U,P,I,PI,CI,D> Loss<U> for BridgeLayer<U,P,I,PI,CI,D>

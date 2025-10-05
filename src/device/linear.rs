@@ -880,6 +880,7 @@ pub trait DeviceDiffLinear<'a,U,I,T,const NI: usize,const NO: usize>
     where U: UnitValue<U> {
     type Output: Debug + 'static;
     fn forward_diff_linear(&self, units: &T, input: I) -> Result<Self::Output, EvaluateError>;
+    fn clone_diff_linear_forward_output(&self, output: &Self::Output) -> Result<Self::Output, EvaluateError>;
 }
 impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,DiffArr<U,NI>,Arr<U,NO>>,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U>
     where U: UnitValue<U> {
@@ -894,6 +895,10 @@ impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,Diff
             }
         }
         Ok(output)
+    }
+
+    fn clone_diff_linear_forward_output(&self, output: &Self::Output) -> Result<Self::Output, EvaluateError> {
+        Ok(output.clone())
     }
 }
 impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,DiffArr<U,NI>,CudaTensor1dPtr<U,A,NO>>,CudaTensor2dPtr<U,A,NI,NO>,NI,NO> for DeviceGpu<U,A>
@@ -940,5 +945,13 @@ impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,Di
         kernel.launch(&mut args)?;
 
         Ok(args.output)
+    }
+
+    fn clone_diff_linear_forward_output(&self, output: &Self::Output) -> Result<Self::Output, EvaluateError> {
+        let mut o = CudaTensor1dPtr::<U,A,NO>::new(self.get_allocator())?;
+
+        output.memcpy_to(&mut o, NO)?;
+
+        Ok(o)
     }
 }

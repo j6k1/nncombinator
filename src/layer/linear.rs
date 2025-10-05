@@ -9,7 +9,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
@@ -434,17 +434,33 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PartialForward for Linear
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ForwardDiff for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> + ForwardDiff +
-          BackwardAll<U,LossInput=PI> +
-          PreTrain<U,PreOutput=PI> + Loss<U>,
-      U: Default + Clone + Copy + Send + UnitValue<U>,
-      I: Debug + Send + Sync,
-      PI: Debug + BatchDataType,
-      OP: Optimizer<U,D>,
-      D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
-      Self: ForwardAll<Input=I>,
-      Self: PreTrain<U> {
+             BackwardAll<U,LossInput=PI> +
+             PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          Self: ForwardAll<Input=I> + PreTrain<U> {
     fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
         let input = self.parent.forward_diff(input)?;
+
+        Ok(self.device.forward_linear(&self.bias,&self.units,&input.into())?)
+    }
+}
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ContinueForward for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI> +
+             BackwardAll<U,LossInput=PI> +
+             PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          Self: ForwardAll<Input=I,Output=<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output> + PreTrain<U> {
+    type ConinueOutput = Self::Output;
+    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+        let input = self.parent.continue_forward(input)?;
 
         Ok(self.device.forward_linear(&self.bias,&self.units,&input.into())?)
     }
@@ -1182,18 +1198,37 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> ForwardDiff for Dif
              ForwardAll<Input=I,Output=PI> + PartialForward<PartialOutput=PI> +
              ForwardDiff +
              PreTrain<U,PreOutput=PI> + Loss<U>,
-      U: Default + Clone + Copy + UnitValue<U>,
-      D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> +
-         DeviceLinear<U,C,BC,PI,NI,NO,Output=<D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output>,
-      I: Debug + Send + Sync,
-      DI: Debug,
-      PI: Debug + BatchDataType,
-      OP: Optimizer<U,D>,
-      Self: ForwardAll<Input=I> +
-            PartialForward<DiffInput=DI,DiffOutput=<D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output> +
-            PreTrain<U> {
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> +
+          DeviceLinear<U,C,BC,PI,NI,NO,Output=<D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output>,
+          I: Debug + Send + Sync,
+          DI: Debug,
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D>,
+          Self: ForwardAll<Input=I> +
+                PartialForward<DiffInput=DI,DiffOutput=<D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output> +
+                PreTrain<U> {
     fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
         Ok(self.device.forward_diff_linear(&self.units,input)?)
+    }
+}
+impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> ContinueForward for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
+    where P: BackwardAll<U,LossInput=()> +
+             ForwardAll<Input=I,Output=PI> + PartialForward<PartialOutput=PI> +
+             PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO,Output=Self::PartialOutput> +
+             DeviceLinear<U,C,BC,PI,NI,NO,Output=<D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output>,
+          I: Debug + Send + Sync,
+          DI: Debug,
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D>,
+          Self: ForwardAll<Input=I,Output=Self::PartialOutput> +
+                PartialForward<DiffInput=DI,DiffOutput=<D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output> +
+                PreTrain<U> {
+    type ConinueOutput = Self::PartialOutput;
+    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+        Ok(self.device.clone_diff_linear_forward_output(input)?)
     }
 }
 impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>

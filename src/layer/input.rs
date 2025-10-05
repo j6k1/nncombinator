@@ -6,7 +6,7 @@ use crate::{Cons, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -222,13 +222,13 @@ impl<U,O,DI,PO,LI,D> ForwardAll for DiffInputLayer<U,O,DI,PO,LI,D>
     }
 }
 impl<U,O,DI,PO,LI,D> PartialForward for DiffInputLayer<U,O,DI,PO,LI,D>
-where U: UnitValue<U>,
-      O: Debug + BatchDataType + Send + Sync + 'static,
-      DI: Debug,
-      PO: Debug,
-      LI: Debug,
-      D: Device<U> + DeviceInput<U,O,Output=PO>,
-      <O as BatchDataType>::Type: Debug + 'static {
+    where U: UnitValue<U>,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O,Output=PO>,
+          <O as BatchDataType>::Type: Debug + 'static {
     type PartialOutput = PO;
     type DiffOutput = DI;
     type DiffInput = DI;
@@ -237,6 +237,18 @@ where U: UnitValue<U>,
     }
 
     fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
+        Ok(input)
+    }
+}
+impl<U,O,DI,PO,LI,D> ForwardDiff for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U>,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O,Output=PO>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
         Ok(input)
     }
 }

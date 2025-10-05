@@ -6,7 +6,7 @@ use crate::{Cons, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -58,17 +58,6 @@ impl<U,O,LI,D> ForwardAll for InputLayer<U,O,LI,D>
     type Output = <D as DeviceInput<U,O>>::Output;
     fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError> {
         Ok(self.device.forward_input(input)?)
-    }
-}
-impl<U,O,LI,D> PartialForward for InputLayer<U,O,LI,D>
-    where U: UnitValue<U>,
-      O: Debug + BatchDataType + Send + Sync + 'static,
-      LI: Debug,
-      D: Device<U> + DeviceInput<U,O>,
-      <O as BatchDataType>::Type: Debug + 'static {
-    type PartialOutput = O;
-    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
-        Ok(input)
     }
 }
 impl<U,O,LI,D> PreTrain<U> for InputLayer<U,O,LI,D>

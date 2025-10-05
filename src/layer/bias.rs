@@ -10,7 +10,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::bias::DeviceBias;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, Forward, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, DiffInput, Forward, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
@@ -295,22 +295,28 @@ impl<U,P,OP,D,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,Arr<U,N>,P,OP,
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> PartialForward for BiasLayer<U,C,P,OP,D,I,PI,N>
-    where P: PreTrain<U,OutStack=<<Self as PreTrain<U>>::OutStack as Stack>::Remaining> +
-             ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> +
-             PartialForward,
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          D: Device<U> + DeviceBias<U,C,PI,N>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-          Self: ForwardAll<Input=I>,
+          Self: ForwardAll<Input=I,Output=PI>,
           Self: PreTrain<U> {
     type PartialOutput = <P as PartialForward>::PartialOutput;
+    type DiffInput = <P as PartialForward>::DiffInput;
 
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
-        self.parent.partial_forward(input)
+        Ok(self.parent.partial_forward(input)?)
+    }
+
+    fn partial_forward_by_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>)
+        -> Result<Self::Output, EvaluateError> {
+        let input = self.parent.partial_forward_by_diff(input)?;
+
+        Ok(self.forward(&input)?)
     }
 }
 impl<U,P,OP,D,I,PI,const N:usize> Loss<U> for BiasLayer<U,Arr<U,N>,P,OP,D,I,PI,N>

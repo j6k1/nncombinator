@@ -2,14 +2,14 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use crate::arr::{Arr, Arr2, IntoConverter};
+use crate::arr::{Arr, Arr2, DiffArr, IntoConverter};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaPtr, CudaTensor1dPtr, CudaTensor2dPtr, ReadMemory, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, Forward, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, DiffInput, Forward, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
@@ -409,21 +409,27 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for Linear
     }
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PartialForward for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
-    where P: PreTrain<U> +
-             ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> +
-             PartialForward,
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward +
+             BackwardAll<U,LossInput=PI> +
+             PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
           Self: ForwardAll<Input=I>,
           Self: PreTrain<U> {
     type PartialOutput = <P as PartialForward>::PartialOutput;
+    type DiffInput = <P as PartialForward>::DiffInput;
 
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         Ok(self.parent.partial_forward(input)?)
+    }
+
+    fn partial_forward_by_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>) -> Result<Self::Output, EvaluateError> {
+        let input = self.parent.partial_forward_by_diff(input)?;
+
+        Ok(self.forward(&input)?)
     }
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
@@ -1113,18 +1119,23 @@ impl<U,C,BC,P,D,OP,I,PI,const NI:usize,const NO:usize> PartialForward for DiffLi
              ForwardAll<Input=I,Output=PI> + PartialForward<PartialOutput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          D: Device<U> + DeviceDiffLinear<U,C,BC,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO,Output=Arr<U,NO>>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
-          Self: ForwardAll<Input=I>,
-          Self: PreTrain<U> {
-    type PartialOutput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
+          Self: ForwardAll<Input=I,Output=<D as DeviceDiffLinear<U,C,BC,NI,NO>>::Output> +
+                PreTrain<U> {
+    type PartialOutput = Arr<U,NO>;
+    type DiffInput = DiffArr<U,NI>;
 
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         let input = self.parent.partial_forward(input)?;
 
         Ok(self.device.forward_linear(&self.bias,&self.units,&input)?)
+    }
+
+    fn partial_forward_by_diff(&self, input: DiffInput<'_, Self::DiffInput, Self::PartialOutput>) -> Result<Self::Output, EvaluateError> {
+        Ok(self.device.forward_diff_linear(&self.units,&input)?)
     }
 }
 impl<U,C,BC,P,OP,D,I,PI,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<U,C,BC,P,OP,D,I,PI,NI,NO>

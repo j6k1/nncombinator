@@ -879,13 +879,13 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
 pub trait DeviceDiffLinear<U,T,B,const NI: usize,const NO: usize>
     where U: UnitValue<U> {
     type Output: Debug + 'static;
-    fn forward_diff_linear<'a>(&self, units: &T, bias: &B, input: &'a DiffInput<DiffArr<U, NI>, Arr<U, NO>>) -> Result<Self::Output, EvaluateError>;
+    fn forward_diff_linear<'a>(&self, units: &T, input: &'a DiffInput<DiffArr<U, NI>, Arr<U, NO>>) -> Result<Self::Output, EvaluateError>;
 }
 impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO> for DeviceCpu<U>
     where U: UnitValue<U> {
     type Output = Arr<U,NO>;
     #[inline]
-    fn forward_diff_linear<'a>(&self, units: &Arr2<U, NI, NO>, _: &Arr<U,NO>, input: &'a DiffInput<DiffArr<U,NI>,Arr<U,NO>>) -> Result<Arr<U, NO>,EvaluateError> {
+    fn forward_diff_linear<'a>(&self, units: &Arr2<U, NI, NO>, input: &'a DiffInput<DiffArr<U,NI>,Arr<U,NO>>) -> Result<Arr<U, NO>,EvaluateError> {
         let mut output = input.output.clone();
 
         for &(i,d) in input.diff.iter() {
@@ -911,7 +911,7 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
     type Output = CudaTensor1dPtr<U,A,NO>;
 
     #[inline]
-    fn forward_diff_linear<'a>(&self, units: &CudaTensor2dPtr<U,A,NI,NO>, _: &CudaTensor1dPtr<U,A,NO>, input: &'a DiffInput<DiffArr<U,NI>,Arr<U,NO>>)
+    fn forward_diff_linear<'a>(&self, units: &CudaTensor2dPtr<U,A,NI,NO>, input: &'a DiffInput<DiffArr<U,NI>,Arr<U,NO>>)
         -> Result<CudaTensor1dPtr<U,A,NO>,EvaluateError> {
         let len = input.diff.len();
         let output = input.output;

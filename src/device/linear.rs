@@ -876,16 +876,16 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
 }
 
 /// Trait that defines the implementation of various computational processes in the differentially applicable linear layer
-pub trait DeviceDiffLinear<U,T,B,const NI: usize,const NO: usize>
+pub trait DeviceDiffLinear<'a,U,I,T,const NI: usize,const NO: usize>
     where U: UnitValue<U> {
     type Output: Debug + 'static;
-    fn forward_diff_linear<'a>(&self, units: &T, input: &'a DiffInput<DiffArr<U, NI>, Self::Output>) -> Result<Self::Output, EvaluateError>;
+    fn forward_diff_linear(&self, units: &T, input: I) -> Result<Self::Output, EvaluateError>;
 }
-impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO> for DeviceCpu<U>
+impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,DiffArr<U,NI>,Arr<U,NO>>,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U>
     where U: UnitValue<U> {
     type Output = Arr<U,NO>;
     #[inline]
-    fn forward_diff_linear<'a>(&self, units: &Arr2<U, NI, NO>, input: &'a DiffInput<DiffArr<U,NI>,Arr<U,NO>>) -> Result<Arr<U, NO>,EvaluateError> {
+    fn forward_diff_linear(&self, units: &Arr2<U, NI, NO>, input: DiffInput<DiffArr<U,NI>,Arr<U,NO>>) -> Result<Arr<U, NO>,EvaluateError> {
         let mut output = input.output.clone();
 
         for &(i,d) in input.diff.iter() {
@@ -896,7 +896,7 @@ impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
         Ok(output)
     }
 }
-impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,NI,NO>,CudaTensor1dPtr<U,A,NO>,NI,NO> for DeviceGpu<U,A>
+impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,DiffArr<U,NI>,CudaTensor1dPtr<U,A,NO>>,CudaTensor2dPtr<U,A,NI,NO>,NI,NO> for DeviceGpu<U,A>
     where U: UnitValue<U> + DataTypeInfo,
           A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -911,7 +911,7 @@ impl<U,A,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,A,N
     type Output = CudaTensor1dPtr<U,A,NO>;
 
     #[inline]
-    fn forward_diff_linear<'a>(&self, units: &CudaTensor2dPtr<U,A,NI,NO>, input: &'a DiffInput<DiffArr<U,NI>,CudaTensor1dPtr<U,A,NO>>)
+    fn forward_diff_linear(&self, units: &CudaTensor2dPtr<U,A,NI,NO>, input: DiffInput<'a,DiffArr<U,NI>,CudaTensor1dPtr<U,A,NO>>)
         -> Result<CudaTensor1dPtr<U,A,NO>,EvaluateError> {
         let len = input.diff.len();
         let output = input.output;

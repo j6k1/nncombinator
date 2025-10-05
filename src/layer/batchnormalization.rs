@@ -9,7 +9,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, DiffInput, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
@@ -622,7 +622,7 @@ impl<U,P,OP,D,C,I,PI,S,const N:usize> PartialForward for BatchNormalizationLayer
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input:DiffInput<'_,Self::DiffInput, Self::PartialOutput>)
+    fn partial_forward_by_diff(&self, input: Self::DiffInput)
         -> Result<Self::DiffOutput, EvaluateError> {
         let input = self.parent.partial_forward_by_diff(input)?;
 
@@ -640,7 +640,7 @@ where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
       OP: Optimizer<U,D>,
       <PI as BatchDataType>::Type: Debug + 'static,
       Self: ForwardAll<Input=I,Output=PI> + PreTrain<U> {
-    fn forward_diff(&self, input: DiffInput<'_, Self::DiffInput, Self::PartialOutput>) -> Result<Self::DiffOutput, EvaluateError> {
+    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
         let input = self.parent.forward_diff(input)?;
 
         Ok(self.forward(&input)?)

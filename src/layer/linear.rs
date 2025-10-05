@@ -420,6 +420,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PartialForward for Linear
           Self: ForwardAll<Input=I>,
           Self: PreTrain<U> {
     type PartialOutput = <P as PartialForward>::PartialOutput;
+    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
     type DiffInput = <P as PartialForward>::DiffInput;
     type DiffOutput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
 
@@ -427,10 +428,8 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PartialForward for Linear
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
-        let input = self.parent.partial_forward_by_diff(input)?;
-
-        Ok(self.device.forward_linear(&self.bias,&self.units,&input.into())?)
+    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input)?)
     }
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ForwardDiff for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
@@ -1048,7 +1047,7 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> ForwardAll for Diff
           DI: Debug,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceDiffLinear<'a,U,C,BC,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO> {
+          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO> {
     type Input = I;
     type Output = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
 
@@ -1067,8 +1066,8 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PreTrain<U> for Dif
           DI: Debug,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceDiffLinear<'a,U,C,BC,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
-          <D as DeviceDiffLinear<'a,U,C,BC,NI,NO>>::Output: Debug + 'static {
+          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          <D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output: Debug + 'static {
     type PreOutput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
     type OutStack = Cons<<P as PreTrain<U>>::OutStack,Self::PreOutput>;
 
@@ -1094,7 +1093,7 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> BackwardAll<U> for 
           C: Debug,
           BC: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceDiffLinear<'a,U,C,BC,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
           <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output: Debug + 'static,
           BC: From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output>,
           for<'b> &'b <OP as Optimizer<U,D>>::InternalType: From<&'b C>,
@@ -1164,6 +1163,7 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> PartialForward for 
           Self: ForwardAll<Input=I> +
                 PreTrain<U> {
     type PartialOutput = <D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output;
+    type PartialOutputByDiff = <D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output;
     type DiffInput = DI;
     type DiffOutput = <D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output;
 
@@ -1173,7 +1173,7 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> PartialForward for 
         Ok(self.device.forward_linear(&self.bias,&self.units,&input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
+    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
         Ok(self.device.forward_diff_linear(&self.units,input)?)
     }
 }
@@ -1201,7 +1201,7 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Loss<U> for DiffLin
              ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=()> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> + DeviceDiffLinear<'a,U,C,BC,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
           I: Debug + Send + Sync,
           DI: Debug,
           PI: Debug + BatchDataType,

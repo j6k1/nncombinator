@@ -306,6 +306,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PartialForward for BiasLayer<U,C,P,OP,D,I,PI
           Self: ForwardAll<Input=I,Output=PI>,
           Self: PreTrain<U> {
     type PartialOutput = <P as PartialForward>::PartialOutput;
+    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
     type DiffInput = <P as PartialForward>::DiffInput;
     type DiffOutput = PI;
 
@@ -313,11 +314,8 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PartialForward for BiasLayer<U,C,P,OP,D,I,PI
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: Self::DiffInput)
-        -> Result<Self::DiffOutput, EvaluateError> {
-        let input = self.parent.partial_forward_by_diff(input)?;
-
-        Ok(self.forward(&input)?)
+    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input)?)
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> ForwardDiff for BiasLayer<U,C,P,OP,D,I,PI,N>

@@ -26,9 +26,19 @@ pub struct DiffInput<'a,T,O>
     pub diff: T,
     pub output: &'a O
 }
-impl<'a,T,O> Clone for DiffInput<'a,T,O>
+impl<'a,T,O> DiffInput<'a,T,O>
     where T: Debug + Clone,
           O: Debug{
+    pub fn new(diff: T, output: &'a O) -> Self {
+        DiffInput {
+            diff,
+            output
+        }
+    }
+}
+impl<'a,T,O> Clone for DiffInput<'a,T,O>
+    where T: Debug + Clone,
+          O: Debug {
     fn clone(&self) -> Self {
         DiffInput {
             diff: self.diff.clone(),
@@ -193,13 +203,15 @@ pub trait Train<U,L>: PreTrain<U>
 pub trait PartialForward: ForwardAll {
     /// Data type of intermediate results during forward propagation processing
     type PartialOutput: Debug;
+    /// Data type of intermediate results based on differential inputs during forward propagation processing
+    type PartialOutputByDiff: Debug;
     /// Forward Propagation Differential Input Information
     type DiffInput: Debug;
     /// Forward Propagation Differential Output Information
     type DiffOutput: Debug;
 
     fn partial_forward(&self, input:Self::Input) -> Result<Self::PartialOutput, EvaluateError>;
-    fn partial_forward_by_diff(&self, input:Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError>;
+    fn partial_forward_by_diff(&self, input:Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError>;
 }
 /// Implementation of a process performing forward propagation calculations from differential input values
 pub trait ForwardDiff: PartialForward {

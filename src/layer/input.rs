@@ -227,16 +227,17 @@ impl<U,O,DI,PO,LI,D> PartialForward for DiffInputLayer<U,O,DI,PO,LI,D>
           DI: Debug,
           PO: Debug,
           LI: Debug,
-          D: Device<U> + DeviceInput<U,O,Output=PO>,
+          D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {
-    type PartialOutput = PO;
+    type PartialOutput = <D as DeviceInput<U,O>>::Output;
+    type PartialOutputByDiff = DI;
     type DiffOutput = DI;
     type DiffInput = DI;
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         Ok(self.device.forward_input(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
+    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
         Ok(input)
     }
 }
@@ -246,7 +247,7 @@ impl<U,O,DI,PO,LI,D> ForwardDiff for DiffInputLayer<U,O,DI,PO,LI,D>
           DI: Debug,
           PO: Debug,
           LI: Debug,
-          D: Device<U> + DeviceInput<U,O,Output=PO>,
+          D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {
     fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
         Ok(input)

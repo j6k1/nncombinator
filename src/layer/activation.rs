@@ -159,6 +159,7 @@ impl<U,P,A,I,PI,D,const N:usize> PartialForward for ActivationLayer<U,P,A,I,PI,D
           PI: Debug + BatchDataType,
           I: Debug + Send + Sync {
     type PartialOutput = <P as PartialForward>::PartialOutput;
+    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
     type DiffInput = <P as PartialForward>::DiffInput;
     type DiffOutput = PI;
 
@@ -166,11 +167,8 @@ impl<U,P,A,I,PI,D,const N:usize> PartialForward for ActivationLayer<U,P,A,I,PI,D
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input:Self::DiffInput)
-        -> Result<Self::DiffOutput, EvaluateError> {
-        let input = self.parent.partial_forward_by_diff(input)?;
-
-        Ok(self.forward(&input)?)
+    fn partial_forward_by_diff(&self, input:Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input)?)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> ForwardDiff for ActivationLayer<U,P,A,I,PI,D,N>

@@ -125,6 +125,7 @@ impl<U,P,I,PI,CI,D> PartialForward for BridgeLayer<U,P,I,PI,CI,D>
           CI: Debug + 'static,
           I: Debug + Send + Sync {
     type PartialOutput = <P as PartialForward>::PartialOutput;
+    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
     type DiffInput = <P as PartialForward>::DiffInput;
     type DiffOutput = PI;
 
@@ -132,8 +133,7 @@ impl<U,P,I,PI,CI,D> PartialForward for BridgeLayer<U,P,I,PI,CI,D>
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: Self::DiffInput)
-        -> Result<Self::DiffOutput, EvaluateError> {
+    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
         Ok(self.parent.partial_forward_by_diff(input)?)
     }
 }

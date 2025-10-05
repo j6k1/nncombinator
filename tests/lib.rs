@@ -13,12 +13,13 @@ mod cuda;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::{fs, thread};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 use csv::Reader;
 use mnist::{Mnist, MnistBuilder};
@@ -4630,4 +4631,254 @@ fn test_fashion_mnist_for_gpu_with_local_allocator() {
     println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
+}
+#[test]
+fn test_weather_by_forward_diff_in_thread() {
+    let mut rnd = prelude::thread_rng();
+    let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
+
+    let n1 = Normal::<f32>::new(0.0, (2f32/14f32).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, 1f32/100f32.sqrt()).unwrap();
+
+    let device = DeviceCpu::new().unwrap();
+
+    let net:DiffInputLayer<f32,Arr<f32,14>,DiffInput<'_,DiffArr<f32,14>,Arr<f32,100>>,Arr<f32,100>,_,_> = DiffInputLayer::new(&device);
+
+    let rnd = rnd_base.clone();
+
+    let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
+
+    let net = net.add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+
+        let rnd = rnd.clone();
+        DiffLinearLayerBuilder::<14,100>::new().build(l,&device,
+                                                      move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                      &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<100,1>::new().build(l,&device,
+                                                 move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                 &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_partial_forward(&l);
+
+        LinearOutputLayer::new(l,&device)
+    });
+
+    assert_forward_all(&net);
+    assert_pre_train(&net);
+    assert_backward_all(&net);
+    assert_update_weight(&net);
+    assert_partial_forward(&net);
+
+    let mut net = Arc::new(net);
+
+    let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
+
+    let mut reader =  BufReader::new(
+        File::open(Path::new("data")
+            .join("weather")
+            .join("training")
+            .join("weather.csv")).unwrap());
+
+    let mut line:String = String::new();
+
+    loop {
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+
+        let columns = line.trim().split(',').map(|c| c.to_string()).collect::<Vec<String>>();
+
+        line.clear();
+
+        if columns.len() != 16 {
+            continue;
+        }
+
+        let t = columns[1].find("晴").is_some();
+
+        let columns = columns.iter().skip(2)
+            .filter(|c| !c.parse::<f32>().is_err())
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
+            .collect::<Vec<f32>>();
+        if columns.len() < 14 {
+            continue;
+        }
+
+        teachers.push((t,columns));
+    }
+
+    let mut rng = rand::thread_rng();
+
+    let mut correct_answers = 0;
+
+    teachers.shuffle(&mut rng);
+
+    for _ in 0..1 {
+        teachers.shuffle(&mut rng);
+
+        for (t, columns) in teachers.iter() {
+            let t = *t;
+
+            let mut input = Arr::<f32,14>::new();
+
+            for (it, p) in input.iter_mut().zip(columns.iter()) {
+                *it = *p;
+            }
+
+            let mut expected = Arr::new();
+
+            expected[0] = if t {
+                1.
+            } else {
+                0.
+            };
+
+            let lossf = CrossEntropy::new();
+
+            Arc::get_mut(&mut net).unwrap().train(expected, input, &lossf).unwrap();
+        }
+    }
+
+    let mut tests:Vec<(bool,Vec<f32>)> = Vec::new();
+
+    let mut reader =  BufReader::new(
+        File::open(Path::new("data")
+            .join("weather")
+            .join("testing")
+            .join("weather.csv")).unwrap());
+
+    let mut line:String = String::new();
+
+    loop {
+        if reader.read_line(&mut line).unwrap() == 0 {
+            break;
+        }
+
+        let columns = line.trim().split(',').map(|c| c.to_string()).collect::<Vec<String>>();
+
+        line.clear();
+
+        if columns.len() != 16 {
+            continue;
+        }
+
+        let t = columns[1].find("晴").is_some();
+
+        let columns = columns.iter().skip(2)
+            .filter(|c| !c.parse::<f32>().is_err())
+            .map(|c| c.parse::<f32>().unwrap() / 10000.)
+            .collect::<Vec<f32>>();
+        if columns.len() < 14 {
+            continue;
+        }
+
+        tests.push((t,columns));
+    }
+
+    let (tests,correct_answers) = {
+        let net = Arc::clone(&net);
+
+        let handle = thread::spawn(move || {
+            let mut initial = true;
+            let mut prev = Arr::new();
+
+            for (t, columns) in tests.iter() {
+                let t = *t;
+
+                let mut input = Arr::<f32, 14>::new();
+
+                for (it, p) in input.iter_mut().zip(columns.iter()) {
+                    *it = *p;
+                }
+
+                if initial {
+                    let po = {
+                        let input = input.clone();
+
+                        net.partial_forward(input).unwrap()
+                    };
+
+                    let r = net.forward_all(input).unwrap()[0];
+
+                    if (t && r >= 0.5) || !t && r < 0.5 {
+                        correct_answers += 1;
+                    }
+
+                    prev = po;
+
+                    initial = false;
+                } else {
+                    let d = input.iter().enumerate().zip(prev.iter())
+                        .filter(|((_, &input), &p)| input != p)
+                        .map(|((index, &input), &p)| (index, input - p))
+                        .fold(DiffArr::new(), |mut acc, (i, d)| {
+                            acc.push(i, d).unwrap();
+                            acc
+                        });
+
+                    let po = {
+                        let d = d.clone();
+                        net.partial_forward_by_diff(DiffInput::new(d, &prev)).unwrap()
+                    };
+
+                    {
+                        let r = net.forward_diff(DiffInput::new(d,&prev)).unwrap()[0];
+
+                        if (t && r >= 0.5) || !t && r < 0.5 {
+                            correct_answers += 1;
+                        }
+                    }
+
+                    prev = po;
+                };
+            }
+
+            (tests,correct_answers)
+        });
+
+        handle.join().unwrap()
+    };
+
+    println!("rate = {}",correct_answers as f32 / tests.len() as f32 * 100.);
+    debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }

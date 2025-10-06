@@ -2,10 +2,10 @@ extern crate nncombinator;
 extern crate rand;
 
 use nncombinator::arr::{Arr, Arr2, IntoConverter, SerializedVec};
-use nncombinator::cuda::{CudaTensor1dPtr,CudaTensor1dPtrView,CudaTensor2dPtr,CudaVec,CudaVecView,ReadMemory,WriteMemory,Kernel,AsCudaMutPtr,AsCudaView};
-use nncombinator::cuda::allocator::{DeviceAlloc};
-use nncombinator::cuda::kernel::device::{ForwardLinearBatch,ForwardLinearBatchArgs,BackwardLinearBatch,BackwardLinearBatchArgs,LinearGradientBatch,LinearGradientBatchArgs};
-use nncombinator::device::DeviceCpu;
+use nncombinator::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, ReadMemory, WriteMemory, Kernel, AsCudaMutPtr, AsCudaView};
+use nncombinator::cuda::allocator::{DeviceAlloc, MemoryPoolAllocator};
+use nncombinator::cuda::kernel::device::{ForwardLinearBatch, ForwardLinearBatchArgs, BackwardLinearBatch, BackwardLinearBatchArgs, LinearGradientBatch, LinearGradientBatchArgs, ReduceLinearBatchArgs, ReduceLinearBatch};
+use nncombinator::device::{DeviceCpu, DeviceReduce};
 use rand::Rng;
 use nncombinator::device::linear::DeviceLinear;
 use crate::common::SHARED_MEMORY_POOL;
@@ -13,10 +13,14 @@ use crate::common::gen_inputs;
 use crate::common::approx_eq_slice;
 use crate::common::upload_inputs_to_device;
 use std::convert::TryFrom;
+use nncombinator::layer::BatchSize;
 
 const NI: usize = 500;
 const NO: usize = 600;
 const BATCH: usize = 400;
+
+type A = MemoryPoolAllocator<DeviceAlloc>;
+
 #[test]
 fn test_kernel_forward_linear_batch_matches_cpu() {
     let device = DeviceCpu::<f32>::new().unwrap();
@@ -27,7 +31,6 @@ fn test_kernel_forward_linear_batch_matches_cpu() {
     let cpu_out = device.batch_forward_linear(&bias,&units,&inputs).unwrap();
 
     // GPU kernel
-    type A = nncombinator::cuda::allocator::MemoryPoolAllocator<DeviceAlloc>;
     let alloc: &A = &SHARED_MEMORY_POOL;
 
     let (d_bias,d_units,d_inputs) = upload_inputs_to_device::<A>(alloc,&bias,&units,&inputs);
@@ -80,7 +83,6 @@ fn test_kernel_backward_linear_batch_matches_cpu() {
     let cpu_out = device.batch_backward_linear(&units,&loss).unwrap();
 
     // GPU kernel setup
-    type A = nncombinator::cuda::allocator::MemoryPoolAllocator<DeviceAlloc>;
     let alloc: &A = &SHARED_MEMORY_POOL;
 
     // Upload units
@@ -148,7 +150,6 @@ fn test_kernel_linear_gradient_batch_matches_cpu() {
     let cpu_grad = device.batch_backward_weight_gradient(&inputs,&loss).unwrap();
 
     // GPU kernel setup
-    type A = nncombinator::cuda::allocator::MemoryPoolAllocator<DeviceAlloc>;
     let alloc: &A = &SHARED_MEMORY_POOL;
 
     // Upload inputs batch
@@ -188,4 +189,54 @@ fn test_kernel_linear_gradient_batch_matches_cpu() {
     }
 
     approx_eq_slice(&gpu_out,&cpu_flat,1e-2);
+}
+#[test]
+fn test_kernel_reduce_linear_batch_matches_cpu() {
+    let device = DeviceCpu::<f32>::new().unwrap();
+
+    let mut rng = rand::thread_rng();
+
+    let input = (0..1200).map(|_| {
+        let mut v = Arr::<f32,1000>::new();
+
+        for v in v.iter_mut() {
+            *v = rng.gen::<f32>();
+        }
+
+        v
+    }).collect::<Vec<_>>();
+
+    let input = SerializedVec::<f32,Arr<f32,1000>>::from(input);
+
+    let cpu_out:Arr<f32,1000> = device.reduce(&input).unwrap();
+
+    let input = &input;
+
+    let allocator:&A = &SHARED_MEMORY_POOL;
+
+    let mut input_ptr = CudaVec::<f32,CudaTensor1dPtr<f32,A,1000>,A>::new(input.size(),allocator).unwrap();
+
+    input_ptr.memcpy(input.as_ptr(),input.size()).unwrap();
+
+    let input_ptr = &input_ptr;
+
+    let input_ptr = input_ptr.as_cuda_view();
+
+    let output_ptr = CudaTensor1dPtr::<f32,A,1000>::new(allocator).unwrap();
+
+    let mut args = ReduceLinearBatchArgs::new(&input_ptr,output_ptr,1000,input.size());
+
+    let mut kernel = ReduceLinearBatch::<f32,A,1000>::new();
+
+    kernel.launch(&mut args).unwrap();
+
+    let gpu_out = args.output.read_to_vec().unwrap();
+
+    let mut cpu_flat: Vec<f32> = Vec::with_capacity(1200 * 1000);
+
+    for &i in cpu_out.iter() {
+        cpu_flat.push(i);
+    }
+
+    approx_eq_slice(&gpu_out,&cpu_flat,2e-4);
 }

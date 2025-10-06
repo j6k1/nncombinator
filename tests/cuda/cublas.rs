@@ -2,7 +2,7 @@ extern crate nncombinator;
 extern crate rand;
 
 use nncombinator::arr::{Arr, Arr2, SerializedVec};
-use nncombinator::cuda::{CudaTensor1dPtr,CudaTensor2dPtr,CudaVec,ReadMemory,WriteMemory,AsCudaMutPtr,AsCudaView};
+use nncombinator::cuda::{CudaTensor1dPtr,CudaTensor2dPtr,CudaVec,ReadMemory,WriteMemory,AsCudaMutPtr};
 use nncombinator::cuda::allocator::{ DeviceAlloc, MemoryPoolAllocator};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
 use rand::Rng;

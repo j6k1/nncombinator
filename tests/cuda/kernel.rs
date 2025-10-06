@@ -216,7 +216,7 @@ fn test_kernel_reduce_linear_batch_matches_cpu() {
 
     let mut input_ptr = CudaVec::<f32,CudaTensor1dPtr<f32,A,1000>,A>::new(input.size(),allocator).unwrap();
 
-    input_ptr.memcpy(input.as_ptr(),input.size()).unwrap();
+    input_ptr.memcpy(input.as_ptr(),input.size() * 1000).unwrap();
 
     let input_ptr = &input_ptr;
 

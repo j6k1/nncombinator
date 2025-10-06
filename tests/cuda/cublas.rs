@@ -1,24 +1,25 @@
 extern crate nncombinator;
 extern crate rand;
 
-use nncombinator::arr::{Arr, Arr2, IntoConverter, SerializedVec};
-use nncombinator::cuda::{CudaTensor1dPtr,CudaTensor1dPtrView,CudaTensor2dPtr,CudaVec,CudaVecView,ReadMemory,WriteMemory,Kernel,AsCudaMutPtr,AsCudaView};
-use nncombinator::cuda::allocator::{DeviceAlloc};
-use nncombinator::cuda::kernel::device::{ForwardLinearBatch,ForwardLinearBatchArgs,BackwardLinearBatch,BackwardLinearBatchArgs,LinearGradientBatch,LinearGradientBatchArgs};
-use nncombinator::device::DeviceCpu;
+use nncombinator::arr::{Arr, Arr2, SerializedVec};
+use nncombinator::cuda::{CudaTensor1dPtr,CudaTensor2dPtr,CudaVec,ReadMemory,WriteMemory,AsCudaMutPtr,AsCudaView};
+use nncombinator::cuda::allocator::{ DeviceAlloc, MemoryPoolAllocator};
+use nncombinator::device::{DeviceCpu, DeviceGpu};
 use rand::Rng;
 use nncombinator::device::linear::DeviceLinear;
 use crate::common::SHARED_MEMORY_POOL;
 use crate::common::gen_inputs;
 use crate::common::approx_eq_slice;
 use crate::common::upload_inputs_to_device;
-use std::convert::TryFrom;
 
 const NI: usize = 500;
 const NO: usize = 600;
 const BATCH: usize = 400;
+type A = MemoryPoolAllocator<DeviceAlloc>;
+
 #[test]
-fn test_kernel_forward_linear_batch_matches_cpu() {
+fn test_device_gpu_forward_linear_batch_matches_cpu()
+    where DeviceGpu<f32,A>: DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,CudaTensor1dPtr<f32,A,NI>,NI,NO> {
     let device = DeviceCpu::<f32>::new().unwrap();
 
     let (bias,units,inputs) = gen_inputs();
@@ -27,25 +28,18 @@ fn test_kernel_forward_linear_batch_matches_cpu() {
     let cpu_out = device.batch_forward_linear(&bias,&units,&inputs).unwrap();
 
     // GPU kernel
-    type A = nncombinator::cuda::allocator::MemoryPoolAllocator<DeviceAlloc>;
     let alloc: &A = &SHARED_MEMORY_POOL;
+
+    let device_gpu = DeviceGpu::<f32,A>::new(alloc).unwrap();
 
     let (d_bias,d_units,d_inputs) = upload_inputs_to_device::<A>(alloc,&bias,&units,&inputs);
 
-    // Prepare output buffer (zero-init required)
-    let d_output = CudaVec::<f32,CudaTensor1dPtr<f32,A,NO>,A>::new(BATCH,alloc).unwrap();
-
     // Build args
     let d_inputs = &d_inputs;
-    let conv = d_inputs.as_cuda_view().into_converter();
-    let input_view = CudaVecView::<f32,CudaTensor1dPtrView<f32,NI>>::try_from(conv).unwrap();
-    let mut args = ForwardLinearBatchArgs::<'_,f32,A,NI,NO>::new(&input_view,&d_units,&d_bias,d_output,BATCH);
 
-    let mut kernel = ForwardLinearBatch::<'_,f32,A,NI,NO>::new();
-    kernel.launch(&mut args).unwrap();
+    let d_output = device_gpu.batch_forward_linear(&d_bias,&d_units,&d_inputs).unwrap();
 
-    let gpu_out = args.output.read_to_vec_with_size(BATCH * NO).unwrap();
-
+    let gpu_out = d_output.read_to_vec().unwrap();
     // Flatten CPU output
     let mut cpu_flat: Vec<f32> = Vec::with_capacity(BATCH * NO);
 
@@ -59,7 +53,8 @@ fn test_kernel_forward_linear_batch_matches_cpu() {
 }
 
 #[test]
-fn test_kernel_backward_linear_batch_matches_cpu() {
+fn test_device_gpu_backward_linear_batch_matches_cpu()
+    where DeviceGpu<f32,A>: DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,CudaTensor1dPtr<f32,A,NI>,NI,NO> {
     let device = DeviceCpu::<f32>::new().unwrap();
 
     let mut rng = rand::thread_rng();
@@ -80,8 +75,9 @@ fn test_kernel_backward_linear_batch_matches_cpu() {
     let cpu_out = device.batch_backward_linear(&units,&loss).unwrap();
 
     // GPU kernel setup
-    type A = nncombinator::cuda::allocator::MemoryPoolAllocator<DeviceAlloc>;
     let alloc: &A = &SHARED_MEMORY_POOL;
+
+    let device_gpu = DeviceGpu::<f32,A>::new(alloc).unwrap();
 
     // Upload units
     let mut flat_units: Vec<f32> = Vec::with_capacity(NI * NO);
@@ -98,16 +94,9 @@ fn test_kernel_backward_linear_batch_matches_cpu() {
     { let mut p = d_loss.as_cuda_mut_ptr(); p.memcpy(flat_loss.as_ptr(),flat_loss.len()).unwrap(); }
 
     // Output buffer (zero-init required)
-    let d_output = CudaVec::<f32,CudaTensor1dPtr<f32,A,NI>,A>::new(BATCH,alloc).unwrap();
+    let d_output = device_gpu.batch_backward_linear(&d_units,(&d_loss).into()).unwrap();
 
-    // Build args
-    let loss_view = CudaVecView::<f32,CudaTensor1dPtrView<f32,NO>>::try_from(&d_loss).unwrap();
-    let mut args = BackwardLinearBatchArgs::<'_,f32,A,NI,NO>::new(&loss_view,&d_units,d_output,BATCH);
-
-    let mut kernel = BackwardLinearBatch::<'_,f32,A,NI,NO>::new();
-    kernel.launch(&mut args).unwrap();
-
-    let gpu_out = args.output.read_to_vec_with_size(BATCH * NI).unwrap();
+    let gpu_out = d_output.read_to_vec().unwrap();
 
     // Flatten CPU output
     let mut cpu_flat: Vec<f32> = Vec::with_capacity(BATCH * NI);
@@ -122,7 +111,8 @@ fn test_kernel_backward_linear_batch_matches_cpu() {
 }
 
 #[test]
-fn test_kernel_linear_gradient_batch_matches_cpu() {
+fn test_device_gpu_linear_gradient_batch_matches_cpu()
+    where DeviceGpu<f32,A>: DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,CudaTensor1dPtr<f32,A,NI>,NI,NO> {
     let device = DeviceCpu::<f32>::new().unwrap();
 
     let mut rng = rand::thread_rng();
@@ -148,8 +138,9 @@ fn test_kernel_linear_gradient_batch_matches_cpu() {
     let cpu_grad = device.batch_backward_weight_gradient(&inputs,&loss).unwrap();
 
     // GPU kernel setup
-    type A = nncombinator::cuda::allocator::MemoryPoolAllocator<DeviceAlloc>;
     let alloc: &A = &SHARED_MEMORY_POOL;
+
+    let device_gpu = DeviceGpu::<f32,A>::new(alloc).unwrap();
 
     // Upload inputs batch
     let mut flat_inputs: Vec<f32> = Vec::with_capacity(BATCH * NI);
@@ -167,20 +158,13 @@ fn test_kernel_linear_gradient_batch_matches_cpu() {
     let mut d_loss = CudaVec::<f32,CudaTensor1dPtr<f32,A,NO>,A>::new(BATCH,alloc).unwrap();
     { let mut p = d_loss.as_cuda_mut_ptr(); p.memcpy(flat_loss.as_ptr(),flat_loss.len()).unwrap(); }
 
-    // Output buffer (zero-init required)
-    let d_output = CudaTensor2dPtr::<f32,A,NI,NO>::with_initializer(alloc,|| 0.0f32).unwrap();
-
     // Build args
     let d_inputs = &d_inputs;
-    let input_view_conv = d_inputs.as_cuda_view().into_converter();
-    let input_view = CudaVecView::<f32,CudaTensor1dPtrView<f32,NI>>::try_from(input_view_conv).unwrap();
-    let loss_view = CudaVecView::<f32,CudaTensor1dPtrView<f32,NO>>::try_from(&d_loss).unwrap();
-    let mut args = LinearGradientBatchArgs::<'_,f32,A,NI,NO>::new(&loss_view,&input_view,d_output,BATCH);
 
-    let mut kernel = LinearGradientBatch::<'_,f32,A,NI,NO>::new();
-    kernel.launch(&mut args).unwrap();
+    // Output buffer
+    let d_output = device_gpu.batch_backward_weight_gradient(d_inputs,(&d_loss).into()).unwrap();
 
-    let gpu_out = args.output.read_to_vec_with_size(NI * NO).unwrap();
+    let gpu_out = d_output.read_to_vec().unwrap();
 
     let mut cpu_flat: Vec<f32> = Vec::with_capacity(BATCH * NO);
     for i in cpu_grad.iter() {

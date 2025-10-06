@@ -2,6 +2,7 @@ use nncombinator::cuda::{CudaPtr, ReadMemory};
 use crate::common::SHARED_MEMORY_POOL;
 
 mod kernel;
+mod cublas;
 
 #[test]
 fn test_cudamemorypoolptr_with_initializer_zeros() {

@@ -1,9 +1,12 @@
 use std::fmt::Debug;
 use lazy_static::lazy_static;
+use rand::Rng;
+use nncombinator::arr::{Arr, Arr2, SerializedVec};
 use nncombinator::device::input::DeviceInput;
 use nncombinator::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchPreTrain, ContinueForward, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
 use nncombinator::ope::UnitValue;
-use nncombinator::cuda::allocator::{DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
+use nncombinator::cuda::allocator::{CudaAllocator, DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
+use nncombinator::cuda::{AsCudaMutPtr, AsCudaView, CudaMutPtr, CudaTensor1dPtr, CudaTensor2dPtr, CudaVec, WriteMemory};
 
 lazy_static! {
     pub static ref SHARED_MEMORY_POOL:MemoryPoolAllocator<DeviceAlloc> = MemoryPoolAllocator::with_size(8 * 1024 * 1024 * 1024,DeviceAlloc).unwrap();
@@ -41,4 +44,73 @@ pub fn assert_batch_backward<U: UnitValue<U>,T: BatchBackward<U>>(_:&T) {
 }
 pub fn assert_batch_loss<U: UnitValue<U>,T: BatchLoss<U>>(_:&T) {
 
+}
+
+
+const NI: usize = 500;
+const NO: usize = 600;
+const BATCH: usize = 400;
+
+pub fn gen_inputs() -> (Arr<f32,NO>,Arr2<f32,NI,NO>,SerializedVec<f32,Arr<f32,NI>>) {
+    let mut rng = rand::thread_rng();
+
+    let mut bias = Arr::<f32,NO>::new();
+    for b in bias.iter_mut() { *b = rng.gen::<f32>() * 1e-3; }
+
+    let mut units = Arr2::<f32,NI,NO>::new();
+    for i in 0..NI {
+        for j in 0..NO { units[(i,j)] = rng.gen::<f32>(); }
+    }
+
+    let mut inputs_host: Vec<Arr<f32,NI>> = Vec::with_capacity(BATCH);
+    for _ in 0..BATCH {
+        let mut v = Arr::<f32,NI>::new();
+        for x in v.iter_mut() { *x = rng.gen::<f32>(); }
+        inputs_host.push(v);
+    }
+
+    (bias,units,inputs_host.into())
+}
+
+pub fn approx_eq_slice(a: &[f32],b: &[f32],eps: f32) {
+    assert_eq!(a.len(),b.len());
+    for (i,(x,y)) in a.iter().zip(b.iter()).enumerate() {
+        let d = (*x - *y).abs();
+        assert!(d < eps,"diff[{}] = {} exceeds eps {} (x={},y={})",i,d,eps,x,y);
+    }
+}
+
+pub fn upload_inputs_to_device<A: MemoryPoolAllocatorInstantiation<DeviceAlloc> + CudaAllocator>(
+    alloc: &A,
+    bias: &Arr<f32,NO>,units: &Arr2<f32,NI,NO>,
+    batch_inputs: &SerializedVec<f32,Arr<f32,NI>>)
+    -> (CudaTensor1dPtr<f32,A,NO>,CudaTensor2dPtr<f32,A,NI,NO>,CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>)
+    where CudaTensor1dPtr<f32,A,NO>: WriteMemory<f32>,
+          CudaTensor2dPtr<f32,A,NI,NO>: WriteMemory<f32>,
+          CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
+          for<'a> CudaMutPtr<'a,f32,A>: WriteMemory<f32>,
+          for<'a> &'a CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: AsCudaView<'a> {
+    // Bias
+    let mut d_bias = CudaTensor1dPtr::<f32,A,NO>::new(alloc).unwrap();
+    d_bias.memcpy(bias.as_ptr(),NO).unwrap();
+
+    // Units: flatten in (i,j) with leading dimension NO (calc_index(out=j,in=i,ld=NO) == i*NO+j)
+    let mut flat_units: Vec<f32> = Vec::with_capacity(NI * NO);
+    for i in 0..NI { for j in 0..NO { flat_units.push(units[(i,j)]); } }
+    let mut d_units = CudaTensor2dPtr::<f32,A,NI,NO>::new(alloc).unwrap();
+    d_units.memcpy(flat_units.as_ptr(),flat_units.len()).unwrap();
+
+    // Inputs: layout is batch-major with leading dimension NI:
+    // calc_index(x=i,y=batch_index,ld=NI) == batch_index*NI + i
+    let mut flat_inputs: Vec<f32> = Vec::with_capacity(BATCH * NI);
+    for b in batch_inputs.iter() {
+        for &v in b.iter() { flat_inputs.push(v); }
+    }
+    let mut d_inputs = CudaVec::<f32,CudaTensor1dPtr<f32,A,NI>,A>::new(BATCH,alloc).unwrap();
+    {
+        let mut ptr = d_inputs.as_cuda_mut_ptr();
+        ptr.memcpy(flat_inputs.as_ptr(),flat_inputs.len()).unwrap();
+    }
+
+    (d_bias,d_units,d_inputs)
 }

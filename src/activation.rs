@@ -7,7 +7,7 @@ use crate::UnitValue;
 use crate::arr::*;
 use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaView, AsKernelPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, CudaView, DataTypeInfo, Kernel, MemorySize, TryClone, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationBatchBackwardArgs, ActivationBatchForwardArgs, ActivationForwardArgs, ReLuBackward, ReLuBatchBackward, ReLuForward, ReLuBatchForward, SigmoidBackward, SigmoidBatchBackward, SigmoidForward, SigmoidBatchForward, SoftMaxBackward, SoftMaxBatchBackward, SoftMaxForward, SoftMaxBatchForward, SwishBackward, SwishBatchBackward, SwishForward, TanhBackward, TanhBatchBackward, TanhForward, TanhBatchForward, SwishBatchForward};
+use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationBatchBackwardArgs, ActivationBatchForwardArgs, ActivationForwardArgs, ReLuBackward, ReLuBatchBackward, ReLuForward, ReLuBatchForward, SigmoidBackward, SigmoidBatchBackward, SigmoidForward, SigmoidBatchForward, SoftMaxBackward, SoftMaxBatchBackward, SoftMaxForward, SoftMaxBatchForward, SwishBackward, SwishBatchBackward, SwishForward, TanhBackward, TanhBatchBackward, TanhForward, TanhBatchForward, SwishBatchForward, LeakyReLuBatchBackward, LeakyReLuBatchForward, LeakyReLuBackward, LeakyReLuForward};
 use crate::device::*;
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
@@ -584,6 +584,202 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         let mut args = ActivationBatchBackwardArgs::new(&o,&u,&loss,output,len);
 
         let mut kernel = ReLuBatchBackward::<'_,U,AC,N>::new();
+
+        kernel.launch(&mut args)?;
+
+        Ok(args.output)
+    }
+}
+/// LeakyReLu Implementation
+pub struct LeakyReLu<U,D> where U: UnitValue<U>, D: Device<U> {
+    u:PhantomData<U>,
+    d:PhantomData<D>
+}
+impl<U,D> LeakyReLu<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of LeakyReLu
+    pub fn new(_:&D) -> LeakyReLu<U,D> {
+        LeakyReLu {
+            u: PhantomData::<U>,
+            d:PhantomData::<D>
+        }
+    }
+}
+impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for LeakyReLu<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter().cloned())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: &Arr<U,N>, loss: &Arr<U,N>, u: &Arr<U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
+        false
+    }
+}
+impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for LeakyReLu<U,DeviceCpu<U>>
+    where U: UnitValue<U> {
+
+    fn apply(&self, device: &DeviceCpu<U>, input: ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
+        self.apply(device,&input.iter().cloned())
+    }
+
+    fn derive(&self, device: &DeviceCpu<U>, o: ArrView<'a,U,N>, loss: ArrView<'a,U,N>, u: ArrView<'a,U,N>) -> Result<Arr<U,N>, TrainingError> {
+        self.derive(device,&o.iter().cloned(),&loss.iter().cloned(),&u.iter().cloned(),)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
+        false
+    }
+}
+impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for LeakyReLu<U,DeviceCpu<U>>
+    where U: UnitValue<U>,
+          I: Iterator<Item=U> + Clone {
+    fn apply(&self, _: &DeviceCpu<U>, input: &'a I) -> Result<Arr<U,N>, EvaluateError> {
+        Ok(input.clone().map(|i| {
+            i.max(&U::default()) + U::from_f64(0.01).unwrap() * i.min(&U::default())
+        }).collect::<Vec<U>>().try_into()?)
+    }
+
+    fn derive(&self, _: &DeviceCpu<U>, _: &'a I, loss: &'a I, u: &'a I) -> Result<Arr<U,N>, TrainingError> {
+        Ok(loss.clone().zip(u.clone()).map(|(l,u)| {
+            if u >= U::default() {
+                l
+            } else {
+                l * U::from_f64(0.01).unwrap()
+            }
+        }).collect::<Vec<U>>().try_into()?)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
+        false
+    }
+}
+impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for LeakyReLu<U,DeviceGpu<U,AC>>
+    where U: UnitValue<U> + DataTypeInfo,
+          CudaPtr<U,AC>: WriteMemory<U>,
+          DeviceGpu<U,AC>: Device<U>,
+          AC: CudaAllocator + 'a,
+          for<'b> I: CudaView<'b>,
+          for<'b> &'b I: AsCudaView<'b>,
+          for<'b> CudaTensor1dPtrView<'b,U,N>: From<<&'b I as CudaView<'b>>::Type>,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
+          for<'b> LeakyReLuForward<'b,U,AC,N>: Kernel<Args=ActivationForwardArgs<'b,U,AC,N>>,
+          for<'b> LeakyReLuBackward<'b,U,AC,N>: Kernel<Args=ActivationBackwardArgs<'b,U,AC,N>> {
+    fn apply(&self, device: &DeviceGpu<U,AC>, input: &'a I) -> Result<CudaTensor1dPtr<U,AC,N>, EvaluateError> {
+        let output = CudaTensor1dPtr::<U,AC,N>::new(device.get_allocator())?;
+
+        let input = input.as_cuda_view().into();
+
+        let mut args = ActivationForwardArgs::new(&input, output);
+
+        let mut kernel = LeakyReLuForward::<'_,U,AC,N>::new();
+
+        kernel.launch(&mut args)?;
+
+        Ok(args.output)
+    }
+
+    fn derive(&self, device: &DeviceGpu<U,AC>, o: &'a I, loss: &'a I, u: &'a I)
+              -> Result<CudaTensor1dPtr<U,AC,N>, TrainingError> {
+        let output = CudaTensor1dPtr::<U,AC,N>::new(device.get_allocator())?;
+
+        let o = o.as_cuda_view().into();
+        let u = u.as_cuda_view().into();
+        let loss = loss.as_cuda_view().into();
+
+        let mut args = ActivationBackwardArgs::new(&o, &u, &loss, output);
+
+        let mut kernel = LeakyReLuBackward::<'_,U,AC,N>::new();
+
+        kernel.launch(&mut args)?;
+
+        Ok(args.output)
+    }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, _: &L) -> bool {
+        false
+    }
+}
+impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for LeakyReLu<U,DeviceCpu<U>>
+    where U: UnitValue<U>,
+          Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
+
+    fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
+        Ok(input.par_iter().map(|i| {
+            self.apply(device, &i.iter().cloned())
+        }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
+    }
+
+    fn batch_derive(&self, device: &DeviceCpu<U>, o: &SerializedVec<U,Arr<U,N>>, loss: &SerializedVec<U,Arr<U,N>>, u: &SerializedVec<U,Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
+        Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
+        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
+    }
+}
+impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for LeakyReLu<U,DeviceCpu<U>>
+    where U: UnitValue<U>,
+          Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
+
+    fn batch_apply(&self, device: &DeviceCpu<U>, input: SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
+        Ok(input.par_iter().map(|i| {
+            self.apply(device, &i.iter().cloned())
+        }).collect::<Result<Vec<Arr<U,N>>,EvaluateError>>().map_err(|e| TrainingError::from(e))?.into())
+    }
+
+    fn batch_derive(&self, device: &DeviceCpu<U>, o: SerializedVecView<'a,U,Arr<U,N>>,
+                    loss: SerializedVecView<'a,U,Arr<U,N>>, u: SerializedVecView<'a,U,Arr<U,N>>)
+                    -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
+        Ok(o.par_iter().zip(loss.par_iter().zip(u.par_iter())).map(|(o,(l,u))| {
+            self.derive(device, &o.iter().cloned(), &l.iter().cloned(), &u.iter().cloned())
+        }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
+    }
+}
+impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
+    for LeakyReLu<U,DeviceGpu<U,AC>>
+    where U: UnitValue<U> + DataTypeInfo,
+          I: BatchSize,
+          AC: CudaAllocator + 'a,
+          DeviceGpu<U,AC>: Device<U>,
+          CudaPtr<U,AC>: WriteMemory<U>,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: AsCudaMutPtr<Pointee=U,Allocator=AC>,
+          for<'b> CudaMutPtr<'b,U,AC>: AsMutKernelPtr,
+          for<'b> CudaTensor1dPtr<U,AC,N>: AsConstKernelPtr + AsKernelPtr + MemorySize,
+          for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
+          for<'b> LeakyReLuBatchForward<'b,U,AC,N>: Kernel<Args=ActivationBatchForwardArgs<'b,U,AC,N>>,
+          for<'b> LeakyReLuBatchBackward<'b,U,AC,N>: Kernel<Args=ActivationBatchBackwardArgs<'b,U,AC,N>> {
+
+    fn batch_apply(&self, device: &DeviceGpu<U,AC>, input: &'a I)
+                   -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
+        let len = input.size();
+
+        let output = CudaVec::<U,CudaTensor1dPtr<U,AC,N>,AC>::new(len,device.get_allocator())?;
+
+        let input = input.try_into()?;
+
+        let mut args = ActivationBatchForwardArgs::new(&input, output, len);
+
+        let mut kernel = LeakyReLuBatchForward::<'_,U,AC,N>::new();
+
+        kernel.launch(&mut args)?;
+
+        Ok(args.output)
+    }
+
+    fn batch_derive(&self, device: &DeviceGpu<U,AC>, o: &'a I, loss: &'a I, u: &'a I) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
+        let len = loss.size();
+
+        let output = CudaVec::<U,CudaTensor1dPtr<U,AC,N>,AC>::new(len,device.get_allocator())?;
+
+        let o = o.try_into()?;
+        let u = u.try_into()?;
+        let loss = loss.try_into()?;
+
+        let mut args = ActivationBatchBackwardArgs::new(&o,&u,&loss,output,len);
+
+        let mut kernel = LeakyReLuBatchBackward::<'_,U,AC,N>::new();
 
         kernel.launch(&mut args)?;
 

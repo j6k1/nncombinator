@@ -21,6 +21,14 @@ __device__ double _fmax(double a, double b) {
     return std::fmax(a,b);
 }
 
+__device__ float _fmin(float a, float b) {
+    return std::fmin(a,b);
+}
+
+__device__ double _fmin(double a, double b) {
+    return std::fmin(a,b);
+}
+
 __device__ float _sqrt(float x) {
     return sqrtf(x);
 }
@@ -91,6 +99,18 @@ __device__ void relu_forward(const T *input, T *output, const size_t units_len, 
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
         output[i] = _fmax(input[i],(T)0.0);
+    }
+}
+template<typename T>
+
+__device__ void leaky_relu_forward(const T *input, T *output, const size_t units_len, const size_t batch_size) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (index < units_len && batch_index < batch_size) {
+        size_t i = batch_index == 0 ? index : batch_index * units_len + index;
+
+        output[i] = _fmax(input[i],(T)0.0) + 0.01 * _fmin(input[i],(T)0.0);
     }
 }
 template<typename T>
@@ -247,6 +267,22 @@ __device__ void relu_backward(const T *o, const T *u, const T *loss, T *output, 
 
         if (!(u[i] > 0.0)) {
             output[i] = 0.0;
+        } else {
+            output[i] = loss[i];
+        }
+    }
+}
+template<typename T>
+
+__device__ void leaky_relu_backward(const T *o, const T *u, const T *loss, T *output, const size_t units_len, const size_t batch_size) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (index < units_len && batch_index < batch_size) {
+        size_t i = batch_index == 0 ? index : batch_index * units_len + index;
+
+        if (!(u[i] >= 0.0)) {
+            output[i] = loss[i] * 0.01;
         } else {
             output[i] = loss[i];
         }
@@ -818,6 +854,10 @@ extern "C" {
         relu_forward(input,output,units_len,batch_size);
     }
 
+    __global__ void leaky_relu_forward_float(const float *input, float *output, const size_t units_len, const size_t batch_size) {
+        leaky_relu_forward(input,output,units_len,batch_size);
+    }
+
 	__global__ void swish_forward_float(const float *input, float *output, const size_t units_len, const size_t batch_size) {
         swish_forward(input,output,units_len,batch_size);
     }
@@ -836,6 +876,10 @@ extern "C" {
 
 	__global__ void relu_backward_float(const float *o, const float *u, const float *loss, float *output, const size_t units_len, const size_t batch_size) {
         relu_backward(o,u,loss,output,units_len,batch_size);
+    }
+
+	__global__ void leaky_relu_backward_float(const float *o, const float *u, const float *loss, float *output, const size_t units_len, const size_t batch_size) {
+        leaky_relu_backward(o,u,loss,output,units_len,batch_size);
     }
 
 	__global__ void swish_backward_float(const float *o, const float *u, const float *loss, float *output, const size_t units_len, const size_t batch_size) {
@@ -857,6 +901,10 @@ extern "C" {
         relu_forward(input,output,units_len,batch_size);
     }
 
+    __global__ void leaky_relu_forward_double(const double *input, double *output, const size_t units_len, const size_t batch_size) {
+        leaky_relu_forward(input,output,units_len,batch_size);
+    }
+
 	__global__ void swish_forward_double(const double *input, double *output, const size_t units_len, const size_t batch_size) {
         swish_forward(input,output,units_len,batch_size);
     }
@@ -875,6 +923,10 @@ extern "C" {
 
 	__global__ void relu_backward_double(const double *o, const double *u, const double *loss, double *output, const size_t units_len, const size_t batch_size) {
         relu_backward(o,u,loss,output,units_len,batch_size);
+    }
+
+	__global__ void leaky_relu_backward_double(const double *o, const double *u, const double *loss, double *output, const size_t units_len, const size_t batch_size) {
+        leaky_relu_backward(o,u,loss,output,units_len,batch_size);
     }
 
 	__global__ void swish_backward_double(const double *o, const double *u, const double *loss, double *output, const size_t units_len, const size_t batch_size) {

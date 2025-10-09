@@ -12,21 +12,25 @@ use crate::ope::UnitValue;
 extern "C" {
     fn sigmoid_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn relu_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
+    fn leaky_relu_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn swish_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn tanh_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn softmax_forward_float(input: *const f32, output: *mut f32, len: size_t, batch_size: size_t) -> c_void;
     fn sigmoid_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
+    fn leaky_relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn swish_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn tanh_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn softmax_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn sigmoid_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn relu_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
+    fn leaky_relu_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn swish_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn tanh_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn softmax_forward_double(input: *const f64, output: *mut f64, len: size_t, batch_size: size_t) -> c_void;
     fn sigmoid_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
     fn relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
+    fn leaky_relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
     fn swish_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
     fn tanh_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
     fn softmax_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
@@ -1126,3 +1130,190 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBatchBackward<'a,f64,A,N>
         }
     }
 }
+/// LeakyReLu activation function implementation activation function implementation
+pub struct LeakyReLuForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+    t:PhantomData<T>,
+    a:PhantomData<A>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,A,const N:usize> LeakyReLuForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+    /// Create a LeakyReLuForward instance
+    pub fn new() -> LeakyReLuForward<'a,T,A,N> {
+        LeakyReLuForward {
+            t: PhantomData::<T>,
+            a: PhantomData::<A>,
+            l: PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for LeakyReLuForward<'a,f32,A,N>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = leaky_relu_forward_float as *const c_void;
+    type Args = ActivationForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for LeakyReLuForward<'a,f64,A,N>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = leaky_relu_forward_double as *const c_void;
+    type Args = ActivationForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+/// Implementation of derivatives of the LeakyReLu activation function
+pub struct LeakyReLuBackward<'a,T,A,const N:usize>
+    where T: DataTypeInfo + UnitValue<T>,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
+    t:PhantomData<T>,
+    a:PhantomData<A>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,A,const N:usize> LeakyReLuBackward<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T>,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
+    /// Create a LeakyReLuBackward instance
+    pub fn new() -> LeakyReLuBackward<'a,T,A,N> {
+        LeakyReLuBackward {
+            t: PhantomData::<T>,
+            a: PhantomData::<A>,
+            l: PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for LeakyReLuBackward<'a,f32,A,N>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = leaky_relu_backward_float as *const c_void;
+    type Args = ActivationBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for LeakyReLuBackward<'a,f64,A,N>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = leaky_relu_backward_double as *const c_void;
+    type Args = ActivationBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+/// Implementation of LeakyReLu activation functions for batch execution
+pub struct LeakyReLuBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+    t:PhantomData<T>,
+    a:PhantomData<A>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,A,const N:usize> LeakyReLuBatchForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+    /// Create a LeakyReLuForwardBatch instance
+    pub fn new() -> LeakyReLuBatchForward<'a,T,A,N> {
+        LeakyReLuBatchForward {
+            t: PhantomData::<T>,
+            a: PhantomData::<A>,
+            l: PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for LeakyReLuBatchForward<'a,f32,A,N>
+    where A: CudaAllocator + 'a,
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
+          for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = leaky_relu_forward_float as *const c_void;
+    type Args = ActivationBatchForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for LeakyReLuBatchForward<'a,f64,A,N>
+    where A: CudaAllocator + 'a,
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
+          for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = leaky_relu_forward_double as *const c_void;
+    type Args = ActivationBatchForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+/// Implement derivatives of the LeakyReLu activation function for batch execution
+pub struct LeakyReLuBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+    t:PhantomData<T>,
+    a:PhantomData<A>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,A,const N:usize> LeakyReLuBatchBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+    /// Create a LeakyReLuBackwardForBatch instance
+    pub fn new() -> LeakyReLuBatchBackward<'a,T,A,N> {
+        LeakyReLuBatchBackward {
+            t: PhantomData::<T>,
+            a: PhantomData::<A>,
+            l: PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for LeakyReLuBatchBackward<'a,f32,A,N>
+    where A: CudaAllocator + 'a,
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
+          for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = leaky_relu_backward_float as *const c_void;
+    type Args = ActivationBatchBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for LeakyReLuBatchBackward<'a,f64,A,N>
+    where A: CudaAllocator + 'a,
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
+          for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = leaky_relu_backward_double as *const c_void;
+    type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+

@@ -788,6 +788,32 @@ __device__ void update_with_adam(T *weight, const T *grad, const size_t size,
 
 template<typename T>
 
+__device__ void update_with_adamw(T *weight, const T *grad, const size_t size,
+                                 const T a, const T weight_decay, const T eps,
+                                 T *mt, T *vt, const T b1, const T b2, const T b1t, const T b2t) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (index < size) {
+        T w = weight[index];
+        T _mt = mt[index];
+        T _vt = vt[index];
+        T e = grad[index];
+
+        w -= a * weight_decay * w;
+
+        _mt = b1 * _mt + (1.0 - b1) * e;
+        _vt = b2 * _vt + (1.0 - b2) * e * e;
+
+        w = w - a * ((_mt / (1.0 - b1t)) / _sqrt((_vt / (1.0 - b2t)) + eps));
+
+        weight[index] = w;
+        mt[index] = _mt;
+        vt[index] = _vt;
+    }
+}
+
+template<typename T>
+
 __device__ void forward_diff_linear(const size_t *indexes, const T *input, const T *units, T *output, const size_t output_size, const size_t diff_len) {
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
@@ -1073,6 +1099,20 @@ extern "C" {
                                             const double eps, double *mt, double *vt,
                                             const double b1, const double b2, const double b1t, const double b2t) {
         update_with_adam(weight,grad,size,a,weight_decay,eps,mt,vt,b1,b2,b1t,b2t);
+    }
+
+    __global__ void update_with_adamw_float(float *weight, const float *grad, const size_t size,
+                                           const float a, const float weight_decay,
+                                           const float eps, float *mt, float *vt,
+                                           const float b1, const float b2, const float b1t, const float b2t) {
+        update_with_adamw(weight,grad,size,a,weight_decay,eps,mt,vt,b1,b2,b1t,b2t);
+    }
+
+    __global__ void update_with_adamw_double(double *weight, const double *grad, const size_t size,
+                                            const double a, const double weight_decay,
+                                            const double eps, double *mt, double *vt,
+                                            const double b1, const double b2, const double b1t, const double b2t) {
+        update_with_adamw(weight,grad,size,a,weight_decay,eps,mt,vt,b1,b2,b1t,b2t);
     }
 
     __global__ void forward_diff_linear_float(const size_t *indexes, const float *input, const float *units, float *output, const size_t output_size, const size_t diff_len) {

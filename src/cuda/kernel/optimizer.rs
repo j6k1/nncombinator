@@ -19,6 +19,8 @@ extern "C" {
     fn update_with_rmsprop_double(weight: *mut f64, grad: *const f64, size: size_t, a: f64, alpha: f64, mu: f64, eps: f64, gt: *mut f64, bt: *mut f64);
     fn update_with_adam_float(weight: *mut f32, grad: *const f32, size: size_t, a: f32, weight_decay: f32, eps: f32, mt: *mut f32, vt: *mut f32, b1: f32, b2: f32, b1t: f32, b2t: f32);
     fn update_with_adam_double(weight: *mut f64, grad: *const f64, size: size_t, a: f64, weight_decay: f64, eps: f64, mt: *mut f64, vt: *mut f64, b1: f64, b2: f64, b1t: f64, b2t: f64);
+    fn update_with_adamw_float(weight: *mut f32, grad: *const f32, size: size_t, a: f32, weight_decay: f32, eps: f32, mt: *mut f32, vt: *mut f32, b1: f32, b2: f32, b1t: f32, b2t: f32);
+    fn update_with_adamw_double(weight: *mut f64, grad: *const f64, size: size_t, a: f64, weight_decay: f64, eps: f64, mt: *mut f64, vt: *mut f64, b1: f64, b2: f64, b1t: f64, b2t: f64);
 }
 /// Defines the list passed to the cuda kernel function as arguments to the SGD optimizer.
 pub struct SGDArgs<'a,T,A> where T: Debug, A: CudaAllocator {
@@ -564,6 +566,135 @@ impl<'a,A> Kernel for Adam<'a,f64,A>
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = update_with_adam_double as *const c_void;
     type Args = AdamArgs<'a,f64,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+
+/// Defines the list passed to the cuda kernel function as arguments to the AdamW optimizer.
+pub struct AdamWArgs<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
+    weight: &'a mut CudaMutPtr<'a,T,A>,
+    grad: CudaConstPtr<'a,CudaPtr<T,A>>,
+    size: usize,
+    a: T,
+    weight_decay: T,
+    eps: T,
+    mt: &'a mut CudaPtr<T,A>,
+    vt: &'a mut CudaPtr<T,A>,
+    b1: T,
+    b2: T,
+    b1t: T,
+    b2t: T
+}
+/// Create an instance of an object representing the argument list of the AdamW optimizer.
+impl<'a,T,A> AdamWArgs<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
+    /// Create a AdamWArgs instance
+    /// # Arguments
+    /// * `weight` - unit weight
+    /// * `grad` - gradient
+    /// * `size` - number of weights to be updated
+    /// * `a` - learning rate
+    /// * `weight_decay` - Weight Decay
+    /// * `eps` - Correction value to prevent zero division
+    /// * `mt` - mt
+    /// * `vt` - vt
+    /// * `b1` - b1
+    /// * `b2` - b2
+    /// * `b1t` - b1t
+    /// * `b2t` - b2t
+    pub fn new(weight: &'a mut CudaMutPtr<'a,T,A>, grad: &'a CudaPtr<T,A>,
+               size: usize, a: T, weight_decay: T, eps: T,
+               mt: &'a mut CudaPtr<T,A>,
+               vt: &'a mut CudaPtr<T,A>,b1: T, b2: T, b1t: T, b2t: T) -> AdamWArgs<'a,T,A> {
+        AdamWArgs {
+            weight,
+            grad: CudaConstPtr::new(grad),
+            size,
+            a,
+            weight_decay,
+            eps,
+            mt,
+            vt,
+            b1,
+            b2,
+            b1t,
+            b2t
+        }
+    }
+}
+impl<'a,T,A> KernelArgs for AdamWArgs<'a,T,A>
+    where T: AsKernelPtr + Debug,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
+        vec![
+            self.weight,
+            &mut self.grad,
+            &mut self.size,
+            &mut self.a,
+            &mut self.weight_decay,
+            &mut self.eps,
+            self.mt,
+            self.vt,
+            &mut self.b1,
+            &mut self.b2,
+            &mut self.b1t,
+            &mut self.b2t
+        ]
+    }
+}
+/// Implementation AdamW optimizer
+pub struct AdamW<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
+    t:PhantomData<T>,
+    a:PhantomData<A>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,A> AdamW<'a,T,A>
+    where T: Debug + 'a,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
+    /// Create a AdamW optimizer instance
+    pub fn new() -> AdamW<'a,T,A> {
+        AdamW {
+            t: PhantomData::<T>,
+            a: PhantomData::<A>,
+            l: PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,A> Kernel for AdamW<'a,f32,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = update_with_adamw_float as *const c_void;
+    type Args = AdamWArgs<'a,f32,A>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (args.size + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+impl<'a,A> Kernel for AdamW<'a,f64,A>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = update_with_adamw_double as *const c_void;
+    type Args = AdamWArgs<'a,f64,A>;
 
     fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
         KernelLaunchConfig {

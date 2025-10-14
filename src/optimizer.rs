@@ -7,7 +7,7 @@ use crate::{UnitValue};
 use crate::arr::ShieldSlice;
 use crate::cuda::{CudaMutPtr, CudaPtr, kernel, Kernel, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, MomentumSGDArgs, RMSpropArgs, SGDArgs};
+use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, AdamWArgs, MomentumSGDArgs, RMSpropArgs, SGDArgs};
 use crate::error::{OptimizerBuildError, TrainingError};
 
 /// OptimizerBuilder Definition
@@ -1081,3 +1081,272 @@ impl<U,A> OptimizerBuilder<U,DeviceGpu<U,A>> for AdamBuilder<U,DeviceGpu<U,A>>
         Adam::<_,DeviceGpu<U,A>>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2)
     }
 }
+/// AdamW Implementation
+pub struct AdamW<U,D>
+    where U: UnitValue<U>, D: Device<U>,
+          Self: OptimizerState<U,D> {
+    d:PhantomData<D>,
+    size:usize,
+    lr:U,
+    weight_decay:U,
+    mt:<Self as OptimizerState<U,D>>::Type,
+    vt:<Self as OptimizerState<U,D>>::Type,
+    b1:U,
+    b2:U,
+    b1t:U,
+    b2t:U,
+    eps:U
+}
+impl<U> AdamW<U,DeviceCpu<U>> where U: UnitValue<U> {
+    /// Create an instance of AdamW
+    /// # Arguments
+    /// * `size` - input size
+    pub fn new(device:&DeviceCpu<U>,size:usize) -> AdamW<U,DeviceCpu<U>> {
+        AdamW::<U,DeviceCpu<U>>::with_lr(device,size,U::from_f64(0.001f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of AdamW with Learning rate
+    /// # Arguments
+    /// * `size` - input size
+    /// * `lr` - Learning rate
+    pub fn with_lr(device:&DeviceCpu<U>,size:usize,lr:U) -> AdamW<U,DeviceCpu<U>> {
+        AdamW::<U,DeviceCpu<U>>::with_params(device,size,
+                                             lr,
+                                             U::default(),
+                                             U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+                                             U::from_f64(0.999f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of AdamW with additional parameters other than the default values
+    /// # Arguments
+    /// * `size` - input size
+    /// * `lr` - Learning rate
+    /// * `b1` - beta1
+    /// * `b2` - beta2
+    pub fn with_params(_:&DeviceCpu<U>,size:usize,lr:U,weight_decay:U,b1:U,b2:U) -> AdamW<U,DeviceCpu<U>> {
+        AdamW {
+            d:PhantomData::<DeviceCpu<U>>,
+            size:size,
+            lr:lr,
+            weight_decay:weight_decay,
+            mt:vec![U::default();size].into_boxed_slice(),
+            vt:vec![U::default();size].into_boxed_slice(),
+            b1:b1,
+            b2:b2,
+            b1t:b1,
+            b2t:b2,
+            eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
+        }
+    }
+}
+impl<U> Optimizer<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>> where U: UnitValue<U> {
+    type InternalType = [U];
+    type InternalUpdateType<'a> = ShieldSlice<'a,U>;
+
+    #[inline]
+    fn update<'a>(&mut self, e: &'a [U], w: Self::InternalUpdateType<'a>) -> Result<(),TrainingError> {
+        let mut w = w;
+        let a = self.lr;
+        let weight_decay = self.weight_decay;
+        let b1 = self.b1;
+        let b2 = self.b2;
+        let b1t = self.b1t;
+        let b2t = self.b2t;
+
+        for ((w,&e),(mt,vt)) in w.iter_mut().zip(e.iter()).zip(self.mt.iter_mut().zip(self.vt.iter_mut())) {
+            *w = *w - a * weight_decay * *w;
+
+            *mt = b1 * *mt + (U::one() - self.b1) * e;
+            *vt = b2 * *vt + (U::one() - self.b2) * e * e;
+
+            *w = *w - a * (*mt / (U::one() - b1t)) / ((*vt / (U::one() - b2t)) + self.eps).sqrt();
+        }
+
+        self.b1t = b1t * b1;
+        self.b2t = b2t * b2;
+
+        Ok(())
+    }
+}
+impl<U,A> AdamW<U,DeviceGpu<U,A>>
+    where U: UnitValue<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U> {
+    /// Create an instance of AdamW
+    /// # Arguments
+    /// * `device` - device
+    /// * `size` - input size
+    pub fn new(device:&DeviceGpu<U,A>,size:usize) -> Result<AdamW<U,DeviceGpu<U,A>>,OptimizerBuildError> {
+        AdamW::<U,DeviceGpu<U,A>>::with_lr(device,size,U::from_f64(0.001f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of AdamW with Learning rate
+    /// # Arguments
+    /// * `device` - device
+    /// * `size` - input size
+    /// * `lr` - Learning rate
+    pub fn with_lr(device:&DeviceGpu<U,A>,size:usize,lr:U) ->Result<AdamW<U,DeviceGpu<U,A>>,OptimizerBuildError> {
+        AdamW::<U,DeviceGpu<U,A>>::with_params(device,size,lr,
+                                               U::default(),
+                                               U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+                                               U::from_f64(0.999f64).expect("Error in type conversion from f64.")
+        )
+    }
+
+    /// Create an instance of AdamW with additional parameters other than the default values
+    /// # Arguments
+    /// * `device` - device
+    /// * `size` - input size
+    /// * `lr` - Learning rate
+    /// * `b1` - beta1
+    /// * `b2` - beta2
+    pub fn with_params(device:&DeviceGpu<U,A>,size:usize,lr:U,weight_decay:U,b1:U,b2:U) ->Result<AdamW<U,DeviceGpu<U,A>>,OptimizerBuildError> {
+        Ok(AdamW {
+            d:PhantomData::<DeviceGpu<U,A>>,
+            size:size,
+            lr:lr,
+            weight_decay:weight_decay,
+            mt:CudaPtr::with_initializer(size, device.get_allocator(), Default::default)?,
+            vt:CudaPtr::with_initializer(size, device.get_allocator(), Default::default)?,
+            b1:b1,
+            b2:b2,
+            b1t:b1,
+            b2t:b2,
+            eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64.")
+        })
+    }
+}
+impl<U,A> Optimizer<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>>
+    where U: UnitValue<U>,
+          A: CudaAllocator + 'static,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U>,
+          for<'a> kernel::optimizer::AdamW<'a,U,A>: Kernel<Args=AdamWArgs<'a,U,A>> {
+    type InternalType = CudaPtr<U,A>;
+    type InternalUpdateType<'a> = CudaMutPtr<'a,U,A>;
+
+    #[inline]
+    fn update<'a>(&mut self, e: &'a CudaPtr<U,A>, w: CudaMutPtr<'a,U,A>) -> Result<(),TrainingError> {
+        let mut w = w;
+        let mut args = AdamWArgs::new(&mut w,e,self.size,self.lr,self.weight_decay,self.eps,
+                                     &mut self.mt,&mut self.vt,
+                                     self.b1,self.b2,self.b1t,self.b2t);
+
+        let mut kernel = kernel::optimizer::AdamW::<'_,U,A>::new();
+
+        kernel.launch(&mut args)?;
+
+        self.b1t = self.b1t * self.b1;
+        self.b2t = self.b2t * self.b2;
+
+        Ok(())
+    }
+}
+impl<U> OptimizerState<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>>
+    where U: UnitValue<U>,
+          DeviceCpu<U>: Device<U> {
+    type Type = Box<[U]>;
+}
+impl<U,A> OptimizerState<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>>
+    where U: UnitValue<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U> {
+    type Type = CudaPtr<U,A>;
+}
+/// Implementation of a builder to generate AdamW optimizers
+pub struct AdamWBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
+    lr:U,
+    weight_decay:U,
+    b1:U,
+    b2:U,
+    device:D
+}
+impl<U,D> AdamWBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of AdamWBuilder with additional parameters other than the default values
+    /// # Arguments
+    /// * `device` - device
+    pub fn new(device:&D) -> AdamWBuilder<U,D> {
+        AdamWBuilder {
+            lr:U::from_f64(0.001f64).expect("Error in type conversion from f64."),
+            weight_decay:U::default(),
+            b1:U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+            b2:U::from_f64(0.999f64).expect("Error in type conversion from f64."),
+            device:device.clone()
+        }
+    }
+
+    /// Replaces the value of field lr in AdamWBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `lr` - Learning rate
+    pub fn lr(self,lr:U) -> AdamWBuilder<U,D> {
+        AdamWBuilder {
+            device:self.device,
+            lr:lr,
+            weight_decay:self.weight_decay,
+            b1:self.b1,
+            b2:self.b2
+        }
+    }
+
+    /// Replaces the value of field weight_decay in AdamWBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `weight_decay` - Learning rate
+    pub fn weight_decay(self,weight_decay:U) -> AdamWBuilder<U,D> {
+        AdamWBuilder {
+            device:self.device,
+            lr:self.lr,
+            weight_decay:weight_decay,
+            b1:self.b1,
+            b2:self.b2
+        }
+    }
+
+    /// Replaces the value of field b1 in AdamWBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `b1` - b1
+    pub fn b1(self,b1:U) -> AdamWBuilder<U,D> {
+        AdamWBuilder {
+            device:self.device,
+            lr:self.lr,
+            weight_decay:self.weight_decay,
+            b1:b1,
+            b2:self.b2
+        }
+    }
+
+    /// Replaces the value of field b2 in AdamWBuilder with the passed value and returns it.
+    /// # Arguments
+    /// * `b2` - b2
+    pub fn b2(self,b2:U) -> AdamWBuilder<U,D> {
+        AdamWBuilder {
+            device:self.device,
+            lr:self.lr,
+            weight_decay:self.weight_decay,
+            b1:self.b1,
+            b2:b2
+        }
+    }
+}
+impl<U> OptimizerBuilder<U,DeviceCpu<U>> for AdamWBuilder<U,DeviceCpu<U>>
+    where U: UnitValue<U>, AdamW<U,DeviceCpu<U>>: Optimizer<U,DeviceCpu<U>> {
+    type Output = AdamW<U,DeviceCpu<U>>;
+
+    fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
+        Ok(AdamW::<_,DeviceCpu<U>>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2))
+    }
+}
+impl<U,A> OptimizerBuilder<U,DeviceGpu<U,A>> for AdamWBuilder<U,DeviceGpu<U,A>>
+    where U: UnitValue<U>,
+          A: CudaAllocator,
+          CudaPtr<U,A>: WriteMemory<U>,
+          DeviceGpu<U,A>: Device<U>,
+          AdamW<U,DeviceGpu<U,A>>: Optimizer<U,DeviceGpu<U,A>> {
+    type Output = AdamW<U,DeviceGpu<U,A>>;
+
+    fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
+        AdamW::<_,DeviceGpu<U,A>>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2)
+    }
+}
+

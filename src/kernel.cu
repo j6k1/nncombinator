@@ -799,7 +799,7 @@ __device__ void update_with_adamw(T *weight, const T *grad, const size_t size,
         T _vt = vt[index];
         T e = grad[index];
 
-        w -= a * weight_decay * w;
+        w -= weight_decay * w;
 
         _mt = b1 * _mt + (1.0 - b1) * e;
         _vt = b2 * _vt + (1.0 - b2) * e * e;

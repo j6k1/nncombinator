@@ -1154,7 +1154,7 @@ impl<U> Optimizer<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>> where U: UnitValue<U
         let b2t = self.b2t;
 
         for ((w,&e),(mt,vt)) in w.iter_mut().zip(e.iter()).zip(self.mt.iter_mut().zip(self.vt.iter_mut())) {
-            *w = *w - a * weight_decay * *w;
+            *w = *w - weight_decay * *w;
 
             *mt = b1 * *mt + (U::one() - self.b1) * e;
             *vt = b2 * *vt + (U::one() - self.b2) * e * e;

@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use crate::device::Device;
-use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
+use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
@@ -35,7 +35,24 @@ impl<U,P,I,PI,D> LoggingLayer<U,P,I,PI,D>
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
           I: Debug + Send + Sync {
-
+    /// Create and return an instance of LoggingLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    pub fn new(parent:P,_:&D) -> LoggingLayer<U,P,I,PI,D> {
+        LoggingLayer {
+            parent:parent,
+            device:PhantomData::<D>,
+            u:PhantomData::<U>,
+            i:PhantomData::<I>,
+            pi:PhantomData::<PI>,
+            forward_loggers: Vec::new(),
+            backward_loggers: Vec::new(),
+            gradient_loggers: Vec::new(),
+            batch_forward_loggers: Vec::new(),
+            batch_backward_loggers: Vec::new(),
+        }
+    }
     pub fn add_forward_logger<F>(&mut self, logger: F) where F: Fn(&PI) -> Result<(),EvaluateError> + 'static {
         self.forward_loggers.push(Box::new(logger));
     }
@@ -335,76 +352,4 @@ impl<U,P,I,PI,D> BatchLoss<U> for LoggingLayer<U,P,I,PI,D>
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: Debug {
-}
-
-/// Trait for LoggingLayer instance creation
-pub trait LoggingLayerInstantiation<U,P,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U>,
-          PI: Debug + 'static + BatchDataType,
-          I: Debug + Send + Sync + 'static + BatchDataType,
-          <I as BatchDataType>::Type: Debug + Send + Sync + 'static {
-    /// Create and return an instance
-    /// # Arguments
-    /// * `parent` - upper layer
-    /// * `device` - Device object used for neural network computation
-    fn instantiation(parent:P,device:&D) -> Result<LoggingLayer<U,P,I,PI,D>,LayerInstantiationError>;
-}
-impl<U,P,I,PI,D> LoggingLayerInstantiation<U,P,I,PI,D> for LoggingLayer<U,P,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
-          U: UnitValue<U>,
-          D: Device<U>,
-          PI: Debug + 'static + BatchDataType,
-          I: Debug + Send + Sync + 'static + BatchDataType,
-          <I as BatchDataType>::Type: Debug + Send + Sync + 'static {
-    /// Create and return an instance of LoggingLayer
-    /// # Arguments
-    /// * `parent` - upper layer
-    /// * `device` - Device object used for neural network computation
-    fn instantiation(parent:P,_:&D) -> Result<LoggingLayer<U,P,I,PI,D>,LayerInstantiationError> {
-        Ok(LoggingLayer {
-            parent:parent,
-            device:PhantomData::<D>,
-            u:PhantomData::<U>,
-            i:PhantomData::<I>,
-            pi:PhantomData::<PI>,
-            forward_loggers: Vec::new(),
-            backward_loggers: Vec::new(),
-            gradient_loggers: Vec::new(),
-            batch_forward_loggers: Vec::new(),
-            batch_backward_loggers: Vec::new(),
-        })
-    }
-}
-
-/// Builder for LoggingLayer instance creation
-pub struct LoggingLayerBuilder;
-
-impl LoggingLayerBuilder {
-    pub fn new() -> LoggingLayerBuilder {
-        LoggingLayerBuilder
-    }
-
-    /// Create an instance of LoggingLayer
-    /// # Arguments
-    /// * `parent` - upper layer
-    /// * `device` - Device object used for neural network computation
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`LayerInstantiationError`]
-    pub fn build<U,P,I,PI,D>(&self,parent:P,device:&D) -> Result<LoggingLayer<U,P,I,PI,D>,LayerInstantiationError>
-        where P: ForwardAll<Input=I,Output=PI> +
-                 BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
-              U: Default + Clone + Copy + Send + UnitValue<U>,
-              D: Device<U>,
-              PI: Debug + 'static + BatchDataType,
-              I: Debug + Send + Sync + 'static + BatchDataType,
-              <I as BatchDataType>::Type: Debug + Send + Sync + 'static,
-              LoggingLayer<U,P,I,PI,D>: LoggingLayerInstantiation<U,P,I,PI,D> {
-        LoggingLayer::<U,P,I,PI,D>::instantiation(parent,device)
-    }
 }

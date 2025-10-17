@@ -15,7 +15,7 @@ use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::{AddLayer, BatchTrain, Train};
 use nncombinator::layer::input::InputLayer;
 use nncombinator::layer::linear::LinearLayerBuilder;
-use nncombinator::layer::logging::{LoggingLayerBuilder};
+use nncombinator::layer::logging::{LoggingLayer};
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropy;
 use nncombinator::optimizer::MomentumSGDBuilder;
@@ -65,7 +65,7 @@ fn test_logger() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        let mut l = LoggingLayerBuilder::new().build(l,&device).unwrap();
+        let mut l = LoggingLayer::new(l,&device);
 
         {
             let sender = sender.clone();

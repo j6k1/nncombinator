@@ -14,6 +14,7 @@ pub mod output;
 pub mod linear;
 pub mod activation;
 pub mod bridge;
+pub mod logging;
 pub mod batchnormalization;
 pub mod bias;
 

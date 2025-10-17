@@ -1,0 +1,410 @@
+//! Implementation of a layer for log collection
+
+use std::fmt::Debug;
+use std::marker::PhantomData;
+use crate::device::Device;
+use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::lossfunction::LossFunction;
+use crate::ope::UnitValue;
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
+use crate::Stack;
+
+/// Logging layer Implementation
+pub struct LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          I: Debug + Send + Sync {
+    parent:P,
+    device:PhantomData<D>,
+    u:PhantomData<U>,
+    i:PhantomData<I>,
+    pi:PhantomData<PI>,
+    // Added logger fields
+    forward_loggers: Vec<Box<dyn Fn(&PI) -> Result<(),EvaluateError> + 'static>>,
+    backward_loggers: Vec<Box<dyn Fn(&PI) -> Result<(), TrainingError> + 'static>>,
+    gradient_loggers: Vec<Box<dyn Fn(&<<P as UpdateWeight<U>>::GradientStack as crate::Stack>::Head) -> Result<(),TrainingError> + 'static>>,
+    batch_forward_loggers: Vec<Box<dyn Fn(&<PI as BatchDataType>::Type) -> Result<(),TrainingError> + 'static>>,
+    batch_backward_loggers: Vec<Box<dyn Fn(&<PI as BatchDataType>::Type) -> Result<(),TrainingError> + 'static>>,
+}
+impl<U,P,I,PI,D> LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          I: Debug + Send + Sync {
+
+    pub fn add_forward_logger<F>(&mut self, logger: F) where F: Fn(&PI) -> Result<(),EvaluateError> + 'static {
+        self.forward_loggers.push(Box::new(logger));
+    }
+
+    pub fn add_backward_logger<F>(&mut self, logger: F) where F: Fn(&PI) -> Result<(),TrainingError> + 'static {
+        self.backward_loggers.push(Box::new(logger));
+    }
+
+    pub fn add_gradient_logger<F>(&mut self, logger: F)
+        where F: Fn(&<<P as UpdateWeight<U>>::GradientStack as crate::Stack>::Head) -> Result<(),TrainingError> + 'static {
+        self.gradient_loggers.push(Box::new(logger));
+    }
+
+    pub fn add_batch_forward_logger<F>(&mut self, logger: F)
+        where F: Fn(&<PI as BatchDataType>::Type) -> Result<(),TrainingError> + 'static {
+        self.batch_forward_loggers.push(Box::new(logger));
+    }
+
+    pub fn add_batch_backward_logger<F>(&mut self, logger: F)
+        where F: Fn(&<PI as BatchDataType>::Type) -> Result<(),TrainingError> + 'static {
+        self.batch_backward_loggers.push(Box::new(logger));
+    }
+}
+impl<U,P,I,PI,D> Persistence<U,TextFilePersistence<U>,Specialized> for LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence<U>,Specialized> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: UnitValue<U> + std::str::FromStr,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          I: Debug + Send + Sync {
+    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+        self.parent.load(persistence)
+    }
+
+    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+        self.parent.save(persistence)
+    }
+}
+impl<T,U,P,I,PI,D> Persistence<U,T,Linear> for LoggingLayer<U,P,I,PI,D>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=PI> + Persistence<U,T,Linear> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          I: Debug + Send + Sync {
+    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
+        self.parent.load(persistence)
+    }
+
+    fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save(persistence)
+    }
+}
+impl<U,P,I,PI,D> ForwardAll for LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          I: Debug + Send + Sync {
+    type Input = I;
+    type Output = PI;
+
+    fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
+        let r = self.parent.forward_all(input)?;
+
+        for logger in self.forward_loggers.iter() {
+            logger(&r)?;
+        }
+
+        Ok(r)
+    }
+}
+impl<U,P,I,PI,D> PreTrain<U> for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync {
+    type PreOutput = PI;
+    type OutStack = <P as PreTrain<U>>::OutStack;
+
+    fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
+        let s = self.parent.pre_train(input)?;
+
+        for logger in self.forward_loggers.iter() {
+            s.map(|r| {
+                logger(r)
+            })?;
+        }
+        Ok(s)
+    }
+}
+impl<U,P,I,PI,D> BackwardAll<U> for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync, {
+    type LossInput = PI;
+    type LossOutput = <P as BackwardAll<U>>::LossOutput;
+
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        for logger in self.backward_loggers.iter() {
+            logger(&input)?;
+        }
+
+        Ok(self.parent.backward_all(input, stack, lossf)?.into())
+    }
+}
+impl<U,P,I,PI,D> UpdateWeight<U> for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + 
+             Loss<U> + UpdateWeight<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync, {
+    type GradientStack = <P as UpdateWeight<U>>::GradientStack;
+
+    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+        for logger in self.gradient_loggers.iter() {
+            stack.map(|r| {
+                logger(r)
+            })?;
+        }
+
+        Ok(self.parent.update_weight(stack)?)
+    }
+}
+impl<U,P,I,PI,D> PartialForward for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward<DiffOutput=PI>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync {
+    type PartialOutput = <P as PartialForward>::PartialOutput;
+    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
+    type DiffInput = <P as PartialForward>::DiffInput;
+    type DiffOutput = PI;
+
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward(input)?)
+    }
+
+    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input)?)
+    }
+}
+impl<U,P,I,PI,D> ForwardDiff for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+             PartialForward<DiffOutput=PI> + ForwardDiff +
+             BackwardAll<U,LossInput=PI> + Loss<U>,
+      U: Default + Clone + Copy + UnitValue<U>,
+      D: Device<U>,
+      PI: Debug + BatchDataType,
+      I: Debug + Send + Sync {
+    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
+        let r = self.parent.forward_diff(input)?;
+
+        for logger in self.forward_loggers.iter() {
+            logger(&r)?;
+        }
+
+        Ok(r)
+    }
+}
+impl<U,P,I,PI,D> ContinueForward for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+          PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI> +
+          BackwardAll<U,LossInput=PI> + Loss<U>,
+      U: Default + Clone + Copy + UnitValue<U>,
+      D: Device<U>,
+      PI: Debug + BatchDataType,
+      I: Debug + Send + Sync {
+    type ConinueOutput = Self::Output;
+    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+        let r = self.parent.continue_forward(input)?;
+
+        for logger in self.forward_loggers.iter() {
+            logger(&r)?;
+        }
+
+        Ok(r)
+    }
+}
+impl<U,P,I,PI,D> Loss<U> for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + Loss<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync {}
+impl<U,P,I,PI,D> BatchForwardBase for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<U> + BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug {
+    type BatchInput = <I as BatchDataType>::Type;
+    type BatchOutput = <PI as BatchDataType>::Type;
+}
+impl<U,P,I,PI,D> BatchForward for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
+             BatchPreTrainBase<U> + BatchPreTrain<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug {
+    fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
+        let r = self.parent.batch_forward(input)?;
+
+        for logger in self.batch_forward_loggers.iter() {
+            logger(&r)?;
+        }
+
+        Ok(r)
+    }
+}
+impl<U,P,I,PI,D> BatchPreTrainBase<U> for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<U> + BatchPreTrain<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug {
+    type BatchPreOutput = <PI as BatchDataType>::Type;
+    type BatchOutStack = <P as BatchPreTrainBase<U>>::BatchOutStack;
+}
+impl<U,P,I,PI,D> BatchPreTrain<U> for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<U> + BatchPreTrain<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug {
+    fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
+        let s = self.parent.batch_pre_train(input)?;
+
+        for logger in self.batch_forward_loggers.iter() {
+            s.map(|r| {
+                logger(r)
+            })?;
+        }
+
+        Ok(s)
+    }
+}
+impl<U,P,I,PI,D> BatchBackward<U> for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<U> + BatchPreTrain<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug {
+    type BatchLossInput = <PI as BatchDataType>::Type;
+    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
+    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
+        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        for logger in self.batch_backward_loggers.iter() {
+            logger(&input)?;
+        }
+
+        let r = self.parent.batch_backward(input, stack, lossf)?;
+
+        Ok(r)
+    }
+}
+impl<U,P,I,PI,D> BatchLoss<U> for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + Loss<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<U> + BatchPreTrain<U,BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug {
+}
+
+/// Trait for LoggingLayer instance creation
+pub trait LoggingLayerInstantiation<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          I: Debug + Send + Sync + 'static + BatchDataType,
+          <I as BatchDataType>::Type: Debug + Send + Sync + 'static {
+    /// Create and return an instance
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    fn instantiation(parent:P,device:&D) -> Result<LoggingLayer<U,P,I,PI,D>,LayerInstantiationError>;
+}
+impl<U,P,I,PI,D> LoggingLayerInstantiation<U,P,I,PI,D> for LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          I: Debug + Send + Sync + 'static + BatchDataType,
+          <I as BatchDataType>::Type: Debug + Send + Sync + 'static {
+    /// Create and return an instance of LoggingLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    fn instantiation(parent:P,_:&D) -> Result<LoggingLayer<U,P,I,PI,D>,LayerInstantiationError> {
+        Ok(LoggingLayer {
+            parent:parent,
+            device:PhantomData::<D>,
+            u:PhantomData::<U>,
+            i:PhantomData::<I>,
+            pi:PhantomData::<PI>,
+            forward_loggers: Vec::new(),
+            backward_loggers: Vec::new(),
+            gradient_loggers: Vec::new(),
+            batch_forward_loggers: Vec::new(),
+            batch_backward_loggers: Vec::new(),
+        })
+    }
+}
+
+/// Builder for LoggingLayer instance creation
+pub struct LoggingLayerBuilder;
+
+impl LoggingLayerBuilder {
+    pub fn new() -> LoggingLayerBuilder {
+        LoggingLayerBuilder
+    }
+
+    /// Create an instance of LoggingLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `device` - Device object used for neural network computation
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`LayerInstantiationError`]
+    pub fn build<U,P,I,PI,D>(&self,parent:P,device:&D) -> Result<LoggingLayer<U,P,I,PI,D>,LayerInstantiationError>
+        where P: ForwardAll<Input=I,Output=PI> +
+                 BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+              U: Default + Clone + Copy + Send + UnitValue<U>,
+              D: Device<U>,
+              PI: Debug + 'static + BatchDataType,
+              I: Debug + Send + Sync + 'static + BatchDataType,
+              <I as BatchDataType>::Type: Debug + Send + Sync + 'static,
+              LoggingLayer<U,P,I,PI,D>: LoggingLayerInstantiation<U,P,I,PI,D> {
+        LoggingLayer::<U,P,I,PI,D>::instantiation(parent,device)
+    }
+}

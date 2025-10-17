@@ -9,6 +9,7 @@ extern crate mnist;
 
 pub mod batchnormalization;
 pub mod common;
+pub mod logging;
 mod cuda;
 
 use std::cell::RefCell;

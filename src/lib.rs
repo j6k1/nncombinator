@@ -23,8 +23,10 @@ pub mod device;
 pub mod computational_graph;
 pub mod layer;
 pub mod persistence;
+pub mod scheduler;
 #[macro_use]
 mod macros;
+
 /// Trait that defines a stack to store the results computed by forward propagation when training a neural network.
 pub trait Stack {
     /// Stack containing elements that do not include the top element of the stack

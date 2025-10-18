@@ -1,0 +1,202 @@
+//! Implementation of a Learning Rate Scheduler
+
+use std::f64::consts::PI;
+use std::marker::PhantomData;
+use crate::error::EvaluateError::TypeCastError;
+use crate::error::TrainingError;
+use crate::ope::UnitValue;
+
+/// Trait that defines learning rate scheduler.
+pub trait Scheduler<U> where U: UnitValue<U> {
+    /// Retrieve the adjusted learning rate
+    fn schedule(&mut self, lr: U, step: usize) -> Result<U,TrainingError>;
+
+    /// Returns a combined scheduler that executes two schedulers sequentially.
+    fn seq<NS>(self, milestone: usize, next_scheduler: NS) -> SequentialLR<U,Self,NS>
+        where NS: Scheduler<U> + Sized + 'static,
+              Self: Sized + 'static {
+
+        SequentialLR::new(self, next_scheduler, milestone)
+    }
+}
+/// Scheduler that does not update the learning rate
+pub struct IdentityLR;
+impl<U> Scheduler<U> for IdentityLR where U: UnitValue<U> {
+    fn schedule(&mut self, lr: U, _: usize) -> Result<U,TrainingError> {
+        Ok(lr)
+    }
+}
+/// A scheduler that adjusts the learning rate using a callback that calculates the ratio relative
+/// to the initial learning rate
+pub struct LambdaLR<U,F> where U: UnitValue<U>, F: FnMut(usize) -> Result<U,TrainingError> {
+    base_lr:U,
+    callback: F
+}
+impl<U,F> LambdaLR<U,F> where U: UnitValue<U>, F: FnMut(usize) -> Result<U,TrainingError> {
+    /// Create a new LambdaLR
+    ///
+    /// # Arguments
+    /// * `base_lr` - Initial learning rate
+    /// * `callback` - Callback function that calculates the ratio relative to the initial learning rate
+    /// # Returns
+    /// * `LambdaLR` - A new LambdaLR
+    pub fn new(base_lr:U, callback: F) -> Self {
+        LambdaLR {
+            base_lr,
+            callback
+        }
+    }
+}
+impl<U,F> Scheduler<U> for LambdaLR<U,F> where U: UnitValue<U>, F: FnMut(usize) -> Result<U,TrainingError> {
+    fn schedule(&mut self, _: U, step: usize) -> Result<U,TrainingError> {
+        Ok(self.base_lr * (self.callback)(step)?)
+    }
+}
+/// A scheduler that gradually increases the learning rate from a low starting point
+pub struct LinearWarmupLR<U> where U: UnitValue<U> {
+    warmup_steps: usize,
+    base_lr: U
+}
+impl<U> LinearWarmupLR<U> where U: UnitValue<U> {
+    /// Creates a new instance of `LinearWarmupLR` with the specified number of warmup steps
+    /// and a base learning rate.
+    ///
+    /// # Parameters
+    /// - `warmup_steps`: The number of steps over which the learning rate will linearly increase
+    ///                   from zero to the base learning rate.
+    /// - `base_lr`: The base learning rate value to be achieved after the warmup period.
+    ///
+    /// # Returns
+    /// A new `LinearWarmupLR` instance configured with the provided warmup steps and base learning rate.
+    ///
+    /// # Example
+    /// ```
+    /// use nncombinator::scheduler::LinearWarmupLR;
+    /// let warmup_steps = 1000;
+    /// let base_lr = 0.01;
+    /// let linear_warmup_lr = LinearWarmupLR::new(warmup_steps, base_lr);
+    /// ```
+   pub fn new(warmup_steps: usize, base_lr: U) -> Self {
+        LinearWarmupLR {
+            warmup_steps,
+            base_lr
+        }
+    }
+}
+impl<U> Scheduler<U> for LinearWarmupLR<U> where U: UnitValue<U> {
+    fn schedule(&mut self, _: U, step: usize) -> Result<U,TrainingError> {
+        Ok(if step < self.warmup_steps {
+            self.base_lr * (U::from_f64(step as f64).ok_or(TypeCastError(
+                String::from("An error occurred during type conversion to floating-point type.")
+            ))? / U::from_f64(self.warmup_steps as f64).ok_or(TypeCastError(
+                String::from("An error occurred during type conversion to floating-point type.")
+            ))?)
+        } else {
+            self.base_lr
+        })
+    }
+}
+/// Scheduler using cosine annealing schedule.
+pub struct CosineAnnealingLR<U> where U: UnitValue<U> {
+    total_steps: usize,
+    eta_min: U
+}
+impl<U> CosineAnnealingLR<U> where U: UnitValue<U> {
+    /// Creates a new instance of `CosineAnnealingLR`.
+    ///
+    /// This method initializes the struct with the total number of steps and the
+    /// minimum learning rate (eta_min) that the scheduler should decay towards.
+    ///
+    /// # Parameters
+    /// - `total_steps`: The total number of steps over which the learning rate
+    ///   will be annealed using a cosine schedule.
+    /// - `eta_min`: The minimum learning rate value to which the learning rate
+    ///   will decay during the schedule.
+    ///
+    /// # Returns
+    /// A new instance of `CosineAnnealingLR` initialized with the specified
+    /// total steps and minimum learning rate.
+    ///
+    /// # Example
+    /// ```
+    /// use your_crate::CosineAnnealingLR;
+    ///
+    /// let scheduler = CosineAnnealingLR::new(100, 0.01);
+    /// ```
+    pub fn new(total_steps: usize, eta_min: U) -> Self {
+        CosineAnnealingLR {
+            total_steps,
+            eta_min
+        }
+    }
+}
+impl<U> Scheduler<U> for CosineAnnealingLR<U> where U: UnitValue<U> {
+    fn schedule(&mut self, lr: U, step: usize) -> Result<U, TrainingError> {
+        Ok(self.eta_min + (lr - self.eta_min) * ((U::from_f64(step as f64).ok_or(TypeCastError(
+            String::from("An error occurred during type conversion to floating-point type.")
+        ))? + U::from_f64(1.).unwrap() * U::from_f64(PI).unwrap() / U::from_f64(self.total_steps as f64).ok_or(TypeCastError(
+            String::from("An error occurred during type conversion to floating-point type.")
+        ))?) / ((U::from_f64(step as f64).ok_or(TypeCastError(
+            String::from("An error occurred during type conversion to floating-point type.")
+        ))?) * U::from_f64(PI).unwrap() / U::from_f64(self.total_steps as f64).ok_or(TypeCastError(
+            String::from("An error occurred during type conversion to floating-point type.")
+        ))?)))
+    }
+}
+/// Scheduler that executes two schedulers sequentially.
+pub struct SequentialLR<U,PS,S> where U: UnitValue<U>, PS: Scheduler<U>, S: Scheduler<U> {
+    prev_scheduler: PS,
+    next_scheduler: S,
+    milestone: usize,
+    u:PhantomData<U>
+}
+impl<U,PS,S> SequentialLR<U,PS,S> where U: UnitValue<U>, PS: Scheduler<U>, S: Scheduler<U> {
+    /// Creates a new instance of `SequentialLR`.
+    ///
+    /// This function initializes a sequential learning rate scheduler, which transitions
+    /// between two schedulers (`prev_scheduler` and `next_scheduler`) based on a specified milestone.
+    ///
+    /// # Parameters
+    /// - `prev_scheduler`: The learning rate scheduler to be used prior to the milestone.
+    /// - `next_scheduler`: The learning rate scheduler to be used after the milestone.
+    /// - `milestone`: An integer value that defines the transition point between `prev_scheduler` and `next_scheduler`.
+    ///
+    /// # Returns
+    /// A new `SequentialLR` instance containing the provided schedulers and milestone.
+    ///
+    /// # Example
+    /// ```
+    /// use nncombinator::scheduler::LinearWarmupLR;
+    /// use nncombinator::scheduler::IdentityLR;
+    /// let warmup_steps = 1000;
+    /// let base_lr = 0.01;
+    /// let linear_warmup_lr = LinearWarmupLR::new(warmup_steps, base_lr);
+    /// let sequential_lr = SequentialLR::new(linear_warmup_lr, IdentityLR, 1000);
+    /// ```
+    pub fn new(prev_scheduler: PS, next_scheduler: S, milestone: usize) -> Self {
+        SequentialLR {
+            prev_scheduler,
+            next_scheduler,
+            milestone,
+            u: PhantomData
+        }
+    }
+}
+impl<U,PS,S> Scheduler<U> for SequentialLR<U,PS,S> where U: UnitValue<U>, PS: Scheduler<U>, S: Scheduler<U> {
+    fn schedule(&mut self, lr: U, step: usize) -> Result<U,TrainingError> {
+        if step < self.milestone {
+            self.prev_scheduler.schedule(lr, step)
+        } else {
+            self.next_scheduler.schedule(lr, step - self.milestone)
+        }
+    }
+
+    fn seq<NS>(self, milestone: usize, next_scheduler: NS) -> SequentialLR<U,Self,NS>
+        where NS: Scheduler<U> + Sized + 'static,
+              Self: Sized + 'static,
+    {
+        let joined_milestone = self.milestone + milestone;
+
+        SequentialLR::new(self, next_scheduler, joined_milestone)
+    }
+}

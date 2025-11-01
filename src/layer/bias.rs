@@ -488,7 +488,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BiasLayer<U,C,P,OP,D,I,PI,N>
           PI: Debug,
           OP: Optimizer<U,D> {
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
-        self.optimizer.onstep(step)?;
+        self.optimizer.on_step(step)?;
         Ok(self.parent.on_step(step)?)
     }
 }

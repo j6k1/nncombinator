@@ -6,7 +6,7 @@ use crate::{Cons, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -166,6 +166,11 @@ impl<U,O,LI,D> BatchLoss<U> for InputLayer<U,O,LI,D>
           <LI as BatchDataType>::Type: Debug,
           <O as BatchDataType>::Type: Debug + 'static {
 }
+impl<U,O,LI,D> OnStep for InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
+    fn on_step(&mut self, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+}
 pub struct DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     o:PhantomData<O>,
@@ -306,3 +311,8 @@ impl<U,O,DI,PO,LI,D> Loss<U> for DiffInputLayer<U,O,DI,PO,LI,D>
           LI: Debug,
           D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {}
+impl<U,O,DI,PO,LI,D> OnStep for DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: Device<U> {
+    fn on_step(&mut self, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+}

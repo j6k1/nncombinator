@@ -662,8 +662,8 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OnStep for LinearLayer<U,
           PI: Debug,
           OP: Optimizer<U,D> {
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
-        self.unit_optimizer.onstep(step)?;
-        self.bias_optimizer.onstep(step)?;
+        self.unit_optimizer.on_step(step)?;
+        self.bias_optimizer.on_step(step)?;
         Ok(self.parent.on_step(step)?)
     }
 }
@@ -1270,8 +1270,8 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> OnStep for DiffLine
           PI: Debug,
           OP: Optimizer<U,D> {
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
-        self.unit_optimizer.onstep(step)?;
-        self.bias_optimizer.onstep(step)?;
+        self.unit_optimizer.on_step(step)?;
+        self.bias_optimizer.on_step(step)?;
         Ok(self.parent.on_step(step)?)
     }
 }

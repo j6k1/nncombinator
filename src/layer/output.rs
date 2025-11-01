@@ -311,7 +311,7 @@ impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
-             BatchBackward<U> + UpdateWeight<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchBackward<U> + UpdateWeight<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OnStep,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync + BatchDataType,
@@ -348,6 +348,10 @@ impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I
 
         let (_,s) = self.parent.batch_backward(loss,stack,lossf)?;
 
+        if self.step_count == 0 {
+            self.parent.on_step(0)?;
+        }
+        
         self.parent.update_weight(s)?;
 
         Ok(total_loss)
@@ -357,10 +361,10 @@ impl<U,P,D,I,PI,const N:usize> Step for LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              OnStep,
-          U: Default + Clone + Copy + UnitValue<U>,
+          U: UnitValue<U>,
           D: Device<U>,
           PI: Debug + 'static,
-          I: Debug + Send + Sync{
+          I: Debug + Send + Sync {
     fn step(&mut self) -> Result<(),TrainingError> {
         self.step_count += 1;
 

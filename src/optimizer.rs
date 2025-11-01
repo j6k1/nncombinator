@@ -31,7 +31,7 @@ pub trait Optimizer<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
     /// Learning Progress Notification
     /// # Arguments
     /// * `step` - step count
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError>;
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError>;
 }
 /// Optimizer State Definition
 pub trait OptimizerState<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
@@ -99,7 +99,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for SGD<U,DeviceCpu<U>,SD> where U: UnitVal
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -124,7 +124,7 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>,SD>
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -269,7 +269,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>,SD> where U:
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -348,7 +348,7 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,SD>
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -527,7 +527,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>,SD> where U: Uni
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -594,7 +594,7 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -777,7 +777,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>,SD> where U: Uni
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -864,7 +864,7 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>,SD>
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -1092,7 +1092,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>,SD> where U: UnitVa
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -1182,7 +1182,7 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>,SD>
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -1410,7 +1410,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>,SD> where U: UnitV
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
@@ -1500,7 +1500,7 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>,SD>
         Ok(())
     }
 
-    fn onstep(&mut self, step: usize) -> Result<(),TrainingError> {
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }

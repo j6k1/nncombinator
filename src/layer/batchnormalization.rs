@@ -828,8 +828,8 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> OnStep for BatchNormalizationLayer<U,C,P,O
           OP: Optimizer<U,D>,
           S: Debug + Sized + 'static {
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
-        self.scale_optimizer.onstep(step)?;
-        self.bias_optimizer.onstep(step)?;
+        self.scale_optimizer.on_step(step)?;
+        self.bias_optimizer.on_step(step)?;
         Ok(self.parent.on_step(step)?)
     }
 }

@@ -10,7 +10,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::bias::DeviceBias;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
@@ -478,6 +478,19 @@ impl<U,P,OP,D,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,Arr<U,N>,P,OP,D,I
           D: Device<U> + DeviceBias<U,Arr<U,N>,PI,N>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a Arr<U,N>>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
+}
+// OnStep implementation
+impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + OnStep,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          PI: Debug,
+          OP: Optimizer<U,D> {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        self.optimizer.onstep(step)?;
+        Ok(self.parent.on_step(step)?)
+    }
 }
 impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,N> for BiasLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,

@@ -6,7 +6,7 @@ use crate::{Cons, Stack};
 use crate::device::activation::DeviceActivation;
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -319,5 +319,16 @@ impl<U,P,A,I,PI,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,PI,D,N
         })?;
 
         Ok((Cons(s,o),r))
+    }
+}
+
+impl<U,P,A,I,PI,D,const N:usize> OnStep for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + OnStep,
+          U: UnitValue<U>,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + 'static,
+          I: Debug + Send + Sync {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.on_step(step)?)
     }
 }

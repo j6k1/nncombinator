@@ -9,7 +9,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
@@ -817,6 +817,21 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+}
+// OnStep implementation
+impl<U,C,P,OP,D,I,PI,S,const N:usize> OnStep for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + OnStep,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          PI: Debug,
+          OP: Optimizer<U,D>,
+          S: Debug + Sized + 'static {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        self.scale_optimizer.onstep(step)?;
+        self.bias_optimizer.onstep(step)?;
+        Ok(self.parent.on_step(step)?)
+    }
 }
 /// Builder for BatchNormalizationLayer instance creation
 pub struct BatchNormalizationLayerBuilder<const N:usize> {

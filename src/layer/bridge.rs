@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use crate::arr::{IntoConverter, MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SliceSize};
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
@@ -266,6 +266,17 @@ impl<U,P,I,PI,CI,D> BatchLoss<U> for BridgeLayer<U,P,I,PI,CI,D>
           <PI as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type : TryFrom<SerializedVecConverter<U,CI>,Error=TypeConvertError> {
 
+}
+impl<U,P,I,PI,CI,D> OnStep for BridgeLayer<U,P,I,PI,CI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + OnStep,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          PI: Debug,
+          CI: Debug {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.on_step(step)?)
+    }
 }
 /// Trait for BridgeLayer instance creation
 pub trait BridgeLayerInstantiation<U,P,I,PI,CI,D>

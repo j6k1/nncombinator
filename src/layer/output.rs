@@ -8,7 +8,7 @@ use crate::cuda::ToHost;
 use crate::device::{Device};
 use crate::device::output::DeviceLinearOutput;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, Train, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PreTrain, Step, Train, UpdateWeight};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -26,6 +26,7 @@ pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>
     n:PhantomData<[();N]>,
     parent:P,
     device:D,
+    step_count:usize
 }
 impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
@@ -45,6 +46,7 @@ impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
             n:PhantomData::<[();N]>,
             parent:parent,
             device:device.clone(),
+            step_count:0
         }
     }
 }
@@ -349,5 +351,19 @@ impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I
         self.parent.update_weight(s)?;
 
         Ok(total_loss)
+    }
+}
+impl<U,P,D,I,PI,const N:usize> Step for LinearOutputLayer<U,P,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
+             OnStep,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + 'static,
+          I: Debug + Send + Sync{
+    fn step(&mut self) -> Result<(),TrainingError> {
+        self.step_count += 1;
+
+        Ok(self.parent.on_step(self.step_count)?)
     }
 }

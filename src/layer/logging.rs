@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use crate::device::Device;
 use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -352,4 +352,14 @@ impl<U,P,I,PI,D> BatchLoss<U> for LoggingLayer<U,P,I,PI,D>
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: Debug {
+}
+impl<U,P,I,PI,D> OnStep for LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + OnStep,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.on_step(step)?)
+    }
 }

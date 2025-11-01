@@ -318,6 +318,28 @@ pub trait BatchTrain<U,D,L>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBack
     /// * [`TrainingError`]
     fn batch_train(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, lossf:&L) -> Result<U, TrainingError>;
 }
+/// Definition of a trait that notifies of progress during learning
+pub trait Step {
+    /// on step notification
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn step(&mut self) -> Result<(), TrainingError>;
+}
+/// Definition of the feature to notify the number of learning progress steps
+pub trait OnStep {
+    /// on step notification with step count
+    /// # Arguments
+    /// * `step` - step count
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn on_step(&mut self, step:usize) -> Result<(), TrainingError>;
+}
 /// Trait that defines the ability to add layers to a neural network.
 pub trait AddLayer: ForwardAll where Self: Sized {
     /// Adding Layers

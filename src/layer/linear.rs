@@ -9,7 +9,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
@@ -653,6 +653,20 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchLoss<U> for LinearLa
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
 }
+// OnStep implementation for LinearLayer
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OnStep for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + OnStep,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          PI: Debug,
+          OP: Optimizer<U,D> {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        self.unit_optimizer.onstep(step)?;
+        self.bias_optimizer.onstep(step)?;
+        Ok(self.parent.on_step(step)?)
+    }
+}
 /// Trait for LinearLayer instance creation
 pub trait LinearLayerInstantiation<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
@@ -1245,6 +1259,21 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Loss<U> for DiffLin
           OP: Optimizer<U,D>,
           BC: From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output>,
           Self: BackwardAll<U> {
+}
+// OnStep implementation for DiffLinearLayer
+impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> OnStep for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + PreTrain<U> + Loss<U> + OnStep,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          DI: Debug,
+          PI: Debug,
+          OP: Optimizer<U,D> {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        self.unit_optimizer.onstep(step)?;
+        self.bias_optimizer.onstep(step)?;
+        Ok(self.parent.on_step(step)?)
+    }
 }
 /// Trait for DiffLinearLayer instance creation
 pub trait DiffLinearLayerInstantiation<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize>

@@ -24,8 +24,8 @@ use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_for
 
 #[test]
 fn test_scheduler_seq() {
-    let mut scheduler = LinearWarmupLR::new(10, 0.01)
-                                        .seq(10, LinearWarmupLR::new(20, 0.01))
+    let mut scheduler = LinearWarmupLR::new(10, 0.01, 0.0)
+                                        .seq(10, LinearWarmupLR::new(20, 0.01, 0.0))
                                         .seq(20,LambdaLR::new(0.01, |_| Ok(0.001)));
 
     assert_eq!(scheduler.schedule(0.01, 0).unwrap(), 0.0);

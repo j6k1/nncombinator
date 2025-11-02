@@ -66,16 +66,18 @@ impl<U,F> Clone for LambdaLR<U,F> where U: UnitValue<U>, F: Fn(usize) -> Result<
 #[derive(Clone)]
 pub struct LinearWarmupLR<U> where U: UnitValue<U> {
     warmup_steps: usize,
-    base_lr: U
+    base_lr: U,
+    start_factor: U,
 }
 impl<U> LinearWarmupLR<U> where U: UnitValue<U> {
     /// Creates a new instance of `LinearWarmupLR` with the specified number of warmup steps
     /// and a base learning rate.
     ///
     /// # Parameters
-    /// - `warmup_steps`: The number of steps over which the learning rate will linearly increase
+    /// * `warmup_steps` The number of steps over which the learning rate will linearly increase
     ///                   from zero to the base learning rate.
-    /// - `base_lr`: The base learning rate value to be achieved after the warmup period.
+    /// * `base_lr` The base learning rate value to be achieved after the warmup period.
+    /// * `start_factor` - Initial learning rate coefficient
     ///
     /// # Returns
     /// A new `LinearWarmupLR` instance configured with the provided warmup steps and base learning rate.
@@ -85,23 +87,27 @@ impl<U> LinearWarmupLR<U> where U: UnitValue<U> {
     /// use nncombinator::scheduler::LinearWarmupLR;
     /// let warmup_steps = 1000;
     /// let base_lr = 0.01;
-    /// let linear_warmup_lr = LinearWarmupLR::new(warmup_steps, base_lr);
+    /// let start_factor = 0.1;
+    /// let linear_warmup_lr = LinearWarmupLR::new(warmup_steps, base_lr, start_factor);
     /// ```
-   pub fn new(warmup_steps: usize, base_lr: U) -> Self {
+   pub fn new(warmup_steps: usize, base_lr: U, start_factor: U) -> Self {
         LinearWarmupLR {
             warmup_steps,
-            base_lr
+            base_lr,
+            start_factor
         }
     }
 }
 impl<U> Scheduler<U> for LinearWarmupLR<U> where U: UnitValue<U> {
     fn schedule(&mut self, _: U, step: usize) -> Result<U,TrainingError> {
         Ok(if step < self.warmup_steps {
-            self.base_lr * (U::from_f64(step as f64).ok_or(TypeCastError(
-                String::from("An error occurred during type conversion to floating-point type.")
-            ))? / U::from_f64(self.warmup_steps as f64).ok_or(TypeCastError(
-                String::from("An error occurred during type conversion to floating-point type.")
-            ))?)
+            self.base_lr * (self.start_factor + (U::one() - self.start_factor) *
+                (U::from_f64(step as f64).ok_or(TypeCastError(
+                    String::from("An error occurred during type conversion to floating-point type.")
+                ))? / U::from_f64(self.warmup_steps as f64).ok_or(TypeCastError(
+                    String::from("An error occurred during type conversion to floating-point type.")
+                ))?)
+            )
         } else {
             self.base_lr
         })

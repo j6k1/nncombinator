@@ -150,15 +150,20 @@ impl<U> CosineAnnealingLR<U> where U: UnitValue<U> {
 }
 impl<U> Scheduler<U> for CosineAnnealingLR<U> where U: UnitValue<U> {
     fn schedule(&mut self, lr: U, step: usize) -> Result<U, TrainingError> {
-        Ok(self.eta_min + (lr - self.eta_min) * ((U::from_f64(step as f64).ok_or(TypeCastError(
-            String::from("An error occurred during type conversion to floating-point type.")
-        ))? + U::from_f64(1.).unwrap() * U::from_f64(PI).unwrap() / U::from_f64(self.total_steps as f64).ok_or(TypeCastError(
-            String::from("An error occurred during type conversion to floating-point type.")
-        ))?) / ((U::from_f64(step as f64).ok_or(TypeCastError(
-            String::from("An error occurred during type conversion to floating-point type.")
-        ))?) * U::from_f64(PI).unwrap() / U::from_f64(self.total_steps as f64).ok_or(TypeCastError(
-            String::from("An error occurred during type conversion to floating-point type.")
-        ))?)))
+        Ok(self.eta_min + (lr - self.eta_min) * (
+            (U::one() +
+                (
+                    (U::from_usize(step).unwrap() + U::one()) * U::from_f64(PI).unwrap() /
+                     U::from_usize(self.total_steps).unwrap()
+                ).cos()
+            ) /
+            (U::one() +
+                (
+                    U::from_usize(step).unwrap() * U::from_f64(PI).unwrap() /
+                    U::from_usize(self.total_steps).unwrap()
+                ).cos()
+            )
+        ))
     }
 }
 /// Scheduler that executes two schedulers sequentially.

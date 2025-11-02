@@ -29,7 +29,7 @@ pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>
     step_count:usize
 }
 impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + OnStep,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           PI: Debug + 'static,
@@ -38,8 +38,8 @@ impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
     /// # Arguments
     /// * `parent` - upper layer
     /// * `device` - Device object used for neural network computation
-    pub fn new(parent:P,device:&D) -> LinearOutputLayer<U,P,D,I,PI,N> {
-        LinearOutputLayer {
+    pub fn new(parent:P,device:&D) -> Result<LinearOutputLayer<U,P,D,I,PI,N>,TrainingError> {
+        let mut l = LinearOutputLayer {
             u:PhantomData::<U>,
             i:PhantomData::<I>,
             io:PhantomData::<PI>,
@@ -47,7 +47,11 @@ impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
             parent:parent,
             device:device.clone(),
             step_count:0
-        }
+        };
+
+        l.parent.on_step(0)?;
+        
+        Ok(l)
     }
 }
 impl<U,P,D,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for LinearOutputLayer<U,P,D,I,PI,N>
@@ -311,7 +315,7 @@ impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
-             BatchBackward<U> + UpdateWeight<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OnStep,
+             BatchBackward<U> + UpdateWeight<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync + BatchDataType,
@@ -348,10 +352,6 @@ impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I
 
         let (_,s) = self.parent.batch_backward(loss,stack,lossf)?;
 
-        if self.step_count == 0 {
-            self.parent.on_step(0)?;
-        }
-        
         self.parent.update_weight(s)?;
 
         Ok(total_loss)

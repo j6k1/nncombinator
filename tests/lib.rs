@@ -85,7 +85,7 @@ fn test_mnist_for_cpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -253,7 +253,7 @@ fn test_fashion_mnist_for_cpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let Mnist {
@@ -406,7 +406,7 @@ fn test_mnist_for_gpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -568,7 +568,7 @@ fn test_mnist_for_gpu_double() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -732,7 +732,7 @@ fn test_mnist_for_gpu_adam() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -896,7 +896,7 @@ fn test_mnist_for_gpu_adamw() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -1066,7 +1066,7 @@ fn test_fashion_mnist_for_gpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let Mnist {
@@ -1235,7 +1235,7 @@ fn test_fashion_mnist_for_gpu_double() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let Mnist {
@@ -1377,7 +1377,7 @@ fn test_weather() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
@@ -1576,7 +1576,7 @@ fn test_weather_by_forward_diff() {
         assert_update_weight(&l);
         assert_partial_forward(&l);
 
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     assert_forward_all(&net);
@@ -1788,7 +1788,7 @@ fn test_weather_batch_train() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
@@ -1975,7 +1975,7 @@ fn test_weather_batch_train_for_gpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
@@ -2162,7 +2162,7 @@ fn test_weather_batch_train_for_gpu_double() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(bool,Vec<f64>)> = Vec::new();
@@ -2338,7 +2338,7 @@ fn test_penguins() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut targets = HashSet::new();
@@ -2556,7 +2556,7 @@ fn test_penguins_for_gpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut targets = HashSet::new();
@@ -2773,7 +2773,7 @@ fn test_weather_for_gpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
@@ -2939,7 +2939,7 @@ fn test_weather_by_forward_diff_for_gpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
@@ -3169,7 +3169,7 @@ fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
         assert_partial_forward(&l);
         assert_continue_forward(&l);
 
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
@@ -3364,7 +3364,7 @@ fn test_penguins_for_gpu_double() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut targets = HashSet::new();
@@ -3581,7 +3581,7 @@ fn test_weather_for_gpu_double() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(bool,Vec<f64>)> = Vec::new();
@@ -3746,7 +3746,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(bool,Vec<f64>)> = Vec::new();
@@ -3951,7 +3951,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -4110,7 +4110,7 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -4267,7 +4267,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -4426,7 +4426,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -4583,7 +4583,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -4741,7 +4741,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,Tanh::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -4908,7 +4908,7 @@ fn test_fashion_mnist_for_gpu_with_local_allocator() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let Mnist {
@@ -5093,7 +5093,7 @@ fn test_weather_by_forward_diff_in_thread() {
         assert_update_weight(&l);
         assert_partial_forward(&l);
 
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     assert_forward_all(&net);
@@ -5347,7 +5347,7 @@ fn test_weather_by_forward_diff_for_continue_forward() {
         assert_partial_forward(&l);
         assert_continue_forward(&l);
 
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     assert_forward_all(&net);
@@ -5567,7 +5567,7 @@ fn test_fashion_mnist_for_gpu_with_leaky_relu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let Mnist {
@@ -5726,7 +5726,7 @@ fn test_mnist_for_cpu_with_leaky_relu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();

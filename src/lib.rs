@@ -160,7 +160,7 @@ mod tests {
     use crate::activation::ReLu;
     use crate::arr::Arr;
     use crate::device::DeviceCpu;
-    use crate::layer::{AddLayer};
+    use crate::layer::{AddLayer, TryAddLayer};
     use crate::layer::activation::ActivationLayer;
     use crate::layer::input::InputLayer;
     use crate::layer::linear::{LinearLayerBuilder};
@@ -186,6 +186,6 @@ mod tests {
             LinearLayerBuilder::<4,1>::new().build(l,&device,|| 1., || 0.,&optimizer_builder).unwrap()
         }).add_layer(|l| {
             ActivationLayer::new(l,ReLu::new(&device),&device)
-        }).add_layer(|l| LinearOutputLayer::new(l,&device));
+        }).try_add_layer(|l| LinearOutputLayer::new(l,&device)).unwrap();
     }
 }

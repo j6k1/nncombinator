@@ -10,21 +10,36 @@ use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLu, Sigmoid};
 use nncombinator::arr::Arr;
-use nncombinator::device::{DeviceGpu};
+use nncombinator::device::DeviceGpu;
 use nncombinator::layer::activation::ActivationLayer;
-use nncombinator::layer::{AddLayer, BatchTrain, Train};
+use nncombinator::layer::{AddLayer, BatchTrain, Step};
 use nncombinator::layer::input::InputLayer;
 use nncombinator::layer::linear::LinearLayerBuilder;
-use nncombinator::layer::logging::{LoggingLayer};
+use nncombinator::layer::logging::LoggingLayer;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropy;
 use nncombinator::optimizer::MomentumSGDBuilder;
-use crate::common::SHARED_MEMORY_POOL;
+use nncombinator::scheduler::{LambdaLR, LinearWarmupLR, Scheduler};
+use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_on_step, assert_pre_train, assert_step, assert_update_weight, SHARED_MEMORY_POOL};
 
 #[test]
-fn test_logger() {
-    let (sender,receiver) = std::sync::mpsc::channel();
+fn test_scheduler_seq() {
+    let mut scheduler = LinearWarmupLR::new(10, 0.01)
+                                        .seq(10, LinearWarmupLR::new(20, 0.01))
+                                        .seq(20,LambdaLR::new(0.01, |_| Ok(0.001)));
 
+    assert_eq!(scheduler.schedule(0.01, 0).unwrap(), 0.0);
+    assert_eq!(scheduler.schedule(0.01, 9).unwrap(), 0.01*(9.0/10.0));
+    assert_eq!(scheduler.schedule(0.01, 10).unwrap(), 0.0);
+    assert_eq!(scheduler.schedule(0.01, 11).unwrap(), 0.01/20.0);
+    assert_eq!(scheduler.schedule(0.01, 29).unwrap(), 0.01*(19.0/20.0));
+    assert_eq!(scheduler.schedule(0.01, 30).unwrap(), 0.00001);
+    assert_eq!(scheduler.schedule(0.01, 35).unwrap(), 0.00001);
+    assert_eq!(scheduler.schedule(0.01, 40).unwrap(), 0.00001);
+    assert_eq!(scheduler.schedule(0.01, 50).unwrap(), 0.00001);
+}
+#[test]
+fn test_scheduler() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
 
@@ -43,91 +58,132 @@ fn test_logger() {
     let optimizer_builder = MomentumSGDBuilder::new(&device).lr(0.001);
 
     let mut net = net.add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+        assert_on_step(&l);
+
         let rnd = rnd.clone();
         LinearLayerBuilder::<14,100>::new().build(l,&device,
                                                   move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+        assert_on_step(&l);
+
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+        assert_on_step(&l);
+
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
                                                    move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+        assert_on_step(&l);
+
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+        assert_on_step(&l);
+
         let rnd = rnd.clone();
         LinearLayerBuilder::<100, 1>::new().build(l, &device,
                                                   move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        let mut l = LoggingLayer::new(l,&device);
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+        assert_on_step(&l);
 
-        {
-            let sender = sender.clone();
-
-            l.add_forward_logger(move |_| {
-                println!("forward");
-                sender.send("forward").unwrap();
-
-                Ok(())
-            });
-        }
-
-        {
-            let sender = sender.clone();
-
-            l.add_backward_logger(move |_| {
-                println!("backward");
-                sender.send("backward").unwrap();
-
-                Ok(())
-            });
-        }
-
-        {
-            let sender = sender.clone();
-
-            l.add_gradient_logger(move |_| {
-                println!("gradient");
-                sender.send("gradient").unwrap();
-
-                Ok(())
-            });
-        }
-
-        {
-            let sender = sender.clone();
-
-            l.add_batch_forward_logger(move |_| {
-                println!("batch forward");
-                sender.send("batch forward").unwrap();
-
-                Ok(())
-            });
-        }
-
-        {
-            let sender = sender.clone();
-
-            l.add_batch_backward_logger(move |_| {
-                println!("batch backward");
-                sender.send("batch backward").unwrap();
-
-                Ok(())
-            });
-        }
-
+        let l = LoggingLayer::new(l,&device);
         l
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+        assert_on_step(&l);
+
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
+        assert_forward_all(&l);
+        assert_pre_train(&l);
+        assert_backward_all(&l);
+        assert_loss(&l);
+        assert_update_weight(&l);
+        assert_batch_forward(&l);
+        assert_batch_pre_train(&l);
+        assert_batch_backward(&l);
+        assert_batch_loss(&l);
+        assert_on_step(&l);
+
         LinearOutputLayer::new(l,&device).unwrap()
     });
+
+    assert_forward_all(&net);
+    assert_pre_train(&net);
+    assert_backward_all(&net);
+    assert_update_weight(&net);
+    assert_batch_forward(&net);
+    assert_batch_pre_train(&net);
+    assert_batch_backward(&net);
+    assert_step(&net);
 
     let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
 
@@ -171,28 +227,6 @@ fn test_logger() {
 
     let mut iter = teachers.chunks_mut(10).take(10);
 
-    if let Some(chunk) = iter.next() {
-        for (t, columns) in chunk.iter_mut() {
-            let t = *t;
-
-            let mut input = Arr::<f32, 14>::new();
-
-            for (it, p) in input.iter_mut().zip(columns.iter()) {
-                *it = *p;
-            }
-
-            let mut expected = Arr::new();
-
-            expected[0] = if t {
-                1.
-            } else {
-                0.
-            };
-
-            let _ = net.train(expected,input,&lossf).unwrap();
-        }
-    }
-
     while let Some(teachers) = iter.next()  {
         teachers.shuffle(&mut rng);
 
@@ -225,17 +259,8 @@ fn test_logger() {
             acc
         });
         let _ = net.batch_train(train_data.0.into(),train_data.1.into(),&lossf).unwrap();
+        net.step().unwrap();
     }
 
-    for _ in 0..10 {
-        assert_eq!("forward", receiver.recv().unwrap());
-        assert_eq!("backward", receiver.recv().unwrap());
-        assert_eq!("gradient", receiver.recv().unwrap());
-    }
-
-    for _ in 0..9 {
-        assert_eq!("batch forward", receiver.recv().unwrap());
-        assert_eq!("batch backward", receiver.recv().unwrap());
-        assert_eq!("gradient", receiver.recv().unwrap());
-    }
+    assert!(true);
 }

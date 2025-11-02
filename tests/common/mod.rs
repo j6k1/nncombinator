@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use rand::Rng;
 use nncombinator::arr::{Arr, Arr2, SerializedVec};
 use nncombinator::device::input::DeviceInput;
-use nncombinator::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchPreTrain, ContinueForward, ForwardAll, Loss, PartialForward, PreTrain, UpdateWeight};
+use nncombinator::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchPreTrain, ContinueForward, ForwardAll, Loss, OnStep, PartialForward, PreTrain, Step, UpdateWeight};
 use nncombinator::ope::UnitValue;
 use nncombinator::cuda::allocator::{CudaAllocator, DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
 use nncombinator::cuda::{AsCudaMutPtr, AsCudaView, CudaMutPtr, CudaTensor1dPtr, CudaTensor2dPtr, CudaVec, WriteMemory};
@@ -46,6 +46,13 @@ pub fn assert_batch_loss<U: UnitValue<U>,T: BatchLoss<U>>(_:&T) {
 
 }
 
+pub fn assert_step<T: Step>(_:&T) {
+
+}
+
+pub fn assert_on_step<T: OnStep>(_:&T) {
+
+}
 
 const NI: usize = 500;
 const NO: usize = 600;

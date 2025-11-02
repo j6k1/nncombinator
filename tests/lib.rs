@@ -379,7 +379,7 @@ fn test_mnist_for_gpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = AdamBuilder::new(&device).lr(0.005);
+    let optimizer_builder = AdamBuilder::new(&device).lr(0.005).weight_decay(0.0001);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();

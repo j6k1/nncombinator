@@ -9,7 +9,7 @@ use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaView, AsKernelPtr, AsMut
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationBatchBackwardArgs, ActivationBatchForwardArgs, ActivationForwardArgs, ReLuBackward, ReLuBatchBackward, ReLuForward, ReLuBatchForward, SigmoidBackward, SigmoidBatchBackward, SigmoidForward, SigmoidBatchForward, SoftMaxBackward, SoftMaxBatchBackward, SoftMaxForward, SoftMaxBatchForward, SwishBackward, SwishBatchBackward, SwishForward, TanhBackward, TanhBatchBackward, TanhForward, TanhBatchForward, SwishBatchForward, LeakyReLuBatchBackward, LeakyReLuBatchForward, LeakyReLuBackward, LeakyReLuForward};
 use crate::device::*;
-use crate::error::{EvaluateError, TrainingError, TypeConvertError};
+use crate::error::{CudaError, EvaluateError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::lossfunction::LossFunction;
 
@@ -137,8 +137,9 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
           CudaPtr<U,AC>: WriteMemory<U>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator,
-          I: TryClone<Error=EvaluateError>,
-          CudaTensor1dPtr<U,AC,N>: From<I> {
+          I: TryClone<Error=CudaError>,
+          CudaTensor1dPtr<U,AC,N>: From<I>,
+          EvaluateError: From<CudaError> {
 
     fn apply(&self, _: &DeviceGpu<U,AC>, input: &'a I) -> Result<CudaTensor1dPtr<U,AC,N>, EvaluateError> {
         Ok(input.try_clone()?.into())
@@ -187,18 +188,22 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
           CudaPtr<U,AC>: WriteMemory<U>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator,
-          for<'b> CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<&'b I,Error=TrainingError> {
+          I: IntoConverter + TryClone<Error=CudaError>,
+          I: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC> as IntoConverter>::Converter,Error=TypeConvertError>,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: IntoConverter + TryClone<Error=CudaError>,
+          CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: TryFrom<<I as IntoConverter>::Converter,Error=TypeConvertError>,
+          TrainingError: From<TypeConvertError> {
 
     fn batch_apply(&self, _: &DeviceGpu<U,AC>, input: &'a I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,TrainingError> {
-        Ok(input.try_into()?)
+        Ok((*input).try_clone()?.into_converter().try_into()?)
     }
 
     fn batch_derive(&self, _: &DeviceGpu<U,AC>,
                     _: &'a I,
                     loss: &'a I,
                     _: &'a I) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
-        Ok(loss.try_into()?)
+        Ok((*loss).try_clone()?.into_converter().try_into()?)
     }
 }
 /// Sigmoid Implementation

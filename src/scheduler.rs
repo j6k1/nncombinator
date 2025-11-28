@@ -62,6 +62,42 @@ impl<U,F> Clone for LambdaLR<U,F> where U: UnitValue<U>, F: Fn(usize) -> Result<
         }
     }
 }
+/// A learning rate decay scheduler using gamma per step size
+#[derive(Clone)]
+pub struct StepLR<U> where U: UnitValue<U> {
+    step_size: usize,
+    gamma: U
+}
+impl<U> StepLR<U> where U: UnitValue<U> {
+    /// Create a new instance of `StepLR` with the specified number of steps and decay rate.
+    ///
+    /// # Arguments
+    /// * `step_size` - Number of steps to decay the learning rate. Decays every this many steps.
+    ///
+    /// * `gamma` - Decay rate when decaying the learning rate
+    ///
+    /// # Returns A new StepLR instance configured with the specified step size and decay rate.
+    ///
+    /// # Example
+    /// ```
+    /// use nncombinator::scheduler::{StepLR};
+    /// let step_size = 75;
+    /// let gamma = 0.3;
+    /// let linear_warmup_lr = StepLR::new(step_size,gamma);
+    /// ```
+    pub fn new(step_size: usize, gamma: U) -> Self {
+        StepLR { step_size, gamma }
+    }
+}
+impl<U> Scheduler<U> for StepLR<U> where U: UnitValue<U> {
+    fn schedule(&mut self, lr: U, step: usize) -> Result<U,TrainingError> {
+        Ok(if step > 0 && step % self.step_size == 0 {
+            lr * self.gamma
+        } else {
+            lr
+        })
+    }
+}
 /// A scheduler that gradually increases the learning rate from a low starting point
 #[derive(Clone)]
 pub struct LinearWarmupLR<U> where U: UnitValue<U> {
@@ -73,10 +109,10 @@ impl<U> LinearWarmupLR<U> where U: UnitValue<U> {
     /// Creates a new instance of `LinearWarmupLR` with the specified number of warmup steps
     /// and a base learning rate.
     ///
-    /// # Parameters
-    /// * `warmup_steps` The number of steps over which the learning rate will linearly increase
+    /// # Arguments
+    /// * `warmup_steps` - The number of steps over which the learning rate will linearly increase
     ///                   from zero to the base learning rate.
-    /// * `base_lr` The base learning rate value to be achieved after the warmup period.
+    /// * `base_lr` - The base learning rate value to be achieved after the warmup period.
     /// * `start_factor` - Initial learning rate coefficient
     ///
     /// # Returns
@@ -125,10 +161,10 @@ impl<U> CosineAnnealingLR<U> where U: UnitValue<U> {
     /// This method initializes the struct with the total number of steps and the
     /// minimum learning rate (eta_min) that the scheduler should decay towards.
     ///
-    /// # Parameters
-    /// - `total_steps`: The total number of steps over which the learning rate
+    /// # Arguments
+    /// * `total_steps`: - The total number of steps over which the learning rate
     ///   will be annealed using a cosine schedule.
-    /// - `eta_min`: The minimum learning rate value to which the learning rate
+    /// * `eta_min` - The minimum learning rate value to which the learning rate
     ///   will decay during the schedule.
     ///
     /// # Returns
@@ -191,10 +227,10 @@ impl<U,PS,S> SequentialLR<U,PS,S> where U: UnitValue<U>, PS: Scheduler<U> + Clon
     /// This function initializes a sequential learning rate scheduler, which transitions
     /// between two schedulers (`prev_scheduler` and `next_scheduler`) based on a specified milestone.
     ///
-    /// # Parameters
-    /// - `prev_scheduler`: The learning rate scheduler to be used prior to the milestone.
-    /// - `next_scheduler`: The learning rate scheduler to be used after the milestone.
-    /// - `milestone`: An integer value that defines the transition point between `prev_scheduler` and `next_scheduler`.
+    /// # Arguments
+    /// * `prev_scheduler` - The learning rate scheduler to be used prior to the milestone.
+    /// * `next_scheduler` - The learning rate scheduler to be used after the milestone.
+    /// * `milestone` - An integer value that defines the transition point between `prev_scheduler` and `next_scheduler`.
     ///
     /// # Returns
     /// A new `SequentialLR` instance containing the provided schedulers and milestone.

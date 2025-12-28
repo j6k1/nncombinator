@@ -86,7 +86,8 @@ pub struct ActivationBackwardArgs<'a,T,A,const N:usize>
     units_len: usize,
     batch_size: usize,
 }
-/// Create an instance of an object representing the list of arguments during error back propagation of the activation function.
+/// Create an instance of an object representing the list of arguments during error
+/// back propagation of the activation function.
 impl<'a,T,A,const N:usize> ActivationBackwardArgs<'a,T,A,N>
     where T: DataTypeInfo + UnitValue<T> +'a,
           A: CudaAllocator +'a {
@@ -226,6 +227,219 @@ impl<'a,T,A,const N:usize> KernelArgs for ActivationBatchBackwardArgs<'a,T,A,N>
             &mut self.o,
             &mut self.u,
             &mut self.loss,
+            &mut self.output,
+            &mut self.units_len,
+            &mut self.batch_size
+        ]
+    }
+}
+/// Define the list of arguments passed to the CUDA kernel function as arguments
+/// for the forward propagation of ClippedReLU.
+pub struct ClippedReLuForwardArgs<'a,T,A,const N:usize>
+    where T: DataTypeInfo + UnitValue<T> + 'a + AsKernelPtr,
+          A: CudaAllocator +'a,
+          CudaMutPtr<'a,T,A>: AsMutKernelPtr {
+    input: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
+    ceiling: T,
+    /// Output buffer
+    pub output: CudaTensor1dPtr<T,A,N>,
+    units_len: usize,
+    batch_size: usize,
+}
+/// Create an instance of an object representing the argument list at the time of activation function forward for ClippedReLU.
+impl<'a,T,A,const N:usize> ClippedReLuForwardArgs<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> +'a + AsKernelPtr,
+          A: CudaAllocator +'a {
+    /// Create a ClippedReLuForwardArgs instance
+    /// # Arguments
+    /// * `input` - Input buffer
+    /// * `ceiling` - Ceiling value for clipping
+    /// * `output` - Output buffer
+    pub fn new(input:&'a CudaTensor1dPtrView<'a,T,N>, ceiling: T, output:CudaTensor1dPtr<T,A,N>) -> ClippedReLuForwardArgs<'a,T,A,N> {
+        ClippedReLuForwardArgs {
+            input: CudaConstPtr::new(input),
+            ceiling: ceiling,
+            output: output,
+            units_len: N,
+            batch_size: 1
+        }
+    }
+}
+impl<'a,T,A,const N:usize> KernelArgs for ClippedReLuForwardArgs<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> + 'a + AsKernelPtr,
+          A: CudaAllocator + 'a {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
+        vec![
+            &mut self.input,
+            &mut self.ceiling,
+            &mut self.output,
+            &mut self.units_len,
+            &mut self.batch_size
+        ]
+    }
+}
+/// Creates an instance of an object representing the list of arguments for backpropagation in ClippedReLU.
+pub struct ClippedReLuBackwardArgs<'a,T,A,const N:usize>
+    where T: DataTypeInfo + UnitValue<T> +'a + AsKernelPtr,
+          A: CudaAllocator +'a {
+    o: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
+    u: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
+    loss: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
+    ceiling: T,
+    /// Output of error back propagation
+    pub output: CudaTensor1dPtr<T,A,N>,
+    units_len: usize,
+    batch_size: usize,
+}
+impl<'a,T,A,const N:usize> ClippedReLuBackwardArgs<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> +'a + AsKernelPtr,
+          A: CudaAllocator +'a {
+    /// Create a ClippedReLuBackwardArgs instance
+    /// # Arguments
+    /// * `o` - Output values
+    /// * `u` - Input values from upper layers
+    /// * `loss` - loss value
+    /// * `ceiling` - Ceiling value for clipping
+    /// * `output` - Output of error back propagation
+    pub fn new(o: &'a CudaTensor1dPtrView<'a,T,N>,
+               u: &'a CudaTensor1dPtrView<'a,T,N>,
+               loss: &'a CudaTensor1dPtrView<'a,T,N>,
+               ceiling: T,
+               output: CudaTensor1dPtr<T,A,N>) -> ClippedReLuBackwardArgs<'a,T,A,N> {
+        ClippedReLuBackwardArgs {
+            o: CudaConstPtr::new(o),
+            u: CudaConstPtr::new(u),
+            loss: CudaConstPtr::new(loss),
+            ceiling: ceiling,
+            output: output,
+            units_len: N,
+            batch_size: 1
+        }
+    }
+}
+impl<'a,T,A,const N:usize> KernelArgs for ClippedReLuBackwardArgs<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> + 'a + AsKernelPtr,
+          A: CudaAllocator + 'a {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
+        vec![
+            &mut self.o,
+            &mut self.u,
+            &mut self.loss,
+            &mut self.ceiling,
+            &mut self.output,
+            &mut self.units_len,
+            &mut self.batch_size
+        ]
+    }
+}
+/// Defines the list of arguments passed to the CUDA kernel function,
+/// which are passed as arguments for the forward propagation in ClippedReLu during batch execution.
+pub struct ClippedReLuBatchForwardArgs<'a,T,A,const N:usize>
+    where T: DataTypeInfo + UnitValue<T> +'a + AsKernelPtr,
+          A: CudaAllocator +'a,
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
+    input: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
+    ceiling: T,
+    /// Output buffer
+    pub output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,
+    units_len: usize,
+    batch_size: usize,
+}
+impl<'a,T,A,const N:usize> ClippedReLuBatchForwardArgs<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> + 'a + AsKernelPtr,
+          A: CudaAllocator + 'a,
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
+    /// Create a ClippedReLuBatchForwardArgs instance
+    /// # Arguments
+    /// * `input` - Input buffer
+    /// * `output` - Output buffer
+    /// * `batch_size` - batches count
+    /// * `ceiling` - Ceiling value for clipping
+    pub fn new(input:&'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>, ceiling: T, output:CudaVec<T,CudaTensor1dPtr<T,A,N>,A>, batch_size: usize)
+        -> ClippedReLuBatchForwardArgs<'a,T,A,N> {
+        ClippedReLuBatchForwardArgs {
+            input: CudaConstPtr::new(input),
+            ceiling: ceiling,
+            output: output,
+            units_len: N,
+            batch_size: batch_size
+        }
+    }
+}
+impl<'a,T,A,const N:usize> KernelArgs for ClippedReLuBatchForwardArgs<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> + 'a + AsKernelPtr,
+          A: CudaAllocator + 'a,
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
+        vec![
+            &mut self.input,
+            &mut self.ceiling,
+            &mut self.output,
+            &mut self.units_len,
+            &mut self.batch_size
+        ]
+    }
+}
+/// Defines the list of arguments passed to the CUDA kernel function.
+/// These are passed as arguments for the backward propagation in ClippedReLu during batch execution.
+pub struct ClippedReLuBatchBackwardArgs<'a,T,A,const N:usize>
+    where T: DataTypeInfo + UnitValue<T> +'a + AsKernelPtr,
+          A: CudaAllocator + 'a,
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
+    o: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
+    u: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
+    loss: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
+    ceiling: T,
+    /// Output of error back propagation
+    pub output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,
+    units_len: usize,
+    batch_size: usize,
+}
+impl<'a,T,A,const N:usize> ClippedReLuBatchBackwardArgs<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> +'a + AsKernelPtr,
+          A: CudaAllocator + 'a,
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
+    /// Create a ClippedReLuBatchBackwardArgs instance
+    /// # Arguments
+    /// * `o` - Output values
+    /// * `u` - Input values from upper layers
+    /// * `loss` - loss value
+    /// * `ceiling` - Ceiling value for clipping
+    /// * `output` - Output of error back propagation
+    /// * `batch_size` - batch count
+    pub fn new(o: &'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,
+               u: &'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,
+               loss: &'a CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>,
+               ceiling: T,
+               output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,
+               batch_size: usize) -> ClippedReLuBatchBackwardArgs<'a,T,A,N> {
+        ClippedReLuBatchBackwardArgs {
+            o: CudaConstPtr::new(o),
+            u: CudaConstPtr::new(u),
+            loss: CudaConstPtr::new(loss),
+            output: output,
+            ceiling: ceiling,
+            units_len: N,
+            batch_size: batch_size
+        }
+    }
+}
+impl<'a,T,A,const N:usize> KernelArgs for ClippedReLuBatchBackwardArgs<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> +'a + AsKernelPtr,
+          A: CudaAllocator + 'a,
+          CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
+          for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
+    fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
+        vec![
+            &mut self.o,
+            &mut self.u,
+            &mut self.loss,
+            &mut self.ceiling,
             &mut self.output,
             &mut self.units_len,
             &mut self.batch_size

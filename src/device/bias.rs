@@ -1,13 +1,13 @@
 //! Implementation of the calculation process for bias layers
 
 use std::fmt::Debug;
-use std::iter;
 use libc::c_int;
 use rcublas_sys::{cublasDaxpy_v2, cublasSaxpy_v2, cublasStatus_t};
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::collection::Broadcast;
-use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsCudaMutPtr, CudaMutPtr, AsCudaPtr};
+use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsCudaMutPtr, CudaMutPtr, AsCudaPtr, Kernel};
 use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::kernel::device::{AddBiasBatch, AddBiasBatchArgs};
 use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator, DeviceReduce};
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
@@ -123,9 +123,12 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
           <IO as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
           for<'a> IO: AsCudaPtr<'a>,
           for<'a> <IO as AsCudaPtr<'a>>::Pointer: AsPtr<f32> + MemoryMoveTo<f32,CudaMutPtr<'a,f32,A>>,
+          for<'a> <IO as BatchDataType>::Type: AsCudaPtr<'a>,
+          for<'a> <<IO as BatchDataType>::Type as AsCudaPtr<'a>>::Pointer: AsPtr<f32> + MemoryMoveTo<f32,CudaMutPtr<'a,f32,A>>,
           for<'a> CudaMutPtr<'a,f32,A>: WriteMemory<f32> + AsMutPtr<f32>,
           for<'a> CudaTensor1dPtrView<'a,f32,N>: From<&'a IO>,
           for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
+          for<'a> AddBiasBatch<'a,f32,A,N>: Kernel<Args=AddBiasBatchArgs<'a,f32,A,N>>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f32,A,N>,f32,N> {
     fn forward_bias<'a>(&self, bias: &CudaTensor1dPtr<f32,A,N>, input: &'a IO) -> Result<IO, EvaluateError> {
         let input_ptr = CudaTensor1dPtrView::<'a,f32,N>::from(input);
@@ -182,47 +185,20 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
         -> Result<<IO as BatchDataType>::Type, TrainingError> {
         let len = input.size();
 
-        let bias = iter::repeat(bias.read_to_vec()?.into_boxed_slice().iter().cloned().collect::<Vec<f32>>())
-            .take(input.size()).collect::<Vec<Vec<f32>>>()
-            .into_iter().flatten().collect::<Vec<f32>>();
+        let mut input_output = CudaVec::<f32,CudaTensor1dPtr::<f32,A,N>,A>::new(len,self.get_allocator())?;
+        input.as_cuda_ptr().memcpy_to(&mut input_output.as_cuda_mut_ptr(),N * len)?;
 
-        let input_ptr = CudaVecView::<'a,f32,CudaTensor1dPtrView<f32,N>>::try_from(input)?;
-        let mut output_ptr = CudaVec::<f32,CudaTensor1dPtr::<f32,A,N>,A>::new(len,self.get_allocator())?;
+        let mut args = AddBiasBatchArgs::new(
+            bias,
+            input_output,
+            len
+        );
 
-        output_ptr.memcpy(bias.as_ptr(),N * len)?;
+        let mut kernel = AddBiasBatch::<'_,f32,A,N>::new();
 
-        let alpha = CudaPtr::try_from(1.0f32)?;
+        kernel.launch(&mut args)?;
 
-        match unsafe {
-            cublasSaxpy_v2 (
-                *self.cublas.id_c(),
-                (N * len) as c_int,
-                alpha.as_ptr(),
-                input_ptr.as_ptr(),
-                1,
-                output_ptr.as_mut_ptr(),
-                1
-            )
-        } {
-            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.into_converter().try_into()?),
-            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
-            },
-            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
-                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                )));
-            },
-            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
-            },
-            status => {
-                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
-                    status as i32 as u64
-                )));
-            }
-        }
+        Ok(args.input_output.into_converter().try_into()?)
     }
 
     fn batch_backward_bias<'a>(&self, input: <IO as BatchDataType>::Type)
@@ -248,8 +224,11 @@ impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for Devic
           <IO as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
           for<'a> IO: AsCudaPtr<'a>,
           for<'a> <IO as AsCudaPtr<'a>>::Pointer: AsPtr<f64> + MemoryMoveTo<f64,CudaMutPtr<'a,f64,A>>,
+          for<'a> <IO as BatchDataType>::Type: AsCudaPtr<'a>,
+          for<'a> <<IO as BatchDataType>::Type as AsCudaPtr<'a>>::Pointer: AsPtr<f64> + MemoryMoveTo<f64,CudaMutPtr<'a,f64,A>>,
           for<'a> CudaMutPtr<'a,f64,A>: WriteMemory<f64> + AsMutPtr<f64>,
           for<'a> CudaTensor1dPtrView<'a,f64,N>: From<&'a IO>,
+          for<'a> AddBiasBatch<'a,f64,A,N>: Kernel<Args=AddBiasBatchArgs<'a,f64,A,N>>,
           for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f64,A,N>,f64,N> {
     fn forward_bias<'a>(&self, bias: &CudaTensor1dPtr<f64,A,N>, input: &'a IO) -> Result<IO, EvaluateError> {
@@ -310,47 +289,20 @@ impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for Devic
         -> Result<<IO as BatchDataType>::Type, TrainingError> {
         let len = input.size();
 
-        let bias = iter::repeat(bias.read_to_vec()?.into_boxed_slice().iter().cloned().collect::<Vec<f64>>())
-            .take(input.size()).collect::<Vec<Vec<f64>>>()
-            .into_iter().flatten().collect::<Vec<f64>>();
+        let mut input_output = CudaVec::<f64,CudaTensor1dPtr<f64,A,N>,A>::new(len,&self.allocator)?;
+        input.as_cuda_ptr().memcpy_to(&mut input_output.as_cuda_mut_ptr(),N * len)?;
 
-        let input_ptr = CudaVecView::<'a,f64,CudaTensor1dPtrView<f64,N>>::try_from(input)?;
-        let mut output_ptr = CudaVec::<f64,CudaTensor1dPtr<f64,A,N>,A>::new(len,&self.allocator)?;
+        let mut args = AddBiasBatchArgs::new(
+            bias,
+            input_output,
+            len
+        );
 
-        output_ptr.memcpy(bias.as_ptr(),N * len)?;
+        let mut kernel = AddBiasBatch::<'_,f64,A,N>::new();
 
-        let alpha = CudaPtr::try_from(1.0f64)?;
+        kernel.launch(&mut args)?;
 
-        match unsafe {
-            cublasDaxpy_v2 (
-                *self.cublas.id_c(),
-                (N * len) as c_int,
-                alpha.as_ptr(),
-                input_ptr.as_ptr(),
-                1,
-                output_ptr.as_mut_ptr(),
-                1
-            )
-        } {
-            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output_ptr.into_converter().try_into()?),
-            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
-                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
-            },
-            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
-                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
-                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
-                )));
-            },
-            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
-                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
-            },
-            status => {
-                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
-                    "Unable to get cuBLAS cublasSgemv_v2",
-                    status as i32 as u64
-                )));
-            }
-        }
+        Ok(args.input_output.into_converter().try_into()?)
     }
 
     fn batch_backward_bias<'a>(&self, input: <IO as BatchDataType>::Type)

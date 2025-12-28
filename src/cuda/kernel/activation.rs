@@ -12,24 +12,28 @@ use crate::ope::UnitValue;
 extern "C" {
     fn sigmoid_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn relu_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
+    fn clipped_relu_forward_float(input: *const f32, ceiling: f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn leaky_relu_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn swish_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn tanh_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
     fn softmax_forward_float(input: *const f32, output: *mut f32, len: size_t, batch_size: size_t) -> c_void;
     fn sigmoid_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
+    fn clipped_relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, ceiling: f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn leaky_relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn swish_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn tanh_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn softmax_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
     fn sigmoid_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn relu_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
+    fn clipped_relu_forward_double(input: *const f64, ceiling: f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn leaky_relu_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn swish_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn tanh_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
     fn softmax_forward_double(input: *const f64, output: *mut f64, len: size_t, batch_size: size_t) -> c_void;
     fn sigmoid_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
     fn relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
+    fn clipped_relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, ceiling: f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
     fn leaky_relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
     fn swish_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
     fn tanh_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
@@ -795,6 +799,196 @@ impl<'a,A,const N:usize> Kernel for ReLuBatchBackward<'a,f64,A,N>
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_double as *const c_void;
     type Args = ActivationBatchBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+/// Implementation of ClippedReLu activation functions for batch execution
+pub struct ClippedReLuForward<'a,T,A,const N:usize>
+    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr, A: CudaAllocator + 'a {
+    t:PhantomData<T>,
+    a:PhantomData<A>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,A,const N:usize> ClippedReLuForward<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr, A: CudaAllocator + 'a {
+    /// Create a ClippedReLuForward instance
+    pub fn new() -> ClippedReLuForward<'a,T,A,N> {
+        ClippedReLuForward {
+            t: PhantomData::<T>,
+            a: PhantomData::<A>,
+            l: PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for ClippedReLuForward<'a,f32,A,N>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = clipped_relu_forward_float as *const c_void;
+    type Args = ClippedReLuForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for ClippedReLuForward<'a,f64,A,N>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = clipped_relu_forward_double as *const c_void;
+    type Args = ClippedReLuForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+/// Implementation of derivatives of the ClippedReLU activation function
+pub struct ClippedReLuBackward<'a,T,A,const N:usize>
+    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
+    t:PhantomData<T>,
+    a:PhantomData<A>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,A,const N:usize> ClippedReLuBackward<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr,
+          A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
+    /// Create a ClippedReLuBackward instance
+    pub fn new() -> ClippedReLuBackward<'a,T,A,N> {
+        ClippedReLuBackward {
+            t: PhantomData::<T>,
+            a: PhantomData::<A>,
+            l: PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for ClippedReLuBackward<'a,f32,A,N>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = clipped_relu_backward_float as *const c_void;
+    type Args = ClippedReLuBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for ClippedReLuBackward<'a,f64,A,N>
+    where A: CudaAllocator + 'a,
+          CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = clipped_relu_backward_double as *const c_void;
+    type Args = ClippedReLuBackwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, _: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 1023) as c_uint / 1024, y: 1, z: 1 },
+            block_dim: dim3 { x: 1024, y: 1, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+/// Implementation of ClippedReLU activation functions for batch execution
+pub struct ClippedReLuBatchForward<'a,T,A,const N:usize>
+    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr, A: CudaAllocator + 'a {
+    t:PhantomData<T>,
+    a:PhantomData<A>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,A,const N:usize> ClippedReLuBatchForward<'a,T,A,N>
+    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr, A: CudaAllocator + 'a {
+    /// Create a ClippedReLuForwardBatch instance
+    pub fn new() -> ClippedReLuBatchForward<'a,T,A,N> {
+        ClippedReLuBatchForward {
+            t: PhantomData::<T>,
+            a: PhantomData::<A>,
+            l: PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for ClippedReLuBatchForward<'a,f32,A,N>
+    where A: CudaAllocator + 'a,
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
+          for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = clipped_relu_forward_float as *const c_void;
+    type Args = ClippedReLuBatchForwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for ClippedReLuBatchForward<'a,f64,A,N>
+    where A: CudaAllocator + 'a,
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
+          for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = clipped_relu_forward_double as *const c_void;
+    type Args = ClippedReLuBatchForwardArgs<'a,f64,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+/// Implement derivatives of the ClippedReLU activation function for batch execution
+pub struct ClippedReLuBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+    t:PhantomData<T>,
+    a:PhantomData<A>,
+    l:PhantomData<&'a ()>
+}
+impl<'a,T,A,const N:usize> ClippedReLuBatchBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+    /// Create a ClippedReLuBackwardForBatch instance
+    pub fn new() -> ClippedReLuBatchBackward<'a,T,A,N> {
+        ClippedReLuBatchBackward {
+            t: PhantomData::<T>,
+            a: PhantomData::<A>,
+            l: PhantomData::<&'a ()>
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for ClippedReLuBatchBackward<'a,f32,A,N>
+    where A: CudaAllocator + 'a,
+          CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
+          for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = clipped_relu_backward_float as *const c_void;
+    type Args = ClippedReLuBatchBackwardArgs<'a,f32,A,N>;
+
+    fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
+        KernelLaunchConfig {
+            grid_dim: dim3 { x: (N + 31) as c_uint / 32, y: (args.batch_size + 31) as c_uint / 32, z: 1 },
+            block_dim: dim3 { x: 32, y: 32, z: 1 },
+            shared_memory_size: 0
+        }
+    }
+}
+impl<'a,A,const N:usize> Kernel for ClippedReLuBatchBackward<'a,f64,A,N>
+    where A: CudaAllocator + 'a,
+          CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
+          for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
+    const FUNC_PTR: *const c_void = clipped_relu_backward_double as *const c_void;
+    type Args = ClippedReLuBatchBackwardArgs<'a,f64,A,N>;
 
     fn launch_config(&self, args: &Self::Args) -> KernelLaunchConfig {
         KernelLaunchConfig {

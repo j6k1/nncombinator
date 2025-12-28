@@ -646,13 +646,13 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Clipped
           I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &'a I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| {
-            i.max(&U::default())
+            i.max(&U::default()).min(&self.ceiling)
         }).collect::<Vec<U>>().try_into()?)
     }
 
     fn derive(&self, _: &DeviceCpu<U>, _: &'a I, loss: &'a I, u: &'a I) -> Result<Arr<U,N>, TrainingError> {
         Ok(loss.clone().zip(u.clone()).map(|(l,u)| {
-            if u > U::default() && u < self.ceiling {
+            if u > U::default() && u <= self.ceiling {
                 l
             } else {
                 U::default()

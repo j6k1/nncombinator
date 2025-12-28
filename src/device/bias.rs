@@ -120,14 +120,14 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
                                     AsMutPtr<f32> +
                                     MemoryMoveTo<f32,CudaTensor1dPtr<f32,A,N>>,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: IntoConverter,
-          <IO as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
+          <IO as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
           for<'a> IO: AsCudaPtr<'a>,
           for<'a> <IO as AsCudaPtr<'a>>::Pointer: AsPtr<f32> + MemoryMoveTo<f32,CudaMutPtr<'a,f32,A>>,
           for<'a> <IO as BatchDataType>::Type: AsCudaPtr<'a>,
           for<'a> <<IO as BatchDataType>::Type as AsCudaPtr<'a>>::Pointer: AsPtr<f32> + MemoryMoveTo<f32,CudaMutPtr<'a,f32,A>>,
           for<'a> CudaMutPtr<'a,f32,A>: WriteMemory<f32> + AsMutPtr<f32>,
           for<'a> CudaTensor1dPtrView<'a,f32,N>: From<&'a IO>,
-          for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
+          for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TypeConvertError>,
           for<'a> AddBiasBatch<'a,f32,A,N>: Kernel<Args=AddBiasBatchArgs<'a,f32,A,N>>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f32,A,N>,f32,N> {
     fn forward_bias<'a>(&self, bias: &CudaTensor1dPtr<f32,A,N>, input: &'a IO) -> Result<IO, EvaluateError> {
@@ -221,7 +221,7 @@ impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for Devic
           AsMutPtr<f64> +
           MemoryMoveTo<f64,CudaTensor1dPtr<f64,A,N>>,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: IntoConverter,
-          <IO as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as IntoConverter>::Converter,Error=TrainingError>,
+          <IO as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
           for<'a> IO: AsCudaPtr<'a>,
           for<'a> <IO as AsCudaPtr<'a>>::Pointer: AsPtr<f64> + MemoryMoveTo<f64,CudaMutPtr<'a,f64,A>>,
           for<'a> <IO as BatchDataType>::Type: AsCudaPtr<'a>,
@@ -229,7 +229,7 @@ impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for Devic
           for<'a> CudaMutPtr<'a,f64,A>: WriteMemory<f64> + AsMutPtr<f64>,
           for<'a> CudaTensor1dPtrView<'a,f64,N>: From<&'a IO>,
           for<'a> AddBiasBatch<'a,f64,A,N>: Kernel<Args=AddBiasBatchArgs<'a,f64,A,N>>,
-          for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TrainingError>,
+          for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TypeConvertError>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f64,A,N>,f64,N> {
     fn forward_bias<'a>(&self, bias: &CudaTensor1dPtr<f64,A,N>, input: &'a IO) -> Result<IO, EvaluateError> {
         let input_ptr = CudaTensor1dPtrView::<'a,f64,N>::from(input);

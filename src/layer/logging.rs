@@ -164,6 +164,10 @@ impl<U,P,I,PI,D> BackwardAll<U> for LoggingLayer<U,P,I,PI,D>
 
         Ok(self.parent.backward_all(input, stack, lossf)?.into())
     }
+
+    fn is_canonical_link<L: LossFunction<U>>(&self, lossf: &L) -> bool {
+        self.parent.is_canonical_link(lossf)
+    }
 }
 impl<U,P,I,PI,D> UpdateWeight<U> for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + 
@@ -247,7 +251,11 @@ impl<U,P,I,PI,D> Loss<U> for LoggingLayer<U,P,I,PI,D>
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           PI: Debug + BatchDataType,
-          I: Debug + Send + Sync {}
+          I: Debug + Send + Sync {
+    fn loss<L: LossFunction<U>>(&mut self, loss: Self::LossInput, lossf: &L, stack: Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
+        Ok(self.parent.loss(loss,lossf,stack)?)
+    }
+}
 impl<U,P,I,PI,D> BatchForwardBase for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
@@ -352,6 +360,9 @@ impl<U,P,I,PI,D> BatchLoss<U> for LoggingLayer<U,P,I,PI,D>
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: Debug {
+    fn batch_loss<L: LossFunction<U>>(&self, loss: Self::BatchLossInput, lossf: &L, stack: Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
+        Ok(self.parent.batch_loss(loss,lossf,stack)?)
+    }
 }
 impl<U,P,I,PI,D> OnStep for LoggingLayer<U,P,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + OnStep,

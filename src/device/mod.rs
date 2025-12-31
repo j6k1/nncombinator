@@ -9,17 +9,19 @@ pub mod input;
 use std::marker::PhantomData;
 use std::fmt::Debug;
 use std::rc::Rc;
+use num_traits::FromPrimitive;
 use rcublas::Context;
-use rcublas_sys::{cublasHandle_t};
+use rcublas_sys::{cublasDscal_v2, cublasHandle_t, cublasSscal_v2, cublasStatus_t};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rcublas::api::PointerMode;
 use rcudnn::{Cudnn};
 use rcudnn_sys::cudnnHandle_t;
 use crate::arr::{Arr, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVecView, DataTypeInfo, Kernel};
+use crate::cuda::{AsCudaMutPtr, AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVecView, DataTypeInfo, Kernel, MemorySize};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::error::{DeviceError, TrainingError, TypeConvertError};
+use crate::error::EvaluateError::TypeCastError;
 use crate::layer::BatchSize;
 use crate::UnitValue;
 
@@ -38,6 +40,19 @@ pub trait DeviceReduce<T,R,U,const N:usize> where U: UnitValue<U> {
     /// * [`TrainingError`]
     fn reduce<'a>(&self, input: &'a T) -> Result<R, TrainingError>;
 }
+/// Characteristics defining the device responsible for batch averaging calculations in neural networks
+pub trait DeviceBatchAveraging<T,U> where U: UnitValue<U> {
+    /// Perform batch averaging
+    /// # Arguments
+    /// * `input` - input tensor
+    /// * `batch_size` - batch size
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn batch_averaging<'a>(&self, input: T,batch_size:usize) -> Result<T,TrainingError>;
+}
 /// Implementation of Device to be computed by CPU
 pub struct DeviceCpu<U> where U: UnitValue<U> {
     u:PhantomData<U>,
@@ -54,7 +69,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
 }
 impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
 }
-impl<U,T,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu<U>
+impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu<U>
     where U: UnitValue<U> + Debug,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a T,Error=TypeConvertError> {
     #[inline]
@@ -68,6 +83,21 @@ impl<U,T,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu<U>
                     .map(|(acc, i)| acc + i).collect::<Vec<U>>().try_into()
             }))
         })?)
+    }
+}
+impl<T,U> DeviceBatchAveraging<T,U> for DeviceCpu<U>
+    where U: UnitValue<U> + FromPrimitive,
+          T: TryFrom<Vec<U>,Error=TypeConvertError>,
+          Vec<U>: From<T> {
+    #[inline]
+    fn batch_averaging<'a>(&self, input: T,batch_size:usize) -> Result<T,TrainingError> {
+        let batch_size = U::from_usize(batch_size).ok_or(TypeCastError(
+            format!("Failed to convert batch size type ")
+        ))?;
+
+        let input = Vec::<U>::from(input);
+
+        Ok(input.into_iter().map(|i| i * batch_size).collect::<Vec<U>>().try_into()?)
     }
 }
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
@@ -220,6 +250,93 @@ impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceG
         kernel.launch(&mut args)?;
 
         Ok(args.output)
+    }
+}
+impl<T,A> DeviceBatchAveraging<T,f32> for DeviceGpu<f32,A>
+    where A: CudaAllocator,
+          T: MemorySize + AsCudaMutPtr<Pointee=f32,Allocator=A> {
+    fn batch_averaging<'a>(&self, input: T, batch_size: usize) -> Result<T, TrainingError> {
+        let batch_size = f32::from_usize(batch_size).ok_or(TypeCastError(
+            format!("Failed to convert batch size type ")
+        ))?;
+
+        let mut input = input;
+
+        let alpha = CudaPtr::try_from(batch_size)?;
+
+        let tensor_size = T::size();
+
+        match unsafe {
+            cublasSscal_v2(*self.cublas.id_c(),
+                           tensor_size as ::libc::c_int,
+                           alpha.as_ptr(),
+                           input.as_mut_ptr(),
+                           1
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(input),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSscal_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+
+    }
+}
+impl<T,A> DeviceBatchAveraging<T,f64> for DeviceGpu<f32,A>
+    where A: CudaAllocator,
+          T: MemorySize + AsCudaMutPtr<Pointee=f64,Allocator=A> {
+    fn batch_averaging<'a>(&self, input: T, batch_size: usize) -> Result<T, TrainingError> {
+        let batch_size = f64::from_usize(batch_size).ok_or(TypeCastError(
+            format!("Failed to convert batch size type ")
+        ))?;
+
+        let mut input = input;
+
+        let alpha = CudaPtr::try_from(batch_size)?;
+
+        let tensor_size = T::size();
+
+        match unsafe {
+            cublasDscal_v2(*self.cublas.id_c(),
+                           tensor_size as ::libc::c_int,
+                           alpha.as_ptr(),
+                           input.as_mut_ptr(),
+                           1
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(input),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasDscal_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
     }
 }
 impl<A: CudaAllocator> Device<f64> for DeviceGpu<f64,A> {

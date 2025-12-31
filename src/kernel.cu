@@ -277,7 +277,7 @@ __device__ void relu_backward(const T *o, const T *u, const T *loss, T *output, 
     if (index < units_len && batch_index < batch_size) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        if (!(u[i] > 0.0)) {
+        if (!(o[i] > 0.0)) {
             output[i] = 0.0;
         } else {
             output[i] = loss[i];
@@ -293,7 +293,7 @@ __device__ void clipped_relu_backward(const T *o, const T *u, const T *loss, con
     if (index < units_len && batch_index < batch_size) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        if (!(u[i] > 0.0 && u[i] <= ceiling)) {
+        if (!(o[i] > 0.0 && o[i] <= ceiling)) {
             output[i] = 0.0;
         } else {
             output[i] = loss[i];
@@ -309,7 +309,7 @@ __device__ void leaky_relu_backward(const T *o, const T *u, const T *loss, T *ou
     if (index < units_len && batch_index < batch_size) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        if (!(u[i] >= 0.0)) {
+        if (!(o[i] >= 0.0)) {
             output[i] = loss[i] * 0.01;
         } else {
             output[i] = loss[i];

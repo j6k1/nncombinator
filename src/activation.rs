@@ -452,9 +452,9 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,
         }).collect::<Vec<U>>().try_into()?)
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &'a I, loss: &'a I, u: &'a I) -> Result<Arr<U,N>, TrainingError> {
-        Ok(loss.clone().zip(u.clone()).map(|(l,u)| {
-            if u > U::default() {
+    fn derive(&self, _: &DeviceCpu<U>, o: &'a I, loss: &'a I, _: &'a I) -> Result<Arr<U,N>, TrainingError> {
+        Ok(loss.clone().zip(o.clone()).map(|(l,o)| {
+            if o > U::default() {
                 l
             } else {
                 U::default()
@@ -650,9 +650,9 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Clipped
         }).collect::<Vec<U>>().try_into()?)
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &'a I, loss: &'a I, u: &'a I) -> Result<Arr<U,N>, TrainingError> {
-        Ok(loss.clone().zip(u.clone()).map(|(l,u)| {
-            if u > U::default() && u <= self.ceiling {
+    fn derive(&self, _: &DeviceCpu<U>, o: &'a I, loss: &'a I, _: &'a I) -> Result<Arr<U,N>, TrainingError> {
+        Ok(loss.clone().zip(o.clone()).map(|(l,o)| {
+            if o > U::default() && o <= self.ceiling {
                 l
             } else {
                 U::default()
@@ -845,9 +845,9 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for LeakyRe
         }).collect::<Vec<U>>().try_into()?)
     }
 
-    fn derive(&self, _: &DeviceCpu<U>, _: &'a I, loss: &'a I, u: &'a I) -> Result<Arr<U,N>, TrainingError> {
-        Ok(loss.clone().zip(u.clone()).map(|(l,u)| {
-            if u >= U::default() {
+    fn derive(&self, _: &DeviceCpu<U>, o: &'a I, loss: &'a I, _: &'a I) -> Result<Arr<U,N>, TrainingError> {
+        Ok(loss.clone().zip(o.clone()).map(|(l,o)| {
+            if o >= U::default() {
                 l
             } else {
                 l * U::from_f64(0.01).unwrap()

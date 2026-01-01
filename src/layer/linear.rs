@@ -6,7 +6,7 @@ use crate::arr::{Arr, Arr2, IntoConverter};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaPtr, CudaTensor1dPtr, CudaTensor2dPtr, ReadMemory, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
+use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator, DeviceBatchAveraging};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
@@ -379,7 +379,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for Linear
           OP: Optimizer<U,D>,
           PI: Debug + BatchDataType +
               From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput>,
-          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO> + DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
@@ -475,20 +475,23 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for Linea
           BC: Debug,
           OP: Optimizer<U,D>,
           PI: Debug + BatchDataType + From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput>,
-          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO> + DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
     type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(C,BC)>;
 
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+    fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
         let (s,(g,bg)) = stack.pop();
+
+        let g = self.device.batch_averaging(g,batch_size)?;
+        let bg = self.device.batch_averaging(bg,batch_size)?;
 
         self.bias_optimizer.update((&bg).into(), (&mut self.bias).into())?;
         self.unit_optimizer.update((&g).into(),(&mut self.units).into())?;
 
-        Ok(self.parent.update_weight(s)?)
+        Ok(self.parent.update_weight(s,batch_size)?)
     }
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
@@ -500,7 +503,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U
           BC: Debug,
           OP: Optimizer<U,D>,
           PI: Debug + BatchDataType + From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput>,
-          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO> + DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
@@ -596,7 +599,8 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for Line
           <PI as BatchDataType>::Type: IntoConverter,
           <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TypeConvertError> + Debug,
           PI: Debug + From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput> + BatchDataType,
-          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type> +
+             DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
           <D as DeviceLinear<U,C,BC,PI,NI,NO>>::BatchOutput: Debug,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
@@ -645,7 +649,8 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchLoss<U> for LinearLa
           <PI as BatchDataType>::Type: BatchSize,
           <PI as BatchDataType>::Type: IntoConverter,
           <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TypeConvertError> + Debug,
-          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type> +
+             DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
           <D as DeviceLinear<U,C,BC,PI,NI,NO>>::BatchOutput: Debug,
           <<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
@@ -1123,7 +1128,8 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> BackwardAll<U> for 
           C: Debug,
           BC: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO> +
+             DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
           <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output: Debug + 'static,
           BC: From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output>,
           for<'b> &'b <OP as Optimizer<U,D>>::InternalType: From<&'b C>,
@@ -1162,20 +1168,23 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> UpdateWeight<U> for
           C: Debug,
           BC: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U>,
+          D: Device<U> + DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
           for<'b> &'b <OP as Optimizer<U,D>>::InternalType: From<&'b C>,
           for<'b> &'b <OP as Optimizer<U,D>>::InternalType: From<&'b BC>,
           for<'b> <OP as Optimizer<U,D>>::InternalUpdateType<'b>: From<&'b mut C>,
           for<'b> <OP as Optimizer<U,D>>::InternalUpdateType<'b>: From<&'b mut BC> {
     type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(C,BC)>;
 
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+    fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
         let (s,(g,bg)) = stack.pop();
+
+        let g = self.device.batch_averaging(g,batch_size)?;
+        let bg = self.device.batch_averaging(bg,batch_size)?;
 
         self.bias_optimizer.update((&bg).into(),(&mut self.bias).into())?;
         self.unit_optimizer.update((&g).into(),(&mut self.units).into())?;
 
-        Ok(self.parent.update_weight(s)?)
+        Ok(self.parent.update_weight(s,batch_size)?)
     }
 }
 impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> PartialForward for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
@@ -1250,7 +1259,8 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Loss<U> for DiffLin
              ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=()> + Loss<U>,
           U: Default + Clone + Copy + UnitValue<U>,
-          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO> +
+             DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
           I: Debug + Send + Sync,
           DI: Debug,
           PI: Debug + BatchDataType,

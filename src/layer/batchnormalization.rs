@@ -6,7 +6,7 @@ use crate::arr::{Arr};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaPtr, CudaTensor1dPtr, ReadMemory, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
+use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator, DeviceBatchAveraging};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
@@ -549,7 +549,7 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BackwardAll<U> for BatchNormalizationLayer
           S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
@@ -583,14 +583,17 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> UpdateWeight<U> for BatchNormalizationLaye
           S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U>,
+          D: Device<U> + DeviceBatchAveraging<C,U>,
           <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(C,C,Option<(C,C)>)>;
 
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+    fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
         let (s,(scale,bias,saved)) = stack.pop();
+
+        let bias = self.device.batch_averaging(bias,batch_size)?;
+        let scale = self.device.batch_averaging(scale,batch_size)?;
 
         self.bias_optimizer.update((&bias).into(),(&mut self.bias).into())?;
         self.scale_optimizer.update((&scale).into(),(&mut self.scale).into())?;
@@ -600,7 +603,7 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> UpdateWeight<U> for BatchNormalizationLaye
             self.running_variance = running_variance;
         }
 
-        Ok(self.parent.update_weight(s)?)
+        Ok(self.parent.update_weight(s,batch_size)?)
     }
 }
 impl<U,P,OP,D,C,I,PI,S,const N:usize> PartialForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
@@ -670,7 +673,7 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> Loss<U> for BatchNormalizationLayer<U,C,P,
           S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
@@ -769,7 +772,7 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchBackward<U> for BatchNormalizationLay
           C: Debug,
           <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type BatchLossInput = <PI as BatchDataType>::Type;
@@ -814,7 +817,7 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U
           C: Debug,
           <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
 }

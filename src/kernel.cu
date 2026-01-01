@@ -669,7 +669,7 @@ __device__ void loss_linear_batch_by_canonical_link(const T *expected, const T *
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        output[i] = (actual[i] - expected[i]) / batch_size;
+        output[i] = actual[i] - expected[i];
     }
 }
 template<typename T>
@@ -680,7 +680,7 @@ __device__ void loss_linear_batch_mse_derive(const T *t, const T *r, T* output, 
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        output[i] = (r[i] - t[i]) / batch_size;
+        output[i] = r[i] - t[i];
     }
 }
 template<typename T>
@@ -691,7 +691,7 @@ __device__ void loss_linear_batch_cross_entropy_derive(const T *t, const T *r, T
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        output[i] = -((r[i] / (t[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i])) / batch_size;
+        output[i] = -((r[i] / (t[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i]));
     }
 }
 template<typename T>
@@ -702,7 +702,7 @@ __device__ void loss_linear_batch_cross_entropy_multiclass_derive(const T *t, co
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        output[i] = -(t[i] / r[i]) / batch_size;
+        output[i] = -(t[i] / r[i]);
     }
 }
 

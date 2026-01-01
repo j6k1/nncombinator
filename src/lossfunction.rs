@@ -78,14 +78,10 @@ impl<'a,T,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for 
         let actual = SerializedVecView::<'a,U,Arr<U,N>>::try_from(actual)?;
         let expected = SerializedVecView::<'a,U,Arr<U,N>>::try_from(expected)?;
 
-        let n = U::from_usize(actual.len()).ok_or(TrainingError::TypeCastError(
-            String::from("An error occurred when casting the batch size data type to U.")
-        ))?;
-
         Ok(actual.par_iter().zip(expected.par_iter()).map(|(a,e)| {
             a.par_iter()
                 .zip(e.par_iter())
-                .map(|(&a,&e)| self.derive(a,e) / n)
+                .map(|(&a,&e)| self.derive(a,e))
                 .collect::<Vec<U>>()
                 .try_into().map_err(|e| TrainingError::from(e))
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())

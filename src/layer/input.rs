@@ -95,7 +95,7 @@ impl<U,O,LI,D> UpdateWeight<U> for InputLayer<U,O,LI,D>
           <O as BatchDataType>::Type: Debug + 'static {
     type GradientStack = Nil;
 
-    fn update_weight(&mut self, _: Self::GradientStack) -> Result<(), TrainingError> {
+    fn update_weight(&mut self, _: Self::GradientStack, _: usize) -> Result<(), TrainingError> {
         Ok(())
     }
 }
@@ -299,7 +299,7 @@ impl<U,O,DI,PO,LI,D> UpdateWeight<U> for DiffInputLayer<U,O,DI,PO,LI,D>
           <O as BatchDataType>::Type: Debug + 'static {
     type GradientStack = Nil;
 
-    fn update_weight(&mut self, _: Self::GradientStack) -> Result<(), TrainingError> {
+    fn update_weight(&mut self, _: Self::GradientStack, _: usize) -> Result<(), TrainingError> {
         Ok(())
     }
 }

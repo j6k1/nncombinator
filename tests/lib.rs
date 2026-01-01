@@ -58,7 +58,7 @@ fn test_mnist_for_cpu() {
 
     let rnd = rnd_base.clone();
 
-    let optimizer_builder = SGDBuilder::new(&device).lr(0.01);
+    let optimizer_builder = SGDBuilder::new(&device).lr(0.05);
 
     let mut net = net.add_layer(|l| {
         let rnd = rnd.clone();

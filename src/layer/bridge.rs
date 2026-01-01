@@ -112,8 +112,8 @@ impl<U,P,I,PI,CI,D> UpdateWeight<U> for BridgeLayer<U,P,I,PI,CI,D>
           I: Debug + Send + Sync, {
     type GradientStack = <P as UpdateWeight<U>>::GradientStack;
 
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
-        Ok(self.parent.update_weight(stack)?)
+    fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.update_weight(stack,batch_size)?)
     }
 }
 impl<U,P,I,PI,CI,D> PartialForward for BridgeLayer<U,P,I,PI,CI,D>

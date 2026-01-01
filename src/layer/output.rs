@@ -141,8 +141,8 @@ impl<U,P,D,I,PI,const N:usize> UpdateWeight<U> for LinearOutputLayer<U,P,D,I,PI,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
     type GradientStack = <P as UpdateWeight<U>>::GradientStack;
 
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
-        Ok(self.parent.update_weight(stack)?)
+    fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.update_weight(stack,batch_size)?)
     }
 }
 impl<U,P,D,I,PI,const N:usize> PartialForward for LinearOutputLayer<U,P,D,I,PI,N>
@@ -225,7 +225,7 @@ impl<U,P,D,I,PI,L,const N:usize> Train<U,L> for LinearOutputLayer<U,P,D,I,PI,N>
 
         let (_,s) = self.backward_all(loss,stack,lossf)?;
 
-        self.parent.update_weight(s)?;
+        self.parent.update_weight(s,1)?;
 
         Ok(total_loss)
     }
@@ -332,6 +332,8 @@ impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I
             return Err(TrainingError::from(SizeMismatchError(expected.len(),input.size())));
         }
 
+        let batch_size = input.size();
+
         let stack = self.batch_pre_train(input)?;
 
         let total_loss = stack.map(|l| self.device.batch_loss_linear_total(&expected,l,lossf))?;
@@ -352,7 +354,7 @@ impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I
 
         let (_,s) = self.parent.batch_backward(loss,stack,lossf)?;
 
-        self.parent.update_weight(s)?;
+        self.parent.update_weight(s,batch_size)?;
 
         Ok(total_loss)
     }

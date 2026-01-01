@@ -178,14 +178,14 @@ impl<U,P,I,PI,D> UpdateWeight<U> for LoggingLayer<U,P,I,PI,D>
           I: Debug + Send + Sync, {
     type GradientStack = <P as UpdateWeight<U>>::GradientStack;
 
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+    fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
         for logger in self.gradient_loggers.iter() {
             stack.map(|r| {
                 logger(r)
             })?;
         }
 
-        Ok(self.parent.update_weight(stack)?)
+        Ok(self.parent.update_weight(stack,batch_size)?)
     }
 }
 impl<U,P,I,PI,D> PartialForward for LoggingLayer<U,P,I,PI,D>

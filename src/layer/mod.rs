@@ -183,7 +183,7 @@ pub trait UpdateWeight<U> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn update_weight(&mut self, stack:Self::GradientStack) -> Result<(), TrainingError>;
+    fn update_weight(&mut self, stack:Self::GradientStack, batch_size: usize) -> Result<(), TrainingError>;
 }
 /// Trait that defines the learning process of a neural network.
 pub trait Train<U,L>: PreTrain<U>

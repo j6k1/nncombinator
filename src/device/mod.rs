@@ -23,6 +23,7 @@ use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::error::{DeviceError, TrainingError, TypeConvertError};
 use crate::error::EvaluateError::TypeCastError;
 use crate::layer::BatchSize;
+use crate::mem::AsRawSlice;
 use crate::UnitValue;
 
 /// Trait that defines devices responsible for various computational processes of neural networks
@@ -86,18 +87,15 @@ impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu<U>
     }
 }
 impl<T,U> DeviceBatchAveraging<T,U> for DeviceCpu<U>
-    where U: UnitValue<U> + FromPrimitive,
-          T: TryFrom<Vec<U>,Error=TypeConvertError>,
-          Vec<U>: From<T> {
+    where U: UnitValue<U> + Default + Clone + Send + FromPrimitive,
+          T: AsRawSlice<U> + TryFrom<Vec<U>,Error=TypeConvertError> {
     #[inline]
     fn batch_averaging<'a>(&self, input: T,batch_size:usize) -> Result<T,TrainingError> {
         let batch_size = U::from_usize(batch_size).ok_or(TypeCastError(
-            format!("Failed to convert batch size type ")
+            format!("Failed to convert batch size type.")
         ))?;
 
-        let input = Vec::<U>::from(input);
-
-        Ok(input.into_iter().map(|i| i * batch_size).collect::<Vec<U>>().try_into()?)
+        Ok(input.as_raw_slice().par_iter().cloned().map(|i| i / batch_size).collect::<Vec<U>>().try_into()?)
     }
 }
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
@@ -257,12 +255,12 @@ impl<T,A> DeviceBatchAveraging<T,f32> for DeviceGpu<f32,A>
           T: MemorySize + AsCudaMutPtr<Pointee=f32,Allocator=A> {
     fn batch_averaging<'a>(&self, input: T, batch_size: usize) -> Result<T, TrainingError> {
         let batch_size = f32::from_usize(batch_size).ok_or(TypeCastError(
-            format!("Failed to convert batch size type ")
+            format!("Failed to convert batch size type.")
         ))?;
 
         let mut input = input;
 
-        let alpha = CudaPtr::try_from(batch_size)?;
+        let alpha = CudaPtr::try_from(1. / batch_size)?;
 
         let tensor_size = T::size();
 
@@ -296,17 +294,17 @@ impl<T,A> DeviceBatchAveraging<T,f32> for DeviceGpu<f32,A>
 
     }
 }
-impl<T,A> DeviceBatchAveraging<T,f64> for DeviceGpu<f32,A>
+impl<T,A> DeviceBatchAveraging<T,f64> for DeviceGpu<f64,A>
     where A: CudaAllocator,
           T: MemorySize + AsCudaMutPtr<Pointee=f64,Allocator=A> {
     fn batch_averaging<'a>(&self, input: T, batch_size: usize) -> Result<T, TrainingError> {
         let batch_size = f64::from_usize(batch_size).ok_or(TypeCastError(
-            format!("Failed to convert batch size type ")
+            format!("Failed to convert batch size type.")
         ))?;
 
         let mut input = input;
 
-        let alpha = CudaPtr::try_from(batch_size)?;
+        let alpha = CudaPtr::try_from(1. / batch_size)?;
 
         let tensor_size = T::size();
 

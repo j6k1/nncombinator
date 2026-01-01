@@ -7,7 +7,7 @@ use crate::arr::{Arr, IntoConverter};
 use crate::{Cons, Stack};
 use crate::cuda::{CudaPtr, CudaTensor1dPtr, ReadMemory, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
+use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator, DeviceBatchAveraging};
 use crate::device::bias::DeviceBias;
 use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
@@ -245,7 +245,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Backward<U,PI,Result<PI,TrainingError>> for 
 impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: BackwardAll<U,LossInput=PI> + ForwardAll<Input=I,Output=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBias<U,C,PI,N>,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
           C: Debug,
@@ -281,19 +281,21 @@ impl<U,C,P,OP,D,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,C,P,OP,D,I,P
           PI: Debug + BatchDataType + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U>,
+          D: Device<U> + DeviceBatchAveraging<C,U>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           OP: Optimizer<U,D>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,C>;
 
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+    fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
         let (s,bias) = stack.pop();
+
+        let bias = self.device.batch_averaging(bias,batch_size)?;
 
         self.optimizer.update((&bias).into(),(&mut self.bias).into())?;
 
-        Ok(self.parent.update_weight(s)?)
+        Ok(self.parent.update_weight(s,batch_size)?)
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> PartialForward for BiasLayer<U,C,P,OP,D,I,PI,N>
@@ -363,7 +365,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Loss<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
           C: Debug,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-          D: Device<U> + DeviceBias<U,C,PI,N>,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
 }
@@ -445,7 +447,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,C,P,OP,D,I,
           <I as BatchDataType>::Type: Debug,
           C: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceBias<U,C,PI,N>,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type BatchLossInput = <PI as BatchDataType>::Type;
@@ -482,7 +484,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,C,P,OP,D,I,PI,N
           <I as BatchDataType>::Type: Debug,
           C: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceBias<U,C,PI,N>,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
 }

@@ -61,12 +61,12 @@ __device__ half _to_half(double x) {
     return __double2half(x);
 }
 
-__device__ size_t calc_index(size_t x, size_t y, size_t leading_dimension) {
-    return y * leading_dimension + x;
+__device__ size_t calc_index(size_t row, size_t col, size_t leading_dimension) {
+    return row * leading_dimension + col;
 }
 
-__device__ size_t calc_transposed_index(size_t x, size_t y, size_t leading_dimension) {
-    return x * leading_dimension + y;
+__device__ size_t calc_transposed_index(size_t row, size_t col, size_t leading_dimension) {
+    return col * leading_dimension + row;
 }
 
 #define BLOCK_SHARED 1024
@@ -516,19 +516,19 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
 
     for (int k = 0; k <= input_len; k += TILE_SIZE) {
         if (k + ty < input_len && bx + tx < batch_size) {
-            sdata_a[tx * TILE_SIZE + ty] = _to_half(input[calc_index(k+ty,bx+tx,input_len)]);
+            sdata_a[tx * TILE_SIZE + ty] = _to_half(input[calc_index(bx+tx,k+ty,input_len)]);
         } else if (k + ty == input_len && bx + tx < batch_size) {
             sdata_a[tx * TILE_SIZE + ty] = __float2half(1.0f);
         } else {
             sdata_a[tx * TILE_SIZE + ty] = __float2half(0.0f);
         }
 
-        if (k + tx < input_len && by + ty < output_len) {
-            sdata_b[tx * TILE_SIZE + ty] = _to_half(units[calc_index(by+ty,k+tx,output_len)]);
-        } else if (k + tx == input_len && by + ty < output_len) {
-            sdata_b[tx * TILE_SIZE + ty] = _to_half(bias[by + ty]);
+        if (k + ty < input_len && by + tx < output_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(units[calc_index(k+ty,by+tx,output_len)]);
+        } else if (k + ty == input_len && by + tx < output_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(bias[by + tx]);
         } else {
-            sdata_b[tx * TILE_SIZE + ty] = __float2half(0.0f);
+            sdata_b[ty * TILE_SIZE + tx] = __float2half(0.0f);
         }
 
         __syncthreads();
@@ -546,7 +546,7 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
     __syncthreads();
 
     if (ty + by < output_len && tx + bx < batch_size) {
-        output[calc_index(ty+by,tx+bx,output_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
+        output[calc_index(tx+bx,ty+by,output_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
     }
 }
 
@@ -575,15 +575,15 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
 
     for (int k = 0; k < output_len; k += TILE_SIZE) {
         if (k + ty < output_len && bx + tx < batch_size) {
-            sdata_a[tx * TILE_SIZE + ty] = _to_half(loss[calc_index(k+ty,bx+tx,output_len)]);
+            sdata_a[tx * TILE_SIZE + ty] = _to_half(loss[calc_index(bx+tx,k+ty,output_len)]);
         } else {
             sdata_a[tx * TILE_SIZE + ty] = __float2half(0.0f);
         }
 
-        if (k + tx < output_len && by + ty < input_len) {
-            sdata_b[tx * TILE_SIZE + ty] = _to_half(units[calc_transposed_index(by+ty,k+tx,output_len)]);
+        if (k + ty < output_len && by + tx < input_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(units[calc_transposed_index(k+ty,by+tx,output_len)]);
         } else {
-            sdata_b[tx * TILE_SIZE + ty] = __float2half(0.0f);
+            sdata_b[ty * TILE_SIZE + tx] = __float2half(0.0f);
         }
 
         __syncthreads();
@@ -601,7 +601,7 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
     __syncthreads();
 
     if (ty + by < input_len && tx + bx < batch_size) {
-        output[calc_index(ty+by,tx+bx,input_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
+        output[calc_index(tx+bx,ty+by,input_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
     }
 }
 
@@ -631,15 +631,15 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
 
     for (int k = 0; k < batch_size; k += TILE_SIZE) {
         if (k + ty < batch_size && bx + tx < input_len) {
-            sdata_a[tx * TILE_SIZE + ty] = _to_half(input[calc_transposed_index(k+ty,bx+tx,input_len)]);
+            sdata_a[tx * TILE_SIZE + ty] = _to_half(input[calc_transposed_index(bx+tx,k+ty,input_len)]);
         } else {
             sdata_a[tx * TILE_SIZE + ty] = __float2half(0.0f);
         }
 
-        if (k + tx < batch_size && by + ty < output_len) {
-            sdata_b[tx * TILE_SIZE + ty] = _to_half(loss[calc_index(by+ty,k+tx,output_len)]);
+        if (k + ty < batch_size && by + tx < output_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(loss[calc_index(k+ty,by+tx,output_len)]);
         } else {
-            sdata_b[tx * TILE_SIZE + ty] = __float2half(0.0f);
+            sdata_b[ty * TILE_SIZE + tx] = __float2half(0.0f);
         }
 
         __syncthreads();
@@ -657,7 +657,7 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
     __syncthreads();
 
     if (ty + by < output_len && tx + bx < input_len) {
-        output[calc_index(ty+by,tx+bx,output_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
+        output[calc_index(tx+bx,ty+by,output_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
     }
 }
 

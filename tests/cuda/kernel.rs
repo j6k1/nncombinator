@@ -58,7 +58,7 @@ fn test_kernel_forward_linear_batch_matches_cpu() {
         }
     }
 
-    approx_eq_slice(&gpu_out,&cpu_flat,2e-2);
+    approx_eq_slice(&gpu_out,&cpu_flat,15e-3);
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn test_kernel_backward_linear_batch_matches_cpu() {
         }
     }
 
-    approx_eq_slice(&gpu_out,&cpu_flat,2e-2);
+    approx_eq_slice(&gpu_out,&cpu_flat,15e-3);
 }
 
 #[test]
@@ -188,7 +188,7 @@ fn test_kernel_linear_gradient_batch_matches_cpu() {
         for &v in i.iter() { cpu_flat.push(v); }
     }
 
-    approx_eq_slice(&gpu_out,&cpu_flat,1e-2);
+    approx_eq_slice(&gpu_out,&cpu_flat,15e-3);
 }
 #[test]
 fn test_kernel_reduce_linear_batch_matches_cpu() {

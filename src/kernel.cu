@@ -691,7 +691,7 @@ __device__ void loss_linear_batch_cross_entropy_derive(const T *t, const T *r, T
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        output[i] = -((r[i] / (t[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i]));
+        output[i] = -(t[i] / (r[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i]);
     }
 }
 template<typename T>

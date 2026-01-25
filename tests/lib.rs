@@ -109,6 +109,8 @@ fn test_mnist_for_cpu() {
 
     let mut teachers = teachers.into_iter().take(60000).collect::<Vec<(usize,PathBuf)>>();
 
+    let start_time = Instant::now();
+
     for _ in 0..10 {
         let mut total_loss = 0.;
         let mut count = 0;
@@ -153,6 +155,12 @@ fn test_mnist_for_cpu() {
         println!("total_loss = {}", total_loss);
         println!("loss_average = {}", total_loss as f32 / count as f32);    
     }
+
+    let elapsed = start_time.elapsed();
+
+    let elapsed = elapsed.as_secs() as u64 * 1000 + elapsed.subsec_millis() as u64;
+
+    println!("processing time is {} secs.",elapsed as f64 / 1000.);
 
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();
 

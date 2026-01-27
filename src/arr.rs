@@ -142,6 +142,13 @@ impl<'data,U,const N:usize> From<ArrView<'data,U,N>> for Arr<U,N> where U: Defau
         }
     }
 }
+impl<T,const N:usize> From<[T;N]> for Arr<T,N> where T: Default + Clone + Send {
+    fn from(value: [T; N]) -> Self {
+        Arr {
+            arr:Box::new(value)
+        }
+    }
+}
 impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Send {
     type Error = TypeConvertError;
 
@@ -401,7 +408,7 @@ impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2> where T: Default {
 }
 impl<T,const N1:usize,const N2:usize> Arr2<T,N1,N2> where T: Default {
     /// Returns a read-only pointer to an internal buffer
-    pub fn as_ptr(&mut self) -> *const T {
+    pub fn as_ptr(&self) -> *const T {
         self.arr.as_ptr()
     }
 
@@ -530,7 +537,7 @@ impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: D
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize> Arr3<T,N1,N2,N3> where T: Default {
     /// Returns a read-only pointer to an internal buffer
-    pub fn as_ptr(&mut self) -> *const T {
+    pub fn as_ptr(&self) -> *const T {
         self.arr.as_ptr()
     }
 
@@ -632,7 +639,7 @@ impl<T,const N1:usize,const N2:usize,const N3:usize, const N4:usize> Arr4<T,N1,N
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> Arr4<T,N1,N2,N3,N4> where T: Default {
     /// Returns a read-only pointer to an internal buffer
-    pub fn as_ptr(&mut self) -> *const T {
+    pub fn as_ptr(&self) -> *const T {
         self.arr.as_ptr()
     }
 
@@ -939,7 +946,7 @@ impl<'a,T,const N1:usize,const N2:usize> Arr2View<'a,T,N1,N2> {
     }
 
     /// Returns a read-only pointer to an internal buffer
-    pub fn as_ptr(&mut self) -> *const T {
+    pub fn as_ptr(&self) -> *const T {
         self.arr.as_ptr()
     }
 }
@@ -1016,7 +1023,7 @@ impl<'a,T,const N1:usize,const N2:usize> Arr2ViewMut<'a,T,N1,N2> {
     }
 
     /// Returns a read-only pointer to an internal buffer
-    pub fn as_ptr(&mut self) -> *const T {
+    pub fn as_ptr(&self) -> *const T {
         self.arr.as_ptr()
     }
 
@@ -1099,7 +1106,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> Arr3View<'a,T,N1,N2,N3> 
     }
 
     /// Returns a read-only pointer to an internal buffer
-    pub fn as_ptr(&mut self) -> *const T {
+    pub fn as_ptr(&self) -> *const T {
         self.arr.as_ptr()
     }
 }
@@ -1832,7 +1839,7 @@ impl<'a,U,T> SerializedVecView<'a,U,T>
 }
 impl<'a,U,T> SerializedVecView<'a,U,T> {
     /// Returns a read-only pointer to an internal buffer
-    pub fn as_ptr(&mut self) -> *const U {
+    pub fn as_ptr(&self) -> *const U {
         self.arr.as_ptr()
     }
 }

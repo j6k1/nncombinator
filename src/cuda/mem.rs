@@ -37,7 +37,6 @@ pub struct MemoryPool {
     pool: *mut c_void
 }
 unsafe impl Send for MemoryPool {}
-unsafe impl Sync for MemoryPool {}
 impl MemoryPool {
     /// # Arguments
     /// * `alloc_type` - Type of cuda memory to be allocated

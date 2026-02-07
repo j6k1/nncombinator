@@ -40,6 +40,10 @@ impl<'a,T> ShieldSlice<'a,T> {
     pub fn iter_mut(&'a mut self) -> IterMut<'a,T> {
         self.raw.iter_mut()
     }
+
+    pub fn as_chunks_mut<const N:usize>(&'a mut self) -> (&'a mut [[T;N]], &'a mut [T]) {
+        self.raw.as_chunks_mut()
+    }
 }
 /// Fixed-length one-dimensional array implementation
 #[derive(Debug,Eq,PartialEq)]

@@ -111,64 +111,6 @@ impl One for f32 {
 pub trait Exp {
     fn exp(&self) -> Self;
 }
-const FASTEXP_C1:f32 = 0.69314697759916432673321651236619800329208374023437;
-const FASTEXP_C2:f32 = 0.24022242085378028852993281816452508792281150817871;
-const FASTEXP_C3:f32 = 5.5507337432541360711102385039339424110949039459229e-2;
-const FASTEXP_C4:f32 = 9.6715126395259202324306002651610469911247491836548e-3;
-const FASTEXP_C5:f32 = 1.326472719636653634089906717008489067666232585907e-3;
-const FASTEXP_C1_F64: f64 = 1.000000000000000000000000000000000000;
-const FASTEXP_C2_F64: f64 = 0.499999999999999999999999999999999999;
-const FASTEXP_C3_F64: f64 = 0.166666666666666666666666666666666666;
-const FASTEXP_C4_F64: f64 = 0.041666666666666666666666666666666666;
-const FASTEXP_C5_F64: f64 = 0.008333333333333333333333333333333333;
-const FASTEXP_C6_F64: f64 = 0.001388888888888888888888888888888888;
-const INV_LN2:f64 = 1. / std::f64::consts::LN_2;
-
-macro_rules! fast_exp_f64 {
-    ($x:expr) => {{
-        let x = $x;
-        let y = x * std::f64::consts::LOG2_E;
-
-        let k = (x * INV_LN2).floor();
-
-        let r = x - k * std::f64::consts::LN_2;
-        let r2 = r * r;
-        let r3 = r * r2;
-        let r4 = r2 * r2;
-        let r5 = r * r4;
-        let r6 = r3 * r3;
-
-        let w = 1. + FASTEXP_C1_F64 * r +
-                     FASTEXP_C2_F64 * r2 +
-                     FASTEXP_C3_F64 * r3 +
-                     FASTEXP_C4_F64 * r4 +
-                     FASTEXP_C5_F64 * r5 +
-                     FASTEXP_C6_F64 * r6;
-
-        let z = f64::from_bits(((k as i64 + 1023) as u64) << 52);
-
-        z * w
-    }};
-}
-macro_rules! fast_exp_f32 {
-    ($x:expr) => {{
-        let y = $x * std::f32::consts::LOG2_E;
-        let n = (y + 12582912.0) as i32 - 12582912;
-        let a = y - n as f32;
-        let a2 = a * a;
-        let a4 = a2 * a2;
-
-        let p01 = FASTEXP_C1 + FASTEXP_C2 * a;
-        let p23 = FASTEXP_C3 + FASTEXP_C4 * a;
-        let p45 = FASTEXP_C5;
-
-        let w = 1. + a * p01 + a2 * p23 + a4 * p45;
-
-        let z = f32::from_bits(((n + 127) as u32) << 23);
-
-        z * w
-    }}
-}
 impl Exp for f64 {
     #[inline(always)]
     fn exp(&self) -> f64 {

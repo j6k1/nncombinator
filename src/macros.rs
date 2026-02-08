@@ -346,17 +346,29 @@ macro_rules! derive_arr_like_arithmetic {
         }
     }
 }
+#[allow(dead_code)]
 pub const FASTEXP_C1:f32 = 0.69314697759916432673321651236619800329208374023437;
+#[allow(dead_code)]
 pub const FASTEXP_C2:f32 = 0.24022242085378028852993281816452508792281150817871;
+#[allow(dead_code)]
 pub const FASTEXP_C3:f32 = 5.5507337432541360711102385039339424110949039459229e-2;
+#[allow(dead_code)]
 pub const FASTEXP_C4:f32 = 9.6715126395259202324306002651610469911247491836548e-3;
+#[allow(dead_code)]
 pub const FASTEXP_C5:f32 = 1.326472719636653634089906717008489067666232585907e-3;
+#[allow(dead_code)]
 pub const FASTEXP_C1_F64: f64 = 1.000000000000000000000000000000000000;
+#[allow(dead_code)]
 pub const FASTEXP_C2_F64: f64 = 0.499999999999999999999999999999999999;
+#[allow(dead_code)]
 pub const FASTEXP_C3_F64: f64 = 0.166666666666666666666666666666666666;
+#[allow(dead_code)]
 pub const FASTEXP_C4_F64: f64 = 0.041666666666666666666666666666666666;
+#[allow(dead_code)]
 pub const FASTEXP_C5_F64: f64 = 0.008333333333333333333333333333333333;
+#[allow(dead_code)]
 pub const FASTEXP_C6_F64: f64 = 0.001388888888888888888888888888888888;
+#[allow(dead_code)]
 pub const INV_LN2:f64 = 1. / std::f64::consts::LN_2;
 #[macro_export]
 macro_rules! fast_exp_f64 {

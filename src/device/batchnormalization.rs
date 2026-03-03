@@ -4,7 +4,7 @@ use rcudnn::{API};
 use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BATCHNORM_SPATIAL};
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
 
-use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
+use crate::arr::{Arr, Arr2, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
@@ -12,8 +12,9 @@ use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView,
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
 use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator};
-use crate::error::{EvaluateError, TrainingError, TypeConvertError};
+use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
+use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
 
 /// Features defining the implementation of the various computational processes in the batch normalization layer
@@ -21,19 +22,24 @@ pub trait DeviceBatchNorm<U,C,I,const N:usize>
     where U: UnitValue<U>,
           I: BatchDataType + Debug + 'static,
           <I as BatchDataType>::Type: Debug + 'static {
-    /// Forward propagation calculation
+    /// Perform generalization of scale, bias, etc., used in batch normalization calculations.
     /// # Arguments
-    /// * `input` - input
-    /// * `scale` - γ
-    /// * `bias` - β
-    /// * `estimated_mean` - μΒ
-    /// * `estimated_variance` - σΒ
+    /// * `vars` - Variables used in batch normalization calculations
     ///
-    /// output = γ * ((input - μΒ) / sqrt(σ^2Β + 1e-6)) + β
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`EvaluateError`]
+    /// * [`GeneralizationError`]
+    fn generalization_vars(&self,vars:C) -> Result<Arr<U,N>, GeneralizationError>;
+    /// Perform specialization of scale, bias, etc., used in batch normalization calculations.
+    /// # Arguments
+    /// * `vars` - Variables used in batch normalization calculations
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`GeneralizationError`]
+    fn specialization_vars(&self,units:Arr<U,N>) -> Result<C, SpecializationError>;
     fn forward_batch_norm<'a>(&self, input: &'a I, scale: &C, bias: &C,
                           estimated_mean: &C, estimated_variance: &C) -> Result<I,EvaluateError>;
     /// Forward propagation calculation (implemented in training mode)
@@ -123,6 +129,14 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu<U>
           SerializedVec<U,Arr<U,N>>: IntoConverter,
           for<'a> ArrView<'a,U,N>: From<&'a I>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError> {
+    #[inline]
+    fn generalization_vars(&self, vars: Arr<U,N>) -> Result<Arr<U,N>, GeneralizationError> {
+        Ok(vars)
+    }
+    #[inline]
+    fn specialization_vars(&self, vars: Arr<U,N>) -> Result<Arr<U,N>, SpecializationError> {
+        Ok(vars)
+    }
     #[inline]
     fn forward_batch_norm<'a>(&self, input: &'a I, scale: &Arr<U,N>, bias: &Arr<U,N>,
                           estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<I,EvaluateError> {
@@ -323,11 +337,24 @@ impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for Devi
           <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,A,N>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
           CudaTensor1dPtr<U,A,N>: AsMutVoidPtr + ReadMemory<U> + MemoryMoveTo<U,CudaTensor1dPtr<U,A,N>>,
           CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: IntoConverter,
-          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsKernelPtr + MemorySize + AsCudaMutPtr<Pointee=U,Allocator=A>,
+          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsKernelPtr + MemorySize +
+                                  AsCudaMutPtr<Pointee=U,Allocator=A> + ReadMemory<U>,
           for<'a> CudaMutPtr<'a,U,A>: WriteMemory<U>,
           for<'a> CudaTensor1dPtrView<'a,U,N>: From<&'a I>,
           for<'a> CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           f64: From<U> {
+    #[inline]
+    fn generalization_vars(&self, bias: CudaTensor1dPtr<U,A,N>) -> Result<Arr<U,N>, GeneralizationError> {
+        Ok(bias.read_to_vec()?.try_into()?)
+    }
+    #[inline]
+    fn specialization_vars(&self, bias: Arr<U,N>) -> Result<CudaTensor1dPtr<U,A,N>, SpecializationError> {
+        let mut v = CudaTensor1dPtr::new(self.get_allocator())?;
+
+        v.memcpy(bias.as_raw_slice().as_ptr(),N)?;
+
+        Ok(v)
+    }
     fn forward_batch_norm<'a>(&self, input: &'a I, scale: &CudaTensor1dPtr<U,A,N>, bias: &CudaTensor1dPtr<U,A,N>,
                           estimated_mean: &CudaTensor1dPtr<U,A,N>, estimated_variance: &CudaTensor1dPtr<U,A,N>)
         -> Result<I,EvaluateError> {

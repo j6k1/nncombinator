@@ -4,13 +4,14 @@ use std::fmt::Debug;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
-use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaPtr, AsCudaReadOnlyPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize, MemoryType};
+use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaPtr, AsCudaReadOnlyPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize, MemoryType, ReadMemory};
 use crate::cuda::{DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator, DeviceReduce};
-use crate::error::{EvaluateError, TrainingError, TypeConvertError};
+use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize, DiffInput};
+use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
 use crate::ope::Product;
 
@@ -22,6 +23,42 @@ pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
     type BatchOutput: Debug + 'static;
     type LossOutput: BatchDataType + Debug + 'static;
     type BatchLossOutput: Debug + 'static;
+    /// Perform generalization of the unit weight data
+    /// # Arguments
+    /// * `units` - Set of weights applied to the inputs of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`GeneralizationError`]
+    fn generalization_units(&self,units:T) -> Result<Arr2<U,NI,NO>, GeneralizationError>;
+    /// Perform generalization of bias data
+    /// # Arguments
+    /// * `bias` - Set of biases applied to the output of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`GeneralizationError`]
+    fn generalization_bias(&self,bias:B) -> Result<Arr<U,NO>, GeneralizationError>;
+    /// Perform specialization of the unit weight data
+    /// # Arguments
+    /// * `units` - Set of weights applied to the inputs of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`SpecializationError`]
+    fn specialization_units(&self,units:Arr2<U,NI,NO>) -> Result<T, SpecializationError>;
+    /// Perform specialization of bias data
+    /// # Arguments
+    /// * `bias` - Set of biases applied to the output of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`SpecializationError`]
+    fn specialization_bias(&self,bias:Arr<U,NO>) -> Result<B, SpecializationError>;
     /// Forward propagation calculation
     /// # Arguments
     /// * `bias` - bias weights
@@ -115,6 +152,22 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
     type LossOutput = I;
     type BatchLossOutput = <I as BatchDataType>::Type;
     #[inline]
+    fn generalization_units(&self, units: Arr2<U, NI, NO>) -> Result<Arr2<U, NI, NO>, GeneralizationError> {
+        Ok(units)
+    }
+    #[inline]
+    fn generalization_bias(&self, bias: Arr<U, NO>) -> Result<Arr<U, NO>, GeneralizationError> {
+        Ok(bias)
+    }
+    #[inline]
+    fn specialization_units(&self, units: Arr2<U, NI, NO>) -> Result<Arr2<U, NI, NO>, SpecializationError> {
+        Ok(units)
+    }
+    #[inline]
+    fn specialization_bias(&self, bias: Arr<U, NO>) -> Result<Arr<U, NO>, SpecializationError> {
+        Ok(bias)
+    }
+    #[inline]
     fn forward_linear<'a>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: &'a I) -> Result<Arr<U, NO>, EvaluateError> {
         Ok(ArrView::<'a,U,NI>::from(input).product(units) + bias)
     }
@@ -192,7 +245,10 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
           A: CudaAllocator + MemoryType + 'static,
           CudaPtr<f32,A>: AsPtr<f32> + WriteMemory<f32>,
           CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: IntoConverter,
-          CudaTensor1dPtr<f32,A,NO>: AsConstKernelPtr + AsKernelPtr + MemorySize + MemoryMoveTo<f32,CudaTensor1dPtr<f32,A,NO>>,
+          CudaTensor1dPtr<f32,A,NO>: AsConstKernelPtr + AsKernelPtr +
+                                     MemorySize + MemoryMoveTo<f32,CudaTensor1dPtr<f32,A,NO>> +
+                                     ReadMemory<f32> + WriteMemory<f32>,
+          CudaTensor2dPtr<f32,A,NI,NO>: ReadMemory<f32> + WriteMemory<f32>,
           Self: DeviceReduce<CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,CudaTensor1dPtr<f32,A,NO>,f32,NO>,
           for<'a> I: CudaView<'a>,
           for<'a> <I as BatchDataType>::Type: CudaView<'a>,
@@ -216,6 +272,30 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
     type BatchOutput = CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>;
     type LossOutput = I;
     type BatchLossOutput = <I as BatchDataType>::Type;
+    #[inline]
+    fn generalization_units(&self, units: CudaTensor2dPtr<f32, A, NI, NO>) -> Result<Arr2<f32, NI, NO>, GeneralizationError> {
+        Ok(units.read_to_vec()?.try_into()?)
+    }
+    #[inline]
+    fn generalization_bias(&self, bias: CudaTensor1dPtr<f32, A, NO>) -> Result<Arr<f32, NO>, GeneralizationError> {
+        Ok(bias.read_to_vec()?.try_into()?)
+    }
+    #[inline]
+    fn specialization_units(&self, units: Arr2<f32, NI, NO>) -> Result<CudaTensor2dPtr<f32, A, NI, NO>, SpecializationError> {
+        let mut u = CudaTensor2dPtr::new(self.get_allocator())?;
+
+        u.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
+
+        Ok(u)
+    }
+    #[inline]
+    fn specialization_bias(&self, bias: Arr<f32, NO>) -> Result<CudaTensor1dPtr<f32, A, NO>, SpecializationError> {
+        let mut b = CudaTensor1dPtr::new(self.get_allocator())?;
+
+        b.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+
+        Ok(b)
+    }
     #[inline]
     fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<f32,A,NO>, units: &CudaTensor2dPtr<f32,A,NI,NO>, input: &'a I)
                           -> Result<CudaTensor1dPtr<f32,A,NO>, EvaluateError> {
@@ -544,7 +624,10 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
           <I as BatchDataType>::Type: BatchSize + Debug + 'static,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
           A: CudaAllocator + 'static,
-          CudaTensor1dPtr<f64,A,NO>: MemoryMoveTo<f64,CudaTensor1dPtr<f64,A,NO>>,
+          CudaPtr<f64,A>: ReadMemory<f64> + WriteMemory<f64>,
+          CudaTensor1dPtr<f64,A,NO>: MemoryMoveTo<f64,CudaTensor1dPtr<f64,A,NO>> + ReadMemory<f64> + WriteMemory<f64>,
+          CudaTensor2dPtr<f64,A,NI,NO>: ReadMemory<f64> + WriteMemory<f64>,
+          CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>: IntoConverter,
           CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>: IntoConverter,
           Self: DeviceReduce<CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>,CudaTensor1dPtr<f64,A,NO>,f64,NO>,
           for<'a> CudaTensor1dPtrView<'a,f64,NI>: From<&'a I>,
@@ -557,6 +640,30 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
     type BatchOutput = CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>;
     type LossOutput = I;
     type BatchLossOutput = <I as BatchDataType>::Type;
+    #[inline]
+    fn generalization_units(&self, units: CudaTensor2dPtr<f64, A, NI, NO>) -> Result<Arr2<f64, NI, NO>, GeneralizationError> {
+        Ok(units.read_to_vec()?.try_into()?)
+    }
+    #[inline]
+    fn generalization_bias(&self, bias: CudaTensor1dPtr<f64, A, NO>) -> Result<Arr<f64, NO>, GeneralizationError> {
+        Ok(bias.read_to_vec()?.try_into()?)
+    }
+    #[inline]
+    fn specialization_units(&self, units: Arr2<f64, NI, NO>) -> Result<CudaTensor2dPtr<f64, A, NI, NO>, SpecializationError> {
+        let mut u = CudaTensor2dPtr::new(self.get_allocator())?;
+
+        u.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
+
+        Ok(u)
+    }
+    #[inline]
+    fn specialization_bias(&self, bias: Arr<f64, NO>) -> Result<CudaTensor1dPtr<f64, A, NO>, SpecializationError> {
+        let mut b = CudaTensor1dPtr::new(self.get_allocator())?;
+
+        b.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+
+        Ok(b)
+    }
     #[inline]
     fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<f64,A,NO>, units: &CudaTensor2dPtr<f64,A,NI,NO>, input: &'a I)
                           -> Result<CudaTensor1dPtr<f64,A,NO>, EvaluateError> {

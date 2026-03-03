@@ -715,6 +715,9 @@ pub enum LayerInstantiationError {
     SizeMismatchError(SizeMismatchError),
     /// Error generated when type conversion fails
     TypeConvertError(TypeConvertError),
+    /// Error during data specialization
+    SpecializationError(SpecializationError)
+
 }
 impl fmt::Display for LayerInstantiationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -732,6 +735,9 @@ impl fmt::Display for LayerInstantiationError {
                 write!(f,"An unexpected error occurred during layer instantiation ({})",e)
             },
             LayerInstantiationError::TypeConvertError(e) => {
+                write!(f,"An unexpected error occurred during layer instantiation ({})",e)
+            },
+            LayerInstantiationError::SpecializationError(e) => {
                 write!(f,"An unexpected error occurred during layer instantiation ({})",e)
             }
         }
@@ -754,6 +760,9 @@ impl error::Error for LayerInstantiationError {
             },
             LayerInstantiationError::TypeConvertError(_) => {
                 "An error occurred during a type conversion operation within the layer object creation process."
+            },
+            LayerInstantiationError::SpecializationError(_) => {
+                "An unexpected error occurred during layer instantiation. (Error during data specialization)"
             }
         }
     }
@@ -764,7 +773,8 @@ impl error::Error for LayerInstantiationError {
             LayerInstantiationError::CudnnError(ref e) => Some(e),
             LayerInstantiationError::OptimizerBuildError(ref e) => Some(e),
             LayerInstantiationError::SizeMismatchError(ref e) => Some(e),
-            LayerInstantiationError::TypeConvertError(ref e) => Some(e)
+            LayerInstantiationError::TypeConvertError(ref e) => Some(e),
+            LayerInstantiationError::SpecializationError(ref e) => Some(e),
         }
     }
 }
@@ -791,6 +801,11 @@ impl From<SizeMismatchError> for LayerInstantiationError {
 impl From<TypeConvertError> for LayerInstantiationError {
     fn from(err: TypeConvertError) -> LayerInstantiationError {
         LayerInstantiationError::TypeConvertError(err)
+    }
+}
+impl From<SpecializationError> for LayerInstantiationError {
+    fn from(err: SpecializationError) -> LayerInstantiationError {
+        LayerInstantiationError::SpecializationError(err)
     }
 }
 /// Error when layer instantiation fails
@@ -840,5 +855,159 @@ impl From<CudaError> for OptimizerBuildError {
 impl From<rcudnn::Error> for OptimizerBuildError {
     fn from(err: rcudnn::Error) -> OptimizerBuildError {
         OptimizerBuildError::CudnnError(err)
+    }
+}
+/// Errors when generalizing data
+#[derive(Debug)]
+pub enum GeneralizationError {
+    /// Error in cuda processing
+    CudaError(CudaError),
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error),
+    /// Errors caused by generating fixed-length arrays from different size Vecs
+    SizeMismatchError(SizeMismatchError),
+    /// Error generated when type conversion fails
+    TypeConvertError(TypeConvertError),
+}
+impl fmt::Display for GeneralizationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GeneralizationError::CudaError(e) => {
+                write!(f,"An unexpected error occurred during data generalization ({})",e)
+            },
+            GeneralizationError::CudnnError(e) => {
+                write!(f,"An unexpected error occurred during data generalization ({})",e)
+            },
+            GeneralizationError::SizeMismatchError(e) => {
+                write!(f,"An unexpected error occurred during data generalization ({})",e)
+            },
+            GeneralizationError::TypeConvertError(e) => {
+                write!(f,"An unexpected error occurred during data generalization ({})",e)
+            }
+        }
+    }
+}
+impl error::Error for GeneralizationError {
+    fn description(&self) -> &str {
+        match self {
+            GeneralizationError::CudaError(_) => {
+                "An unexpected error occurred during data generalization (An error occurred in the process of cudas)."
+            },
+            GeneralizationError::CudnnError(_) => {
+                "An unexpected error occurred during data generalization (An error occurred in the process of cudnns)."
+            },
+            GeneralizationError::SizeMismatchError(_) => {
+                "An unexpected error occurred during data generalization. (Error during conversion to fixed length array)."
+            },
+            GeneralizationError::TypeConvertError(_) => {
+                "An error occurred during a type conversion operation within the layer object creation process."
+            }
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            GeneralizationError::CudaError(ref e) => Some(e),
+            GeneralizationError::CudnnError(ref e) => Some(e),
+            GeneralizationError::SizeMismatchError(ref e) => Some(e),
+            GeneralizationError::TypeConvertError(ref e) => Some(e)
+        }
+    }
+}
+impl From<CudaError> for GeneralizationError {
+    fn from(err: CudaError) -> GeneralizationError {
+        GeneralizationError::CudaError(err)
+    }
+}
+impl From<rcudnn::Error> for GeneralizationError {
+    fn from(err: rcudnn::Error) -> GeneralizationError {
+        GeneralizationError::CudnnError(err)
+    }
+}
+impl From<SizeMismatchError> for GeneralizationError {
+    fn from(err: SizeMismatchError) -> GeneralizationError {
+        GeneralizationError::SizeMismatchError(err)
+    }
+}
+impl From<TypeConvertError> for GeneralizationError {
+    fn from(err: TypeConvertError) -> GeneralizationError {
+        GeneralizationError::TypeConvertError(err)
+    }
+}
+/// Error during data specialization
+#[derive(Debug)]
+pub enum SpecializationError {
+    /// Error in cuda processing
+    CudaError(CudaError),
+    /// Error in cudnn processing
+    CudnnError(rcudnn::Error),
+    /// Errors caused by generating fixed-length arrays from different size Vecs
+    SizeMismatchError(SizeMismatchError),
+    /// Error generated when type conversion fails
+    TypeConvertError(TypeConvertError),
+}
+impl fmt::Display for SpecializationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SpecializationError::CudaError(e) => {
+                write!(f,"An unexpected error occurred during data specialization ({})",e)
+            },
+            SpecializationError::CudnnError(e) => {
+                write!(f,"An unexpected error occurred during data specialization ({})",e)
+            },
+            SpecializationError::SizeMismatchError(e) => {
+                write!(f,"An unexpected error occurred during data specialization ({})",e)
+            },
+            SpecializationError::TypeConvertError(e) => {
+                write!(f,"An unexpected error occurred during data specialization ({})",e)
+            }
+        }
+    }
+}
+impl error::Error for SpecializationError {
+    fn description(&self) -> &str {
+        match self {
+            SpecializationError::CudaError(_) => {
+                "An unexpected error occurred during data specialization (An error occurred in the process of cudas)."
+            },
+            SpecializationError::CudnnError(_) => {
+                "An unexpected error occurred during data specialization (An error occurred in the process of cudnns)."
+            },
+            SpecializationError::SizeMismatchError(_) => {
+                "An unexpected error occurred during data specialization. (Error during conversion to fixed length array)."
+            },
+            SpecializationError::TypeConvertError(_) => {
+                "An error occurred during a type conversion operation within the layer object creation process."
+            }
+        }
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            SpecializationError::CudaError(ref e) => Some(e),
+            SpecializationError::CudnnError(ref e) => Some(e),
+            SpecializationError::SizeMismatchError(ref e) => Some(e),
+            SpecializationError::TypeConvertError(ref e) => Some(e)
+        }
+    }
+}
+impl From<CudaError> for SpecializationError {
+    fn from(err: CudaError) -> SpecializationError {
+        SpecializationError::CudaError(err)
+    }
+}
+impl From<rcudnn::Error> for SpecializationError {
+    fn from(err: rcudnn::Error) -> SpecializationError {
+        SpecializationError::CudnnError(err)
+    }
+}
+impl From<SizeMismatchError> for SpecializationError {
+    fn from(err: SizeMismatchError) -> SpecializationError {
+        SpecializationError::SizeMismatchError(err)
+    }
+}
+impl From<TypeConvertError> for SpecializationError {
+    fn from(err: TypeConvertError) -> SpecializationError {
+        SpecializationError::TypeConvertError(err)
     }
 }

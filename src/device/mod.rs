@@ -17,14 +17,14 @@ use rcublas::api::PointerMode;
 use rcudnn::{Cudnn};
 use rcudnn_sys::cudnnHandle_t;
 use crate::arr::{Arr, SerializedVecView};
-use crate::cuda::{AsCudaMutPtr, AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVecView, DataTypeInfo, Kernel, MemorySize};
-use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
 use crate::error::{DeviceError, TrainingError, TypeConvertError};
 use crate::error::EvaluateError::TypeCastError;
 use crate::layer::BatchSize;
 use crate::mem::AsRawSlice;
 use crate::UnitValue;
+use crate::cuda::{AsCudaMutPtr, AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVecView, DataTypeInfo, Kernel, MemorySize};
+use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
 
 /// Trait that defines devices responsible for various computational processes of neural networks
 pub trait Device<U>: Clone where U: UnitValue<U> {

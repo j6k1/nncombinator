@@ -5,13 +5,13 @@ use std::marker::PhantomData;
 use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::UnitValue;
 use crate::arr::*;
-use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaView, AsKernelPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, CudaView, DataTypeInfo, Kernel, MemorySize, TryClone, WriteMemory};
-use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationBatchBackwardArgs, ActivationBatchForwardArgs, ActivationForwardArgs, ReLuBackward, ReLuBatchBackward, ReLuForward, ReLuBatchForward, SigmoidBackward, SigmoidBatchBackward, SigmoidForward, SigmoidBatchForward, SoftMaxBackward, SoftMaxBatchBackward, SoftMaxForward, SoftMaxBatchForward, SwishBackward, SwishBatchBackward, SwishForward, TanhBackward, TanhBatchBackward, TanhForward, TanhBatchForward, SwishBatchForward, LeakyReLuBatchBackward, LeakyReLuBatchForward, LeakyReLuBackward, LeakyReLuForward, ClippedReLuForward, ClippedReLuForwardArgs, ClippedReLuBackward, ClippedReLuBackwardArgs, ClippedReLuBatchForward, ClippedReLuBatchForwardArgs, ClippedReLuBatchBackward, ClippedReLuBatchBackwardArgs};
 use crate::device::*;
 use crate::error::{CudaError, EvaluateError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::lossfunction::LossFunction;
+use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaView, AsKernelPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, CudaView, DataTypeInfo, Kernel, MemorySize, TryClone, WriteMemory};
+use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationBatchBackwardArgs, ActivationBatchForwardArgs, ActivationForwardArgs, ReLuBackward, ReLuBatchBackward, ReLuForward, ReLuBatchForward, SigmoidBackward, SigmoidBatchBackward, SigmoidForward, SigmoidBatchForward, SoftMaxBackward, SoftMaxBatchBackward, SoftMaxForward, SoftMaxBatchForward, SwishBackward, SwishBatchBackward, SwishForward, TanhBackward, TanhBatchBackward, TanhForward, TanhBatchForward, SwishBatchForward, LeakyReLuBatchBackward, LeakyReLuBatchForward, LeakyReLuBackward, LeakyReLuForward, ClippedReLuForward, ClippedReLuForwardArgs, ClippedReLuBackward, ClippedReLuBackwardArgs, ClippedReLuBatchForward, ClippedReLuBatchForwardArgs, ClippedReLuBatchBackward, ClippedReLuBatchBackwardArgs};
 
 /// Trait defining activation functions
 pub trait Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {

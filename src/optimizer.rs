@@ -5,11 +5,11 @@ use std::marker::PhantomData;
 use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::{UnitValue};
 use crate::arr::ShieldSlice;
+use crate::error::{OptimizerBuildError, TrainingError};
+use crate::scheduler::{Scheduler, IdentityLR};
 use crate::cuda::{CudaMutPtr, CudaPtr, kernel, Kernel, WriteMemory};
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, AdamWArgs, MomentumSGDArgs, RMSpropArgs, SGDArgs};
-use crate::error::{OptimizerBuildError, TrainingError};
-use crate::scheduler::{Scheduler, IdentityLR};
 
 /// OptimizerBuilder Definition
 pub trait OptimizerBuilder<U,D> where U: UnitValue<U>, D: Device<U> {

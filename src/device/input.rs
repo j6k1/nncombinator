@@ -1,12 +1,13 @@
 //! Implementation of the calculation process for input layers
 
 use std::fmt::Debug;
-use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::{ToCuda};
-use crate::device::{Device, DeviceCpu, DeviceGpu};
+use crate::device::{Device, DeviceCpu};
 use crate::error::{TypeConvertError};
 use crate::layer::BatchDataType;
 use crate::ope::UnitValue;
+use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::{ToCuda};
+use crate::device::{DeviceGpu};
 
 /// Trait that defines the function of processing data input in the input layer
 /// into a form that can be passed to subsequent intermediate layers.

@@ -4,16 +4,17 @@ use std::fmt::Debug;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
-use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaPtr, AsCudaReadOnlyPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize, MemoryType, ReadMemory};
-use crate::cuda::{DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
-use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
-use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator, DeviceReduce};
+use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize, DiffInput};
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
 use crate::ope::Product;
+use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaPtr, AsCudaReadOnlyPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize, MemoryType, ReadMemory};
+use crate::cuda::{DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
+use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
+use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the linear layer
 pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>

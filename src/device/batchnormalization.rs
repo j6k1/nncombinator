@@ -8,14 +8,15 @@ use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
-use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, WriteMemory, ReadMemory, MemoryMoveTo, AsCudaMutPtr, AsKernelPtr, AsConstKernelPtr, MemorySize, CudaMutPtr};
-use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
-use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
+use crate::device::{DeviceCpu};
+use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, WriteMemory, ReadMemory, MemoryMoveTo, AsCudaMutPtr, AsKernelPtr, AsConstKernelPtr, MemorySize, CudaMutPtr};
+use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
+use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Features defining the implementation of the various computational processes in the batch normalization layer
 pub trait DeviceBatchNorm<U,C,I,const N:usize>

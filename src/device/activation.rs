@@ -1,13 +1,14 @@
 //! Implementation of the calculation process for the activation layer
 use crate::activation::{Activation, BatchActivation};
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView};
-use crate::cuda::allocator::CudaAllocator;
-use crate::device::{Device, DeviceCpu, DeviceGpu};
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::layer::BatchDataType;
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
+use crate::device::{Device, DeviceCpu};
+use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView};
+use crate::cuda::allocator::CudaAllocator;
+use crate::device::{DeviceGpu};
 
 /// Trait that defines the implementation of various calculation processes in the activation layer
 pub trait DeviceActivation<U,I,A,const N:usize>: Device<U>

@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::{Stack};
 use crate::arr::{Arr, SerializedVec};
-use crate::cuda::ToHost;
 use crate::device::{Device};
 use crate::device::output::DeviceLinearOutput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
@@ -12,6 +11,7 @@ use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, Batc
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
+use crate::cuda::ToHost;
 
 /// Layer implementation of the output layer (linear layer)
 pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>

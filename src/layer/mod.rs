@@ -3,11 +3,11 @@
 use std::fmt::Debug;
 use crate::device::*;
 use crate::{Stack};
-use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::ToCuda;
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
+use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::ToCuda;
 
 pub mod input;
 pub mod output;

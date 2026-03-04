@@ -5,14 +5,15 @@ use libc::c_int;
 use rcublas_sys::{cublasDaxpy_v2, cublasSaxpy_v2, cublasStatus_t};
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::collection::Broadcast;
-use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsCudaMutPtr, CudaMutPtr, AsCudaPtr, Kernel};
-use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::kernel::device::{AddBiasBatch, AddBiasBatchArgs};
-use crate::device::{DeviceCpu, DeviceGpu, DeviceAllocator, DeviceReduce};
+use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
+use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsCudaMutPtr, CudaMutPtr, AsCudaPtr, Kernel};
+use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::kernel::device::{AddBiasBatch, AddBiasBatchArgs};
+use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the bias layer
 pub trait DeviceBias<U,T,IO,const N: usize>

@@ -6,14 +6,15 @@ use rayon::iter::ParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IndexedParallelIterator;
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory, WriteMemory, CudaPtr, AsMutPtr, AsCudaPtr};
-use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, LossLinearByCanonicalLink, LossLinearByCanonicalLinkArgs};
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
+use crate::device::{Device, DeviceCpu};
 use crate::error::{TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;
+use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory, WriteMemory, CudaPtr, AsMutPtr, AsCudaPtr};
+use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, LossLinearByCanonicalLink, LossLinearByCanonicalLinkArgs};
+use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the linear output layer
 pub trait DeviceLinearOutput<'a,U,const N:usize>: Device<U>

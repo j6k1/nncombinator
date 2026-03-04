@@ -3,13 +3,14 @@
 use std::marker::PhantomData;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
-use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, WriteMemory};
-use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs, LinearCrossEntropy, LinearCrossEntropyArgs, LinearCrossEntropyMulticlass, LinearCrossEntropyMulticlassArgs, LinearMse, LinearMseArgs};
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
+use crate::device::{Device, DeviceCpu};
 use crate::error::{TrainingError, TypeConvertError};
 use crate::layer::{BatchSize};
 use crate::UnitValue;
+use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, WriteMemory};
+use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs, LinearCrossEntropy, LinearCrossEntropyArgs, LinearCrossEntropyMulticlass, LinearCrossEntropyMulticlassArgs, LinearMse, LinearMseArgs};
+use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of the loss function used in neural networks during training.
 pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy + UnitValue<U> {

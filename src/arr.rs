@@ -7,13 +7,13 @@ use std::slice::{IterMut};
 use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
-use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, ToHost, AsMutPtr, AsCudaMutPtr, CudaMutPtr, CudaPtr};
-use crate::cuda::allocator::CudaAllocator;
-use crate::device::{DeviceGpu, DeviceAllocator};
 use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::{Product, Sum, UnitValue};
+use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, ToHost, AsMutPtr, AsCudaMutPtr, CudaMutPtr, CudaPtr};
+use crate::cuda::allocator::CudaAllocator;
+use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that returns the number of elements in the slice held by itself
 pub trait SliceSize {

@@ -4,7 +4,7 @@ use rcudnn::{API};
 use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BATCHNORM_SPATIAL};
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
 
-use crate::arr::{Arr, Arr2, ArrView, IntoConverter, SerializedVec, SerializedVecView};
+use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
@@ -30,7 +30,7 @@ pub trait DeviceBatchNorm<U,C,I,const N:usize>
     ///
     /// This function may return the following errors
     /// * [`GeneralizationError`]
-    fn generalization_vars(&self,vars:C) -> Result<Arr<U,N>, GeneralizationError>;
+    fn generalization_vars(&self,vars:&C) -> Result<Arr<U,N>, GeneralizationError>;
     /// Perform specialization of scale, bias, etc., used in batch normalization calculations.
     /// # Arguments
     /// * `vars` - Variables used in batch normalization calculations
@@ -130,8 +130,8 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu<U>
           for<'a> ArrView<'a,U,N>: From<&'a I>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError> {
     #[inline]
-    fn generalization_vars(&self, vars: Arr<U,N>) -> Result<Arr<U,N>, GeneralizationError> {
-        Ok(vars)
+    fn generalization_vars(&self, vars: &Arr<U,N>) -> Result<Arr<U,N>, GeneralizationError> {
+        Ok(vars.clone())
     }
     #[inline]
     fn specialization_vars(&self, vars: Arr<U,N>) -> Result<Arr<U,N>, SpecializationError> {
@@ -344,7 +344,7 @@ impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for Devi
           for<'a> CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           f64: From<U> {
     #[inline]
-    fn generalization_vars(&self, bias: CudaTensor1dPtr<U,A,N>) -> Result<Arr<U,N>, GeneralizationError> {
+    fn generalization_vars(&self, bias: &CudaTensor1dPtr<U,A,N>) -> Result<Arr<U,N>, GeneralizationError> {
         Ok(bias.read_to_vec()?.try_into()?)
     }
     #[inline]

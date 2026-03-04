@@ -31,7 +31,7 @@ pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
     ///
     /// This function may return the following errors
     /// * [`GeneralizationError`]
-    fn generalization_units(&self,units:T) -> Result<Arr2<U,NI,NO>, GeneralizationError>;
+    fn generalization_units(&self,units:&T) -> Result<Arr2<U,NI,NO>, GeneralizationError>;
     /// Perform generalization of bias data
     /// # Arguments
     /// * `bias` - Set of biases applied to the output of the linear layer
@@ -40,7 +40,7 @@ pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
     ///
     /// This function may return the following errors
     /// * [`GeneralizationError`]
-    fn generalization_bias(&self,bias:B) -> Result<Arr<U,NO>, GeneralizationError>;
+    fn generalization_bias(&self,bias:&B) -> Result<Arr<U,NO>, GeneralizationError>;
     /// Perform specialization of the unit weight data
     /// # Arguments
     /// * `units` - Set of weights applied to the inputs of the linear layer
@@ -152,23 +152,23 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
     type LossOutput = I;
     type BatchLossOutput = <I as BatchDataType>::Type;
     #[inline]
-    fn generalization_units(&self, units: Arr2<U, NI, NO>) -> Result<Arr2<U, NI, NO>, GeneralizationError> {
+    fn generalization_units(&self, units: &Arr2<U,NI,NO>) -> Result<Arr2<U,NI,NO>, GeneralizationError> {
+        Ok(units.clone())
+    }
+    #[inline]
+    fn generalization_bias(&self, bias: &Arr<U,NO>) -> Result<Arr<U,NO>, GeneralizationError> {
+        Ok(bias.clone())
+    }
+    #[inline]
+    fn specialization_units(&self, units: Arr2<U,NI,NO>) -> Result<Arr2<U,NI,NO>, SpecializationError> {
         Ok(units)
     }
     #[inline]
-    fn generalization_bias(&self, bias: Arr<U, NO>) -> Result<Arr<U, NO>, GeneralizationError> {
+    fn specialization_bias(&self, bias: Arr<U,NO>) -> Result<Arr<U,NO>, SpecializationError> {
         Ok(bias)
     }
     #[inline]
-    fn specialization_units(&self, units: Arr2<U, NI, NO>) -> Result<Arr2<U, NI, NO>, SpecializationError> {
-        Ok(units)
-    }
-    #[inline]
-    fn specialization_bias(&self, bias: Arr<U, NO>) -> Result<Arr<U, NO>, SpecializationError> {
-        Ok(bias)
-    }
-    #[inline]
-    fn forward_linear<'a>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: &'a I) -> Result<Arr<U, NO>, EvaluateError> {
+    fn forward_linear<'a>(&self, bias: &Arr<U,NO>, units: &Arr2<U,NI,NO>, input: &'a I) -> Result<Arr<U,NO>, EvaluateError> {
         Ok(ArrView::<'a,U,NI>::from(input).product(units) + bias)
     }
 
@@ -273,15 +273,15 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
     type LossOutput = I;
     type BatchLossOutput = <I as BatchDataType>::Type;
     #[inline]
-    fn generalization_units(&self, units: CudaTensor2dPtr<f32, A, NI, NO>) -> Result<Arr2<f32, NI, NO>, GeneralizationError> {
+    fn generalization_units(&self, units: &CudaTensor2dPtr<f32, A,NI,NO>) -> Result<Arr2<f32,NI,NO>, GeneralizationError> {
         Ok(units.read_to_vec()?.try_into()?)
     }
     #[inline]
-    fn generalization_bias(&self, bias: CudaTensor1dPtr<f32, A, NO>) -> Result<Arr<f32, NO>, GeneralizationError> {
+    fn generalization_bias(&self, bias: &CudaTensor1dPtr<f32,A,NO>) -> Result<Arr<f32,NO>, GeneralizationError> {
         Ok(bias.read_to_vec()?.try_into()?)
     }
     #[inline]
-    fn specialization_units(&self, units: Arr2<f32, NI, NO>) -> Result<CudaTensor2dPtr<f32, A, NI, NO>, SpecializationError> {
+    fn specialization_units(&self, units: Arr2<f32,NI,NO>) -> Result<CudaTensor2dPtr<f32,A,NI,NO>, SpecializationError> {
         let mut u = CudaTensor2dPtr::new(self.get_allocator())?;
 
         u.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
@@ -289,7 +289,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
         Ok(u)
     }
     #[inline]
-    fn specialization_bias(&self, bias: Arr<f32, NO>) -> Result<CudaTensor1dPtr<f32, A, NO>, SpecializationError> {
+    fn specialization_bias(&self, bias: Arr<f32,NO>) -> Result<CudaTensor1dPtr<f32,A,NO>, SpecializationError> {
         let mut b = CudaTensor1dPtr::new(self.get_allocator())?;
 
         b.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
@@ -641,15 +641,15 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
     type LossOutput = I;
     type BatchLossOutput = <I as BatchDataType>::Type;
     #[inline]
-    fn generalization_units(&self, units: CudaTensor2dPtr<f64, A, NI, NO>) -> Result<Arr2<f64, NI, NO>, GeneralizationError> {
+    fn generalization_units(&self, units: &CudaTensor2dPtr<f64,A,NI,NO>) -> Result<Arr2<f64,NI,NO>, GeneralizationError> {
         Ok(units.read_to_vec()?.try_into()?)
     }
     #[inline]
-    fn generalization_bias(&self, bias: CudaTensor1dPtr<f64, A, NO>) -> Result<Arr<f64, NO>, GeneralizationError> {
+    fn generalization_bias(&self, bias: &CudaTensor1dPtr<f64,A,NO>) -> Result<Arr<f64,NO>, GeneralizationError> {
         Ok(bias.read_to_vec()?.try_into()?)
     }
     #[inline]
-    fn specialization_units(&self, units: Arr2<f64, NI, NO>) -> Result<CudaTensor2dPtr<f64, A, NI, NO>, SpecializationError> {
+    fn specialization_units(&self, units: Arr2<f64,NI,NO>) -> Result<CudaTensor2dPtr<f64,A,NI,NO>, SpecializationError> {
         let mut u = CudaTensor2dPtr::new(self.get_allocator())?;
 
         u.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
@@ -657,7 +657,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
         Ok(u)
     }
     #[inline]
-    fn specialization_bias(&self, bias: Arr<f64, NO>) -> Result<CudaTensor1dPtr<f64, A, NO>, SpecializationError> {
+    fn specialization_bias(&self, bias: Arr<f64,NO>) -> Result<CudaTensor1dPtr<f64,A,NO>, SpecializationError> {
         let mut b = CudaTensor1dPtr::new(self.get_allocator())?;
 
         b.memcpy(bias.as_raw_slice().as_ptr(),NO)?;

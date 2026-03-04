@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use libc::c_int;
 use rcublas_sys::{cublasDaxpy_v2, cublasSaxpy_v2, cublasStatus_t};
-use crate::arr::{Arr, Arr2, ArrView, IntoConverter, SerializedVec, SerializedVecView};
+use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::collection::Broadcast;
 use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsCudaMutPtr, CudaMutPtr, AsCudaPtr, Kernel};
 use crate::cuda::allocator::CudaAllocator;
@@ -27,7 +27,7 @@ pub trait DeviceBias<U,T,IO,const N: usize>
     ///
     /// This function may return the following errors
     /// * [`GeneralizationError`]
-    fn generalization_bias(&self,bias:T) -> Result<Arr<U,N>, GeneralizationError>;
+    fn generalization_bias(&self,bias:&T) -> Result<Arr<U,N>, GeneralizationError>;
     /// Perform specialization of bias data
     /// # Arguments
     /// * `bias` - Set of biases applied to the output of the bias layer
@@ -116,8 +116,8 @@ impl<U,IO,const N:usize> DeviceBias<U,Arr<U,N>,IO,N> for DeviceCpu<U>
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TypeConvertError>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,Arr<U,N>,U,N> {
     #[inline]
-    fn generalization_bias(&self, bias: Arr<U,N>) -> Result<Arr<U,N>, GeneralizationError> {
-        Ok(bias)
+    fn generalization_bias(&self, bias:&Arr<U,N>) -> Result<Arr<U,N>, GeneralizationError> {
+        Ok(bias.clone())
     }
     #[inline]
     fn specialization_bias(&self, bias: Arr<U,N>) -> Result<Arr<U,N>, SpecializationError> {
@@ -174,11 +174,11 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
           for<'a> AddBiasBatch<'a,f32,A,N>: Kernel<Args=AddBiasBatchArgs<'a,f32,A,N>>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f32,A,N>,f32,N> {
     #[inline]
-    fn generalization_bias(&self, bias: CudaTensor1dPtr<f32, A, N>) -> Result<Arr<f32, N>, GeneralizationError> {
+    fn generalization_bias(&self, bias: &CudaTensor1dPtr<f32,A,N>) -> Result<Arr<f32,N>, GeneralizationError> {
         Ok(bias.read_to_vec()?.try_into()?)
     }
     #[inline]
-    fn specialization_bias(&self, bias: Arr<f32, N>) -> Result<CudaTensor1dPtr<f32, A, N>, SpecializationError> {
+    fn specialization_bias(&self, bias: Arr<f32,N>) -> Result<CudaTensor1dPtr<f32,A,N>, SpecializationError> {
         let mut b = CudaTensor1dPtr::new(self.get_allocator())?;
 
         b.memcpy(bias.as_raw_slice().as_ptr(),N)?;
@@ -293,11 +293,11 @@ impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for Devic
           for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TypeConvertError>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,CudaTensor1dPtr<f64,A,N>,f64,N> {
     #[inline]
-    fn generalization_bias(&self, bias: CudaTensor1dPtr<f64, A, N>) -> Result<Arr<f64, N>, GeneralizationError> {
+    fn generalization_bias(&self, bias: &CudaTensor1dPtr<f64,A,N>) -> Result<Arr<f64,N>, GeneralizationError> {
         Ok(bias.read_to_vec()?.try_into()?)
     }
     #[inline]
-    fn specialization_bias(&self, bias: Arr<f64, N>) -> Result<CudaTensor1dPtr<f64, A, N>, SpecializationError> {
+    fn specialization_bias(&self, bias: Arr<f64,N>) -> Result<CudaTensor1dPtr<f64,A,N>, SpecializationError> {
         let mut b = CudaTensor1dPtr::new(self.get_allocator())?;
 
         b.memcpy(bias.as_raw_slice().as_ptr(),N)?;

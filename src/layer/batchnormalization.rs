@@ -4,14 +4,11 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::arr::{Arr};
 use crate::{Cons, Stack};
-use crate::cuda::{CudaPtr, CudaTensor1dPtr, ReadMemory, WriteMemory};
-use crate::cuda::allocator::CudaAllocator;
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator, DeviceBatchAveraging};
+use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::batchnormalization::DeviceBatchNorm;
-use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
+use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
 use crate::lossfunction::LossFunction;
-use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, UnitOrMarker};
@@ -29,12 +26,11 @@ pub struct MeanAndVariance<T> {
     pub saved_inv_variance:T
 }
 /// Trait for BatchNormalizationLayer instance creation
-pub trait BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,S,const N:usize>
+pub trait BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
-          S: Debug + Sized + 'static,
           OP: Optimizer<U,D> {
     /// Create and return an instance with the specified scale, bias, and momentum.
     /// # Arguments
@@ -47,7 +43,7 @@ pub trait BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,S,const N:usize>
     ///
     /// y = γx + β
     fn with_params<B: OptimizerBuilder<U,D,Output=OP>>(parent:P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>,LayerInstantiationError>;
+        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError>;
 
     /// Create and return an instance with the momentum.
     /// # Arguments
@@ -59,7 +55,7 @@ pub trait BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,S,const N:usize>
     /// γ = 1, β = 0
     /// y = γx + β
     fn with_momentum<B: OptimizerBuilder<U,D,Output=OP>>(parent:P,device:&D,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>,LayerInstantiationError>;
+        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError>;
 
     /// Create and return an instance.
     /// # Arguments
@@ -70,15 +66,14 @@ pub trait BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,S,const N:usize>
     /// γ = 1, β = 0
     /// y = γx + β
     /// momentum = 0.9
-    fn new<B: OptimizerBuilder<U,D,Output=OP>>(parent:P,device:&D,b:&B) -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>,LayerInstantiationError>;
+    fn new<B: OptimizerBuilder<U,D,Output=OP>>(parent:P,device:&D,b:&B) -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError>;
 }
 ///  BatchNormalization Layer Implementation
-pub struct BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,const N:usize>
+pub struct BatchNormalizationLayer<U,C,P,OP,D,I,PI,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
-          S: Debug + Sized + 'static,
           OP: Optimizer<U,D> {
     parent:P,
     device:D,
@@ -88,18 +83,20 @@ pub struct BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,const N:usize>
     running_mean: C,
     running_variance: C,
     pi:PhantomData<PI>,
-    s:PhantomData<S>,
     scale_optimizer:OP,
     bias_optimizer:OP
 }
-impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>
-    for BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,N>
+    for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceCpu<U>> {
-    fn with_params<B: OptimizerBuilder<U,DeviceCpu<U>,Output=OP>>(parent:P,device:&DeviceCpu<U>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>,LayerInstantiationError> {
+          PI: BatchDataType + Debug + 'static,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + 'static {
+    fn with_params<B: OptimizerBuilder<U,D,Output=OP>>(parent:P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
+        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError> {
 
         let running_mean = Arr::new();
         let mut running_variance = Arr::new();
@@ -107,6 +104,11 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,Arr<U,N>,
         for v in running_variance.iter_mut() {
             *v = U::one();
         }
+
+        let bias = device.specialization_vars(bias)?;
+        let scale = device.specialization_vars(scale)?;
+        let running_mean = device.specialization_vars(running_mean)?;
+        let running_variance = device.specialization_vars(running_variance)?;
 
         Ok(BatchNormalizationLayer {
             parent:parent,
@@ -117,14 +119,13 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,Arr<U,N>,
             running_mean:running_mean,
             running_variance:running_variance,
             pi:PhantomData::<PI>,
-            s:PhantomData::<Arr<U,N>>,
             scale_optimizer:b.build(N)?,
             bias_optimizer:b.build(N)?
         })
     }
 
-    fn with_momentum<B: OptimizerBuilder<U,DeviceCpu<U>,Output=OP>>(parent:P,device:&DeviceCpu<U>,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>,LayerInstantiationError> {
+    fn with_momentum<B: OptimizerBuilder<U,D,Output=OP>>(parent:P,device:&D,momentum:U,b:&B)
+        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError> {
         let mut scale = Arr::new();
 
         for i in scale.iter_mut() {
@@ -134,87 +135,53 @@ impl<U,P,OP,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,Arr<U,N>,
         Self::with_params(parent,device,scale,Arr::new(),momentum,b)
     }
 
-    fn new<B: OptimizerBuilder<U,DeviceCpu<U>,Output=OP>>(parent:P,device:&DeviceCpu<U>,b:&B)
-        -> Result<BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>,LayerInstantiationError> {
+    fn new<B: OptimizerBuilder<U,D,Output=OP>>(parent:P,device:&D,b:&B)
+        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError> {
         Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."),b)
     }
 }
-impl<U,P,OP,I,PI,A,const N:usize> BatchNormalizationLayerInstantiation<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>
-    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          A: CudaAllocator,
-          OP: Optimizer<U,DeviceGpu<U,A>>,
-          CudaPtr<U,A>: WriteMemory<U>,
-          DeviceGpu<U,A>: Device<U> {
-    fn with_params<B: OptimizerBuilder<U,DeviceGpu<U,A>,Output=OP>>(parent:P,device:&DeviceGpu<U,A>,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>,LayerInstantiationError> {
-        let mut scale_ptr = CudaTensor1dPtr::new(device.get_allocator())?;
-
-        scale_ptr.memcpy(scale.as_raw_slice().as_ptr(),N)?;
-
-        let mut bias_ptr = CudaTensor1dPtr::new(device.get_allocator())?;
-
-        bias_ptr.memcpy(bias.as_raw_slice().as_ptr(),N)?;
-
-        Ok(BatchNormalizationLayer {
-            parent:parent,
-            device:device.clone(),
-            scale:scale_ptr,
-            bias:bias_ptr,
-            momentum:momentum,
-            running_mean:CudaTensor1dPtr::with_initializer(device.get_allocator(), Default::default)?,
-            running_variance:CudaTensor1dPtr::with_initializer(device.get_allocator(), || U::one())?,
-            pi:PhantomData::<PI>,
-            s:PhantomData::<CudaPtr<U,A>>,
-            scale_optimizer:b.build(N)?,
-            bias_optimizer:b.build(N)?
-        })
-    }
-
-    fn with_momentum<B: OptimizerBuilder<U,DeviceGpu<U,A>,Output=OP>>(parent:P,device:&DeviceGpu<U,A>,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>,LayerInstantiationError> {
-        let mut scale = Arr::new();
-
-        for i in scale.iter_mut() {
-            *i = U::one();
-        }
-
-        Self::with_params(parent,device,scale,Arr::new(),momentum,b)
-    }
-
-    fn new<B: OptimizerBuilder<U,DeviceGpu<U,A>,Output=OP>>(parent:P,device:&DeviceGpu<U,A>,b:&B)
-        -> Result<BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>,LayerInstantiationError> {
-        Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."),b)
-    }
-}
-impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized>
-    for BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized>
+    for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceCpu<U>>,
-          ConfigReadError: From<<U as FromStr>::Err> {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+          PI: BatchDataType + Debug + 'static,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          ModelLoadError: From<<U as FromStr>::Err>,
+          <PI as BatchDataType>::Type: Debug + 'static {
+    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
-        for i in self.scale.iter_mut() {
+        let mut scale = Arr::<U,N>::new();
+
+        for i in scale.iter_mut() {
             *i = persistence.read()?;
         }
 
-        for i in self.bias.iter_mut() {
+        let mut bias = Arr::<U,N>::new();
+
+        for i in bias.iter_mut() {
             *i = persistence.read()?;
         }
 
-        for i in self.running_mean.iter_mut() {
+        let mut running_mean = Arr::<U,N>::new();
+
+        for i in running_mean.iter_mut() {
             *i = persistence.read()?;
         }
 
-        for i in self.running_variance.iter_mut() {
+        let mut running_variance = Arr::<U,N>::new();
+
+        for i in running_variance.iter_mut() {
             *i = persistence.read()?;
         }
+
+        self.scale = self.device.specialization_vars(scale)?;
+        self.bias = self.device.specialization_vars(bias)?;
+        self.running_mean = self.device.specialization_vars(running_mean)?;
+        self.running_variance = self.device.specialization_vars(running_variance)?;
 
         Ok(())
     }
@@ -226,95 +193,47 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
 
         persistence.write(UnitOrMarker::UnitsStart);
 
-        for i in self.scale.iter() {
+        let scale = self.device.generalization_vars(&self.scale)?;
+        let bias = self.device.generalization_vars(&self.bias)?;
+        let running_mean = self.device.generalization_vars(&self.running_mean)?;
+        let running_variance = self.device.generalization_vars(&self.running_variance)?;
+
+        for i in scale.iter() {
             persistence.write(UnitOrMarker::Unit(*i));
         }
 
         persistence.write(UnitOrMarker::UnitsStart);
 
-        for i in self.bias.iter() {
+        for i in bias.iter() {
             persistence.write(UnitOrMarker::Unit(*i));
         }
 
         persistence.write(UnitOrMarker::UnitsStart);
 
-        for i in self.running_mean.iter() {
+        for i in running_mean.iter() {
             persistence.write(UnitOrMarker::Unit(*i));
         }
 
         persistence.write(UnitOrMarker::UnitsStart);
 
-        for i in self.running_variance.iter() {
+        for i in running_variance.iter() {
             persistence.write(UnitOrMarker::Unit(*i));
         }
 
         Ok(())
     }
 }
-impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear>
-    for BatchNormalizationLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,Arr<U,N>,N>
+impl<T,U,C,P,OP,D,I,PI,const N:usize> Persistence<U,T,Linear> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,DeviceCpu<U>> {
-    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
-        self.parent.load(persistence)?;
-
-        for i in self.scale.iter_mut() {
-            *i = persistence.read()?;
-        }
-
-        for i in self.bias.iter_mut() {
-            *i = persistence.read()?;
-        }
-
-        for i in self.running_mean.iter_mut() {
-            *i = persistence.read()?;
-        }
-
-        for i in self.running_variance.iter_mut() {
-            *i = persistence.read()?;
-        }
-
-        Ok(())
-    }
-
-    fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
-        self.parent.save(persistence)?;
-
-        for i in self.scale.iter() {
-            persistence.write(*i)?;
-        }
-
-        for i in self.bias.iter() {
-            persistence.write(*i)?;
-        }
-
-        for i in self.running_mean.iter() {
-            persistence.write(*i)?;
-        }
-
-        for i in self.running_variance.iter() {
-            persistence.write(*i)?;
-        }
-
-        Ok(())
-    }
-}
-impl<U,P,OP,I,PI,A,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized>
-    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>
-        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-                 PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
-              U: Default + Clone + Copy + UnitValue<U> + FromStr,
-              A: CudaAllocator,
-              I: Debug + Send + Sync,
-              OP: Optimizer<U,DeviceGpu<U,A>>,
-              CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
-              ConfigReadError: From<<U as FromStr>::Err>,
-              DeviceGpu<U,A>: Device<U> {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+          PI: BatchDataType + Debug + 'static,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + 'static {
+    fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
         let mut scale = Arr::<U,N>::new();
@@ -341,96 +260,10 @@ impl<U,P,OP,I,PI,A,const N:usize> Persistence<U,TextFilePersistence<U>,Specializ
             *i = persistence.read()?;
         }
 
-        self.scale.memcpy(scale.as_raw_slice().as_ptr(),N)?;
-        self.bias.memcpy(bias.as_raw_slice().as_ptr(),N)?;
-        self.running_mean.memcpy(running_mean.as_raw_slice().as_ptr(),N)?;
-        self.running_variance.memcpy(running_variance.as_raw_slice().as_ptr(),N)?;
-
-        Ok(())
-    }
-
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
-        self.parent.save(persistence)?;
-
-        persistence.write(UnitOrMarker::LayerStart);
-
-        persistence.write(UnitOrMarker::UnitsStart);
-
-        let scale = self.scale.read_to_vec()?;
-
-        for i in scale.iter() {
-            persistence.write(UnitOrMarker::Unit(*i));
-        }
-
-        persistence.write(UnitOrMarker::UnitsStart);
-
-        let bias = self.bias.read_to_vec()?;
-
-        for i in bias.iter() {
-            persistence.write(UnitOrMarker::Unit(*i));
-        }
-
-        persistence.write(UnitOrMarker::UnitsStart);
-
-        let running_mean = self.running_mean.read_to_vec()?;
-
-        for i in running_mean.iter() {
-            persistence.write(UnitOrMarker::Unit(*i));
-        }
-
-        persistence.write(UnitOrMarker::UnitsStart);
-
-        let running_variance = self.running_variance.read_to_vec()?;
-
-        for i in running_variance.iter() {
-            persistence.write(UnitOrMarker::Unit(*i));
-        }
-
-        Ok(())
-    }
-}
-impl<T,U,P,OP,I,PI,A,const N:usize> Persistence<U,T,Linear>
-    for BatchNormalizationLayer<U,CudaTensor1dPtr<U,A,N>,P,OP,DeviceGpu<U,A>,I,PI,CudaPtr<U,A>,N>
-        where T: LinearPersistence<U>,
-              P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-                 PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
-              U: Default + Clone + Copy + UnitValue<U>,
-              I: Debug + Send + Sync,
-              A: CudaAllocator,
-              OP: Optimizer<U,DeviceGpu<U,A>>,
-              CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
-              DeviceGpu<U,A>: Device<U> {
-    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
-        self.parent.load(persistence)?;
-
-        let mut scale = Arr::<U,N>::new();
-
-        for i in scale.iter_mut() {
-            *i = persistence.read()?;
-        }
-
-        let mut bias = Arr::<U,N>::new();
-
-        for i in bias.iter_mut() {
-            *i = persistence.read()?;
-        }
-
-        let mut running_mean = Arr::<U,N>::new();
-
-        for i in running_mean.iter_mut() {
-            *i = persistence.read()?;
-        }
-
-        let mut running_variance = Arr::<U,N>::new();
-
-        for i in running_variance.iter_mut() {
-            *i = persistence.read()?;
-        }
-
-        self.scale.memcpy(scale.as_raw_slice().as_ptr(),N)?;
-        self.bias.memcpy(bias.as_raw_slice().as_ptr(),N)?;
-        self.running_mean.memcpy(running_mean.as_raw_slice().as_ptr(),N)?;
-        self.running_variance.memcpy(running_variance.as_raw_slice().as_ptr(),N)?;
+        self.scale = self.device.specialization_vars(scale)?;
+        self.bias = self.device.specialization_vars(bias)?;
+        self.running_mean = self.device.specialization_vars(running_mean)?;
+        self.running_variance = self.device.specialization_vars(running_variance)?;
 
         Ok(())
     }
@@ -438,25 +271,22 @@ impl<T,U,P,OP,I,PI,A,const N:usize> Persistence<U,T,Linear>
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        let scale = Arr::<U,N>::try_from(self.scale.read_to_vec()?)?;
+        let scale = self.device.generalization_vars(&self.scale)?;
+        let bias = self.device.generalization_vars(&self.bias)?;
+        let running_mean = self.device.generalization_vars(&self.running_mean)?;
+        let running_variance = self.device.generalization_vars(&self.running_variance)?;
 
         for i in scale.iter() {
             persistence.write(*i)?;
         }
 
-        let bias = Arr::<U,N>::try_from(self.bias.read_to_vec()?)?;
-
         for i in bias.iter() {
             persistence.write(*i)?;
         }
 
-        let running_mean = Arr::<U,N>::try_from(self.running_mean.read_to_vec()?)?;
-
         for i in running_mean.iter() {
             persistence.write(*i)?;
         }
-
-        let running_variance = Arr::<U,N>::try_from(self.running_variance.read_to_vec()?)?;
 
         for i in running_variance.iter() {
             persistence.write(*i)?;
@@ -465,26 +295,24 @@ impl<T,U,P,OP,I,PI,A,const N:usize> Persistence<U,T,Linear>
         Ok(())
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> Forward<PI,Result<PI,EvaluateError>> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> Forward<PI,Result<PI,EvaluateError>> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + 'static {
     fn forward(&self,input:&PI) -> Result<PI,EvaluateError> {
         self.device.forward_batch_norm(input,&self.scale,&self.bias,&self.running_mean,&self.running_variance)
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> ForwardAll for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> ForwardAll for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + 'static {
     type Input = I;
@@ -493,13 +321,12 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> ForwardAll for BatchNormalizationLayer<U,C
         Ok(self.forward(&self.parent.forward_all(input)?)?)
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + 'static {
@@ -520,15 +347,14 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> PreTrain<U> for BatchNormalizationLayer<U,
         Ok(s.push((m,iv)).push(u))
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> Backward<U,(&PI,&PI,&C,&C),Result<(PI,C,C),TrainingError>>
-    for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> Backward<U,(&PI,&PI,&C,&C),Result<(PI,C,C),TrainingError>>
+    for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
 
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + 'static {
@@ -541,12 +367,11 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> Backward<U,(&PI,&PI,&C,&C),Result<(PI,C,C)
                                         saved_inv_variance)
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
@@ -575,12 +400,11 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BackwardAll<U> for BatchNormalizationLayer
         Ok((l,Cons(s,(scale,bias,None))))
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceBatchAveraging<C,U>,
@@ -606,14 +430,13 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> UpdateWeight<U> for BatchNormalizationLaye
         Ok(self.parent.update_weight(s,batch_size)?)
     }
 }
-impl<U,P,OP,D,C,I,PI,S,const N:usize> PartialForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,P,OP,D,C,I,PI,const N:usize> PartialForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PartialForward<DiffOutput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + 'static,
           Self: ForwardAll<Input=I,Output=PI> + PreTrain<U> {
@@ -630,14 +453,13 @@ impl<U,P,OP,D,C,I,PI,S,const N:usize> PartialForward for BatchNormalizationLayer
         Ok(self.parent.partial_forward_by_diff(input)?)
     }
 }
-impl<U,P,OP,D,C,I,PI,S,const N:usize> ForwardDiff for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,P,OP,D,C,I,PI,const N:usize> ForwardDiff for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
           PartialForward<DiffOutput=PI> + ForwardDiff + PreTrain<U,PreOutput=PI> + Loss<U>,
       U: Default + Clone + Copy + Send + UnitValue<U>,
       D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
       I: Debug + Send + Sync,
       PI: BatchDataType + Debug + 'static,
-      S: Debug + Sized + 'static,
       OP: Optimizer<U,D>,
       <PI as BatchDataType>::Type: Debug + 'static,
       Self: ForwardAll<Input=I,Output=PI> + PreTrain<U> {
@@ -647,14 +469,13 @@ impl<U,P,OP,D,C,I,PI,S,const N:usize> ForwardDiff for BatchNormalizationLayer<U,
         Ok(self.forward(&input)?)
     }
 }
-impl<U,P,OP,D,C,I,PI,S,const N:usize> ContinueForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,P,OP,D,C,I,PI,const N:usize> ContinueForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
           PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
       U: Default + Clone + Copy + Send + UnitValue<U>,
       D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
       I: Debug + Send + Sync,
       PI: BatchDataType + Debug + 'static,
-      S: Debug + Sized + 'static,
       OP: Optimizer<U,D>,
       <PI as BatchDataType>::Type: Debug + 'static,
       Self: ForwardAll<Input=I,Output=PI> + PreTrain<U> {
@@ -665,12 +486,11 @@ impl<U,P,OP,D,C,I,PI,S,const N:usize> ContinueForward for BatchNormalizationLaye
         Ok(self.forward(&input)?)
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> Loss<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> Loss<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
@@ -678,14 +498,13 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> Loss<U> for BatchNormalizationLayer<U,C,P,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchForwardBase for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchForwardBase for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           <I as BatchDataType>::Type: Debug,
@@ -694,14 +513,13 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchForwardBase for BatchNormalizationLay
     type BatchInput = <I as BatchDataType>::Type;
     type BatchOutput = <PI as BatchDataType>::Type;
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           <I as BatchDataType>::Type: Debug,
@@ -712,14 +530,13 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchForward for BatchNormalizationLayer<U
         Ok(self.device.batch_forward_batch_norm(&input,&self.scale,&self.bias,&self.running_mean,&self.running_variance)?)
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrainBase<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
-          S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           PI: BatchDataType + Debug + 'static,
@@ -729,14 +546,13 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrainBase<U> for BatchNormalizatio
     type BatchPreOutput = <PI as BatchDataType>::Type;
     type BatchOutStack = Cons<Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,MeanAndVariance<C>>,Self::BatchPreOutput>;
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U>,
           U: Default + Clone + Copy + Debug + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
-          S: Debug + Sized + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           PI: BatchDataType + Debug + 'static,
@@ -759,7 +575,7 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchPreTrain<U> for BatchNormalizationLay
         }).push(u))
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
@@ -768,7 +584,6 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchBackward<U> for BatchNormalizationLay
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,D>,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           C: Debug,
           <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
@@ -804,7 +619,7 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchBackward<U> for BatchNormalizationLay
         Ok((l,Cons(s,(scale,bias,Some((running_mean,running_variance))))))
     }
 }
-impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
@@ -813,7 +628,6 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,D>,
           PI: BatchDataType + Debug + 'static,
-          S: Debug + Sized + 'static,
           C: Debug,
           <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
@@ -822,14 +636,13 @@ impl<U,C,P,OP,D,I,PI,S,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
 }
 // OnStep implementation
-impl<U,C,P,OP,D,I,PI,S,const N:usize> OnStep for BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + OnStep,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
           PI: Debug,
-          OP: Optimizer<U,D>,
-          S: Debug + Sized + 'static {
+          OP: Optimizer<U,D> {
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
         self.scale_optimizer.on_step(step)?;
         self.bias_optimizer.on_step(step)?;
@@ -863,16 +676,15 @@ impl<const N:usize> BatchNormalizationLayerBuilder<N> {
     ///
     /// This function may return the following errors
     /// * [`LayerInstantiationError`]
-    pub fn build_with_params<U,C,P,OP,D,I,PI,S,B>(&self,parent: P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>,LayerInstantiationError>
+    pub fn build_with_params<U,C,P,OP,D,I,PI,B>(&self,parent: P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
+        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
               U: Default + Clone + Copy + Send + UnitValue<U>,
               D: Device<U>,
               I: Debug + Send + Sync,
-              S: Debug + Sized + 'static,
               OP: Optimizer<U,D>,
               B: OptimizerBuilder<U,D,Output=OP>,
-              BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N> : BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,S,N> {
+              BatchNormalizationLayer<U,C,P,OP,D,I,PI,N> : BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,N> {
         Ok(BatchNormalizationLayer::with_params(parent,device,scale,bias,momentum,b)?)
     }
 
@@ -887,16 +699,15 @@ impl<const N:usize> BatchNormalizationLayerBuilder<N> {
     ///
     /// This function may return the following errors
     /// * [`LayerInstantiationError`]
-    pub fn build_with_momentum<U,C,P,OP,D,I,PI,S,B: OptimizerBuilder<U,D>>(&self,parent:P,device:&D,momentum:U,b:&B)
-        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>,LayerInstantiationError>
+    pub fn build_with_momentum<U,C,P,OP,D,I,PI,B: OptimizerBuilder<U,D>>(&self,parent:P,device:&D,momentum:U,b:&B)
+        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
               U: Default + Clone + Copy + Send + UnitValue<U>,
               D: Device<U>,
               I: Debug + Send + Sync,
-              S: Debug + Sized + 'static,
               OP: Optimizer<U,D>,
               B: OptimizerBuilder<U,D,Output=OP>,
-              BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N> : BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,S,N>{
+              BatchNormalizationLayer<U,C,P,OP,D,I,PI,N> : BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,N>{
         Ok(BatchNormalizationLayer::with_momentum(parent,device,momentum,b)?)
     }
 
@@ -910,16 +721,15 @@ impl<const N:usize> BatchNormalizationLayerBuilder<N> {
     ///
     /// This function may return the following errors
     /// * [`LayerInstantiationError`]
-    pub fn build<U,C,P,OP,D,I,PI,S,B>(&self,parent: P,device:&D,b:&B)
-        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N>,LayerInstantiationError>
+    pub fn build<U,C,P,OP,D,I,PI,B>(&self,parent: P,device:&D,b:&B)
+        -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
               U: Default + Clone + Copy + Send + UnitValue<U>,
               D: Device<U>,
               I: Debug + Send + Sync,
-              S: Debug + Sized + 'static,
               OP: Optimizer<U,D>,
               B: OptimizerBuilder<U,D,Output=OP>,
-              BatchNormalizationLayer<U,C,P,OP,D,I,PI,S,N> : BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,S,N> {
+              BatchNormalizationLayer<U,C,P,OP,D,I,PI,N> : BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,N> {
         Ok(BatchNormalizationLayer::new(parent,device,b)?)
     }
 }

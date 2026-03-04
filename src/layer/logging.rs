@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use crate::device::Device;
-use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
+use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
@@ -83,7 +83,7 @@ impl<U,P,I,PI,D> Persistence<U,TextFilePersistence<U>,Specialized> for LoggingLa
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
           I: Debug + Send + Sync {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
     }
 
@@ -99,7 +99,7 @@ impl<T,U,P,I,PI,D> Persistence<U,T,Linear> for LoggingLayer<U,P,I,PI,D>
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
           I: Debug + Send + Sync {
-    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
+    fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
     }
 

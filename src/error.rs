@@ -107,7 +107,7 @@ impl error::Error for TrainingError {
 }
 /// Error when reading settings
 #[derive(Debug)]
-pub enum ConfigReadError {
+pub enum ModelLoadError {
     /// IO Error
     IOError(io::Error),
     /// Errors that occur when the internal state of a particular object or other object is abnormal.
@@ -115,34 +115,39 @@ pub enum ConfigReadError {
     /// Error when trying to parse a numeric string into numbers
     ParseFloatError(ParseFloatError),
     /// Error in cudnn processing
-    CudnnError(rcudnn::Error)
+    CudnnError(rcudnn::Error),
+    /// Error in specialization
+    SpecializationError(SpecializationError),
 }
-impl fmt::Display for ConfigReadError {
+impl fmt::Display for ModelLoadError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ConfigReadError::IOError(_) => write!(f, "Error occurred in file I/O."),
-            ConfigReadError::InvalidState(ref s) => write!(f, "Configuration is invalid. ({})",s),
-            ConfigReadError::ParseFloatError(_) => write!(f, "An error occurred when converting a string to a double value."),
-            ConfigReadError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
+        match self {
+            ModelLoadError::IOError(_) => write!(f, "Error occurred in file I/O."),
+            ModelLoadError::InvalidState(ref s) => write!(f, "Configuration is invalid. ({})", s),
+            ModelLoadError::ParseFloatError(_) => write!(f, "An error occurred when converting a string to a double value."),
+            ModelLoadError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
+            ModelLoadError::SpecializationError(e) => write!(f, "An error occurred during specialization. ({})", e),
         }
     }
 }
-impl error::Error for ConfigReadError {
+impl error::Error for ModelLoadError {
     fn description(&self) -> &str {
-        match *self {
-            ConfigReadError::IOError(_) => "Error occurred in file I/O.",
-            ConfigReadError::InvalidState(_) => "Configuration is invalid.",
-            ConfigReadError::ParseFloatError(_) => "An error occurred when converting a string to a double value.",
-            ConfigReadError::CudnnError(_) => "An error occurred during the execution of a process in cudnn."
+        match self {
+            ModelLoadError::IOError(_) => "Error occurred in file I/O.",
+            ModelLoadError::InvalidState(_) => "Configuration is invalid.",
+            ModelLoadError::ParseFloatError(_) => "An error occurred when converting a string to a double value.",
+            ModelLoadError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            ModelLoadError::SpecializationError(_) => "An error occurred during specialization."
         }
     }
 
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match *self {
-            ConfigReadError::IOError(ref e) => Some(e),
-            ConfigReadError::InvalidState(_) => None,
-            ConfigReadError::ParseFloatError(ref e) => Some(e),
-            ConfigReadError::CudnnError(ref e) => Some(e)
+        match self {
+            ModelLoadError::IOError(ref e) => Some(e),
+            ModelLoadError::InvalidState(_) => None,
+            ModelLoadError::ParseFloatError(ref e) => Some(e),
+            ModelLoadError::CudnnError(ref e) => Some(e),
+            ModelLoadError::SpecializationError(ref e) => Some(e)
         }
     }
 }
@@ -191,19 +196,24 @@ impl From<UnsupportedOperationError> for TrainingError {
         TrainingError::UnsupportedOperationError(err)
     }
 }
-impl From<io::Error> for ConfigReadError {
-    fn from(err: io::Error) -> ConfigReadError {
-        ConfigReadError::IOError(err)
+impl From<io::Error> for ModelLoadError {
+    fn from(err: io::Error) -> ModelLoadError {
+        ModelLoadError::IOError(err)
     }
 }
-impl From<ParseFloatError> for ConfigReadError {
-    fn from(err: ParseFloatError) -> ConfigReadError {
-        ConfigReadError::ParseFloatError(err)
+impl From<ParseFloatError> for ModelLoadError {
+    fn from(err: ParseFloatError) -> ModelLoadError {
+        ModelLoadError::ParseFloatError(err)
     }
 }
-impl From<rcudnn::Error> for ConfigReadError {
-    fn from(err: rcudnn::Error) -> ConfigReadError {
-        ConfigReadError::CudnnError(err)
+impl From<rcudnn::Error> for ModelLoadError {
+    fn from(err: rcudnn::Error) -> ModelLoadError {
+        ModelLoadError::CudnnError(err)
+    }
+}
+impl From<SpecializationError> for ModelLoadError {
+    fn from(err: SpecializationError) -> ModelLoadError {
+        ModelLoadError::SpecializationError(err)
     }
 }
 impl From<TryFromSliceError> for TrainingError {
@@ -465,6 +475,8 @@ pub enum PersistenceError {
     SizeMismatchError(SizeMismatchError),
     /// Error generated when type conversion fails
     TypeConvertError(TypeConvertError),
+    /// Error in generalization
+    GeneralizationError(GeneralizationError),
 }
 impl fmt::Display for PersistenceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -472,6 +484,7 @@ impl fmt::Display for PersistenceError {
             PersistenceError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
             PersistenceError::SizeMismatchError(e) => write!(f, "{}",e),
             PersistenceError::TypeConvertError(e) => write!(f,"{}",e),
+            PersistenceError::GeneralizationError(e) => write!(f,"{}",e),
         }
     }
 }
@@ -481,6 +494,7 @@ impl error::Error for PersistenceError {
             PersistenceError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
             PersistenceError::SizeMismatchError(_) => "memory size does not match.",
             PersistenceError::TypeConvertError(_) => "Type convert failed.",
+            PersistenceError::GeneralizationError(_) => "An error occurred during generalization.",
         }
     }
 
@@ -489,6 +503,7 @@ impl error::Error for PersistenceError {
             PersistenceError::CudnnError(ref e) => Some(e),
             PersistenceError::SizeMismatchError(ref e) => Some(e),
             PersistenceError::TypeConvertError(ref e) => Some(e),
+            PersistenceError::GeneralizationError(ref e) => Some(e),
         }
     }
 }
@@ -505,6 +520,11 @@ impl From<SizeMismatchError> for PersistenceError {
 impl From<TypeConvertError> for PersistenceError {
     fn from(err: TypeConvertError) -> PersistenceError {
         PersistenceError::TypeConvertError(err)
+    }
+}
+impl From<GeneralizationError> for PersistenceError {
+    fn from(err: GeneralizationError) -> PersistenceError {
+        PersistenceError::GeneralizationError(err)
     }
 }
 /// Error in cuda processing

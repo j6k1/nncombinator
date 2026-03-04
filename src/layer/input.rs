@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::{Cons, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
-use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
+use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
@@ -30,7 +30,7 @@ impl<U,O,LI,D> InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
 }
 impl<U,O,LI,D> Persistence<U,TextFilePersistence<U>,Specialized> for InputLayer<U,O,LI,D>
     where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
-    fn load(&mut self, _: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+    fn load(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
         Ok(())
     }
 
@@ -40,7 +40,7 @@ impl<U,O,LI,D> Persistence<U,TextFilePersistence<U>,Specialized> for InputLayer<
 }
 impl<T,U,O,LI,D> Persistence<U,T,Linear> for InputLayer<U,O,LI,D>
     where T: LinearPersistence<U>, U: UnitValue<U>, D: Device<U> {
-    fn load(&mut self, _: &mut T) -> Result<(),ConfigReadError> {
+    fn load(&mut self, _: &mut T) -> Result<(), ModelLoadError> {
         Ok(())
     }
 
@@ -194,7 +194,7 @@ impl<U,O,DI,PO,LI,D> DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: De
 }
 impl<U,O,DI,PO,LI,D> Persistence<U,TextFilePersistence<U>,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
-    fn load(&mut self, _: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+    fn load(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
         Ok(())
     }
 
@@ -204,7 +204,7 @@ impl<U,O,DI,PO,LI,D> Persistence<U,TextFilePersistence<U>,Specialized> for DiffI
 }
 impl<T,U,O,DI,PO,LI,D> Persistence<U,T,Linear> for DiffInputLayer<U,O,DI,PO,LI,D>
     where T: LinearPersistence<U>, U: UnitValue<U>, D: Device<U> {
-    fn load(&mut self, _: &mut T) -> Result<(),ConfigReadError> {
+    fn load(&mut self, _: &mut T) -> Result<(), ModelLoadError> {
         Ok(())
     }
 

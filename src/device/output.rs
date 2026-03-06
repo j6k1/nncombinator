@@ -1,19 +1,26 @@
 //! Implementation of the calculation process for output layers
 
-use core::fmt::Debug;
 use num_traits::FromPrimitive;
 use rayon::iter::ParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IndexedParallelIterator;
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
 use crate::device::{Device, DeviceCpu};
-use crate::error::{TrainingError, TypeConvertError};
+use crate::error::{TrainingError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;
+#[cfg(feature = "cuda")]
+use core::fmt::Debug;
+#[cfg(feature = "cuda")]
+use crate::error::{TypeConvertError};
+#[cfg(feature = "cuda")]
 use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory, WriteMemory, CudaPtr, AsMutPtr, AsCudaPtr};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, LossLinearByCanonicalLink, LossLinearByCanonicalLinkArgs};
+#[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the linear output layer
@@ -138,6 +145,7 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
         ))
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
     where U: DataTypeInfo + UnitValue<U> + AsMutPtr<U>,
           A: CudaAllocator + 'static,

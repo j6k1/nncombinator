@@ -1,18 +1,25 @@
 //! Implementation of the calculation process for bias layers
 
 use std::fmt::Debug;
+#[cfg(feature = "cuda")]
 use libc::c_int;
+#[cfg(feature = "cuda")]
 use rcublas_sys::{cublasDaxpy_v2, cublasSaxpy_v2, cublasStatus_t};
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::collection::Broadcast;
 use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
-use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
+#[cfg(feature = "cuda")]
+use crate::mem::AsRawSlice;
+#[cfg(feature = "cuda")]
 use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsCudaMutPtr, CudaMutPtr, AsCudaPtr, Kernel};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::kernel::device::{AddBiasBatch, AddBiasBatchArgs};
+#[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the bias layer
@@ -154,6 +161,7 @@ impl<U,IO,const N:usize> DeviceBias<U,Arr<U,N>,IO,N> for DeviceCpu<U>
         self.reduce(loss)
     }
 }
+#[cfg(feature = "cuda")]
 impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for DeviceGpu<f32,A>
     where IO: BatchDataType + Debug,
           <IO as BatchDataType>::Type: BatchSize + Debug,
@@ -273,6 +281,7 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
         self.reduce(loss)
     }
 }
+#[cfg(feature = "cuda")]
 impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for DeviceGpu<f64,A>
     where IO: BatchDataType + Debug,
           <IO as BatchDataType>::Type: BatchSize + Debug,

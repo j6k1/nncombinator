@@ -6,12 +6,22 @@ use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallel
 use crate::UnitValue;
 use crate::arr::*;
 use crate::device::*;
-use crate::error::{CudaError, EvaluateError, TrainingError, TypeConvertError};
-use crate::layer::{BatchDataType, BatchSize};
+use crate::error::{EvaluateError, TrainingError};
 use crate::lossfunction::LossFunction;
+#[cfg(feature = "cuda")]
+use crate::layer::{BatchDataType};
+#[cfg(feature = "cuda")]
+use crate::layer::{BatchSize};
+#[cfg(feature = "cuda")]
+use crate::error::{TypeConvertError};
+#[cfg(feature = "cuda")]
 use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaView, AsKernelPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, CudaView, DataTypeInfo, Kernel, MemorySize, TryClone, WriteMemory};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::kernel::activation::{ActivationBackwardArgs, ActivationBatchBackwardArgs, ActivationBatchForwardArgs, ActivationForwardArgs, ReLuBackward, ReLuBatchBackward, ReLuForward, ReLuBatchForward, SigmoidBackward, SigmoidBatchBackward, SigmoidForward, SigmoidBatchForward, SoftMaxBackward, SoftMaxBatchBackward, SoftMaxForward, SoftMaxBatchForward, SwishBackward, SwishBatchBackward, SwishForward, TanhBackward, TanhBatchBackward, TanhForward, TanhBatchForward, SwishBatchForward, LeakyReLuBatchBackward, LeakyReLuBatchForward, LeakyReLuBackward, LeakyReLuForward, ClippedReLuForward, ClippedReLuForwardArgs, ClippedReLuBackward, ClippedReLuBackwardArgs, ClippedReLuBatchForward, ClippedReLuBatchForwardArgs, ClippedReLuBatchBackward, ClippedReLuBatchBackwardArgs};
+#[cfg(feature = "cuda")]
+use crate::error::{CudaError};
 
 /// Trait defining activation functions
 pub trait Activation<U,T,R,D> where U: UnitValue<U>, D: Device<U> {
@@ -132,6 +142,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
         self.c.contains(l.name())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for Identity<U,DeviceGpu<U,AC>>
     where U: UnitValue<U>,
           CudaPtr<U,AC>: WriteMemory<U>,
@@ -182,6 +193,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         Ok((&loss).into())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Identity<U,DeviceGpu<U,AC>>
     where U: UnitValue<U>,
@@ -270,6 +282,7 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Sigmoid
         self.c.contains(l.name())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for Sigmoid<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           I: BatchDataType + 'a,
@@ -352,6 +365,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Sigmoid<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
@@ -466,6 +480,7 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,
         false
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for ReLu<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           CudaPtr<U,AC>: WriteMemory<U>,
@@ -546,6 +561,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for ReLu<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
@@ -664,6 +680,7 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Clipped
         false
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for ClippedReLu<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo + AsKernelPtr,
           CudaPtr<U,AC>: WriteMemory<U>,
@@ -742,6 +759,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for ClippedReLu<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo + AsKernelPtr,
@@ -859,6 +877,7 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for LeakyRe
         false
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for LeakyReLu<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           CudaPtr<U,AC>: WriteMemory<U>,
@@ -939,6 +958,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for LeakyReLu<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
@@ -1049,6 +1069,7 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Swish<U
         false
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for Swish<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           CudaPtr<U,AC>: WriteMemory<U>,
@@ -1129,6 +1150,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Swish<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
@@ -1242,6 +1264,7 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,
         false
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for Tanh<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           I: BatchDataType + 'a,
@@ -1325,6 +1348,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Tanh<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
@@ -1458,6 +1482,7 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for SoftMax
         self.c.contains(l.name())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for SoftMax<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,
           I: BatchDataType + 'a,
@@ -1542,6 +1567,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
         }).collect::<Result<Vec<Arr<U,N>>,_>>()?.into())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for SoftMax<U,DeviceGpu<U,AC>>
     where U: UnitValue<U> + DataTypeInfo,

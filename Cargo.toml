@@ -16,15 +16,18 @@ categories = ["mathematics","science"]
 license = "MIT"
 
 build = "build.rs"
+[features]
+default = ["cuda"]
+cuda = ["cuda-runtime-sys","rcudnn","rcudnn-sys","rcublas","rcublas-sys"]
 [dependencies]
 num-traits = "0.2.14"
 rayon = "1.5.1"
 libc = "0.2"
-cuda-runtime-sys = "0.3.0-alpha.1"
-rcudnn = "1.8.0"
-rcudnn-sys = "0.5.0"
-rcublas = "0.6.0"
-rcublas-sys = "0.5.0"
+cuda-runtime-sys = { version = "0.3.0-alpha.1", optional = true }
+rcudnn = { version =  "1.8.0", optional = true }
+rcudnn-sys = { version = "0.5.0", optional = true }
+rcublas = { version = "0.6.0", optional = true }
+rcublas-sys = { version = "0.5.0", optional = true }
 [dev-dependencies]
 rand = "0.8.5"
 rand_xorshift = "0.3.0"

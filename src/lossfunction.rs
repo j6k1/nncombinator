@@ -7,9 +7,13 @@ use crate::device::{Device, DeviceCpu};
 use crate::error::{TrainingError, TypeConvertError};
 use crate::layer::{BatchSize};
 use crate::UnitValue;
+#[cfg(feature = "cuda")]
 use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, WriteMemory};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs, LinearCrossEntropy, LinearCrossEntropyArgs, LinearCrossEntropyMulticlass, LinearCrossEntropyMulticlassArgs, LinearMse, LinearMseArgs};
+#[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of the loss function used in neural networks during training.
@@ -114,6 +118,7 @@ impl<U> LossFunction<U> for Mse<U> where U: Clone + Copy + UnitValue<U> {
         "mse"
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           I: 'a,
@@ -140,6 +145,7 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse
         Ok(args.output)
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           I: 'a,
@@ -193,6 +199,7 @@ impl<U> LossFunction<U> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U>
         "crossentropy"
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropy<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           I: 'a,
@@ -220,6 +227,7 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
         Ok(args.output)
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropy<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           I: 'a,
@@ -274,6 +282,7 @@ impl<U> LossFunction<U> for CrossEntropyMulticlass<U> where U: Clone + Copy + Un
         "crossentropymulticlass"
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropyMulticlass<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           I: 'a,
@@ -299,6 +308,7 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
         Ok(args.output)
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropyMulticlass<U>
     where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
           I: 'a,

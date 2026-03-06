@@ -1,8 +1,11 @@
+#[cfg(feature = "cuda")]
 extern crate cc;
 
+#[cfg(feature = "cuda")]
 use std::env;
+#[cfg(feature = "cuda")]
 use std::process::Command;
-
+#[cfg(feature = "cuda")]
 fn find_library_paths() -> Vec<String> {
 	match env::var("CUDA_PATH") {
 		Ok(path) => {
@@ -13,7 +16,7 @@ fn find_library_paths() -> Vec<String> {
 		Err(_) => vec![],
 	}
 }
-
+#[cfg(feature = "cuda")]
 fn main() {
 	println!("cargo:rerun-if-changed=src/kernel.cu");
 
@@ -72,3 +75,5 @@ fn main() {
 	println!("cargo:rustc-link-search=native={}", &out_dir);
 	println!("cargo:rustc-link-lib=static=kernel");
 }
+#[cfg(not(feature = "cuda"))]
+fn main() {}

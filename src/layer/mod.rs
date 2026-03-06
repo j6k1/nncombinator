@@ -3,10 +3,14 @@
 use std::fmt::Debug;
 use crate::device::*;
 use crate::{Stack};
-use crate::error::{EvaluateError, TrainingError, TypeConvertError};
+use crate::error::{EvaluateError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
+#[cfg(feature = "cuda")]
+use crate::error::{TypeConvertError};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::ToCuda;
 
 pub mod input;
@@ -60,6 +64,7 @@ impl<'a,T,O> BatchDataType for DiffInput<'a,T,O>
           O: Debug + 'a {
     type Type = Vec<DiffInput<'a,T,O>>;
 }
+#[cfg(feature = "cuda")]
 impl<'a,T,O,U,A> ToCuda<U,A> for DiffInput<'a,T,O>
     where U: UnitValue<U> + Clone + Copy + Debug,
           T: Debug,
@@ -71,6 +76,7 @@ impl<'a,T,O,U,A> ToCuda<U,A> for DiffInput<'a,T,O>
         Ok(self)
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,T,O,U,A> ToCuda<U,A> for Vec<DiffInput<'a,T,O>>
     where U: UnitValue<U> + Clone + Copy + Debug,
           T: Debug,

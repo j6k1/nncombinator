@@ -1,15 +1,21 @@
 //! Definition and implementation of optimizers to be used during training
 
-use core::fmt::Debug;
 use std::marker::PhantomData;
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceAllocator};
+use crate::device::{Device, DeviceCpu};
 use crate::{UnitValue};
 use crate::arr::ShieldSlice;
 use crate::error::{OptimizerBuildError, TrainingError};
 use crate::scheduler::{Scheduler, IdentityLR};
+#[cfg(feature = "cuda")]
+use core::fmt::Debug;
+#[cfg(feature = "cuda")]
 use crate::cuda::{CudaMutPtr, CudaPtr, kernel, Kernel, WriteMemory};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, AdamWArgs, MomentumSGDArgs, RMSpropArgs, SGDArgs};
+#[cfg(feature = "cuda")]
+use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// OptimizerBuilder Definition
 pub trait OptimizerBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -41,6 +47,7 @@ pub trait OptimizerState<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U>
 /// SGD Implementation
 pub struct SGD<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> {
     d:PhantomData<D>,
+    #[allow(dead_code)]
     size: usize,
     /// Learning rate
     lr:U,
@@ -104,6 +111,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for SGD<U,DeviceCpu<U>,SD> where U: UnitVal
         Ok(())
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           A: CudaAllocator + 'static,
@@ -203,6 +211,7 @@ pub struct MomentumSGD<U,D,SD>
     where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U>,
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
+    #[allow(dead_code)]
     size:usize,
     lr:U,
     mu:U,
@@ -274,6 +283,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>,SD> where U:
         Ok(())
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A> MomentumSGD<U,DeviceGpu<U,A>,IdentityLR>
     where U: UnitValue<U> + Debug + Default,
           A: CudaAllocator,
@@ -298,6 +308,7 @@ impl<U,A> MomentumSGD<U,DeviceGpu<U,A>,IdentityLR>
         })
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> MomentumSGD<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U> + Debug + Default,
           A: CudaAllocator,
@@ -326,6 +337,7 @@ impl<U,A,SD> MomentumSGD<U,DeviceGpu<U,A>,SD>
         })
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U> + Debug + Default,
           A: CudaAllocator + 'static,
@@ -359,6 +371,7 @@ impl<U,SD> OptimizerState<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>,SD>
           DeviceCpu<U>: Device<U> {
     type Type = Box<[U]>;
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U> + Debug + Default,
           SD: Scheduler<U>,
@@ -451,6 +464,7 @@ impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for MomentumSGDBuilder<U,DeviceCpu<U
         Ok(MomentumSGD::<U,DeviceCpu<U>,SD>::with_params(&self.device,size,self.lr,self.mu,self.weight_decay,self.scheduler.clone()))
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for MomentumSGDBuilder<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U> + Clone,
@@ -469,6 +483,7 @@ pub struct Adagrad<U,D,SD>
     where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U>,
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
+    #[allow(dead_code)]
     size:usize,
     lr:U,
     gt:<Self as OptimizerState<U,D>>::Type,
@@ -532,6 +547,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>,SD> where U: Uni
         Ok(())
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A> Adagrad<U,DeviceGpu<U,A>,IdentityLR>
     where U: UnitValue<U>,
           A: CudaAllocator,
@@ -550,6 +566,7 @@ impl<U,A> Adagrad<U,DeviceGpu<U,A>,IdentityLR>
         )
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> Adagrad<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           A: CudaAllocator,
@@ -572,6 +589,7 @@ impl<U,A,SD> Adagrad<U,DeviceGpu<U,A>,SD>
         })
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           A: CudaAllocator + 'static,
@@ -605,6 +623,7 @@ impl<U,SD> OptimizerState<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>,SD>
           DeviceCpu<U>: Device<U> {
     type Type = Box<[U]>;
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
@@ -680,6 +699,7 @@ impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for AdagradBuilder<U,DeviceCpu<U>,SD
         Ok(Adagrad::<_,DeviceCpu<U>,SD>::with_params(&self.device,size,self.lr,self.weight_decay,self.scheduler.clone()))
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for AdagradBuilder<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U> + Clone,
@@ -698,6 +718,7 @@ pub struct RMSprop<U,D,SD>
     where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U>,
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
+    #[allow(dead_code)]
     size:usize,
     lr:U,
     weight_decay:U,
@@ -782,6 +803,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>,SD> where U: Uni
         Ok(())
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A> RMSprop<U,DeviceGpu<U,A>,IdentityLR>
     where U: UnitValue<U>,
           A: CudaAllocator,
@@ -812,7 +834,7 @@ impl<U,A> RMSprop<U,DeviceGpu<U,A>,IdentityLR>
         )
     }
 }
-
+#[cfg(feature = "cuda")]
 impl<U,A,SD> RMSprop<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
@@ -842,6 +864,7 @@ impl<U,A,SD> RMSprop<U,DeviceGpu<U,A>,SD>
         })
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
@@ -875,6 +898,7 @@ impl<U,SD> OptimizerState<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>,SD>
           DeviceCpu<U>: Device<U> {
     type Type = Box<[U]>;
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
@@ -988,6 +1012,7 @@ impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for RMSpropBuilder<U,DeviceCpu<U>,SD
         Ok(RMSprop::<_,DeviceCpu<U>,SD>::with_params(&self.device,size,self.lr,self.weight_decay,self.alpha,self.mu,self.scheduler.clone()))
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for RMSpropBuilder<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U> + Clone,
@@ -1006,6 +1031,7 @@ pub struct Adam<U,D,SD>
     where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U>,
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
+    #[allow(dead_code)]
     size:usize,
     lr:U,
     weight_decay:U,
@@ -1097,6 +1123,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>,SD> where U: UnitVa
         Ok(())
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A> Adam<U,DeviceGpu<U,A>,IdentityLR>
     where U: UnitValue<U>,
           A: CudaAllocator,
@@ -1124,7 +1151,7 @@ impl<U,A> Adam<U,DeviceGpu<U,A>,IdentityLR>
         )
     }
 }
-
+#[cfg(feature = "cuda")]
 impl<U,A,SD> Adam<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
@@ -1155,6 +1182,7 @@ impl<U,A,SD> Adam<U,DeviceGpu<U,A>,SD>
         })
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
@@ -1193,6 +1221,7 @@ impl<U,SD> OptimizerState<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>,SD>
           DeviceCpu<U>: Device<U> {
     type Type = Box<[U]>;
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
@@ -1306,6 +1335,7 @@ impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for AdamBuilder<U,DeviceCpu<U>,SD>
         Ok(Adam::<_,DeviceCpu<U>,SD>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2,self.scheduler.clone()))
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for AdamBuilder<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U> + Clone,
@@ -1324,6 +1354,7 @@ pub struct AdamW<U,D,SD>
     where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U>,
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
+    #[allow(dead_code)]
     size:usize,
     lr:U,
     weight_decay:U,
@@ -1415,6 +1446,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>,SD> where U: UnitV
         Ok(())
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A> AdamW<U,DeviceGpu<U,A>,IdentityLR>
     where U: UnitValue<U>,
           A: CudaAllocator,
@@ -1442,7 +1474,7 @@ impl<U,A> AdamW<U,DeviceGpu<U,A>,IdentityLR>
         )
     }
 }
-
+#[cfg(feature = "cuda")]
 impl<U,A,SD> AdamW<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
@@ -1473,6 +1505,7 @@ impl<U,A,SD> AdamW<U,DeviceGpu<U,A>,SD>
         })
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
@@ -1511,6 +1544,7 @@ impl<U,SD> OptimizerState<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>,SD>
           DeviceCpu<U>: Device<U> {
     type Type = Box<[U]>;
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
@@ -1624,6 +1658,7 @@ impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for AdamWBuilder<U,DeviceCpu<U>,SD>
         Ok(AdamW::<_,DeviceCpu<U>,SD>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2,self.scheduler.clone()))
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for AdamWBuilder<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U> + Clone,

@@ -2,18 +2,28 @@
 
 use std::fmt::Debug;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
-use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
 use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
-use crate::layer::{BatchDataType, BatchSize, DiffInput};
-use crate::mem::AsRawSlice;
+use crate::layer::{DiffInput};
 use crate::ope::UnitValue;
 use crate::ope::Product;
+use crate::layer::{BatchDataType};
+#[cfg(feature = "cuda")]
+use crate::mem::AsRawSlice;
+#[cfg(feature = "cuda")]
+use crate::layer::{BatchSize};
+#[cfg(feature = "cuda")]
+use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
+#[cfg(feature = "cuda")]
 use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaPtr, AsCudaReadOnlyPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize, MemoryType, ReadMemory};
+#[cfg(feature = "cuda")]
 use crate::cuda::{DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
+#[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the linear layer
@@ -239,6 +249,7 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
         self.reduce(loss)
     }
 }
+#[cfg(feature = "cuda")]
 impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,I,NI,NO> for DeviceGpu<f32,A>
     where I: BatchDataType + MemorySize + AsConstKernelPtr + AsKernelPtr + From<CudaTensor1dPtr<f32,A,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
@@ -619,7 +630,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
         self.reduce(loss)
     }
 }
-
+#[cfg(feature = "cuda")]
 impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,A,NI,NO>,CudaTensor1dPtr<f64,A,NO>,I,NI,NO> for DeviceGpu<f64,A>
     where I: BatchDataType + From<CudaTensor1dPtr<f64,A,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'static,
@@ -1009,6 +1020,7 @@ impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,Diff
         Ok(output.clone())
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,DiffArr<U,NI>,CudaTensor1dPtr<U,A,NO>>,CudaTensor2dPtr<U,A,NI,NO>,NI,NO> for DeviceGpu<U,A>
     where U: UnitValue<U> + DataTypeInfo,
           A: CudaAllocator + 'static,

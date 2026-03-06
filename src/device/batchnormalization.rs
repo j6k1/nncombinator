@@ -1,7 +1,10 @@
 //! Implementation of the calculation process for batch normalization
 use std::fmt::Debug;
+#[cfg(feature = "cuda")]
 use rcudnn::{API};
+#[cfg(feature = "cuda")]
 use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BATCHNORM_SPATIAL};
+#[cfg(feature = "cuda")]
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
 
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
@@ -9,13 +12,20 @@ use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
-use crate::layer::{BatchDataType, BatchSize};
-use crate::mem::AsRawSlice;
+use crate::layer::{BatchDataType};
 use crate::ope::UnitValue;
 use crate::device::{DeviceCpu};
+#[cfg(feature = "cuda")]
+use crate::mem::AsRawSlice;
+#[cfg(feature = "cuda")]
+use crate::layer::{BatchSize};
+#[cfg(feature = "cuda")]
 use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, WriteMemory, ReadMemory, MemoryMoveTo, AsCudaMutPtr, AsKernelPtr, AsConstKernelPtr, MemorySize, CudaMutPtr};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
+#[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Features defining the implementation of the various computational processes in the batch normalization layer
@@ -330,6 +340,7 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu<U>
         Ok((dx.into_converter().try_into()?,s,b))
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for DeviceGpu<U,A>
     where U: UnitValue<U> + Debug + Default + DataTypeInfo + AsVoidPtr,
           A: CudaAllocator,

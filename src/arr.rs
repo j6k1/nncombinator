@@ -10,9 +10,15 @@ use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
-use crate::ope::{Product, Sum, UnitValue};
-use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, ToHost, AsMutPtr, AsCudaMutPtr, CudaMutPtr, CudaPtr};
+use crate::ope::{Product, Sum};
+#[cfg(feature = "cuda")]
+use crate::ope::{UnitValue};
+use crate::bridge::{ToHost};
+#[cfg(feature = "cuda")]
+use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, AsMutPtr, AsCudaMutPtr, CudaMutPtr, CudaPtr};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that returns the number of elements in the slice held by itself
@@ -194,6 +200,7 @@ impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: D
         ShieldSlice::new(&mut arr.arr)
     }
 }
+#[cfg(feature = "cuda")]
 impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
     where T: UnitValue<T>,
           A: CudaAllocator,
@@ -210,6 +217,7 @@ impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
         Ok(ptr)
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a Arr<T,N>
     where T: UnitValue<T> + 'a,
           A: CudaAllocator + 'a,
@@ -1529,6 +1537,7 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
         }
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
     where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
           T: Debug,
@@ -1551,6 +1560,7 @@ impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
         }
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,T,A> ToCuda<U,A> for &'a SerializedVec<U,T>
     where U: Debug + Default + Clone + Copy + Send + UnitValue<U> + AsMutPtr<U>,
           A: CudaAllocator,

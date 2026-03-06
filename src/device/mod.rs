@@ -6,25 +6,38 @@ pub mod activation;
 pub mod output;
 pub mod input;
 
+use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::fmt::Debug;
-use std::rc::Rc;
 use num_traits::FromPrimitive;
-use rcublas::Context;
-use rcublas_sys::{cublasDscal_v2, cublasHandle_t, cublasSscal_v2, cublasStatus_t};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+#[cfg(feature = "cuda")]
+use std::rc::Rc;
+#[cfg(feature = "cuda")]
+use rcublas::Context;
+#[cfg(feature = "cuda")]
+use rcublas_sys::{cublasDscal_v2, cublasHandle_t, cublasSscal_v2, cublasStatus_t};
+#[cfg(feature = "cuda")]
 use rcublas::api::PointerMode;
+#[cfg(feature = "cuda")]
 use rcudnn::{Cudnn};
+#[cfg(feature = "cuda")]
 use rcudnn_sys::cudnnHandle_t;
 use crate::arr::{Arr, SerializedVecView};
-use crate::error::{DeviceError, TrainingError, TypeConvertError};
+use crate::error::{TrainingError, TypeConvertError};
 use crate::error::EvaluateError::TypeCastError;
-use crate::layer::BatchSize;
 use crate::mem::AsRawSlice;
 use crate::UnitValue;
+#[cfg(feature = "cuda")]
+use crate::layer::BatchSize;
+#[cfg(feature = "cuda")]
 use crate::cuda::{AsCudaMutPtr, AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVecView, DataTypeInfo, Kernel, MemorySize};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
+#[cfg(feature = "cuda")]
+use crate::error::{DeviceError};
 
 /// Trait that defines devices responsible for various computational processes of neural networks
 pub trait Device<U>: Clone where U: UnitValue<U> {
@@ -62,7 +75,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     /// note: For the sake of implementation uniformity,
     /// DeviceCpu::new is defined as if it may return a DeviceError of type Result,
     /// but this error is never actually returned.
-    pub fn new() -> Result<DeviceCpu<U>,DeviceError> {
+    pub fn new() -> Result<DeviceCpu<U>,Infallible> {
         Ok(DeviceCpu {
             u: PhantomData::<U>
         })
@@ -106,9 +119,11 @@ impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     }
 }
 /// cublas context
+#[cfg(feature = "cuda")]
 pub struct CublasContext {
     raw:Rc<Context>
 }
+#[cfg(feature = "cuda")]
 impl CublasContext {
     /// Create an instance of CublasContext
     /// # Arguments
@@ -142,6 +157,7 @@ impl CublasContext {
         self.raw.pointer_mode()
     }
 }
+#[cfg(feature = "cuda")]
 impl Clone for CublasContext {
     fn clone(&self) -> Self {
         CublasContext {
@@ -150,9 +166,11 @@ impl Clone for CublasContext {
     }
 }
 /// cudnn context
+#[cfg(feature = "cuda")]
 pub struct CudnnContext {
     raw:Rc<Cudnn>
 }
+#[cfg(feature = "cuda")]
 impl CudnnContext {
     /// Create an instance of CudnnContext
     ///
@@ -173,6 +191,7 @@ impl CudnnContext {
         self.raw.id_c()
     }
 }
+#[cfg(feature = "cuda")]
 impl Clone for CudnnContext {
     fn clone(&self) -> Self {
         CudnnContext {
@@ -181,6 +200,7 @@ impl Clone for CudnnContext {
     }
 }
 /// Implementation of Device to be computed by GPU
+#[cfg(feature = "cuda")]
 pub struct DeviceGpu<U,A> where A: CudaAllocator {
     u:PhantomData<U>,
     cublas:CublasContext,
@@ -188,6 +208,7 @@ pub struct DeviceGpu<U,A> where A: CudaAllocator {
     /// Memory pool for cuda memory allocation
     allocator:A
 }
+#[cfg(feature = "cuda")]
 impl<U,A> DeviceGpu<U,A> where U: UnitValue<U>, A: CudaAllocator {
     /// Create an instance of DeviceGpu
     /// # Arguments
@@ -219,17 +240,22 @@ impl<U,A> DeviceGpu<U,A> where U: UnitValue<U>, A: CudaAllocator {
         &self.cudnn
     }
 }
+/// A trait defining the implementation of a memory allocator for CUDA
+#[cfg(feature = "cuda")]
 pub trait DeviceAllocator<A: CudaAllocator> {
     /// Returns the memory pool object owned by itself
     fn get_allocator(&self) -> &A;
 }
+#[cfg(feature = "cuda")]
 impl<U,A> DeviceAllocator<A> for DeviceGpu<U,A> where A: CudaAllocator {
     fn get_allocator(&self) -> &A {
         &self.allocator
     }
 }
+#[cfg(feature = "cuda")]
 impl<A: CudaAllocator> Device<f32> for DeviceGpu<f32,A> {
 }
+#[cfg(feature = "cuda")]
 impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceGpu<U,A>
     where U: UnitValue<U> + DataTypeInfo,
           T: BatchSize,
@@ -250,6 +276,7 @@ impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceG
         Ok(args.output)
     }
 }
+#[cfg(feature = "cuda")]
 impl<T,A> DeviceBatchAveraging<T,f32> for DeviceGpu<f32,A>
     where A: CudaAllocator,
           T: MemorySize + AsCudaMutPtr<Pointee=f32,Allocator=A> {
@@ -294,6 +321,7 @@ impl<T,A> DeviceBatchAveraging<T,f32> for DeviceGpu<f32,A>
 
     }
 }
+#[cfg(feature = "cuda")]
 impl<T,A> DeviceBatchAveraging<T,f64> for DeviceGpu<f64,A>
     where A: CudaAllocator,
           T: MemorySize + AsCudaMutPtr<Pointee=f64,Allocator=A> {
@@ -337,8 +365,10 @@ impl<T,A> DeviceBatchAveraging<T,f64> for DeviceGpu<f64,A>
         }
     }
 }
+#[cfg(feature = "cuda")]
 impl<A: CudaAllocator> Device<f64> for DeviceGpu<f64,A> {
 }
+#[cfg(feature = "cuda")]
 impl<U,A> Clone for DeviceGpu<U,A> where U: UnitValue<U> + Debug, A: CudaAllocator {
     fn clone(&self) -> Self {
         DeviceGpu {

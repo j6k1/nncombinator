@@ -16,6 +16,7 @@ use crate::error::{CudaError, CudaRuntimeError, SizeMismatchError, TypeConvertEr
 use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
+use crate::bridge::ToHost;
 
 pub mod ffi;
 pub mod mem;
@@ -2209,17 +2210,6 @@ pub trait ToCuda<T,A> where T: UnitValue<T>, A: CudaAllocator {
     /// * [`TypeConvertError`]
     ///
     fn to_cuda(self,device:&DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError>;
-}
-/// Trait for inverse conversion of value to host memory type
-pub trait ToHost<T> where T: Default + Clone + Send {
-    type Output;
-
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`TypeConvertError`]
-    ///
-    fn to_host(self) -> Result<Self::Output,TypeConvertError>;
 }
 impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a CudaTensor1dPtr<T,A,N>
     where T :UnitValue<T>,

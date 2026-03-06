@@ -5,8 +5,11 @@ use crate::device::{Device, DeviceCpu};
 use crate::error::{TypeConvertError};
 use crate::layer::BatchDataType;
 use crate::ope::UnitValue;
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::{ToCuda};
+#[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu};
 
 /// Trait that defines the function of processing data input in the input layer
@@ -56,6 +59,7 @@ impl<U,I> DeviceInput<U,I> for DeviceCpu<U>
         Ok(input)
     }
 }
+#[cfg(feature = "cuda")]
 
 impl<U,I,A> DeviceInput<U,I> for DeviceGpu<U,A>
     where U: UnitValue<U>,

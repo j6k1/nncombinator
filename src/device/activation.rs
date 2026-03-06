@@ -6,8 +6,11 @@ use crate::layer::BatchDataType;
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::device::{Device, DeviceCpu};
+#[cfg(feature = "cuda")]
 use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView};
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu};
 
 /// Trait that defines the implementation of various calculation processes in the activation layer
@@ -100,6 +103,7 @@ impl<'a,U,I,A,const N:usize> DeviceActivation<U,I,A,N> for DeviceCpu<U>
         f.is_canonical_link(l)
     }
 }
+#[cfg(feature = "cuda")]
 impl<'a,U,I,A,AC,const N:usize> DeviceActivation<U,I,A,N> for DeviceGpu<U,AC>
     where U: UnitValue<U>,
           AC: CudaAllocator,

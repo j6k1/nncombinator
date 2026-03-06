@@ -659,22 +659,29 @@ impl From<rcublas::Error> for CudaError {
 }
 /// Errors that occur in processes implemented in objects that implement Device Traits
 #[derive(Debug)]
-#[cfg(feature = "cuda")]
 pub enum DeviceError {
     /// Error in cuda processing
+    #[cfg(feature = "cuda")]
     CudaError(CudaError),
     /// Error in cublas processing
+    #[cfg(feature = "cuda")]
     CublasError(rcublas::error::Error),
     /// Error in cudnn processing
+    #[cfg(feature = "cuda")]
     CudnnError(rcudnn::Error),
+    Fail
 }
 #[cfg(feature = "cuda")]
 impl fmt::Display for DeviceError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            #[cfg(feature = "cuda")]
             DeviceError::CudaError(e) => write!(f, "An error occurred in the process of cuda. ({})", e),
+            #[cfg(feature = "cuda")]
             DeviceError::CublasError(e) => write!(f, "An error occurred during the execution of a process in cublas. ({})", e),
+            #[cfg(feature = "cuda")]
             DeviceError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
+            DeviceError::Fail => write!(f, "An error occurred in create device process."),
         }
     }
 }
@@ -682,17 +689,25 @@ impl fmt::Display for DeviceError {
 impl error::Error for DeviceError {
     fn description(&self) -> &str {
         match self {
+            #[cfg(feature = "cuda")]
             DeviceError::CudaError(_) => "Asn error occurred in the process of cuda.",
+            #[cfg(feature = "cuda")]
             DeviceError::CublasError(_) => "An error occurred during the execution of a process in cublas.",
+            #[cfg(feature = "cuda")]
             DeviceError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            DeviceError::Fail => "An error occurred in create device process.",
         }
     }
 
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
+            #[cfg(feature = "cuda")]
             DeviceError::CudaError(e) => Some(e),
+            #[cfg(feature = "cuda")]
             DeviceError::CublasError(e) => Some(e),
+            #[cfg(feature = "cuda")]
             DeviceError::CudnnError(e) => Some(e),
+            DeviceError::Fail => None,
         }
     }
 }

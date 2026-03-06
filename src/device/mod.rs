@@ -6,7 +6,6 @@ pub mod activation;
 pub mod output;
 pub mod input;
 
-use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::fmt::Debug;
 use num_traits::FromPrimitive;
@@ -28,6 +27,7 @@ use crate::error::{TrainingError, TypeConvertError};
 use crate::error::EvaluateError::TypeCastError;
 use crate::mem::AsRawSlice;
 use crate::UnitValue;
+use crate::error::{DeviceError};
 #[cfg(feature = "cuda")]
 use crate::layer::BatchSize;
 #[cfg(feature = "cuda")]
@@ -36,8 +36,6 @@ use crate::cuda::{AsCudaMutPtr, AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaT
 use crate::cuda::allocator::CudaAllocator;
 #[cfg(feature = "cuda")]
 use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
-#[cfg(feature = "cuda")]
-use crate::error::{DeviceError};
 
 /// Trait that defines devices responsible for various computational processes of neural networks
 pub trait Device<U>: Clone where U: UnitValue<U> {
@@ -75,7 +73,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
     /// note: For the sake of implementation uniformity,
     /// DeviceCpu::new is defined as if it may return a DeviceError of type Result,
     /// but this error is never actually returned.
-    pub fn new() -> Result<DeviceCpu<U>,Infallible> {
+    pub fn new() -> Result<DeviceCpu<U>,DeviceError> {
         Ok(DeviceCpu {
             u: PhantomData::<U>
         })

@@ -458,6 +458,32 @@ impl<T,const N1:usize, const N2:usize> IndexMut<(usize,usize)> for Arr2<T,N1,N2>
         &mut self.arr[y * N2 + x]
     }
 }
+impl<T,const N1:usize, const N2:usize> Index<usize> for Arr2<T,N1,N2> where T: Default {
+    type Output = [T];
+
+    #[inline]
+    fn index(&self, index:usize) -> &Self::Output {
+        if index >= N1 {
+            panic!("index out of bounds: the len is {} but the index is {}",N1,index);
+        }
+
+        let offset = index * N2;
+
+        &self.arr[offset..(offset + N2)]
+    }
+}
+impl<T,const N1:usize, const N2:usize> IndexMut<usize> for Arr2<T,N1,N2> where T: Default {
+    #[inline]
+    fn index_mut(&mut self, index:usize) -> &mut Self::Output {
+        if index >= N1 {
+            panic!("index out of bounds: the len is {} but the index is {}",N1,index);
+        }
+
+        let offset = index * N2;
+
+        &mut self.arr[offset..(offset + N2)]
+    }
+}
 impl<'a,T,const N1:usize, const N2: usize> AsRawSlice<T> for Arr2<T,N1,N2> where T: Default + Clone + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr

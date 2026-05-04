@@ -185,7 +185,7 @@ impl<U> Scheduler<U> for CosineAnnealingLR<U> where U: UnitValue<U> {
         Ok(self.eta_min + (lr - self.eta_min) * (
             (U::one() +
                 (
-                    (U::try_from_usize(step)? + U::one()) * U::from_f64(PI).unwrap() /
+                    (U::try_from_usize(step)? + U::one()) * U::try_from_f64(PI)? /
                      U::try_from_usize(self.total_steps)?
                 ).cos()
             ) /

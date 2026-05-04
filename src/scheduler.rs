@@ -3,7 +3,7 @@
 use std::f64::consts::PI;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use crate::error::EvaluateError::TypeCastError;
+use try_from_primitive::TryFromPrimitive;
 use crate::error::TrainingError;
 use crate::ope::UnitValue;
 
@@ -134,15 +134,11 @@ impl<U> LinearWarmupLR<U> where U: UnitValue<U> {
         }
     }
 }
-impl<U> Scheduler<U> for LinearWarmupLR<U> where U: UnitValue<U> {
+impl<U> Scheduler<U> for LinearWarmupLR<U> where U: UnitValue<U> + TryFromPrimitive {
     fn schedule(&mut self, _: U, step: usize) -> Result<U,TrainingError> {
         Ok(if step < self.warmup_steps {
             self.base_lr * (self.start_factor + (U::one() - self.start_factor) *
-                (U::from_f64(step as f64).ok_or(TypeCastError(
-                    String::from("An error occurred during type conversion to floating-point type.")
-                ))? / U::from_f64(self.warmup_steps as f64).ok_or(TypeCastError(
-                    String::from("An error occurred during type conversion to floating-point type.")
-                ))?)
+                (U::try_from_f64(step as f64)? / U::try_from_f64(self.warmup_steps as f64)?)
             )
         } else {
             self.base_lr
@@ -189,14 +185,14 @@ impl<U> Scheduler<U> for CosineAnnealingLR<U> where U: UnitValue<U> {
         Ok(self.eta_min + (lr - self.eta_min) * (
             (U::one() +
                 (
-                    (U::from_usize(step).unwrap() + U::one()) * U::from_f64(PI).unwrap() /
-                     U::from_usize(self.total_steps).unwrap()
+                    (U::try_from_usize(step)? + U::one()) * U::from_f64(PI).unwrap() /
+                     U::try_from_usize(self.total_steps)?
                 ).cos()
             ) /
             (U::one() +
                 (
-                    U::from_usize(step).unwrap() * U::from_f64(PI).unwrap() /
-                    U::from_usize(self.total_steps).unwrap()
+                    U::try_from_usize(step)? * U::try_from_f64(PI)? /
+                    U::try_from_usize(self.total_steps)?
                 ).cos()
             )
         ))

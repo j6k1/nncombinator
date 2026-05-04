@@ -1,6 +1,7 @@
 //! nncombinator is a neural network library that allows type-safe implementation.
 
 extern crate libc;
+extern crate try_from_primitive;
 #[cfg(feature = "cuda")]
 extern crate cuda_runtime_sys;
 #[cfg(feature = "cuda")]

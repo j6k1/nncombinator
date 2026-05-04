@@ -9,6 +9,7 @@ use std::fmt::{Debug};
 use std::num::ParseFloatError;
 #[cfg(feature = "cuda")]
 use cuda_runtime_sys::cudaError_t;
+use try_from_primitive::error::FromPrimitiveError;
 
 /// Errors made during neural network training
 #[derive(Debug)]
@@ -49,7 +50,9 @@ pub enum TrainingError {
     /// Error generated when type conversion fails
     TypeConvertError(TypeConvertError),
     /// Error raised if cast to fixed-length array fails
-    TryFromSliceError(TryFromSliceError)
+    TryFromSliceError(TryFromSliceError),
+    /// Error raised when the value is not a valid primitive type.
+    FromPrimitiveError(FromPrimitiveError)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -72,7 +75,8 @@ impl fmt::Display for TrainingError {
             TrainingError::UnsupportedOperationError(e) => write!(f,"unsupported operation. ({})",e),
             TrainingError::TypeCastError(s) => write!(f,"{}",s),
             TrainingError::TypeConvertError(e) => write!(f,"{}",e),
-            TrainingError::TryFromSliceError(e) => write!(f,"{}",e)
+            TrainingError::TryFromSliceError(e) => write!(f,"{}",e),
+            TrainingError::FromPrimitiveError(e) => write!(f,"{}",e),
         }
     }
 }
@@ -98,6 +102,7 @@ impl error::Error for TrainingError {
             TrainingError::TypeCastError(_) => "Typecast failed.",
             TrainingError::TypeConvertError(_) => "Type convert failed.",
             TrainingError::TryFromSliceError(_) => "Conversion to fixed-length array failed.",
+            TrainingError::FromPrimitiveError(_) => "Conversion from primitive type failed.",
         }
     }
 
@@ -121,7 +126,8 @@ impl error::Error for TrainingError {
             TrainingError::UnsupportedOperationError(e) => Some(e),
             TrainingError::TypeCastError(_) => None,
             TrainingError::TypeConvertError(e) => Some(e),
-            TrainingError::TryFromSliceError(e) => Some(e)
+            TrainingError::TryFromSliceError(e) => Some(e),
+            TrainingError::FromPrimitiveError(e) => Some(e),
         }
     }
 }
@@ -248,6 +254,11 @@ impl From<SpecializationError> for ModelLoadError {
 impl From<TryFromSliceError> for TrainingError {
     fn from(err: TryFromSliceError) -> TrainingError {
         TrainingError::TryFromSliceError(err)
+    }
+}
+impl From<FromPrimitiveError> for TrainingError {
+    fn from(err: FromPrimitiveError) -> TrainingError {
+        TrainingError::FromPrimitiveError(err)
     }
 }
 /// Error generating fixed-length collections from collections of different sizes

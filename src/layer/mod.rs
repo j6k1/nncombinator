@@ -367,7 +367,7 @@ pub trait TryAddLayer: ForwardAll where Self: Sized {
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`E`]
+    /// * `E`
     fn try_add_layer<C,F,E>(self,f:F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E>;
 }
 impl<T> TryAddLayer for T where T: ForwardAll + Sized {

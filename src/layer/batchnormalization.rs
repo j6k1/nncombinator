@@ -11,7 +11,7 @@ use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchFor
 use crate::lossfunction::LossFunction;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, UnitOrMarker};
 
 /// Structure that holds information related to mean and variance calculated during forward propagation during learning.
 #[derive(Debug)]

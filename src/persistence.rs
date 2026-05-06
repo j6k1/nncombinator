@@ -8,7 +8,6 @@ use std::path::Path;
 use std::str::FromStr;
 use crate::error::*;
 
-/// Trait Defining Data Persistence
 pub trait Persistence<U,P,K> where K: PersistenceType {
     /// Load Model
     /// # Arguments
@@ -47,6 +46,16 @@ pub trait SaveToFile<U> {
     /// * [`io::Error`]
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error>;
 }
+/// A trait that verifies that a read operation on the persistence layer has reached EOF
+pub trait VerifyEof {
+    /// Has the read position of the persisted information reached EOF?
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ModelLoadError`]
+    fn verify_eof(&mut self) -> Result<(), ModelLoadError>;
+}
 /// Trait to define an implementation to persist the model in a flat data structure
 pub trait LinearPersistence<U> {
     /// Read to restore the persisted model
@@ -65,13 +74,6 @@ pub trait LinearPersistence<U> {
     /// This function may return the following errors
     /// * [`PersistenceError`]
     fn write(&mut self, u:U) -> Result<(), PersistenceError>;
-    /// Has the read position of the persisted information reached EOF?
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`ModelLoadError`]
-    fn verify_eof(&mut self) -> Result<(), ModelLoadError>;
 }
 /// Types for passing identifiable information about layers and unit boundaries when persisting models
 pub enum UnitOrMarker<U> {
@@ -81,6 +83,25 @@ pub enum UnitOrMarker<U> {
     LayerStart,
     /// boundary
     UnitsStart
+}
+/// A feature that defines an implementation for persisting a model to a text-based data structure
+pub trait TextPersistence<U> {
+    /// Read to restore the persisted model
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ModelLoadError`]
+    fn read(&mut self) -> Result<U, ModelLoadError>;
+    /// Write to persist model information
+    /// # Arguments
+    /// * `u` - Weight value
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`PersistenceError`]
+    fn write(&mut self, u:UnitOrMarker<U>);
 }
 /// Persistent object for saving to a text file
 pub struct TextFilePersistence<U> where U: FromStr + Sized {
@@ -180,14 +201,18 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
 
         Ok(t)
     }
-
-    /// Has the read position of the persisted information reached EOF?
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`ModelLoadError`]
-    pub fn verify_eof(&mut self) -> Result<(), ModelLoadError> {
+}
+impl<U> TextPersistence<U> for TextFilePersistence<U> where U: FromStr + Sized, ModelLoadError: From<<U as FromStr>::Err>
+{
+    fn read(&mut self) -> Result<U, ModelLoadError> {
+        Ok(self.next_token()?.parse::<U>()?)
+    }
+    fn write(&mut self, v: UnitOrMarker<U>) {
+        self.data.push(v);
+    }
+}
+impl<U> VerifyEof for TextFilePersistence<U> where U: FromStr + Sized, ModelLoadError: From<<U as FromStr>::Err> {
+    fn verify_eof(&mut self) -> Result<(), ModelLoadError> {
         match self.reader {
             Some(ref mut reader) => {
                 let mut buf = String::new();
@@ -214,25 +239,6 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
                     "File does not exist yet.")))
             }
         }
-    }
-}
-impl<U> TextFilePersistence<U> where U: FromStr + Sized, ModelLoadError: From<<U as FromStr>::Err> {
-    /// Read the weight values from a file
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`ModelLoadError`]
-    pub fn read(&mut self) -> Result<U, ModelLoadError> {
-        Ok(self.next_token()?.parse::<U>()?)
-    }
-}
-impl<U> TextFilePersistence<U> where U: FromStr + Sized {
-    /// Layer weights are added to the end of the internal buffer
-    /// # Arguments
-    /// * `v` - Weight value
-    pub fn write(&mut self,v:UnitOrMarker<U>) {
-        self.data.push(v);
     }
 }
 impl<U> SaveToFile<U> for TextFilePersistence<U> where U: FromStr + Sized + Display {
@@ -315,26 +321,6 @@ impl LinearPersistence<f64> for BinFilePersistence<f64> {
         self.data.push(u);
         Ok(())
     }
-
-    fn verify_eof(&mut self) -> Result<(), ModelLoadError> {
-        match self.reader {
-            Some(ref mut reader) => {
-                let mut buf: [u8; 1] = [0];
-
-                let n = reader.read(&mut buf)?;
-
-                if n == 0 {
-                    Ok(())
-                } else {
-                    Err(ModelLoadError::InvalidState(String::from("Data loaded , but the input has not reached the end.")))
-                }
-            },
-            None => {
-                Err(ModelLoadError::InvalidState(String::from(
-                    "File does not exist yet.")))
-            }
-        }
-    }
 }
 impl LinearPersistence<f32> for BinFilePersistence<f32> {
     fn read(&mut self) -> Result<f32, ModelLoadError> {
@@ -362,7 +348,8 @@ impl LinearPersistence<f32> for BinFilePersistence<f32> {
         self.data.push(u);
         Ok(())
     }
-
+}
+impl<U> VerifyEof for BinFilePersistence<U> {
     fn verify_eof(&mut self) -> Result<(), ModelLoadError> {
         match self.reader {
             Some(ref mut reader) => {

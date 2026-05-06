@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use crate::device::*;
 use crate::{Stack};
-use crate::error::{EvaluateError, TrainingError};
+use crate::error::{EvaluateError, ModelLoadError, PersistenceError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 #[cfg(feature = "cuda")]
@@ -12,6 +12,7 @@ use crate::error::{TypeConvertError};
 use crate::cuda::allocator::CudaAllocator;
 #[cfg(feature = "cuda")]
 use crate::cuda::ToCuda;
+use crate::persistence::PersistenceType;
 
 pub mod input;
 pub mod output;
@@ -377,6 +378,27 @@ pub trait OnStep {
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn on_step(&mut self, step:usize) -> Result<(), TrainingError>;
+}
+/// Trait that define the persistence of learning progress data
+pub trait PersistProgress<P,K> where K: PersistenceType {
+    /// Load train progress data
+    /// # Arguments
+    /// * `persistence` - train progress persistent object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ModelLoadError`]
+    fn load_progress(&mut self, persistence:&mut P) -> Result<(), ModelLoadError>;
+    /// Save train progress data
+    /// # Arguments
+    /// * `persistence` - train progress persistent object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`PersistenceError`]
+    fn save_progress(&mut self, persistence:&mut P) -> Result<(), PersistenceError>;
 }
 /// Trait that defines the ability to add layers to a neural network.
 pub trait AddLayer: ForwardAll where Self: Sized {

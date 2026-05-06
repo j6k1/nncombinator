@@ -6,7 +6,7 @@ use crate::{Cons, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PersistProgress, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -171,6 +171,26 @@ impl<U,O,LI,D> OnStep for InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<
         Ok(())
     }
 }
+impl<U,O,LI,D> PersistProgress<TextFilePersistence<U>,Specialized> for InputLayer<U,O,LI,D>
+    where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
+    fn load_progress(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+        Ok(())
+    }
+
+    fn save_progress(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+impl<T,U,O,LI,D> PersistProgress<T,Linear> for InputLayer<U,O,LI,D>
+    where T: LinearPersistence<U>, U: UnitValue<U>, D: Device<U> {
+    fn load_progress(&mut self, _: &mut T) -> Result<(), ModelLoadError> {
+        Ok(())
+    }
+
+    fn save_progress(&mut self, _: &mut T) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
 pub struct DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
     o:PhantomData<O>,
@@ -313,6 +333,26 @@ impl<U,O,DI,PO,LI,D> Loss<U> for DiffInputLayer<U,O,DI,PO,LI,D>
           <O as BatchDataType>::Type: Debug + 'static {}
 impl<U,O,DI,PO,LI,D> OnStep for DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: Device<U> {
     fn on_step(&mut self, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+}
+impl<U,O,DI,PO,LI,D> PersistProgress<TextFilePersistence<U>,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
+    fn load_progress(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+        Ok(())
+    }
+
+    fn save_progress(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+impl<T,U,O,DI,PO,LI,D> PersistProgress<T,Linear> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where T: LinearPersistence<U>, U: UnitValue<U>, D: Device<U> {
+    fn load_progress(&mut self, _: &mut T) -> Result<(), ModelLoadError> {
+        Ok(())
+    }
+
+    fn save_progress(&mut self, _: &mut T) -> Result<(), PersistenceError> {
         Ok(())
     }
 }

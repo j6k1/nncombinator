@@ -18,7 +18,7 @@ use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, AdamWArgs, MomentumS
 use crate::cuda::ReadMemory;
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, UnitOrMarker};
 
 /// OptimizerBuilder Definition
 pub trait OptimizerBuilder<U,D> where U: UnitValue<U>, D: Device<U> {

@@ -8,10 +8,10 @@ use crate::bridge::ToHost;
 use crate::device::{Device};
 use crate::device::output::DeviceLinearOutput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PreTrain, Step, Train, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PersistProgress, PreTrain, Step, Train, UpdateWeight};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, UnitOrMarker, VerifyEof};
 
 /// Layer implementation of the output layer (linear layer)
 pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>
@@ -56,11 +56,13 @@ impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
 }
 impl<U,P,D,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
+             PreTrain<U,PreOutput=PI> + Loss<U> +
+             Persistence<U,TextFilePersistence<U>,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
           D: Device<U>,
           PI: Debug + 'static,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync,
+          TextFilePersistence<U>: VerifyEof {
     fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
         persistence.verify_eof()
@@ -71,7 +73,7 @@ impl<U,P,D,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized>
     }
 }
 impl<T,U,P,D,I,PI,const N:usize> Persistence<U,T,Linear> for LinearOutputLayer<U,P,D,I,PI,N>
-    where T: LinearPersistence<U>,
+    where T: LinearPersistence<U> + VerifyEof,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U> + Persistence<U,T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
@@ -371,5 +373,51 @@ impl<U,P,D,I,PI,const N:usize> Step for LinearOutputLayer<U,P,D,I,PI,N>
         self.step_count += 1;
 
         Ok(self.parent.on_step(self.step_count)?)
+    }
+}
+impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Specialized> for LinearOutputLayer<U,P,D,I,PI,N>
+    where T: TextPersistence<usize> + TextPersistence<U> + VerifyEof,
+          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<U,PreOutput=PI> + Loss<U> +
+             PersistProgress<T,Specialized>,
+          U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
+          D: Device<U>,
+          PI: Debug + 'static,
+          I: Debug + Send + Sync {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(),ModelLoadError> {
+        self.parent.load_progress(persistence)?;
+        self.step_count = persistence.read()?;
+
+        persistence.verify_eof()
+    }
+
+    fn save_progress(&mut self, persistence: &mut T) -> Result<(),PersistenceError> {
+        self.parent.save_progress(persistence)?;
+        persistence.write(UnitOrMarker::Unit(self.step_count));
+        Ok(())
+    }
+}
+impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer<U,P,D,I,PI,N>
+    where T: LinearPersistence<usize> + LinearPersistence<U> + VerifyEof,
+          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<U,PreOutput=PI> + Loss<U> +
+             Persistence<U,T,Linear> +
+             PersistProgress<T,Linear>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + 'static,
+          I: Debug + Send + Sync {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
+        self.parent.load_progress(persistence)?;
+        self.step_count = persistence.read()?;
+
+        persistence.verify_eof()
+    }
+
+    fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)?;
+        persistence.write(self.step_count)?;
+
+        Ok(())
     }
 }

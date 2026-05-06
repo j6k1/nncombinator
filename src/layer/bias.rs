@@ -12,7 +12,7 @@ use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchFor
 use crate::lossfunction::LossFunction;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, UnitOrMarker};
 
 /// Trait for BiasLayer instance creation
 pub trait BiasLayerInstantiation<U,C,P,OP,D,I,PI,const N:usize>

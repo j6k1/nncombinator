@@ -375,18 +375,20 @@ impl<U,P,D,I,PI,const N:usize> Step for LinearOutputLayer<U,P,D,I,PI,N>
         Ok(self.parent.on_step(self.step_count)?)
     }
 }
-impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Specialized> for LinearOutputLayer<U,P,D,I,PI,N>
-    where T: TextPersistence<usize> + TextPersistence<U> + VerifyEof,
-          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+impl<U,P,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> for LinearOutputLayer<U,P,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U> +
-             PersistProgress<T,Specialized> + OnStep,
+             PersistProgress<TextFilePersistence,Specialized> + OnStep,
           U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
           D: Device<U>,
           PI: Debug + 'static,
-          I: Debug + Send + Sync {
-    fn load_progress(&mut self, persistence: &mut T) -> Result<(),TrainingError> {
+          I: Debug + Send + Sync,
+          TextFilePersistence: TextPersistence<u64> + TextPersistence<U> + VerifyEof,
+          ModelLoadError: From<<U as FromStr>::Err> + From<<u64 as FromStr>::Err> {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(),TrainingError> {
         self.parent.load_progress(persistence)?;
-        self.step_count = persistence.read()?;
+        let step_count:u64 = persistence.read()?;
+        self.step_count = step_count as usize;
 
         for _ in 0..self.step_count {
             self.step()?;
@@ -395,14 +397,14 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Specialized> for LinearOutput
         Ok(persistence.verify_eof()?)
     }
 
-    fn save_progress(&mut self, persistence: &mut T) -> Result<(),PersistenceError> {
+    fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(),PersistenceError> {
         self.parent.save_progress(persistence)?;
-        persistence.write(UnitOrMarker::Unit(self.step_count));
+        persistence.write(UnitOrMarker::Unit(self.step_count as u64));
         Ok(())
     }
 }
 impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer<U,P,D,I,PI,N>
-    where T: LinearPersistence<usize> + LinearPersistence<U> + VerifyEof,
+    where T: LinearPersistence<u64> + LinearPersistence<U> + VerifyEof,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U> +
              Persistence<U,T,Linear> +
@@ -413,7 +415,9 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer
           I: Debug + Send + Sync {
     fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
-        self.step_count = persistence.read()?;
+        let step_count:u64 = persistence.read()?;
+
+        self.step_count = step_count as usize;
 
         for _ in 0..self.step_count {
             self.step()?;
@@ -424,7 +428,7 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer
 
     fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         self.parent.save_progress(persistence)?;
-        persistence.write(self.step_count)?;
+        persistence.write(self.step_count as u64)?;
 
         Ok(())
     }

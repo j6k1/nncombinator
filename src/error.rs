@@ -6,7 +6,7 @@ use std::ffi::CStr;
 #[cfg(feature = "cuda")]
 use std::fmt::{Formatter};
 use std::fmt::{Debug};
-use std::num::ParseFloatError;
+use std::num::{ParseFloatError, ParseIntError};
 #[cfg(feature = "cuda")]
 use cuda_runtime_sys::cudaError_t;
 use try_from_primitive::error::FromPrimitiveError;
@@ -145,6 +145,8 @@ pub enum ModelLoadError {
     InvalidState(String),
     /// Error when trying to parse a numeric string into numbers
     ParseFloatError(ParseFloatError),
+    /// Error when trying to parse a numeric string into integers
+    ParseIntError(ParseIntError),
     /// Error in cudnn processing
     #[cfg(feature = "cuda")]
     CudnnError(rcudnn::Error),
@@ -157,6 +159,7 @@ impl fmt::Display for ModelLoadError {
             ModelLoadError::IOError(_) => write!(f, "Error occurred in file I/O."),
             ModelLoadError::InvalidState(ref s) => write!(f, "Configuration is invalid. ({})", s),
             ModelLoadError::ParseFloatError(_) => write!(f, "An error occurred when converting a string to a double value."),
+            ModelLoadError::ParseIntError(_) => write!(f, "An error occurred when converting a string to an integer value."),
             #[cfg(feature = "cuda")]
             ModelLoadError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
             ModelLoadError::SpecializationError(e) => write!(f, "An error occurred during specialization. ({})", e),
@@ -169,6 +172,7 @@ impl error::Error for ModelLoadError {
             ModelLoadError::IOError(_) => "Error occurred in file I/O.",
             ModelLoadError::InvalidState(_) => "Configuration is invalid.",
             ModelLoadError::ParseFloatError(_) => "An error occurred when converting a string to a double value.",
+            ModelLoadError::ParseIntError(_) => "An error occurred when converting a string to an integer value.",
             #[cfg(feature = "cuda")]
             ModelLoadError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
             ModelLoadError::SpecializationError(_) => "An error occurred during specialization."
@@ -180,6 +184,7 @@ impl error::Error for ModelLoadError {
             ModelLoadError::IOError(ref e) => Some(e),
             ModelLoadError::InvalidState(_) => None,
             ModelLoadError::ParseFloatError(ref e) => Some(e),
+            ModelLoadError::ParseIntError(ref e) => Some(e),
             #[cfg(feature = "cuda")]
             ModelLoadError::CudnnError(ref e) => Some(e),
             ModelLoadError::SpecializationError(ref e) => Some(e)
@@ -248,6 +253,11 @@ impl From<io::Error> for ModelLoadError {
 impl From<ParseFloatError> for ModelLoadError {
     fn from(err: ParseFloatError) -> ModelLoadError {
         ModelLoadError::ParseFloatError(err)
+    }
+}
+impl From<ParseIntError> for ModelLoadError {
+    fn from(err: ParseIntError) -> ModelLoadError {
+        ModelLoadError::ParseIntError(err)
     }
 }
 #[cfg(feature = "cuda")]

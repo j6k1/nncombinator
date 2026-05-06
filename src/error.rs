@@ -52,7 +52,9 @@ pub enum TrainingError {
     /// Error raised if cast to fixed-length array fails
     TryFromSliceError(TryFromSliceError),
     /// Error raised when the value is not a valid primitive type.
-    FromPrimitiveError(FromPrimitiveError)
+    FromPrimitiveError(FromPrimitiveError),
+    /// Error when reading model
+    ModelLoadError(ModelLoadError)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -77,6 +79,7 @@ impl fmt::Display for TrainingError {
             TrainingError::TypeConvertError(e) => write!(f,"{}",e),
             TrainingError::TryFromSliceError(e) => write!(f,"{}",e),
             TrainingError::FromPrimitiveError(e) => write!(f,"{}",e),
+            TrainingError::ModelLoadError(e) => write!(f,"{}",e),
         }
     }
 }
@@ -103,6 +106,7 @@ impl error::Error for TrainingError {
             TrainingError::TypeConvertError(_) => "Type convert failed.",
             TrainingError::TryFromSliceError(_) => "Conversion to fixed-length array failed.",
             TrainingError::FromPrimitiveError(_) => "Conversion from primitive type failed.",
+            TrainingError::ModelLoadError(_) => "An error occurred when loading the model.",
         }
     }
 
@@ -128,10 +132,11 @@ impl error::Error for TrainingError {
             TrainingError::TypeConvertError(e) => Some(e),
             TrainingError::TryFromSliceError(e) => Some(e),
             TrainingError::FromPrimitiveError(e) => Some(e),
+            TrainingError::ModelLoadError(e) => Some(e),
         }
     }
 }
-/// Error when reading settings
+/// Error when reading model
 #[derive(Debug)]
 pub enum ModelLoadError {
     /// IO Error
@@ -228,6 +233,11 @@ impl From<InvalidStateError> for TrainingError {
 impl From<UnsupportedOperationError> for TrainingError {
     fn from(err: UnsupportedOperationError) -> TrainingError {
         TrainingError::UnsupportedOperationError(err)
+    }
+}
+impl From<ModelLoadError> for TrainingError {
+    fn from(err: ModelLoadError) -> TrainingError {
+        TrainingError::ModelLoadError(err)
     }
 }
 impl From<io::Error> for ModelLoadError {

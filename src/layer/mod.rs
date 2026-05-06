@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use crate::device::*;
 use crate::{Stack};
-use crate::error::{EvaluateError, ModelLoadError, PersistenceError, TrainingError};
+use crate::error::{EvaluateError, PersistenceError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
 #[cfg(feature = "cuda")]
@@ -389,7 +389,7 @@ pub trait PersistProgress<P,K> where K: PersistenceType {
     ///
     /// This function may return the following errors
     /// * [`ModelLoadError`]
-    fn load_progress(&mut self, persistence:&mut P) -> Result<(), ModelLoadError>;
+    fn load_progress(&mut self, persistence:&mut P) -> Result<(),TrainingError>;
     /// Save train progress data
     /// # Arguments
     /// * `persistence` - train progress persistent object

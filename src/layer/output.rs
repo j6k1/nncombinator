@@ -379,16 +379,20 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Specialized> for LinearOutput
     where T: TextPersistence<usize> + TextPersistence<U> + VerifyEof,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U> +
-             PersistProgress<T,Specialized>,
+             PersistProgress<T,Specialized> + OnStep,
           U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
           D: Device<U>,
           PI: Debug + 'static,
           I: Debug + Send + Sync {
-    fn load_progress(&mut self, persistence: &mut T) -> Result<(),ModelLoadError> {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(),TrainingError> {
         self.parent.load_progress(persistence)?;
         self.step_count = persistence.read()?;
 
-        persistence.verify_eof()
+        for _ in 0..self.step_count {
+            self.step()?;
+        }
+
+        Ok(persistence.verify_eof()?)
     }
 
     fn save_progress(&mut self, persistence: &mut T) -> Result<(),PersistenceError> {
@@ -402,16 +406,20 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U> +
              Persistence<U,T,Linear> +
-             PersistProgress<T,Linear>,
+             PersistProgress<T,Linear> + OnStep,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           PI: Debug + 'static,
           I: Debug + Send + Sync {
-    fn load_progress(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
         self.step_count = persistence.read()?;
 
-        persistence.verify_eof()
+        for _ in 0..self.step_count {
+            self.step()?;
+        }
+        
+        Ok(persistence.verify_eof()?)
     }
 
     fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {

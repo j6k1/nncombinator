@@ -555,7 +555,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFileP
       OP: Optimizer<U,D> + Persistence<U,TextFilePersistence<U>,Specialized>,
       D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
       ModelLoadError: From<<U as FromStr>::Err> {
-    fn load_progress(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
         self.unit_optimizer.load(persistence)?;
@@ -584,7 +584,7 @@ impl<T,U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<T,Linea
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D> + Persistence<U,T,Linear>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO> {
-    fn load_progress(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
         self.unit_optimizer.load(persistence)?;
@@ -1087,7 +1087,7 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<Tex
       OP: Optimizer<U,D> + Persistence<U,TextFilePersistence<U>,Specialized>,
       D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
       ModelLoadError: From<<U as FromStr>::Err> {
-    fn load_progress(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
         self.unit_optimizer.load(persistence)?;
@@ -1117,7 +1117,7 @@ impl<'a,T,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<T
           DI: Debug,
           OP: Optimizer<U,D> + Persistence<U,T,Linear>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO> {
-    fn load_progress(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
         self.unit_optimizer.load(persistence)?;

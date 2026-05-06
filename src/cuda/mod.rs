@@ -116,14 +116,19 @@ pub trait AsCudaPtr<'a> {
     fn as_cuda_ptr(&'a self) -> &'a Self::Pointer;
 }
 pub trait DeriveCudaConstPtr {}
+/// A trait that defines a clone of an object that may fail
 pub trait TryClone: Sized {
     type Error;
 
     fn try_clone(&self) -> Result<Self,Self::Error>;
 }
+/// Definition of a trait implementation
+/// that returns a view type referencing CUDA memory associated with a type
+/// that implements this trait
 pub trait CudaView<'a> {
     type Type: 'a;
 }
+/// A trait that defines a function to return a value of the corresponding CudaView type
 pub trait AsCudaView<'a>: CudaView<'a> {
     fn as_cuda_view(&self) -> Self::Type;
 }

@@ -217,17 +217,49 @@ pub trait PartialForward: ForwardAll {
     /// Forward Propagation Differential Output Information
     type DiffOutput: Debug;
 
+    /// Returns the intermediate result during forward propagation
+    /// # Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
     fn partial_forward(&self, input:Self::Input) -> Result<Self::PartialOutput, EvaluateError>;
+    /// Take a difference input as input and return the result of the forward propagation up to that point
+    /// # Arguments
+    /// * `input` - diff input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
     fn partial_forward_by_diff(&self, input:Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError>;
 }
 /// Implementation of a process performing forward propagation calculations from differential input values
 pub trait ForwardDiff: PartialForward {
+    /// Perform forward propagation using the diff input
+    /// # Arguments
+    /// * `input` - diff input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
     fn forward_diff(&self, input:Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError>;
 }
 /// Implementation of the process for performing forward propagation calculations from precomputed values
 pub trait ContinueForward: PartialForward {
     /// The data type of the result value when recalculating the overall result from the precomputed result
     type ConinueOutput;
+    /// Resume forward propagation using the precomputed output of this layer
+    /// # Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
     fn continue_forward(&self, input:&Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError>;
 }
 /// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.

@@ -10,9 +10,21 @@ use crate::ope::UnitValue;
 /// Trait that defines learning rate scheduler.
 pub trait Scheduler<U> where U: UnitValue<U> {
     /// Retrieve the adjusted learning rate
+    /// # Arguments
+    /// * `lr` - learning rate
+    /// * `step` - current training step
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
     fn schedule(&mut self, lr: U, step: usize) -> Result<U,TrainingError>;
 
     /// Returns a combined scheduler that executes two schedulers sequentially.
+    /// # Arguments
+    /// * `milestone` - Threshold for the number of steps before delegating processing to the next scheduler
+    /// * `next_scheduler` - Scheduler to be executed after the milestone
+    ///
     fn seq<NS>(self, milestone: usize, next_scheduler: NS) -> SequentialLR<U,Self,NS>
         where NS: Scheduler<U> + Clone + Sized + 'static,
               Self:  Clone + Sized + 'static {

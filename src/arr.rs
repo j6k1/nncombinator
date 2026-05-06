@@ -47,6 +47,7 @@ impl<'a,T> ShieldSlice<'a,T> {
         self.raw.iter_mut()
     }
 
+    /// Obtaining a mutable chunks
     pub fn as_chunks_mut<const N:usize>(&'a mut self) -> (&'a mut [[T;N]], &'a mut [T]) {
         self.raw.as_chunks_mut()
     }

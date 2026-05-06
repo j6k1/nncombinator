@@ -6,6 +6,7 @@ use crate::cuda::ffi;
 use crate::cuda::mem::{Alloctype, MemoryPool};
 use crate::error::CudaError;
 
+/// Trait Defining CUDA Memory Allocator
 pub trait CudaAllocator: Clone + Debug {
    /// Allocate memory from memory pool
     ///
@@ -28,6 +29,7 @@ pub trait CudaAllocator: Clone + Debug {
     /// * [`CudaError`]
     fn deallocate<T>(&self, ptr:*mut T) -> Result<(),CudaError>;
 }
+/// CUDA memory allocator that allocates device memory
 #[derive(Clone)]
 pub struct DeviceAllocator;
 impl DeviceAllocator  {
@@ -49,6 +51,7 @@ impl Debug for DeviceAllocator {
         write!(f,"DeviceAllocator")
     }
 }
+/// CUDA memory allocator that allocates host memory
 #[derive(Clone)]
 pub struct HostAllocator {
     flags:c_uint
@@ -74,10 +77,12 @@ impl Debug for HostAllocator {
         write!(f,"HostAllocator")
     }
 }
+/// A CUDA memory allocator that allocates memory from a custom memory pool
 pub struct MemoryPoolAllocator<A> {
     memory_pool:Arc<Mutex<MemoryPool>>,
     allocator:PhantomData<A>
 }
+/// The type of memory allocated by MemoryPoolAllocator. Allocate device memory.
 #[derive(Debug,Clone)]
 pub struct DeviceAlloc;
 
@@ -86,6 +91,7 @@ impl DeviceAlloc {
         DeviceAlloc
     }
 }
+/// The type of memory allocated by MemoryPoolAllocator. Allocate host memory.
 #[derive(Debug,Clone)]
 pub struct HostAlloc {
     flags:c_uint
@@ -97,9 +103,14 @@ impl HostAlloc {
         }
     }
 }
+/// A trait for instantiating MemoryPoolAllocator with different allocation types
 pub trait MemoryPoolAllocatorInstantiation<A> {
     fn new(_:A) -> Result<MemoryPoolAllocator<A>,CudaError>;
-
+    /// Create MemoryPoolAllocatorInstantiation
+    /// # Arguments
+    /// * `size` - Size of memory pool (bytes)
+    ///
+    ///
     fn with_size(size:usize, _:A) -> Result<MemoryPoolAllocator<A>,CudaError>;
 }
 impl MemoryPoolAllocatorInstantiation<DeviceAlloc> for MemoryPoolAllocator<DeviceAlloc> {

@@ -8,6 +8,7 @@ use std::path::Path;
 use std::str::FromStr;
 use crate::error::*;
 
+/// Trait Defining Data Persistence
 pub trait Persistence<U,P,K> where K: PersistenceType {
     /// Load Model
     /// # Arguments

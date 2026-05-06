@@ -35,7 +35,7 @@ impl PersistenceType for Specialized {}
 impl PersistenceType for Linear {}
 
 /// Trait that defines the implementation of the ability to save a model to a file
-pub trait SaveToFile<U> {
+pub trait SaveToFile {
     /// Save to File
     /// # Arguments
     /// * `file` - Destination path
@@ -84,6 +84,29 @@ pub enum UnitOrMarker<U> {
     /// boundary
     UnitsStart
 }
+/// Record type for saving models in text format
+pub enum TextRecord {
+    F32(f32),
+    F64(f64),
+    U64(u64),
+    LayerStart,
+    UnitsStart
+}
+impl From<f32> for TextRecord {
+    fn from(f:f32) -> Self {
+        TextRecord::F32(f)
+    }
+}
+impl From<f64> for TextRecord {
+    fn from(f:f64) -> Self {
+        TextRecord::F64(f)
+    }
+}
+impl From<u64> for TextRecord {
+    fn from(i:u64) -> Self {
+        TextRecord::U64(i)
+    }
+}
 /// A feature that defines an implementation for persisting a model to a text-based data structure
 pub trait TextPersistence<U> {
     /// Read to restore the persisted model
@@ -104,13 +127,13 @@ pub trait TextPersistence<U> {
     fn write(&mut self, u:UnitOrMarker<U>);
 }
 /// Persistent object for saving to a text file
-pub struct TextFilePersistence<U> where U: FromStr + Sized {
+pub struct TextFilePersistence {
     reader:Option<BufReader<File>>,
     line:Option<Vec<String>>,
     index:usize,
-    data:Vec<UnitOrMarker<U>>
+    data:Vec<TextRecord>
 }
-impl<U> TextFilePersistence<U> where U: FromStr + Sized {
+impl TextFilePersistence {
     /// Create an instance of TextFilePersistence
     /// # Arguments
     /// * `file` - File path to be persisted
@@ -119,7 +142,7 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
     ///
     /// This function may return the following errors
     /// * [`ModelLoadError`]
-    pub fn new<P: AsRef<Path>>(file:P) -> Result<TextFilePersistence<U>, ModelLoadError> {
+    pub fn new<P: AsRef<Path>>(file:P) -> Result<TextFilePersistence, ModelLoadError> {
         if file.as_ref().exists() {
             Ok(TextFilePersistence {
                 reader:Some(BufReader::new(OpenOptions::new().read(true).create(false).open(file)?)),
@@ -202,16 +225,29 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
         Ok(t)
     }
 }
-impl<U> TextPersistence<U> for TextFilePersistence<U> where U: FromStr + Sized, ModelLoadError: From<<U as FromStr>::Err>
+impl<U> TextPersistence<U> for TextFilePersistence
+    where U: FromStr + Sized,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err>
 {
     fn read(&mut self) -> Result<U, ModelLoadError> {
         Ok(self.next_token()?.parse::<U>()?)
     }
     fn write(&mut self, v: UnitOrMarker<U>) {
-        self.data.push(v);
+        match v {
+            UnitOrMarker::Unit(u) => {
+                self.data.push(u.into());
+            },
+            UnitOrMarker::LayerStart => {
+                self.data.push(TextRecord::LayerStart);
+            },
+            UnitOrMarker::UnitsStart => {
+                self.data.push(TextRecord::UnitsStart);
+            }
+        }
     }
 }
-impl<U> VerifyEof for TextFilePersistence<U> where U: FromStr + Sized, ModelLoadError: From<<U as FromStr>::Err> {
+impl VerifyEof for TextFilePersistence {
     fn verify_eof(&mut self) -> Result<(), ModelLoadError> {
         match self.reader {
             Some(ref mut reader) => {
@@ -241,19 +277,25 @@ impl<U> VerifyEof for TextFilePersistence<U> where U: FromStr + Sized, ModelLoad
         }
     }
 }
-impl<U> SaveToFile<U> for TextFilePersistence<U> where U: FromStr + Sized + Display {
+impl SaveToFile for TextFilePersistence {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
         let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
 
         for u in self.data.iter() {
             match u {
-                UnitOrMarker::Unit(u) => {
+                TextRecord::F32(u) => {
                     bw.write(format!("{} ",u).as_bytes())?;
                 },
-                UnitOrMarker::LayerStart => {
+                TextRecord::F64(u) => {
+                    bw.write(format!("{} ",u).as_bytes())?;
+                },
+                TextRecord::U64(u) => {
+                    bw.write(format!("{} ",u).as_bytes())?;
+                },
+                TextRecord::LayerStart => {
                     bw.write(b"#layer\n")?;
                 },
-                UnitOrMarker::UnitsStart => {
+                TextRecord::UnitsStart => {
                     bw.write(b"\n")?;
                 }
             }
@@ -370,7 +412,7 @@ impl<U> VerifyEof for BinFilePersistence<U> {
         }
     }
 }
-impl SaveToFile<f64> for BinFilePersistence<f64> {
+impl SaveToFile for BinFilePersistence<f64> {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
         let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
 
@@ -393,7 +435,7 @@ impl SaveToFile<f64> for BinFilePersistence<f64> {
         Ok(())
     }
 }
-impl SaveToFile<f32> for BinFilePersistence<f32> {
+impl SaveToFile for BinFilePersistence<f32> {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
         let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
 

@@ -46,18 +46,18 @@ impl<U,P,A,I,PI,D,const N:usize> ActivationLayer<U,P,A,I,PI,D,N>
         }
     }
 }
-impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence<U>,Specialized> +
+impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence,Specialized> for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence,Specialized> +
              BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)
     }
 }

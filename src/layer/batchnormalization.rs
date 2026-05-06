@@ -11,7 +11,7 @@ use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchFor
 use crate::lossfunction::LossFunction;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
 
 /// Structure that holds information related to mean and variance calculated during forward propagation during learning.
 #[derive(Debug)]
@@ -140,18 +140,19 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,C,P,O
         Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."),b)
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized>
+impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialized>
     for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
+             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err>,
           <PI as BatchDataType>::Type: Debug + 'static {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
         let mut scale = Arr::<U,N>::new();
@@ -186,7 +187,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Special
         Ok(())
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
         persistence.write(UnitOrMarker::LayerStart);

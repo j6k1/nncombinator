@@ -76,18 +76,18 @@ impl<U,P,I,PI,D> LoggingLayer<U,P,I,PI,D>
         self.batch_backward_loggers.push(Box::new(logger));
     }
 }
-impl<U,P,I,PI,D> Persistence<U,TextFilePersistence<U>,Specialized> for LoggingLayer<U,P,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence<U>,Specialized> +
+impl<U,P,I,PI,D> Persistence<U,TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence,Specialized> +
              BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
           I: Debug + Send + Sync {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)
     }
 }

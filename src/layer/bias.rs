@@ -12,7 +12,7 @@ use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchFor
 use crate::lossfunction::LossFunction;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
 
 /// Trait for BiasLayer instance creation
 pub trait BiasLayerInstantiation<U,C,P,OP,D,I,PI,const N:usize>
@@ -46,17 +46,18 @@ pub struct BiasLayer<U,C,P,OP,D,I,PI,const N:usize>
     u:PhantomData<U>,
     optimizer:OP
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
+             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
+          TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err>,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           <PI as BatchDataType>::Type: Debug + BatchSize {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
         let mut bias = Arr::<U,N>::new();
@@ -70,7 +71,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Special
         Ok(())
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
         persistence.write(UnitOrMarker::LayerStart);

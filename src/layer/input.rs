@@ -28,13 +28,13 @@ impl<U,O,LI,D> InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,O,LI,D> Persistence<U,TextFilePersistence<U>,Specialized> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> Persistence<U,TextFilePersistence,Specialized> for InputLayer<U,O,LI,D>
     where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
-    fn load(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, _: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         Ok(())
     }
 
-    fn save(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         Ok(())
     }
 }
@@ -171,13 +171,13 @@ impl<U,O,LI,D> OnStep for InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<
         Ok(())
     }
 }
-impl<U,O,LI,D> PersistProgress<TextFilePersistence<U>,Specialized> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> PersistProgress<TextFilePersistence,Specialized> for InputLayer<U,O,LI,D>
     where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
-    fn load_progress(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), TrainingError> {
+    fn load_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), TrainingError> {
         Ok(())
     }
 
-    fn save_progress(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         Ok(())
     }
 }
@@ -212,13 +212,13 @@ impl<U,O,DI,PO,LI,D> DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: De
         }
     }
 }
-impl<U,O,DI,PO,LI,D> Persistence<U,TextFilePersistence<U>,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
+impl<U,O,DI,PO,LI,D> Persistence<U,TextFilePersistence,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
-    fn load(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, _: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         Ok(())
     }
 
-    fn save(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         Ok(())
     }
 }
@@ -336,13 +336,13 @@ impl<U,O,DI,PO,LI,D> OnStep for DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValu
         Ok(())
     }
 }
-impl<U,O,DI,PO,LI,D> PersistProgress<TextFilePersistence<U>,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
+impl<U,O,DI,PO,LI,D> PersistProgress<TextFilePersistence,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
-    fn load_progress(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), TrainingError> {
+    fn load_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), TrainingError> {
         Ok(())
     }
 
-    fn save_progress(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         Ok(())
     }
 }

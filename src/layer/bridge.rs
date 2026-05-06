@@ -25,19 +25,19 @@ pub struct BridgeLayer<U,P,I,PI,CI,D> where P: ForwardAll<Input=I,Output=PI> + B
     pi:PhantomData<PI>,
     ci:PhantomData<CI>
 }
-impl<U,P,I,PI,CI,D> Persistence<U,TextFilePersistence<U>,Specialized> for BridgeLayer<U,P,I,PI,CI,D>
-    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence<U>,Specialized> +
+impl<U,P,I,PI,CI,D> Persistence<U,TextFilePersistence,Specialized> for BridgeLayer<U,P,I,PI,CI,D>
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence,Specialized> +
              BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U>,
           PI: Debug + 'static,
           CI: Debug + 'static,
           I: Debug + Send + Sync {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)
     }
 }

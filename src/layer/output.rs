@@ -54,21 +54,21 @@ impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
         Ok(l)
     }
 }
-impl<U,P,D,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for LinearOutputLayer<U,P,D,I,PI,N>
+impl<U,P,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialized> for LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U> +
-             Persistence<U,TextFilePersistence<U>,Specialized>,
+             Persistence<U,TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr + Sized,
           D: Device<U>,
           PI: Debug + 'static,
           I: Debug + Send + Sync,
-          TextFilePersistence<U>: VerifyEof {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+          TextFilePersistence: VerifyEof {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
         persistence.verify_eof()
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)
     }
 }
@@ -418,7 +418,7 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer
         for _ in 0..self.step_count {
             self.step()?;
         }
-        
+
         Ok(persistence.verify_eof()?)
     }
 

@@ -18,7 +18,7 @@ use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, AdamWArgs, MomentumS
 use crate::cuda::ReadMemory;
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
 
 /// OptimizerBuilder Definition
 pub trait OptimizerBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -140,16 +140,16 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>,SD>
         Ok(())
     }
 }
-impl<U,D,S> Persistence<U,TextFilePersistence<U>,Specialized> for SGD<U,D,S>
+impl<U,D,S> Persistence<U,TextFilePersistence,Specialized> for SGD<U,D,S>
     where U: UnitValue<U> + FromStr,
           D: Device<U>,
           S: Scheduler<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn load(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, _: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         Ok(())
     }
 
-    fn save(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         Ok(())
     }
 }
@@ -408,18 +408,19 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,S
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
-impl<U,SD> Persistence<U,TextFilePersistence<U>,Specialized> for MomentumSGD<U,DeviceCpu<U>,SD>
+impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,DeviceCpu<U>,SD>
     where U: UnitValue<U> + FromStr,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &vt in self.vt.iter() {
             persistence.write(UnitOrMarker::Unit(vt));
         }
         Ok(())
     }
 
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         for vt in self.vt.iter_mut() {
             *vt = persistence.read()?;
         }
@@ -445,21 +446,22 @@ impl<T,U,SD> Persistence<U,T,Linear> for MomentumSGD<U,DeviceCpu<U>,SD>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,A,SD> Persistence<U,TextFilePersistence<U>,Specialized> for MomentumSGD<U,DeviceGpu<U,A>,SD>
+impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U> + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &vt in self.vt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(vt));
         }
         Ok(())
     }
 
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         let mut vt = vec![U::default();self.size];
 
         for vt in vt.iter_mut() {
@@ -477,6 +479,7 @@ impl<T,U,A,SD> Persistence<U,T,Linear> for MomentumSGD<U,DeviceGpu<U,A>,SD>
           U: UnitValue<U> + Debug + Default,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U> {
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
@@ -750,18 +753,19 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
-impl<U,SD> Persistence<U,TextFilePersistence<U>,Specialized> for Adagrad<U,DeviceCpu<U>,SD>
+impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,DeviceCpu<U>,SD>
     where U: UnitValue<U> + FromStr,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &gt in self.gt.iter() {
             persistence.write(UnitOrMarker::Unit(gt));
         }
         Ok(())
     }
 
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         for gt in self.gt.iter_mut() {
             *gt = persistence.read()?;
         }
@@ -787,21 +791,22 @@ impl<T,U,SD> Persistence<U,T,Linear> for Adagrad<U,DeviceCpu<U>,SD>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,A,SD> Persistence<U,TextFilePersistence<U>,Specialized> for Adagrad<U,DeviceGpu<U,A>,SD>
+impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U> + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &gt in self.gt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(gt));
         }
         Ok(())
     }
 
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         let mut gt = vec![U::default();self.size];
 
         for gt in gt.iter_mut() {
@@ -819,6 +824,7 @@ impl<T,U,A,SD> Persistence<U,T,Linear> for Adagrad<U,DeviceGpu<U,A>,SD>
           U: UnitValue<U> + Debug + Default,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U> {
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
@@ -1115,11 +1121,12 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>,SD>
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
-impl<U,SD> Persistence<U,TextFilePersistence<U>,Specialized> for RMSprop<U,DeviceCpu<U>,SD>
+impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,DeviceCpu<U>,SD>
     where U: UnitValue<U> + FromStr,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &gt in self.gt.iter() {
             persistence.write(UnitOrMarker::Unit(gt));
         }
@@ -1130,7 +1137,7 @@ impl<U,SD> Persistence<U,TextFilePersistence<U>,Specialized> for RMSprop<U,Devic
         Ok(())
     }
 
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         for gt in self.gt.iter_mut() {
             *gt = persistence.read()?;
         }
@@ -1168,14 +1175,15 @@ impl<T,U,SD> Persistence<U,T,Linear> for RMSprop<U,DeviceCpu<U>,SD>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,A,SD> Persistence<U,TextFilePersistence<U>,Specialized> for RMSprop<U,DeviceGpu<U,A>,SD>
+impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U> + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &gt in self.gt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(gt));
         }
@@ -1186,7 +1194,7 @@ impl<U,A,SD> Persistence<U,TextFilePersistence<U>,Specialized> for RMSprop<U,Dev
         Ok(())
     }
 
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         let mut gt = vec![U::default();self.size];
 
         for gt in gt.iter_mut() {
@@ -1568,11 +1576,12 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>,SD>
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
-impl<U,SD> Persistence<U,TextFilePersistence<U>,Specialized> for Adam<U,DeviceCpu<U>,SD>
+impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceCpu<U>,SD>
     where U: UnitValue<U> + FromStr,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &mt in self.mt.iter() {
             persistence.write(UnitOrMarker::Unit(mt));
         }
@@ -1587,7 +1596,7 @@ impl<U,SD> Persistence<U,TextFilePersistence<U>,Specialized> for Adam<U,DeviceCp
         Ok(())
     }
 
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         for mt in self.mt.iter_mut() {
             *mt = persistence.read()?;
         }
@@ -1637,14 +1646,15 @@ impl<T,U,SD> Persistence<U,T,Linear> for Adam<U,DeviceCpu<U>,SD>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,A,SD> Persistence<U,TextFilePersistence<U>,Specialized> for Adam<U,DeviceGpu<U,A>,SD>
+impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U> + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &mt in self.mt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(mt));
         }
@@ -1659,7 +1669,7 @@ impl<U,A,SD> Persistence<U,TextFilePersistence<U>,Specialized> for Adam<U,Device
         Ok(())
     }
 
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         let mut mt = vec![U::default();self.size];
 
         for mt in mt.iter_mut() {
@@ -2051,11 +2061,12 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>,SD>
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
-impl<U,SD> Persistence<U,TextFilePersistence<U>,Specialized> for AdamW<U,DeviceCpu<U>,SD>
+impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceCpu<U>,SD>
     where U: UnitValue<U> + FromStr,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &mt in self.mt.iter() {
             persistence.write(UnitOrMarker::Unit(mt));
         }
@@ -2070,7 +2081,7 @@ impl<U,SD> Persistence<U,TextFilePersistence<U>,Specialized> for AdamW<U,DeviceC
         Ok(())
     }
 
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         for mt in self.mt.iter_mut() {
             *mt = persistence.read()?;
         }
@@ -2120,14 +2131,15 @@ impl<T,U,SD> Persistence<U,T,Linear> for AdamW<U,DeviceCpu<U>,SD>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,A,SD> Persistence<U,TextFilePersistence<U>,Specialized> for AdamW<U,DeviceGpu<U,A>,SD>
+impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U> + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &mt in self.mt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(mt));
         }
@@ -2142,7 +2154,7 @@ impl<U,A,SD> Persistence<U,TextFilePersistence<U>,Specialized> for AdamW<U,Devic
         Ok(())
     }
 
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         let mut mt = vec![U::default();self.size];
 
         for mt in mt.iter_mut() {

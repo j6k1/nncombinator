@@ -11,7 +11,7 @@ use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchFor
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::optimizer::{Optimizer, OptimizerBuilder};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
 
 /// Linear Layer Implementation
 pub struct LinearLayer<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
@@ -75,16 +75,17 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> LinearLayer<U,C,BC,P,D,I,
         })
     }
 }
-impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>,Specialized> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence,Specialized> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
+             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
         let mut bias = Arr::<U,NO>::new();
@@ -107,7 +108,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePer
         Ok(())
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
         persistence.write(UnitOrMarker::LayerStart);
@@ -544,18 +545,18 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OnStep for LinearLayer<U,
         Ok(self.parent.on_step(step)?)
     }
 }
-impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFilePersistence<U>,Specialized> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFilePersistence,Specialized> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> +
-             Persistence<U,TextFilePersistence<U>,Specialized> +
-             PersistProgress<TextFilePersistence<U>,Specialized>,
+             Persistence<U,TextFilePersistence,Specialized> +
+             PersistProgress<TextFilePersistence,Specialized>,
       U: Default + Clone + Copy + UnitValue<U> + FromStr,
       I: Debug + Send + Sync,
       PI: Debug + BatchDataType,
-      OP: Optimizer<U,D> + Persistence<U,TextFilePersistence<U>,Specialized>,
+      OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
       D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
       ModelLoadError: From<<U as FromStr>::Err> {
-    fn load_progress(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), TrainingError> {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
         self.unit_optimizer.load(persistence)?;
@@ -564,7 +565,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFileP
         Ok(())
     }
 
-    fn save_progress(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save_progress(persistence)?;
 
         self.unit_optimizer.save(persistence)?;
@@ -751,19 +752,20 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> DiffLinearLayer<'a,
         })
     }
 }
-impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence<U>,Specialized>
+impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence,Specialized>
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=()> + PreTrain<U> + Loss<U> +
-             Persistence<U,TextFilePersistence<U>,Specialized>,
+             Persistence<U,TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           DI: Debug,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), ModelLoadError> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
         let mut bias = Arr::<U,NO>::new();
@@ -786,7 +788,7 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,TextF
         Ok(())
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
         persistence.write(UnitOrMarker::LayerStart);
@@ -1074,20 +1076,20 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> OnStep for DiffLine
         Ok(self.parent.on_step(step)?)
     }
 }
-impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<TextFilePersistence<U>,Specialized>
+impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<TextFilePersistence,Specialized>
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=()> + PreTrain<U> + Loss<U> +
-             Persistence<U,TextFilePersistence<U>,Specialized> +
-             PersistProgress<TextFilePersistence<U>,Specialized>,
+             Persistence<U,TextFilePersistence,Specialized> +
+             PersistProgress<TextFilePersistence,Specialized>,
       U: Default + Clone + Copy + UnitValue<U> + FromStr,
       I: Debug + Send + Sync,
       PI: Debug + BatchDataType,
       DI: Debug,
-      OP: Optimizer<U,D> + Persistence<U,TextFilePersistence<U>,Specialized>,
+      OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
       D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
       ModelLoadError: From<<U as FromStr>::Err> {
-    fn load_progress(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), TrainingError> {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
         self.unit_optimizer.load(persistence)?;
@@ -1096,7 +1098,7 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<Tex
         Ok(())
     }
 
-    fn save_progress(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save_progress(persistence)?;
 
         self.unit_optimizer.save(persistence)?;

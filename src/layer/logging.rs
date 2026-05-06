@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
@@ -372,5 +372,39 @@ impl<U,P,I,PI,D> OnStep for LoggingLayer<U,P,I,PI,D>
           PI: Debug + BatchDataType {
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
         Ok(self.parent.on_step(step)?)
+    }
+}
+impl<U,P,I,PI,D> PersistProgress<TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> +
+             Persistence<U,TextFilePersistence,Specialized> +
+             PersistProgress<TextFilePersistence,Specialized> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: UnitValue<U> + std::str::FromStr,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          I: Debug + Send + Sync {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)
+    }
+
+    fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)
+    }
+}
+impl<T,U,P,I,PI,D> PersistProgress<T,Linear> for LoggingLayer<U,P,I,PI,D>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=PI> +
+             Persistence<U,T,Linear> + PersistProgress<T,Linear> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          I: Debug + Send + Sync {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)
+    }
+
+    fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)
     }
 }

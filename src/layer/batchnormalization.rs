@@ -7,7 +7,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
 use crate::lossfunction::LossFunction;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
@@ -732,5 +732,66 @@ impl<const N:usize> BatchNormalizationLayerBuilder<N> {
               B: OptimizerBuilder<U,D,Output=OP>,
               BatchNormalizationLayer<U,C,P,OP,D,I,PI,N> : BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,N> {
         Ok(BatchNormalizationLayer::new(parent,device,b)?)
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized>
+    for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<U> + Loss<U> +
+             Persistence<U,TextFilePersistence,Specialized> +
+             PersistProgress<TextFilePersistence,Specialized>,
+          U: Default + Clone + Copy + UnitValue<U> + FromStr,
+          I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
+          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err>,
+          <PI as BatchDataType>::Type: Debug + 'static {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)?;
+
+        self.scale_optimizer.load(persistence)?;
+        self.bias_optimizer.load(persistence)?;
+
+        Ok(())
+    }
+
+    fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)?;
+
+        self.scale_optimizer.save(persistence)?;
+        self.bias_optimizer.save(persistence)?;
+
+        Ok(())
+    }
+}
+impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<U> + Loss<U> +
+             Persistence<U,T,Linear> + PersistProgress<T,Linear>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug + Send + Sync,
+          PI: BatchDataType + Debug + 'static,
+          OP: Optimizer<U,D> + Persistence<U,T,Linear>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + 'static {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)?;
+
+        self.scale_optimizer.load(persistence)?;
+        self.bias_optimizer.load(persistence)?;
+
+        Ok(())
+    }
+
+    fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)?;
+
+        self.scale_optimizer.save(persistence)?;
+        self.bias_optimizer.save(persistence)?;
+
+        Ok(())
     }
 }

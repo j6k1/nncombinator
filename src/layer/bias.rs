@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::bias::DeviceBias;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
 use crate::lossfunction::LossFunction;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
@@ -437,6 +437,62 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BiasLayer<U,C,P,OP,D,I,PI,N>
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
         self.optimizer.on_step(step)?;
         Ok(self.parent.on_step(step)?)
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<U> + Loss<U> +
+             Persistence<U,TextFilePersistence,Specialized> +
+             PersistProgress<TextFilePersistence,Linear>,
+          U: Default + Clone + Copy + UnitValue<U> + FromStr,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Linear>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err>,
+          D: Device<U> + DeviceBias<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + BatchSize {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)?;
+
+        self.optimizer.load(persistence)?;
+
+        Ok(())
+    }
+
+    fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)?;
+
+        self.optimizer.save(persistence)?;
+
+        Ok(())
+    }
+}
+impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<U> + Loss<U> +
+             Persistence<U,T,Linear> + PersistProgress<T,Linear>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D> + Persistence<U,T,Linear>,
+          D: Device<U> + DeviceBias<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + BatchSize {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)?;
+
+        self.optimizer.load(persistence)?;
+
+        Ok(())
+    }
+
+    fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)?;
+
+        self.optimizer.save(persistence)?;
+
+        Ok(())
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BiasLayerInstantiation<U,C,P,OP,D,I,PI,N> for BiasLayer<U,C,P,OP,D,I,PI,N>

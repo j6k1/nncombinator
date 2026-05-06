@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use crate::arr::{IntoConverter, MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SliceSize};
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
@@ -276,6 +276,42 @@ impl<U,P,I,PI,CI,D> OnStep for BridgeLayer<U,P,I,PI,CI,D>
           CI: Debug {
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
         Ok(self.parent.on_step(step)?)
+    }
+}
+impl<U,P,I,PI,CI,D> PersistProgress<TextFilePersistence,Specialized> for BridgeLayer<U,P,I,PI,CI,D>
+    where P: ForwardAll<Input=I,Output=PI> +
+             Persistence<U,TextFilePersistence,Specialized> +
+             PersistProgress<TextFilePersistence,Specialized> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: UnitValue<U> + std::str::FromStr,
+          D: Device<U>,
+          PI: Debug + 'static,
+          CI: Debug + 'static,
+          I: Debug + Send + Sync {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)
+    }
+
+    fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)
+    }
+}
+impl<T,U,P,I,PI,CI,D> PersistProgress<T,Linear> for BridgeLayer<U,P,I,PI,CI,D>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=PI> +
+             Persistence<U,T,Linear> + PersistProgress<T,Linear> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          U: UnitValue<U>,
+          D: Device<U>,
+          PI: Debug + 'static,
+          CI: Debug + 'static,
+          I: Debug + Send + Sync {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)
+    }
+
+    fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)
     }
 }
 /// Trait for BridgeLayer instance creation

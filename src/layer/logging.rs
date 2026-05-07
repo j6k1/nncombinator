@@ -2,12 +2,13 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::str::FromStr;
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
 use crate::Stack;
 
 /// Logging layer Implementation
@@ -82,13 +83,20 @@ impl<U,P,I,PI,D> Persistence<U,TextFilePersistence,Specialized> for LoggingLayer
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
     }
 
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
-        self.parent.save(persistence)
+        self.parent.save(persistence)?;
+
+        persistence.write(UnitOrMarker::LayerStart);
+        persistence.write(UnitOrMarker::LayerEnd);
+
+        Ok(())
     }
 }
 impl<T,U,P,I,PI,D> Persistence<U,T,Linear> for LoggingLayer<U,P,I,PI,D>

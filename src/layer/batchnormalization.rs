@@ -221,6 +221,8 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialize
             persistence.write(UnitOrMarker::Unit(*i));
         }
 
+        persistence.write(UnitOrMarker::LayerEnd);
+
         Ok(())
     }
 }

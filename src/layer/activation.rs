@@ -2,6 +2,7 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::str::FromStr;
 use crate::{Cons, Stack};
 use crate::device::activation::DeviceActivation;
 use crate::device::Device;
@@ -9,7 +10,7 @@ use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingErro
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
 
 /// Activation layer Implementation
 pub struct ActivationLayer<U,P,A,I,PI,D,const N:usize> where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
@@ -52,13 +53,20 @@ impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence,Specialized> 
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + 'static,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
     }
 
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
-        self.parent.save(persistence)
+        self.parent.save(persistence)?;
+
+        persistence.write(UnitOrMarker::LayerStart);
+        persistence.write(UnitOrMarker::LayerEnd);
+
+        Ok(())
     }
 }
 impl<T,U,P,A,I,PI,D,const N:usize> Persistence<U,T,Linear> for ActivationLayer<U,P,A,I,PI,D,N>

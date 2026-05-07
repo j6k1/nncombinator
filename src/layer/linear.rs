@@ -116,6 +116,8 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePer
         let bias = self.device.generalization_bias(&self.bias)?;
         let units = self.device.generalization_units(&self.units)?;
 
+        persistence.write(UnitOrMarker::UnitsStart);
+
         for b in bias.iter() {
             persistence.write(UnitOrMarker::Unit(*b));
         }
@@ -126,6 +128,8 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePer
                 persistence.write(UnitOrMarker::Unit(*w));
             }
         }
+
+        persistence.write(UnitOrMarker::LayerEnd);
 
         Ok(())
     }
@@ -796,6 +800,8 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,TextF
         let bias = self.device.generalization_bias(&self.bias)?;
         let units = self.device.generalization_units(&self.units)?;
 
+        persistence.write(UnitOrMarker::UnitsStart);
+
         for b in bias.iter() {
             persistence.write(UnitOrMarker::Unit(*b));
         }
@@ -806,6 +812,8 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,TextF
                 persistence.write(UnitOrMarker::Unit(*w));
             }
         }
+
+        persistence.write(UnitOrMarker::LayerEnd);
 
         Ok(())
     }

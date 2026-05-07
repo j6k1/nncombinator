@@ -78,8 +78,10 @@ pub trait LinearPersistence<U> {
 pub enum UnitOrMarker<U> {
     /// Not a boundary.
     Unit(U),
-    /// layer boundary
+    /// start layer boundary
     LayerStart,
+    /// end layer boundary
+    LayerEnd,
     /// boundary
     UnitsStart
 }
@@ -89,6 +91,7 @@ pub enum TextRecord {
     F64(f64),
     U64(u64),
     LayerStart,
+    LayerEnd,
     UnitsStart
 }
 impl From<f32> for TextRecord {
@@ -240,6 +243,9 @@ impl<U> TextPersistence<U> for TextFilePersistence
             UnitOrMarker::LayerStart => {
                 self.data.push(TextRecord::LayerStart);
             },
+            UnitOrMarker::LayerEnd => {
+                self.data.push(TextRecord::LayerEnd);
+            },
             UnitOrMarker::UnitsStart => {
                 self.data.push(TextRecord::UnitsStart);
             }
@@ -261,7 +267,9 @@ impl VerifyEof for TextFilePersistence {
 
                     buf = buf.trim().to_string();
 
-                    if !buf.is_empty() {
+                    if !buf.is_empty() && buf.chars().nth(0) == Some('#') {
+                        buf.clear();
+                    } else if !buf.is_empty() {
                         return Err(ModelLoadError::InvalidState(
                             String::from("Data loaded , but the input has not reached the end.")));
                     } else {
@@ -278,7 +286,10 @@ impl VerifyEof for TextFilePersistence {
 }
 impl SaveToFile for TextFilePersistence {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
-        let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
+        let mut bw = BufWriter::new(OpenOptions::new()
+                                                            .write(true)
+                                                            .create(true)
+                                                            .truncate(true).open(file)?);
 
         for u in self.data.iter() {
             match u {
@@ -294,7 +305,7 @@ impl SaveToFile for TextFilePersistence {
                 TextRecord::LayerStart => {
                     bw.write(b"#layer\n")?;
                 },
-                TextRecord::UnitsStart => {
+                TextRecord::UnitsStart | TextRecord::LayerEnd => {
                     bw.write(b"\n")?;
                 }
             }
@@ -310,7 +321,7 @@ pub struct BinFilePersistence {
     data:Vec<u8>
 }
 impl BinFilePersistence {
-    /// Create an instance of TextFilePersistence
+    /// Create an instance of BinFilePersistence
     /// # Arguments
     /// * `file` - File path to be persisted
     ///
@@ -469,7 +480,10 @@ impl SaveToFile for BinFilePersistence {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
         const BLOCK_SIZE:usize = 4096;
 
-        let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
+        let mut bw = BufWriter::new(OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true).open(file)?);
 
         for offset in (0..(self.data.len() / BLOCK_SIZE * BLOCK_SIZE)).step_by(BLOCK_SIZE) {
             bw.write(&self.data[offset..offset + BLOCK_SIZE])?;

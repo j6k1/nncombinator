@@ -78,9 +78,13 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialize
 
         let bias = self.device.generalization_bias(&self.bias)?;
 
+        persistence.write(UnitOrMarker::UnitsStart);
+        
         for b in bias.iter() {
             persistence.write(UnitOrMarker::Unit(*b));
         }
+
+        persistence.write(UnitOrMarker::LayerEnd);
 
         Ok(())
     }

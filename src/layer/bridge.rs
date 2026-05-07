@@ -2,6 +2,7 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::str::FromStr;
 use crate::arr::{IntoConverter, MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SliceSize};
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
@@ -9,7 +10,7 @@ use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, Batc
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
 
 /// Bridge layer Implementation
 pub struct BridgeLayer<U,P,I,PI,CI,D> where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
@@ -32,13 +33,20 @@ impl<U,P,I,PI,CI,D> Persistence<U,TextFilePersistence,Specialized> for BridgeLay
           D: Device<U>,
           PI: Debug + 'static,
           CI: Debug + 'static,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
     }
 
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
-        self.parent.save(persistence)
+        self.parent.save(persistence)?;
+
+        persistence.write(UnitOrMarker::LayerStart);
+        persistence.write(UnitOrMarker::LayerEnd);
+
+        Ok(())
     }
 }
 impl<T,U,P,I,PI,CI,D> Persistence<U,T,Linear> for BridgeLayer<U,P,I,PI,CI,D>

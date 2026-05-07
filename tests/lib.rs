@@ -11,7 +11,9 @@ pub mod batchnormalization;
 pub mod common;
 pub mod logging;
 pub mod scheduler;
-mod cuda;
+pub mod persistence;
+
+pub mod cuda;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};

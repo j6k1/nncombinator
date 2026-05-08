@@ -160,6 +160,7 @@ impl<U> Scheduler<U> for LinearWarmupLR<U> where U: UnitValue<U> + TryFromPrimit
 /// Scheduler using cosine annealing schedule.
 #[derive(Clone)]
 pub struct CosineAnnealingLR<U> where U: UnitValue<U> {
+    base_lr: U,
     total_steps: usize,
     eta_min: U
 }
@@ -185,8 +186,9 @@ impl<U> CosineAnnealingLR<U> where U: UnitValue<U> {
     ///
     /// let scheduler = CosineAnnealingLR::new(100, 0.01);
     /// ```
-    pub fn new(total_steps: usize, eta_min: U) -> Self {
+    pub fn new(base_lr: U, total_steps: usize, eta_min: U) -> Self {
         CosineAnnealingLR {
+            base_lr,
             total_steps,
             eta_min
         }
@@ -194,6 +196,13 @@ impl<U> CosineAnnealingLR<U> where U: UnitValue<U> {
 }
 impl<U> Scheduler<U> for CosineAnnealingLR<U> where U: UnitValue<U> {
     fn schedule(&mut self, lr: U, step: usize) -> Result<U, TrainingError> {
+        Ok(self.eta_min + (self.base_lr - self.eta_min) / U::try_from_usize(2)? * (
+            U::one() + (
+                U::try_from_usize(step)? * U::try_from_f64(PI)? /
+                U::try_from_usize(self.total_steps)?
+            ).cos()
+        ))
+        /*
         Ok(self.eta_min + (lr - self.eta_min) * (
             (U::one() +
                 (
@@ -208,6 +217,7 @@ impl<U> Scheduler<U> for CosineAnnealingLR<U> where U: UnitValue<U> {
                 ).cos()
             )
         ))
+         */
     }
 }
 /// Scheduler that executes two schedulers sequentially.

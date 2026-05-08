@@ -552,14 +552,14 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OnStep for LinearLayer<U,
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFilePersistence,Specialized> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> +
-             Persistence<U,TextFilePersistence,Specialized> +
              PersistProgress<TextFilePersistence,Specialized>,
-      U: Default + Clone + Copy + UnitValue<U> + FromStr,
-      I: Debug + Send + Sync,
-      PI: Debug + BatchDataType,
-      OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
-      D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
-      ModelLoadError: From<<U as FromStr>::Err> {
+          U: Default + Clone + Copy + UnitValue<U> + FromStr,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
@@ -572,8 +572,16 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFileP
     fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save_progress(persistence)?;
 
+        persistence.write_layer_start();
+
+        persistence.write_units_start();
+
         self.unit_optimizer.save(persistence)?;
+        persistence.write_units_start();
+
         self.bias_optimizer.save(persistence)?;
+
+        persistence.write_layer_end();
 
         Ok(())
     }
@@ -582,7 +590,6 @@ impl<T,U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<T,Linea
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> +
-             Persistence<U,T,Linear> +
              PersistProgress<T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -1088,15 +1095,15 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<Tex
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=()> + PreTrain<U> + Loss<U> +
-             Persistence<U,TextFilePersistence,Specialized> +
              PersistProgress<TextFilePersistence,Specialized>,
-      U: Default + Clone + Copy + UnitValue<U> + FromStr,
-      I: Debug + Send + Sync,
-      PI: Debug + BatchDataType,
-      DI: Debug,
-      OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
-      D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
-      ModelLoadError: From<<U as FromStr>::Err> {
+          U: Default + Clone + Copy + UnitValue<U> + FromStr,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType,
+          DI: Debug,
+          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
@@ -1109,8 +1116,16 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<Tex
     fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save_progress(persistence)?;
 
+        persistence.write_layer_start();
+        persistence.write_units_start();
+
         self.unit_optimizer.save(persistence)?;
+
+        persistence.write_units_start();
+
         self.bias_optimizer.save(persistence)?;
+
+        persistence.write_layer_end();
 
         Ok(())
     }
@@ -1119,8 +1134,8 @@ impl<'a,T,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<T
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> +
-          BackwardAll<U,LossInput=()> + PreTrain<U> + Loss<U> +
-          Persistence<U,T,Linear> + PersistProgress<T,Linear>,
+             BackwardAll<U,LossInput=()> + PreTrain<U> + Loss<U> +
+             PersistProgress<T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,

@@ -226,6 +226,16 @@ impl TextFilePersistence {
 
         Ok(t)
     }
+
+    pub fn write_layer_start(&mut self) {
+        self.data.push(TextRecord::LayerStart);
+    }
+    pub fn write_layer_end(&mut self) {
+        self.data.push(TextRecord::LayerEnd);
+    }
+    pub fn write_units_start(&mut self) {
+        self.data.push(TextRecord::UnitsStart);
+    }
 }
 impl<U> TextPersistence<U> for TextFilePersistence
     where U: FromStr + Sized,

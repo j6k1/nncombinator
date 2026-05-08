@@ -8,18 +8,22 @@ use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
-use nncombinator::activation::{ReLu, SoftMax};
+use nncombinator::activation::{ReLu, Sigmoid, SoftMax};
 use nncombinator::arr::{Arr};
 use nncombinator::device::{DeviceGpu};
-use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll};
+use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll, PersistProgress, Step};
 use nncombinator::layer::activation::ActivationLayer;
+use nncombinator::layer::batchnormalization::BatchNormalizationLayerBuilder;
+use nncombinator::layer::bias::BiasLayerBuilder;
+use nncombinator::layer::bridge::{BridgeLayerBuilder};
 use nncombinator::layer::input::{InputLayer};
 use nncombinator::layer::linear::{LinearLayerBuilder};
+use nncombinator::layer::logging::LoggingLayer;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropyMulticlass};
 use nncombinator::optimizer::{AdamBuilder};
 use nncombinator::persistence::{BinFilePersistence, Persistence, SaveToFile, TextFilePersistence};
-use crate::common::{SHARED_MEMORY_POOL};
+use crate::common::{assert_text_persist_progress, SHARED_MEMORY_POOL};
 
 #[test]
 fn test_mnist_for_gpu_with_persistence() {
@@ -440,4 +444,258 @@ fn test_mnist_for_gpu_with_text_persistence() {
     println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 90.)
+}
+#[test]
+fn test_gpu_with_persist_progress_all_layears() {
+    let mut rnd = prelude::thread_rng();
+    let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
+
+    let n1 = Normal::<f32>::new(0.0, (2f32/(32f32)).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/32f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(32f32).sqrt()).unwrap();
+
+    let memory_pool = &SHARED_MEMORY_POOL.clone();
+
+    let device = DeviceGpu::new(memory_pool).unwrap();
+
+    let net:InputLayer<f32,Arr<f32,32>,_,_> = InputLayer::new(&device);
+
+    let rnd = rnd_base.clone();
+
+    let optimizer_builder = AdamBuilder::new(&device).lr(0.005).weight_decay(0.0001);
+
+    let mut net = net.add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32,32>::new().build(l,&device,
+                                                         move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                         &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32, 32>::new().build(l, &device,
+                                                  move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                  &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BiasLayerBuilder::new().build(l,&device,|| 0., &optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32, 1>::new().build(l, &device,
+                                                 move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                 &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BridgeLayerBuilder::new().build(l,&device).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer(|l| {
+        LoggingLayer::new(l,&device)
+    }).add_layer(|l| {
+        LinearOutputLayer::new(l,&device).unwrap()
+    });
+
+    net.step().unwrap();
+
+    let nn_path = Path::new("data").join("tmp").join("test_gpu_with_persist_progress_all_layears.bin");
+
+    let mut p = BinFilePersistence::new(&nn_path).unwrap();
+
+    net.save_progress(&mut p).unwrap();
+
+    p.save(&nn_path).unwrap();
+
+    let net:InputLayer<f32,Arr<f32,32>,_,_> = InputLayer::new(&device);
+
+    let rnd = rnd_base.clone();
+
+    let optimizer_builder = AdamBuilder::new(&device).lr(0.005).weight_decay(0.0001);
+
+    let mut net = net.add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32,32>::new().build(l,&device,
+                                                 move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                 &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32, 32>::new().build(l, &device,
+                                                  move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                  &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BiasLayerBuilder::new().build(l,&device,|| 0., &optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32, 1>::new().build(l, &device,
+                                                 move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                 &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BridgeLayerBuilder::new().build(l,&device).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer(|l| {
+        LoggingLayer::new(l,&device)
+    }).add_layer(|l| {
+        LinearOutputLayer::new(l,&device).unwrap()
+    });
+
+    let nn_path = Path::new("data").join("tmp").join("test_gpu_with_persist_progress_all_layears.bin");
+
+    let mut p = BinFilePersistence::new(&nn_path).unwrap();
+
+    net.load_progress(&mut p).unwrap();
+
+    assert!(true)
+}
+#[test]
+fn test_gpu_with_persist_to_text_progress_all_layears() {
+    let mut rnd = prelude::thread_rng();
+    let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
+
+    let n1 = Normal::<f32>::new(0.0, (2f32/(32f32)).sqrt()).unwrap();
+    let n2 = Normal::<f32>::new(0.0, (2f32/32f32).sqrt()).unwrap();
+    let n3 = Normal::<f32>::new(0.0, 1f32/(32f32).sqrt()).unwrap();
+
+    let memory_pool = &SHARED_MEMORY_POOL.clone();
+
+    let device = DeviceGpu::new(memory_pool).unwrap();
+
+    let net:InputLayer<f32,Arr<f32,32>,_,_> = InputLayer::new(&device);
+
+    let rnd = rnd_base.clone();
+
+    let optimizer_builder = AdamBuilder::new(&device).lr(0.005).weight_decay(0.0001);
+
+    let mut net = net.add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32,32>::new().build(l,&device,
+                                                 move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                 &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32, 32>::new().build(l, &device,
+                                                  move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                  &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        BiasLayerBuilder::new().build(l,&device,|| 0., &optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32, 1>::new().build(l, &device,
+                                                 move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                 &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        BridgeLayerBuilder::new().build(l,&device).unwrap()
+    }).add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        LoggingLayer::new(l,&device)
+    }).add_layer(|l| {
+        assert_text_persist_progress(&l);
+
+        LinearOutputLayer::new(l,&device).unwrap()
+    });
+
+    assert_text_persist_progress(&net);
+
+    net.step().unwrap();
+
+    let nn_path = Path::new("data").join("tmp").join("test_gpu_with_persist_progress_all_layears.txt");
+
+    let mut p = TextFilePersistence::new(&nn_path).unwrap();
+
+    net.save_progress(&mut p).unwrap();
+
+    p.save(&nn_path).unwrap();
+
+    let net:InputLayer<f32,Arr<f32,32>,_,_> = InputLayer::new(&device);
+
+    let rnd = rnd_base.clone();
+
+    let optimizer_builder = AdamBuilder::new(&device).lr(0.005).weight_decay(0.0001);
+
+    let mut net = net.add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32,32>::new().build(l,&device,
+                                                 move || n1.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                 &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32, 32>::new().build(l, &device,
+                                                  move || n2.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                  &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BiasLayerBuilder::new().build(l,&device,|| 0., &optimizer_builder).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        let rnd = rnd.clone();
+        LinearLayerBuilder::<32, 1>::new().build(l, &device,
+                                                 move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
+                                                 &optimizer_builder
+        ).unwrap()
+    }).add_layer(|l| {
+        BridgeLayerBuilder::new().build(l,&device).unwrap()
+    }).add_layer(|l| {
+        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+    }).add_layer(|l| {
+        LoggingLayer::new(l,&device)
+    }).add_layer(|l| {
+        LinearOutputLayer::new(l,&device).unwrap()
+    });
+
+    let nn_path = Path::new("data").join("tmp").join("test_gpu_with_persist_progress_all_layears.txt");
+
+    let mut p = TextFilePersistence::new(&nn_path).unwrap();
+
+    net.load_progress(&mut p).unwrap();
+
+    assert!(true)
 }

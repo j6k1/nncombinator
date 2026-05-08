@@ -342,25 +342,30 @@ impl<U,P,A,I,PI,D,const N:usize> OnStep for ActivationLayer<U,P,A,I,PI,D,N>
 }
 impl<U,P,A,I,PI,D,const N:usize> PersistProgress<TextFilePersistence,Specialized> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> +
-             Persistence<U,TextFilePersistence,Specialized> +
              PersistProgress<TextFilePersistence,Specialized> +
              BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + 'static,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)
     }
 
     fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
-        self.parent.save_progress(persistence)
+        self.parent.save_progress(persistence)?;
+        persistence.write_layer_start();
+        persistence.write_layer_end();
+
+        Ok(())
     }
 }
 impl<T,U,P,A,I,PI,D,const N:usize> PersistProgress<T,Linear> for ActivationLayer<U,P,A,I,PI,D,N>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> +
-             Persistence<U,T,Linear> + PersistProgress<T,Linear> +
+             PersistProgress<T,Linear> +
              BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: UnitValue<U>,
           D: Device<U> + DeviceActivation<U,PI,A,N>,

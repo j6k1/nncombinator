@@ -11,7 +11,7 @@ use crate::error::{ModelLoadError, EvaluateError, PersistenceError, SizeMismatch
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PersistProgress, PreTrain, Step, Train, UpdateWeight};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, UnitOrMarker, VerifyEof};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker, VerifyEof};
 
 /// Layer implementation of the output layer (linear layer)
 pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>
@@ -383,7 +383,7 @@ impl<U,P,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> 
           D: Device<U>,
           PI: Debug + 'static,
           I: Debug + Send + Sync,
-          TextFilePersistence: TextPersistence<u64> + TextPersistence<U> + VerifyEof,
+          TextRecord: From<U> + From<u64>,
           ModelLoadError: From<<U as FromStr>::Err> + From<<u64 as FromStr>::Err> {
     fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(),TrainingError> {
         self.parent.load_progress(persistence)?;
@@ -399,15 +399,21 @@ impl<U,P,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> 
 
     fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(),PersistenceError> {
         self.parent.save_progress(persistence)?;
+
+        persistence.write_layer_start();
+        persistence.write_units_start();
+
         persistence.write(UnitOrMarker::Unit(self.step_count as u64));
+
+        persistence.write_layer_end();
+
         Ok(())
     }
 }
 impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer<U,P,D,I,PI,N>
-    where T: LinearPersistence<u64> + LinearPersistence<U> + VerifyEof,
+    where T: LinearPersistence<U> + LinearPersistence<u64> + VerifyEof,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U> +
-             Persistence<U,T,Linear> +
              PersistProgress<T,Linear> + OnStep,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,

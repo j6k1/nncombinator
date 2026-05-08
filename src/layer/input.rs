@@ -9,7 +9,7 @@ use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingErro
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PersistProgress, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 pub struct InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
@@ -172,7 +172,10 @@ impl<U,O,LI,D> OnStep for InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<
     }
 }
 impl<U,O,LI,D> PersistProgress<TextFilePersistence,Specialized> for InputLayer<U,O,LI,D>
-    where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
+    where U: UnitValue<U> + FromStr + Sized,
+          D: Device<U>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), TrainingError> {
         Ok(())
     }
@@ -337,7 +340,10 @@ impl<U,O,DI,PO,LI,D> OnStep for DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValu
     }
 }
 impl<U,O,DI,PO,LI,D> PersistProgress<TextFilePersistence,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
-    where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
+    where U: UnitValue<U> + FromStr + Sized,
+          D: Device<U>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), TrainingError> {
         Ok(())
     }

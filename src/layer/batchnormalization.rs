@@ -740,16 +740,15 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Speciali
     for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> +
-             Persistence<U,TextFilePersistence,Specialized> +
              PersistProgress<TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,
           OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + 'static,
           TextRecord: From<U>,
-          ModelLoadError: From<<U as FromStr>::Err>,
-          <PI as BatchDataType>::Type: Debug + 'static {
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
@@ -761,10 +760,14 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Speciali
 
     fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save_progress(persistence)?;
+        persistence.write_layer_start();
 
+        persistence.write_units_start();
         self.scale_optimizer.save(persistence)?;
+        persistence.write_units_start();
         self.bias_optimizer.save(persistence)?;
 
+        persistence.write_layer_end();
         Ok(())
     }
 }
@@ -772,7 +775,7 @@ impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BatchNormali
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> +
-             Persistence<U,T,Linear> + PersistProgress<T,Linear>,
+             PersistProgress<T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: BatchDataType + Debug + 'static,

@@ -288,26 +288,31 @@ impl<U,P,I,PI,CI,D> OnStep for BridgeLayer<U,P,I,PI,CI,D>
 }
 impl<U,P,I,PI,CI,D> PersistProgress<TextFilePersistence,Specialized> for BridgeLayer<U,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             Persistence<U,TextFilePersistence,Specialized> +
              PersistProgress<TextFilePersistence,Specialized> +
              BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U>,
           PI: Debug + 'static,
           CI: Debug + 'static,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)
     }
 
     fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
-        self.parent.save_progress(persistence)
+        self.parent.save_progress(persistence)?;
+
+        persistence.write_layer_start();
+        persistence.write_layer_end();
+        Ok(())
     }
 }
 impl<T,U,P,I,PI,CI,D> PersistProgress<T,Linear> for BridgeLayer<U,P,I,PI,CI,D>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> +
-             Persistence<U,T,Linear> + PersistProgress<T,Linear> +
+             PersistProgress<T,Linear> +
              BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: UnitValue<U>,
           D: Device<U>,

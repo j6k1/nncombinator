@@ -79,7 +79,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialize
         let bias = self.device.generalization_bias(&self.bias)?;
 
         persistence.write(UnitOrMarker::UnitsStart);
-        
+
         for b in bias.iter() {
             persistence.write(UnitOrMarker::Unit(*b));
         }
@@ -446,16 +446,15 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BiasLayer<U,C,P,OP,D,I,PI,N>
 impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> +
-             Persistence<U,TextFilePersistence,Specialized> +
-             PersistProgress<TextFilePersistence,Linear>,
+             PersistProgress<TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
-          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Linear>,
-          TextRecord: From<U>,
-          ModelLoadError: From<<U as FromStr>::Err>,
+          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
           D: Device<U> + DeviceBias<U,C,PI,N>,
-          <PI as BatchDataType>::Type: Debug + BatchSize {
+          <PI as BatchDataType>::Type: Debug + BatchSize,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
     fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
@@ -467,7 +466,13 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Speciali
     fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save_progress(persistence)?;
 
+        persistence.write_layer_start();
+
+        persistence.write_units_start();
+
         self.optimizer.save(persistence)?;
+
+        persistence.write_layer_end();
 
         Ok(())
     }
@@ -476,7 +481,7 @@ impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BiasLayer<U,
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> +
-             Persistence<U,T,Linear> + PersistProgress<T,Linear>,
+             PersistProgress<T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,

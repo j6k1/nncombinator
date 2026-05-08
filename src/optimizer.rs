@@ -316,6 +316,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>,SD> where U:
 impl<U,A> MomentumSGD<U,DeviceGpu<U,A>,IdentityLR>
     where U: UnitValue<U> + Debug + Default,
           A: CudaAllocator,
+          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: WriteMemory<U> {
     /// Create an instance of MomentumSGD
@@ -341,6 +342,7 @@ impl<U,A,SD> MomentumSGD<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U> + Debug + Default,
           A: CudaAllocator,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: WriteMemory<U> {
     /// Create an instance of MomentumSGD with additional parameters other than the default values
@@ -370,6 +372,7 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U> + Debug + Default,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'a> kernel::optimizer::MomentumSGD<'a,U,A>: Kernel<Args=MomentumSGDArgs<'a,U,A>> {
@@ -404,6 +407,7 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,S
     where U: UnitValue<U> + Debug + Default,
           SD: Scheduler<U>,
           A: CudaAllocator,
+          TextRecord: From<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
@@ -590,6 +594,7 @@ impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for MomentumSGDBuilder<U,DeviceG
     where U: UnitValue<U>,
           SD: Scheduler<U> + Clone,
           A: CudaAllocator,
+          TextRecord: From<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U>,
           MomentumSGD<U,DeviceGpu<U,A>,SD>: Optimizer<U,DeviceGpu<U,A>> {
@@ -672,6 +677,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>,SD> where U: Uni
 impl<U,A> Adagrad<U,DeviceGpu<U,A>,IdentityLR>
     where U: UnitValue<U>,
           A: CudaAllocator,
+          TextRecord: From<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     /// Create an instance of Adagrad
@@ -692,6 +698,7 @@ impl<U,A,SD> Adagrad<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           A: CudaAllocator,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     /// Create an instance of Adagrad with additional parameters other than the default values
@@ -715,6 +722,7 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
+          TextRecord: From<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U>,
           for<'a> kernel::optimizer::Adagrad<'a,U,A>: Kernel<Args=AdagradArgs<'a,U,A>> {
@@ -749,6 +757,7 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
     where U: UnitValue<U>,
           SD: Scheduler<U>,
           A: CudaAllocator,
+          TextRecord: From<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
     type Type = CudaPtr<U,A>;
@@ -918,6 +927,7 @@ impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for AdagradBuilder<U,DeviceGpu<U
     where U: UnitValue<U>,
           SD: Scheduler<U> + Clone,
           A: CudaAllocator,
+          TextRecord: From<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U>,
           Adagrad<U,DeviceGpu<U,A>,SD>: Optimizer<U,DeviceGpu<U,A>> {
@@ -2135,9 +2145,9 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceGp
     where U: UnitValue<U> + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
-          TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
+          TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         for &mt in self.mt.read_to_vec()?.iter() {

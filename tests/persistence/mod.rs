@@ -501,6 +501,7 @@ fn test_gpu_with_persist_progress_all_layears() {
     });
 
     net.step().unwrap();
+    net.frequently_step().unwrap();
 
     let nn_path = Path::new("data").join("tmp").join("test_gpu_with_persist_progress_all_layears.bin");
 
@@ -640,6 +641,7 @@ fn test_gpu_with_persist_to_text_progress_all_layears() {
     assert_text_persist_progress(&net);
 
     net.step().unwrap();
+    net.frequently_step().unwrap();
 
     let nn_path = Path::new("data").join("tmp").join("test_gpu_with_persist_progress_all_layears.txt");
 

@@ -442,6 +442,10 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BiasLayer<U,C,P,OP,D,I,PI,N>
         self.optimizer.on_step(step)?;
         Ok(self.parent.on_step(step)?)
     }
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.optimizer.on_frequently_step(step,frequently_step)?;
+        Ok(self.parent.on_frequently_step(step,frequently_step)?)
+    }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +

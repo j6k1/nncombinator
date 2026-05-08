@@ -651,6 +651,12 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BatchNormalizationLayer<U,C,P,OP,
         self.bias_optimizer.on_step(step)?;
         Ok(self.parent.on_step(step)?)
     }
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.scale_optimizer.on_frequently_step(step,frequently_step)?;
+        self.bias_optimizer.on_frequently_step(step,frequently_step)?;
+        Ok(self.parent.on_frequently_step(step,frequently_step)?)
+    }
 }
 /// Builder for BatchNormalizationLayer instance creation
 pub struct BatchNormalizationLayerBuilder<const N:usize> {

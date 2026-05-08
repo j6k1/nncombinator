@@ -170,6 +170,9 @@ impl<U,O,LI,D> OnStep for InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<
     fn on_step(&mut self, _: usize) -> Result<(), TrainingError> {
         Ok(())
     }
+    fn on_frequently_step(&mut self, _: usize, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
 }
 impl<U,O,LI,D> PersistProgress<TextFilePersistence,Specialized> for InputLayer<U,O,LI,D>
     where U: UnitValue<U> + FromStr + Sized,
@@ -336,6 +339,9 @@ impl<U,O,DI,PO,LI,D> Loss<U> for DiffInputLayer<U,O,DI,PO,LI,D>
           <O as BatchDataType>::Type: Debug + 'static {}
 impl<U,O,DI,PO,LI,D> OnStep for DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: Device<U> {
     fn on_step(&mut self, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+    fn on_frequently_step(&mut self, _: usize, _: usize) -> Result<(), TrainingError> {
         Ok(())
     }
 }

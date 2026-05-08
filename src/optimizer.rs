@@ -41,6 +41,10 @@ pub trait Optimizer<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
     /// # Arguments
     /// * `step` - step count
     fn on_step(&mut self, step: usize) -> Result<(),TrainingError>;
+    /// Learning Progress Notification
+    /// # Arguments
+    /// * `frequently_step` - frequently step count
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(),TrainingError>;
 }
 /// Optimizer State Definition
 pub trait OptimizerState<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
@@ -113,6 +117,11 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for SGD<U,DeviceCpu<U>,SD> where U: UnitVal
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
+        Ok(())
+    }
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>,SD>
@@ -137,6 +146,12 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>,SD>
 
     fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
+        Ok(())
+    }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
         Ok(())
     }
 }
@@ -311,6 +326,12 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>,SD> where U:
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
+        Ok(())
+    }
 }
 #[cfg(feature = "cuda")]
 impl<U,A> MomentumSGD<U,DeviceGpu<U,A>,IdentityLR>
@@ -393,6 +414,12 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,SD>
 
     fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
+        Ok(())
+    }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
         Ok(())
     }
 }
@@ -672,6 +699,12 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>,SD> where U: Uni
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
+        Ok(())
+    }
 }
 #[cfg(feature = "cuda")]
 impl<U,A> Adagrad<U,DeviceGpu<U,A>,IdentityLR>
@@ -743,6 +776,12 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
 
     fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
+        Ok(())
+    }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
         Ok(())
     }
 }
@@ -1026,6 +1065,12 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>,SD> where U: Uni
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
+        Ok(())
+    }
 }
 #[cfg(feature = "cuda")]
 impl<U,A> RMSprop<U,DeviceGpu<U,A>,IdentityLR>
@@ -1113,6 +1158,12 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>,SD>
 
     fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
+        Ok(())
+    }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
         Ok(())
     }
 }
@@ -1478,6 +1529,12 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>,SD> where U: UnitVa
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
+        Ok(())
+    }
 }
 #[cfg(feature = "cuda")]
 impl<U,A> Adam<U,DeviceGpu<U,A>,IdentityLR>
@@ -1568,6 +1625,12 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>,SD>
 
     fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
+        Ok(())
+    }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
         Ok(())
     }
 }
@@ -1963,6 +2026,12 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>,SD> where U: UnitV
         self.lr = self.scheduler.schedule(self.lr, step)?;
         Ok(())
     }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
+        Ok(())
+    }
 }
 #[cfg(feature = "cuda")]
 impl<U,A> AdamW<U,DeviceGpu<U,A>,IdentityLR>
@@ -2053,6 +2122,12 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>,SD>
 
     fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
         self.lr = self.scheduler.schedule(self.lr, step)?;
+        Ok(())
+    }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
         Ok(())
     }
 }

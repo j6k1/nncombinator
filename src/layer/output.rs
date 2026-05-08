@@ -26,7 +26,8 @@ pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>
     n:PhantomData<[();N]>,
     parent:P,
     device:D,
-    step_count:usize
+    step_count:usize,
+    frequently_steps:usize
 }
 impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> + OnStep,
@@ -46,7 +47,8 @@ impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
             n:PhantomData::<[();N]>,
             parent:parent,
             device:device.clone(),
-            step_count:0
+            step_count:0,
+            frequently_steps:0
         };
 
         l.parent.on_step(0)?;
@@ -374,6 +376,11 @@ impl<U,P,D,I,PI,const N:usize> Step for LinearOutputLayer<U,P,D,I,PI,N>
 
         Ok(self.parent.on_step(self.step_count)?)
     }
+
+    fn frequently_step(&mut self) -> Result<(),TrainingError> {
+        self.frequently_steps += 1;
+        Ok(self.parent.on_frequently_step(self.step_count,self.frequently_steps)?)
+    }
 }
 impl<U,P,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> for LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
@@ -389,6 +396,8 @@ impl<U,P,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> 
         self.parent.load_progress(persistence)?;
         let step_count:u64 = persistence.read()?;
         self.step_count = step_count as usize;
+        let frequently_steps:u64 = persistence.read()?;
+        self.frequently_steps = frequently_steps as usize;
 
         for _ in 0..self.step_count {
             self.step()?;
@@ -404,6 +413,7 @@ impl<U,P,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> 
         persistence.write_units_start();
 
         persistence.write(UnitOrMarker::Unit(self.step_count as u64));
+        persistence.write(UnitOrMarker::Unit(self.frequently_steps as u64));
 
         persistence.write_layer_end();
 
@@ -425,6 +435,9 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer
 
         self.step_count = step_count as usize;
 
+        let frequently_steps:u64 = persistence.read()?;
+        self.frequently_steps = frequently_steps as usize;
+
         for _ in 0..self.step_count {
             self.step()?;
         }
@@ -435,6 +448,7 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer
     fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         self.parent.save_progress(persistence)?;
         persistence.write(self.step_count as u64)?;
+        persistence.write(self.frequently_steps as u64)?;
 
         Ok(())
     }

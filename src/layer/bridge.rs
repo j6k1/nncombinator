@@ -285,6 +285,9 @@ impl<U,P,I,PI,CI,D> OnStep for BridgeLayer<U,P,I,PI,CI,D>
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
         Ok(self.parent.on_step(step)?)
     }
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.on_frequently_step(step,frequently_step)?)
+    }
 }
 impl<U,P,I,PI,CI,D> PersistProgress<TextFilePersistence,Specialized> for BridgeLayer<U,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> +

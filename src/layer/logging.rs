@@ -381,6 +381,9 @@ impl<U,P,I,PI,D> OnStep for LoggingLayer<U,P,I,PI,D>
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
         Ok(self.parent.on_step(step)?)
     }
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.on_frequently_step(step,frequently_step)?)
+    }
 }
 impl<U,P,I,PI,D> PersistProgress<TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> +

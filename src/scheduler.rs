@@ -18,12 +18,28 @@ pub trait Scheduler<U> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn schedule(&mut self, lr: U, step: usize) -> Result<U,TrainingError>;
+    fn schedule(&mut self, lr: U, _: usize) -> Result<U,TrainingError> {
+        Ok(lr)
+    }
+
+    /// Retrieve the updated value of the learning rate, which is adjusted more frequently
+    /// # Arguments
+    /// * `lr` - learning rate
+    /// * `frequently_step` - current training frequently step
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn schedule_frequently(&mut self, lr: U, _: usize, _: usize) -> Result<U,TrainingError> {
+        Ok(lr)
+    }
 
     /// Returns a combined scheduler that executes two schedulers sequentially.
     /// # Arguments
     /// * `milestone` - Threshold for the number of steps before delegating processing to the next scheduler
     /// * `next_scheduler` - Scheduler to be executed after the milestone
+    ///
     ///
     fn seq<NS>(self, milestone: usize, next_scheduler: NS) -> SequentialLR<U,Self,NS>
         where NS: Scheduler<U> + Clone + Sized + 'static,
@@ -147,10 +163,10 @@ impl<U> LinearWarmupLR<U> where U: UnitValue<U> {
     }
 }
 impl<U> Scheduler<U> for LinearWarmupLR<U> where U: UnitValue<U> + TryFromPrimitive {
-    fn schedule(&mut self, _: U, step: usize) -> Result<U,TrainingError> {
-        Ok(if step < self.warmup_steps {
+    fn schedule_frequently(&mut self, _: U, _: usize, frequently_step: usize) -> Result<U,TrainingError> {
+        Ok(if frequently_step < self.warmup_steps {
             self.base_lr * (self.start_factor + (U::one() - self.start_factor) *
-                (U::try_from_f64(step as f64)? / U::try_from_f64(self.warmup_steps as f64)?)
+                (U::try_from_f64(frequently_step as f64)? / U::try_from_f64(self.warmup_steps as f64)?)
             )
         } else {
             self.base_lr
@@ -195,7 +211,7 @@ impl<U> CosineAnnealingLR<U> where U: UnitValue<U> {
     }
 }
 impl<U> Scheduler<U> for CosineAnnealingLR<U> where U: UnitValue<U> {
-    fn schedule(&mut self, lr: U, step: usize) -> Result<U, TrainingError> {
+    fn schedule(&mut self, _: U, step: usize) -> Result<U, TrainingError> {
         Ok(self.eta_min + (self.base_lr - self.eta_min) / U::try_from_usize(2)? * (
             U::one() + (
                 U::try_from_usize(step)? * U::try_from_f64(PI)? /
@@ -277,6 +293,13 @@ impl<U,PS,S> Scheduler<U> for SequentialLR<U,PS,S> where U: UnitValue<U>, PS: Sc
             self.prev_scheduler.schedule(lr, step)
         } else {
             self.next_scheduler.schedule(lr, step - self.milestone)
+        }
+    }
+    fn schedule_frequently(&mut self, lr: U, step: usize, frequently_step: usize) -> Result<U, TrainingError> {
+        if step < self.milestone {
+            self.prev_scheduler.schedule_frequently(lr, step, frequently_step)
+        } else {
+            self.next_scheduler.schedule_frequently(lr, step - self.milestone, frequently_step)
         }
     }
 

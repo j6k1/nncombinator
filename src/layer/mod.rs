@@ -366,6 +366,13 @@ pub trait Step {
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn step(&mut self) -> Result<(), TrainingError>;
+    /// on frequently step notification
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn frequently_step(&mut self) -> Result<(), TrainingError>;
 }
 /// Definition of the feature to notify the number of learning progress steps
 pub trait OnStep {
@@ -378,6 +385,16 @@ pub trait OnStep {
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn on_step(&mut self, step:usize) -> Result<(), TrainingError>;
+
+    /// on frequently step notification with step count
+    /// # Arguments
+    /// * `step` - step count
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError>;
 }
 /// Trait that define the persistence of learning progress data
 pub trait PersistProgress<P,K> where K: PersistenceType {

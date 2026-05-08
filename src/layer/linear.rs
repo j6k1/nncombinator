@@ -548,6 +548,11 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OnStep for LinearLayer<U,
         self.bias_optimizer.on_step(step)?;
         Ok(self.parent.on_step(step)?)
     }
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.unit_optimizer.on_frequently_step(step,frequently_step)?;
+        self.bias_optimizer.on_frequently_step(step,frequently_step)?;
+        Ok(self.parent.on_frequently_step(step,frequently_step)?)
+    }
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFilePersistence,Specialized> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
@@ -1089,6 +1094,12 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> OnStep for DiffLine
         self.unit_optimizer.on_step(step)?;
         self.bias_optimizer.on_step(step)?;
         Ok(self.parent.on_step(step)?)
+    }
+    
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.unit_optimizer.on_frequently_step(step,frequently_step)?;
+        self.bias_optimizer.on_frequently_step(step,frequently_step)?;
+        Ok(self.parent.on_frequently_step(step,frequently_step)?)
     }
 }
 impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<TextFilePersistence,Specialized>

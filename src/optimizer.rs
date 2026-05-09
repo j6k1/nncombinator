@@ -445,6 +445,8 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,Devi
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
         for &vt in self.vt.iter() {
             persistence.write(UnitOrMarker::Unit(vt));
         }
@@ -486,6 +488,8 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,De
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
         for &vt in self.vt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(vt));
         }
@@ -807,6 +811,8 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,DeviceCp
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
         for &gt in self.gt.iter() {
             persistence.write(UnitOrMarker::Unit(gt));
         }
@@ -848,6 +854,8 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,Device
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
         for &gt in self.gt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(gt));
         }
@@ -1188,9 +1196,13 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,DeviceCp
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
         for &gt in self.gt.iter() {
             persistence.write(UnitOrMarker::Unit(gt));
         }
+
+        persistence.write_units_start();
 
         for &bt in self.bt.iter() {
             persistence.write(UnitOrMarker::Unit(bt));
@@ -1245,9 +1257,13 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,Device
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
         for &gt in self.gt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(gt));
         }
+
+        persistence.write_units_start();
 
         for &bt in self.bt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(bt));
@@ -1655,15 +1671,24 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceCpu<U
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
         for &mt in self.mt.iter() {
             persistence.write(UnitOrMarker::Unit(mt));
         }
+
+        persistence.write_units_start();
 
         for &vt in self.vt.iter() {
             persistence.write(UnitOrMarker::Unit(vt));
         }
 
+        persistence.write_units_start();
+
         persistence.write(UnitOrMarker::Unit(self.b1t));
+
+        persistence.write_units_start();
+
         persistence.write(UnitOrMarker::Unit(self.b2t));
 
         Ok(())
@@ -1728,15 +1753,24 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceGpu
           CudaPtr<U,A>: ReadMemory<U> + WriteMemory<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
         for &mt in self.mt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(mt));
         }
+
+        persistence.write_units_start();
 
         for &vt in self.vt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(vt));
         }
 
+        persistence.write_units_start();
+
         persistence.write(UnitOrMarker::Unit(self.b1t));
+
+        persistence.write_units_start();
+
         persistence.write(UnitOrMarker::Unit(self.b2t));
 
         Ok(())
@@ -2152,15 +2186,24 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceCpu<
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
         for &mt in self.mt.iter() {
             persistence.write(UnitOrMarker::Unit(mt));
         }
+
+        persistence.write_units_start();
 
         for &vt in self.vt.iter() {
             persistence.write(UnitOrMarker::Unit(vt));
         }
 
+        persistence.write_units_start();
+
         persistence.write(UnitOrMarker::Unit(self.b1t));
+
+        persistence.write_units_start();
+
         persistence.write(UnitOrMarker::Unit(self.b2t));
 
         Ok(())
@@ -2225,15 +2268,24 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceGp
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
         for &mt in self.mt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(mt));
         }
+
+        persistence.write_units_start();
 
         for &vt in self.vt.read_to_vec()?.iter() {
             persistence.write(UnitOrMarker::Unit(vt));
         }
 
+        persistence.write_units_start();
+
         persistence.write(UnitOrMarker::Unit(self.b1t));
+
+        persistence.write_units_start();
+
         persistence.write(UnitOrMarker::Unit(self.b2t));
 
         Ok(())

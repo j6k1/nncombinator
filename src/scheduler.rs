@@ -218,22 +218,6 @@ impl<U> Scheduler<U> for CosineAnnealingLR<U> where U: UnitValue<U> {
                 U::try_from_usize(self.total_steps)?
             ).cos()
         ))
-        /*
-        Ok(self.eta_min + (lr - self.eta_min) * (
-            (U::one() +
-                (
-                    (U::try_from_usize(step)? + U::one()) * U::try_from_f64(PI)? /
-                     U::try_from_usize(self.total_steps)?
-                ).cos()
-            ) /
-            (U::one() +
-                (
-                    U::try_from_usize(step)? * U::try_from_f64(PI)? /
-                    U::try_from_usize(self.total_steps)?
-                ).cos()
-            )
-        ))
-         */
     }
 }
 /// Scheduler that executes two schedulers sequentially.

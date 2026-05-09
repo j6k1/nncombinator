@@ -74,17 +74,6 @@ pub trait LinearPersistence<U> {
     /// * [`PersistenceError`]
     fn write(&mut self, u:U) -> Result<(), PersistenceError>;
 }
-/// Types for passing identifiable information about layers and unit boundaries when persisting models
-pub enum UnitOrMarker<U> {
-    /// Not a boundary.
-    Unit(U),
-    /// start layer boundary
-    LayerStart,
-    /// end layer boundary
-    LayerEnd,
-    /// boundary
-    UnitsStart
-}
 /// Record type for saving models in text format
 pub enum TextRecord {
     F32(f32),
@@ -126,7 +115,7 @@ pub trait TextPersistence<U> {
     ///
     /// This function may return the following errors
     /// * [`PersistenceError`]
-    fn write(&mut self, u:UnitOrMarker<U>);
+    fn write(&mut self, u:U);
 }
 /// Persistent object for saving to a text file
 pub struct TextFilePersistence {
@@ -245,21 +234,8 @@ impl<U> TextPersistence<U> for TextFilePersistence
     fn read(&mut self) -> Result<U, ModelLoadError> {
         Ok(self.next_token()?.parse::<U>()?)
     }
-    fn write(&mut self, v: UnitOrMarker<U>) {
-        match v {
-            UnitOrMarker::Unit(u) => {
-                self.data.push(u.into());
-            },
-            UnitOrMarker::LayerStart => {
-                self.data.push(TextRecord::LayerStart);
-            },
-            UnitOrMarker::LayerEnd => {
-                self.data.push(TextRecord::LayerEnd);
-            },
-            UnitOrMarker::UnitsStart => {
-                self.data.push(TextRecord::UnitsStart);
-            }
-        }
+    fn write(&mut self, v: U) {
+        self.data.push(v.into());
     }
 }
 impl VerifyEof for TextFilePersistence {

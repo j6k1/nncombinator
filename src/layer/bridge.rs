@@ -10,7 +10,7 @@ use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, Batc
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 /// Bridge layer Implementation
 pub struct BridgeLayer<U,P,I,PI,CI,D> where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
@@ -43,8 +43,8 @@ impl<U,P,I,PI,CI,D> Persistence<U,TextFilePersistence,Specialized> for BridgeLay
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        persistence.write(UnitOrMarker::LayerStart);
-        persistence.write(UnitOrMarker::LayerEnd);
+        persistence.write_layer_start();
+        persistence.write_layer_end();
 
         Ok(())
     }

@@ -11,7 +11,7 @@ use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchFor
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::optimizer::{Optimizer, OptimizerBuilder};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
 
 /// Linear Layer Implementation
 pub struct LinearLayer<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
@@ -111,25 +111,25 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePer
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        persistence.write(UnitOrMarker::LayerStart);
+        persistence.write_layer_start();
 
         let bias = self.device.generalization_bias(&self.bias)?;
         let units = self.device.generalization_units(&self.units)?;
 
-        persistence.write(UnitOrMarker::UnitsStart);
+        persistence.write_units_start();
 
         for b in bias.iter() {
-            persistence.write(UnitOrMarker::Unit(*b));
+            persistence.write(*b);
         }
 
         for u in units.iter() {
-            persistence.write(UnitOrMarker::UnitsStart);
+            persistence.write_units_start();
             for w in u.iter() {
-                persistence.write(UnitOrMarker::Unit(*w));
+                persistence.write(*w);
             }
         }
 
-        persistence.write(UnitOrMarker::LayerEnd);
+        persistence.write_layer_end();
 
         Ok(())
     }
@@ -807,25 +807,25 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,TextF
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        persistence.write(UnitOrMarker::LayerStart);
+        persistence.write_layer_start();
 
         let bias = self.device.generalization_bias(&self.bias)?;
         let units = self.device.generalization_units(&self.units)?;
 
-        persistence.write(UnitOrMarker::UnitsStart);
+        persistence.write_units_start();
 
         for b in bias.iter() {
-            persistence.write(UnitOrMarker::Unit(*b));
+            persistence.write(*b);
         }
 
         for u in units.iter() {
-            persistence.write(UnitOrMarker::UnitsStart);
+            persistence.write_units_start();
             for w in u.iter() {
-                persistence.write(UnitOrMarker::Unit(*w));
+                persistence.write(*w);
             }
         }
 
-        persistence.write(UnitOrMarker::LayerEnd);
+        persistence.write_layer_end();
 
         Ok(())
     }

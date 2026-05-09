@@ -12,7 +12,7 @@ use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchFor
 use crate::lossfunction::LossFunction;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
 
 /// Trait for BiasLayer instance creation
 pub trait BiasLayerInstantiation<U,C,P,OP,D,I,PI,const N:usize>
@@ -74,17 +74,17 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialize
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        persistence.write(UnitOrMarker::LayerStart);
+        persistence.write_layer_start();
 
         let bias = self.device.generalization_bias(&self.bias)?;
 
-        persistence.write(UnitOrMarker::UnitsStart);
+        persistence.write_units_start();
 
         for b in bias.iter() {
-            persistence.write(UnitOrMarker::Unit(*b));
+            persistence.write(*b);
         }
 
-        persistence.write(UnitOrMarker::LayerEnd);
+        persistence.write_layer_end();
 
         Ok(())
     }

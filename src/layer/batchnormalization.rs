@@ -11,7 +11,7 @@ use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchFor
 use crate::lossfunction::LossFunction;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
 
 /// Structure that holds information related to mean and variance calculated during forward propagation during learning.
 #[derive(Debug)]
@@ -190,9 +190,9 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialize
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        persistence.write(UnitOrMarker::LayerStart);
+        persistence.write_layer_start();
 
-        persistence.write(UnitOrMarker::UnitsStart);
+        persistence.write_units_start();
 
         let scale = self.device.generalization_vars(&self.scale)?;
         let bias = self.device.generalization_vars(&self.bias)?;
@@ -200,28 +200,28 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialize
         let running_variance = self.device.generalization_vars(&self.running_variance)?;
 
         for i in scale.iter() {
-            persistence.write(UnitOrMarker::Unit(*i));
+            persistence.write(*i);
         }
 
-        persistence.write(UnitOrMarker::UnitsStart);
+        persistence.write_units_start();
 
         for i in bias.iter() {
-            persistence.write(UnitOrMarker::Unit(*i));
+            persistence.write(*i);
         }
 
-        persistence.write(UnitOrMarker::UnitsStart);
+        persistence.write_units_start();
 
         for i in running_mean.iter() {
-            persistence.write(UnitOrMarker::Unit(*i));
+            persistence.write(*i);
         }
 
-        persistence.write(UnitOrMarker::UnitsStart);
+        persistence.write_units_start();
 
         for i in running_variance.iter() {
-            persistence.write(UnitOrMarker::Unit(*i));
+            persistence.write(*i);
         }
 
-        persistence.write(UnitOrMarker::LayerEnd);
+        persistence.write_layer_end();
 
         Ok(())
     }

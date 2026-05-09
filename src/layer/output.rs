@@ -11,7 +11,7 @@ use crate::error::{ModelLoadError, EvaluateError, PersistenceError, SizeMismatch
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PersistProgress, PreTrain, Step, Train, UpdateWeight};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker, VerifyEof};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, VerifyEof};
 
 /// Layer implementation of the output layer (linear layer)
 pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>
@@ -412,8 +412,8 @@ impl<U,P,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> 
         persistence.write_layer_start();
         persistence.write_units_start();
 
-        persistence.write(UnitOrMarker::Unit(self.step_count as u64));
-        persistence.write(UnitOrMarker::Unit(self.frequently_steps as u64));
+        persistence.write(self.step_count as u64);
+        persistence.write(self.frequently_steps as u64);
 
         persistence.write_layer_end();
 

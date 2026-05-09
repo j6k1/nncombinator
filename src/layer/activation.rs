@@ -10,7 +10,7 @@ use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingErro
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 /// Activation layer Implementation
 pub struct ActivationLayer<U,P,A,I,PI,D,const N:usize> where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
@@ -63,8 +63,8 @@ impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence,Specialized> 
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        persistence.write(UnitOrMarker::LayerStart);
-        persistence.write(UnitOrMarker::LayerEnd);
+        persistence.write_layer_start();
+        persistence.write_layer_end();
 
         Ok(())
     }

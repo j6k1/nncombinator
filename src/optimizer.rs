@@ -18,7 +18,7 @@ use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, AdamWArgs, MomentumS
 use crate::cuda::ReadMemory;
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
 
 /// OptimizerBuilder Definition
 pub trait OptimizerBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
@@ -448,7 +448,7 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,Devi
         persistence.write_units_start();
 
         for &vt in self.vt.iter() {
-            persistence.write(UnitOrMarker::Unit(vt));
+            persistence.write(vt);
         }
         Ok(())
     }
@@ -491,7 +491,7 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,De
         persistence.write_units_start();
 
         for &vt in self.vt.read_to_vec()?.iter() {
-            persistence.write(UnitOrMarker::Unit(vt));
+            persistence.write(vt);
         }
         Ok(())
     }
@@ -814,7 +814,7 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,DeviceCp
         persistence.write_units_start();
 
         for &gt in self.gt.iter() {
-            persistence.write(UnitOrMarker::Unit(gt));
+            persistence.write(gt);
         }
         Ok(())
     }
@@ -857,7 +857,7 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,Device
         persistence.write_units_start();
 
         for &gt in self.gt.read_to_vec()?.iter() {
-            persistence.write(UnitOrMarker::Unit(gt));
+            persistence.write(gt);
         }
         Ok(())
     }
@@ -1199,13 +1199,13 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,DeviceCp
         persistence.write_units_start();
 
         for &gt in self.gt.iter() {
-            persistence.write(UnitOrMarker::Unit(gt));
+            persistence.write(gt);
         }
 
         persistence.write_units_start();
 
         for &bt in self.bt.iter() {
-            persistence.write(UnitOrMarker::Unit(bt));
+            persistence.write(bt);
         }
         Ok(())
     }
@@ -1260,13 +1260,13 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,Device
         persistence.write_units_start();
 
         for &gt in self.gt.read_to_vec()?.iter() {
-            persistence.write(UnitOrMarker::Unit(gt));
+            persistence.write(gt);
         }
 
         persistence.write_units_start();
 
         for &bt in self.bt.read_to_vec()?.iter() {
-            persistence.write(UnitOrMarker::Unit(bt));
+            persistence.write(bt);
         }
         Ok(())
     }
@@ -1674,22 +1674,22 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceCpu<U
         persistence.write_units_start();
 
         for &mt in self.mt.iter() {
-            persistence.write(UnitOrMarker::Unit(mt));
+            persistence.write(mt);
         }
 
         persistence.write_units_start();
 
         for &vt in self.vt.iter() {
-            persistence.write(UnitOrMarker::Unit(vt));
+            persistence.write(vt);
         }
 
         persistence.write_units_start();
 
-        persistence.write(UnitOrMarker::Unit(self.b1t));
+        persistence.write(self.b1t);
 
         persistence.write_units_start();
 
-        persistence.write(UnitOrMarker::Unit(self.b2t));
+        persistence.write(self.b2t);
 
         Ok(())
     }
@@ -1756,22 +1756,22 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceGpu
         persistence.write_units_start();
 
         for &mt in self.mt.read_to_vec()?.iter() {
-            persistence.write(UnitOrMarker::Unit(mt));
+            persistence.write(mt);
         }
 
         persistence.write_units_start();
 
         for &vt in self.vt.read_to_vec()?.iter() {
-            persistence.write(UnitOrMarker::Unit(vt));
+            persistence.write(vt);
         }
 
         persistence.write_units_start();
 
-        persistence.write(UnitOrMarker::Unit(self.b1t));
+        persistence.write(self.b1t);
 
         persistence.write_units_start();
 
-        persistence.write(UnitOrMarker::Unit(self.b2t));
+        persistence.write(self.b2t);
 
         Ok(())
     }
@@ -2189,22 +2189,22 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceCpu<
         persistence.write_units_start();
 
         for &mt in self.mt.iter() {
-            persistence.write(UnitOrMarker::Unit(mt));
+            persistence.write(mt);
         }
 
         persistence.write_units_start();
 
         for &vt in self.vt.iter() {
-            persistence.write(UnitOrMarker::Unit(vt));
+            persistence.write(vt);
         }
 
         persistence.write_units_start();
 
-        persistence.write(UnitOrMarker::Unit(self.b1t));
+        persistence.write(self.b1t);
 
         persistence.write_units_start();
 
-        persistence.write(UnitOrMarker::Unit(self.b2t));
+        persistence.write(self.b2t);
 
         Ok(())
     }
@@ -2271,22 +2271,22 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceGp
         persistence.write_units_start();
 
         for &mt in self.mt.read_to_vec()?.iter() {
-            persistence.write(UnitOrMarker::Unit(mt));
+            persistence.write(mt);
         }
 
         persistence.write_units_start();
 
         for &vt in self.vt.read_to_vec()?.iter() {
-            persistence.write(UnitOrMarker::Unit(vt));
+            persistence.write(vt);
         }
 
         persistence.write_units_start();
 
-        persistence.write(UnitOrMarker::Unit(self.b1t));
+        persistence.write(self.b1t);
 
         persistence.write_units_start();
 
-        persistence.write(UnitOrMarker::Unit(self.b2t));
+        persistence.write(self.b2t);
 
         Ok(())
     }

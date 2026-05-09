@@ -8,7 +8,7 @@ use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingErro
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::Stack;
 
 /// Logging layer Implementation
@@ -93,8 +93,8 @@ impl<U,P,I,PI,D> Persistence<U,TextFilePersistence,Specialized> for LoggingLayer
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        persistence.write(UnitOrMarker::LayerStart);
-        persistence.write(UnitOrMarker::LayerEnd);
+        persistence.write_layer_start();
+        persistence.write_layer_end();
 
         Ok(())
     }

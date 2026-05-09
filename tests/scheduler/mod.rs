@@ -28,15 +28,21 @@ fn test_scheduler_seq() {
                                         .seq(10, LinearWarmupLR::new(20, 0.01, 0.0))
                                         .seq(20,LambdaLR::new(0.01, |_| Ok(0.001)));
 
-    assert_eq!(scheduler.schedule(0.01, 0).unwrap(), 0.0);
-    assert_eq!(scheduler.schedule(0.01, 9).unwrap(), 0.01*(9.0/10.0));
-    assert_eq!(scheduler.schedule(0.01, 10).unwrap(), 0.0);
-    assert_eq!(scheduler.schedule(0.01, 11).unwrap(), 0.01/20.0);
-    assert_eq!(scheduler.schedule(0.01, 29).unwrap(), 0.01*(19.0/20.0));
+    assert_eq!(scheduler.schedule_frequently(0.01, 0,0).unwrap(), 0.0);
+    assert_eq!(scheduler.schedule_frequently(0.01, 5,9).unwrap(), 0.01 * (9.0 / 10.0));
+    assert_eq!(scheduler.schedule_frequently(0.01, 10,2).unwrap(), 0.01 * (2.0 / 20.0));
+    assert_eq!(scheduler.schedule_frequently(0.01, 11,12).unwrap(), 0.01 * (12.0 / 20.0));
+    assert_eq!(scheduler.schedule_frequently(0.01, 29,18).unwrap(), 0.01 * (18.0 / 20.0));
     assert_eq!(scheduler.schedule(0.01, 30).unwrap(), 0.00001);
     assert_eq!(scheduler.schedule(0.01, 35).unwrap(), 0.00001);
     assert_eq!(scheduler.schedule(0.01, 40).unwrap(), 0.00001);
     assert_eq!(scheduler.schedule(0.01, 50).unwrap(), 0.00001);
+
+    assert_eq!(scheduler.schedule(0.01, 0).unwrap(), 0.01);
+    assert_eq!(scheduler.schedule(0.02, 5).unwrap(), 0.02);
+    assert_eq!(scheduler.schedule(0.03, 10).unwrap(), 0.03);
+    assert_eq!(scheduler.schedule(0.04, 11).unwrap(), 0.04);
+    assert_eq!(scheduler.schedule(0.05, 29).unwrap(), 0.05);
 }
 #[test]
 fn test_scheduler() {

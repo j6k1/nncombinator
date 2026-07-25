@@ -23,6 +23,7 @@ cuda = ["cuda-runtime-sys","rcudnn","rcudnn-sys","rcublas","rcublas-sys"]
 num-traits = "0.2.14"
 rayon = "1.5.1"
 libc = "0.2"
+try-from-primitive = "0.1.0"
 cuda-runtime-sys = { version = "0.3.0-alpha.1", optional = true }
 rcudnn = { version =  "1.8.0", optional = true }
 rcudnn-sys = { version = "0.5.0", optional = true }
@@ -39,8 +40,6 @@ image = "0.24.4"
 mnist = "0.5.0"
 [build-dependencies]
 cc = "1.0.95"
-[dependencies.try-from-primitive]
-path = "../try-from-primitive"
 [profile.test]
 opt-level = 3
 codegen-units = 1

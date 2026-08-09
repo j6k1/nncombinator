@@ -1,3 +1,119 @@
+Version 0.9.8 (2026-08-09)
+===========================
+
+Major changes
+--------
+
+- Added support for building in environments where CUDA is not installed.
+
+Important bugfix
+--------
+
+- Fixed an issue in batch back propagation where errors propagated to parent layers
+  were calculated from values that had already been divided by the batch size at
+  the output layer. Errors are now propagated first and divided by the batch size
+  in each layer as required, fixing incorrect training behavior.
+
+Bugfix
+--------
+
+- Fixed cases where `TextPersistence` could not correctly handle comment lines
+  in model files.
+- Fixed missing boundary checks in the `Iterator` implementations for
+  `Arr2Iter` and `Arr2IterMut`.
+
+Function additions
+--------
+
+- Added learning rate scheduler support.
+- Added the `CudaAllocator` trait and consolidated CUDA-related memory
+  allocation behind its implementations.
+- Added the `PartialForward`, `ForwardDiff`, and `ContinueForward` traits and
+  implemented them for various layers.
+- Added `LoggingLayer`.
+- Added the `Step` and `OnStep` traits and implemented them for various layers.
+- Added the `DeviceBatchAveraging` trait.
+- Added `MemoryWriter`.
+- Added `CudaPtrRef`, `AddBiasBatch`, and `AddBiasBatchArgs`.
+- Added AdamW support.
+- Added `DeviceAllocator`, `HostAllocator`, and `MemoryPoolAllocator`.
+- Added the `AsCudaReadOnlyPtr`, `DeriveCudaConstPtr`, `CudaView`,
+  `AsCudaView`, and `MemoryType` traits.
+- Added `ModelLoadError` and `GeneralizationError`.
+- Added `TrainingError::FromPrimitiveError` and
+  `TrainingError::ModelLoadError`.
+- Added `LayerInstantiationError::SpecializationError`.
+- Added `From<ModelLoadError>` and `From<FromPrimitiveError>` implementations
+  for `TrainingError`.
+- Added a `From<SpecializationError>` implementation for
+  `LayerInstantiationError`.
+- Added `ShieldSlice::as_chunks_mut`.
+- Added `From<[T; N]>` for `Arr`.
+- Added `Index` and `IndexMut` implementations for `Arr2` that return `&[T]`
+  and `&mut [T]`.
+- Added the `VerifyEof` trait.
+- Added the `Cos` trait and implemented it for `f32` and `f64`.
+- Added the `TextRecord` type.
+- Added `ClippedReLu` and `LeakyReLu` activation function implementations.
+- Added `Kernel::launch_config`.
+- Added `CudaPtr::with_initializer`.
+
+Specification change
+--------
+
+- Changed the `Persistence::load` error type.
+- Changed the `LinearPersistence::read` error type.
+- Changed the error types returned by methods on `TextFilePersistence` and
+  `BinFilePersistence`.
+- Added a type parameter to the `SaveToFile` trait.
+- Changed `UpdateWeight::update_weigth` to accept the batch size as its second
+  argument.
+- Changed the `DiffInput` specification.
+- Removed the `AskDiffInput` trait.
+- Changed `as_ptr` functions that accepted mutable references to accept
+  immutable references instead.
+- Changed `DeviceBias` batch execution to use the `AddBiasBatch`
+  implementation.
+- Implemented `DeviceBatchAveraging` for `DeviceCpu` and `DeviceGpu`.
+- Removed the unsafe `Sync` implementation from `MemoryPool`.
+- Updated signatures for activation-function-related traits and their
+  implementations.
+- Removed dimension-related arguments from `Kernel::launch`; dimension
+  information is now returned from `Kernel::launch_config`.
+- Moved the definition location of the `ToHost` trait.
+- Changed `LossFunctionLinear` signatures.
+- Added `on_step` and `on_frequently_step` methods to the `Optimizer` trait.
+
+CUDA and memory API changes
+--------
+
+- Added `generalization_vars` and `specialization_vars` methods to the
+  `DeviceBatchNorm` trait.
+- Added `generalization_bias` and `specialization_bias` methods to the
+  `DeviceBias` trait.
+- Added `generalization_units`, `generalization_bias`, `specialization_units`,
+  and `specialization_bias` methods to the `DeviceLinear` trait.
+- Implemented `AsPtr<T>`, `AsMutPtr<T>`, and `AsMutKernelPtrBase` for `u32`,
+  `i64`, `u64`, `usize`, `f32`, and `f64`.
+- Implemented `MemorySize` for `CudaTensor1dPtrView`, `CudaTensor2dPtrView`,
+  `CudaTensor3dPtrView`, and `CudaTensor4dPtrView`.
+- Changed inherited traits for `WriteMemory` and `WriteMemoryAsync` from
+  `AsMutVoidPtr` to `AsMutPtr<T>`.
+- Implemented `AsCudaReadOnlyPtr` for `CudaPtr`.
+- Removed `CudaMemoryPoolPtr`.
+- Implemented `CudaView` for `CudaTensor1dPtr`, `CudaTensor2dPtr`,
+  `CudaTensor3dPtr`, and `CudaTensor4dPtr`.
+- Implemented `AsCudaReadOnlyPtr` and `DeriveCudaConstPtr` for
+  `CudaTensor1dPtr`, `CudaTensor1dPtrView`, `CudaTensor2dPtr`,
+  `CudaTensor2dPtrView`, `CudaTensor3dPtr`, `CudaTensor3dPtrView`,
+  `CudaTensor4dPtr`, `CudaTensor4dPtrView`, `CudaVec`, and `CudaVecView`.
+- Implemented `AsCudaReadOnlyPtr` for `&CudaTensor1dPtr`,
+  `&CudaTensor2dPtr`, `&CudaTensor3dPtr`, and `&CudaTensor4dPtr`.
+- Implemented `AsCudaView` for `&CudaTensor1dPtr`, `&CudaTensor2dPtr`,
+  `&CudaTensor3dPtr`, and `&CudaTensor4dPtr`.
+- Implemented `TryFrom` to convert references of CUDA tensor pointer types to
+  their owned non-reference types.
+
 Version 0.9.0 (2025-01-02)
 ===========================
 

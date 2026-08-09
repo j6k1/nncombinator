@@ -5,11 +5,11 @@ use std::str::FromStr;
 use crate::{Cons, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
-use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, PreTrain, UpdateWeight};
+use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PersistProgress, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 pub struct InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
     u:PhantomData<U>,
@@ -28,19 +28,19 @@ impl<U,O,LI,D> InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,O,LI,D> Persistence<U,TextFilePersistence<U>,Specialized> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> Persistence<U,TextFilePersistence,Specialized> for InputLayer<U,O,LI,D>
     where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
-    fn load(&mut self, _: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+    fn load(&mut self, _: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         Ok(())
     }
 
-    fn save(&mut self, _: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         Ok(())
     }
 }
 impl<T,U,O,LI,D> Persistence<U,T,Linear> for InputLayer<U,O,LI,D>
     where T: LinearPersistence<U>, U: UnitValue<U>, D: Device<U> {
-    fn load(&mut self, _: &mut T) -> Result<(),ConfigReadError> {
+    fn load(&mut self, _: &mut T) -> Result<(), ModelLoadError> {
         Ok(())
     }
 
@@ -95,7 +95,7 @@ impl<U,O,LI,D> UpdateWeight<U> for InputLayer<U,O,LI,D>
           <O as BatchDataType>::Type: Debug + 'static {
     type GradientStack = Nil;
 
-    fn update_weight(&mut self, _: Self::GradientStack) -> Result<(), TrainingError> {
+    fn update_weight(&mut self, _: Self::GradientStack, _: usize) -> Result<(), TrainingError> {
         Ok(())
     }
 }
@@ -165,4 +165,206 @@ impl<U,O,LI,D> BatchLoss<U> for InputLayer<U,O,LI,D>
           D: Device<U> + DeviceInput<U,O>,
           <LI as BatchDataType>::Type: Debug,
           <O as BatchDataType>::Type: Debug + 'static {
+}
+impl<U,O,LI,D> OnStep for InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
+    fn on_step(&mut self, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+    fn on_frequently_step(&mut self, _: usize, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+}
+impl<U,O,LI,D> PersistProgress<TextFilePersistence,Specialized> for InputLayer<U,O,LI,D>
+    where U: UnitValue<U> + FromStr + Sized,
+          D: Device<U>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
+    fn load_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), TrainingError> {
+        Ok(())
+    }
+
+    fn save_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+impl<T,U,O,LI,D> PersistProgress<T,Linear> for InputLayer<U,O,LI,D>
+    where T: LinearPersistence<U>, U: UnitValue<U>, D: Device<U> {
+    fn load_progress(&mut self, _: &mut T) -> Result<(), TrainingError> {
+        Ok(())
+    }
+
+    fn save_progress(&mut self, _: &mut T) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+pub struct DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: Device<U> {
+    u:PhantomData<U>,
+    o:PhantomData<O>,
+    di:PhantomData<DI>,
+    po:PhantomData<PO>,
+    l:PhantomData<LI>,
+    device:D
+}
+impl<U,O,DI,PO,LI,D> DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: Device<U> {
+    /// Create an instance of InputLayer
+    pub fn new(device:&D) -> DiffInputLayer<U,O,DI,PO,LI,D> {
+        DiffInputLayer {
+            u:PhantomData::<U>,
+            o:PhantomData::<O>,
+            di:PhantomData::<DI>,
+            po:PhantomData::<PO>,
+            l:PhantomData::<LI>,
+            device:device.clone()
+        }
+    }
+}
+impl<U,O,DI,PO,LI,D> Persistence<U,TextFilePersistence,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
+    fn load(&mut self, _: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
+        Ok(())
+    }
+
+    fn save(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+impl<T,U,O,DI,PO,LI,D> Persistence<U,T,Linear> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where T: LinearPersistence<U>, U: UnitValue<U>, D: Device<U> {
+    fn load(&mut self, _: &mut T) -> Result<(), ModelLoadError> {
+        Ok(())
+    }
+
+    fn save(&mut self, _: &mut T) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+impl<U,O,DI,PO,LI,D> ForwardAll for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U>,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+        DI: Debug,
+        PO: Debug,
+        LI: Debug,
+        D: Device<U> + DeviceInput<U,O>,
+        <O as BatchDataType>::Type: Debug + 'static {
+    type Input = O;
+    type Output = <D as DeviceInput<U,O>>::Output;
+    fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError> {
+        Ok(self.device.forward_input(input)?)
+    }
+}
+impl<U,O,DI,PO,LI,D> PartialForward for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U>,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type PartialOutput = <D as DeviceInput<U,O>>::Output;
+    type PartialOutputByDiff = DI;
+    type DiffOutput = DI;
+    type DiffInput = DI;
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.device.forward_input(input)?)
+    }
+
+    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
+        Ok(input)
+    }
+}
+impl<U,O,DI,PO,LI,D> ForwardDiff for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U>,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
+        Ok(input)
+    }
+}
+impl<U,O,DI,PO,LI,D> PreTrain<U> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U>,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type PreOutput = <D as DeviceInput<U,O>>::Output;
+    type OutStack = Cons<Nil,Self::PreOutput>;
+
+    fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError> {
+        Ok(Cons(Nil,self.device.forward_input(input)?))
+    }
+}
+impl<U,O,DI,PO,LI,D> BackwardAll<U> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U>,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type LossInput = LI;
+    type LossOutput = LI;
+
+    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, _:Self::OutStack, _:&L)
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        Ok((input,Nil))
+    }
+}
+impl<U,O,DI,PO,LI,D> UpdateWeight<U> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U>,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type GradientStack = Nil;
+
+    fn update_weight(&mut self, _: Self::GradientStack, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+}
+impl<U,O,DI,PO,LI,D> Loss<U> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U>,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {}
+impl<U,O,DI,PO,LI,D> OnStep for DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: Device<U> {
+    fn on_step(&mut self, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+    fn on_frequently_step(&mut self, _: usize, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+}
+impl<U,O,DI,PO,LI,D> PersistProgress<TextFilePersistence,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: UnitValue<U> + FromStr + Sized,
+          D: Device<U>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
+    fn load_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), TrainingError> {
+        Ok(())
+    }
+
+    fn save_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+impl<T,U,O,DI,PO,LI,D> PersistProgress<T,Linear> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where T: LinearPersistence<U>, U: UnitValue<U>, D: Device<U> {
+    fn load_progress(&mut self, _: &mut T) -> Result<(), TrainingError> {
+        Ok(())
+    }
+
+    fn save_progress(&mut self, _: &mut T) -> Result<(), PersistenceError> {
+        Ok(())
+    }
 }

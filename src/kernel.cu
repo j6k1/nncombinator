@@ -21,6 +21,14 @@ __device__ double _fmax(double a, double b) {
     return std::fmax(a,b);
 }
 
+__device__ float _fmin(float a, float b) {
+    return std::fmin(a,b);
+}
+
+__device__ double _fmin(double a, double b) {
+    return std::fmin(a,b);
+}
+
 __device__ float _sqrt(float x) {
     return sqrtf(x);
 }
@@ -53,12 +61,12 @@ __device__ half _to_half(double x) {
     return __double2half(x);
 }
 
-__device__ size_t calc_index(size_t x, size_t y, size_t leading_dimension) {
-    return y * leading_dimension + x;
+__device__ size_t calc_index(size_t row, size_t col, size_t leading_dimension) {
+    return row * leading_dimension + col;
 }
 
-__device__ size_t calc_transposed_index(size_t x, size_t y, size_t leading_dimension) {
-    return x * leading_dimension + y;
+__device__ size_t calc_transposed_index(size_t row, size_t col, size_t leading_dimension) {
+    return col * leading_dimension + row;
 }
 
 #define BLOCK_SHARED 1024
@@ -91,6 +99,30 @@ __device__ void relu_forward(const T *input, T *output, const size_t units_len, 
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
         output[i] = _fmax(input[i],(T)0.0);
+    }
+}
+template<typename T>
+
+__device__ void clipped_relu_forward(const T *input, const T ceiling, T *output, const size_t units_len, const size_t batch_size) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (index < units_len && batch_index < batch_size) {
+        size_t i = batch_index == 0 ? index : batch_index * units_len + index;
+
+        output[i] = _fmin(_fmax(input[i],(T)0.0),ceiling);
+    }
+}
+template<typename T>
+
+__device__ void leaky_relu_forward(const T *input, T *output, const size_t units_len, const size_t batch_size) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (index < units_len && batch_index < batch_size) {
+        size_t i = batch_index == 0 ? index : batch_index * units_len + index;
+
+        output[i] = _fmax(input[i],(T)0.0) + 0.01 * _fmin(input[i],(T)0.0);
     }
 }
 template<typename T>
@@ -245,8 +277,40 @@ __device__ void relu_backward(const T *o, const T *u, const T *loss, T *output, 
     if (index < units_len && batch_index < batch_size) {
         size_t i = batch_index == 0 ? index : batch_index * units_len + index;
 
-        if (!(u[i] > 0.0)) {
+        if (!(o[i] > 0.0)) {
             output[i] = 0.0;
+        } else {
+            output[i] = loss[i];
+        }
+    }
+}
+template<typename T>
+
+__device__ void clipped_relu_backward(const T *o, const T *u, const T *loss, const T ceiling, T *output, const size_t units_len, const size_t batch_size) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (index < units_len && batch_index < batch_size) {
+        size_t i = batch_index == 0 ? index : batch_index * units_len + index;
+
+        if (!(o[i] > 0.0 && o[i] <= ceiling)) {
+            output[i] = 0.0;
+        } else {
+            output[i] = loss[i];
+        }
+    }
+}
+template<typename T>
+
+__device__ void leaky_relu_backward(const T *o, const T *u, const T *loss, T *output, const size_t units_len, const size_t batch_size) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if (index < units_len && batch_index < batch_size) {
+        size_t i = batch_index == 0 ? index : batch_index * units_len + index;
+
+        if (!(o[i] >= 0.0)) {
+            output[i] = loss[i] * 0.01;
         } else {
             output[i] = loss[i];
         }
@@ -375,44 +439,56 @@ __device__ void reduce_linear_batch(const T *input, T *output, const int nlen, c
     extern __shared__ char smem[];
     T *sdata = reinterpret_cast<T*>(smem);
 
-    if (blockIdx.x < nlen && blockDim.x * blockIdx.z + threadIdx.x < batch_size) {
-        unsigned int tid = threadIdx.x;
-        unsigned int i = blockIdx.x + tid * nlen;
-        unsigned int distance = blockDim.x * nlen;
+    unsigned int tid = threadIdx.x;
+    unsigned int size = batch_size * nlen;
+    unsigned int distance = blockDim.x * nlen;
 
-        if (tid < 32) {
-            sdata[tid] = (T)0;
-        }
-        __syncthreads();
+    if (tid < 32) {
+        sdata[tid] = (T)0;
+    }
+    __syncthreads();
 
-        T acc = 0.0;
+    T acc = 0.0;
 
-        acc += input[i + blockIdx.z * distance];
+    for (unsigned int i = blockIdx.x + tid * nlen; i < size; i += distance) {
+        acc += input[i];
+    }
+
+    acc += __shfl_down_sync(0xffffffff,acc,16);
+    acc += __shfl_down_sync(0xffffffff,acc,8);
+    acc += __shfl_down_sync(0xffffffff,acc,4);
+    acc += __shfl_down_sync(0xffffffff,acc,2);
+    acc += __shfl_down_sync(0xffffffff,acc,1);
+
+    if (tid % 32 == 0) {
+        sdata[tid / 32] = acc;
+    }
+    __syncthreads();
+
+    if (tid < 32) {
+        acc = sdata[tid];
 
         acc += __shfl_down_sync(0xffffffff,acc,16);
         acc += __shfl_down_sync(0xffffffff,acc,8);
         acc += __shfl_down_sync(0xffffffff,acc,4);
         acc += __shfl_down_sync(0xffffffff,acc,2);
         acc += __shfl_down_sync(0xffffffff,acc,1);
+    }
 
-        if (tid % 32 == 0) {
-            sdata[tid / 32] = acc;
-        }
-        __syncthreads();
+    if (tid == 0) {
+        output[blockIdx.x] = acc;
+    }
+}
+template<typename T>
 
-        if (tid < 32) {
-            acc = sdata[tid];
+__device__ void addbias_batch(const T *bias, T *input_output, const size_t units_len, const size_t batch_size) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+    size_t batch_index = blockDim.y * blockIdx.y + threadIdx.y;
 
-            acc += __shfl_down_sync(0xffffffff,acc,16);
-            acc += __shfl_down_sync(0xffffffff,acc,8);
-            acc += __shfl_down_sync(0xffffffff,acc,4);
-            acc += __shfl_down_sync(0xffffffff,acc,2);
-            acc += __shfl_down_sync(0xffffffff,acc,1);
-        }
+    if (index < units_len && batch_index < batch_size) {
+        size_t i = batch_index * units_len + index;
 
-        if (tid == 0) {
-            atomicAdd(&output[blockIdx.x],acc);
-        }
+        input_output[i] += bias[index];
     }
 }
 template<typename T>
@@ -439,18 +515,18 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
     __syncthreads();
 
     for (int k = 0; k <= input_len; k += TILE_SIZE) {
-        if (k + tx < input_len && by + ty < batch_size) {
-            sdata_a[ty * TILE_SIZE + tx] = _to_half(input[calc_index(k+tx,by+ty,input_len)]);
-        } else if (k + tx == input_len && by + ty < batch_size) {
-            sdata_a[ty * TILE_SIZE + tx] = __float2half(1.0f);
+        if (k + ty < input_len && bx + tx < batch_size) {
+            sdata_a[tx * TILE_SIZE + ty] = _to_half(input[calc_index(bx+tx,k+ty,input_len)]);
+        } else if (k + ty == input_len && bx + tx < batch_size) {
+            sdata_a[tx * TILE_SIZE + ty] = __float2half(1.0f);
         } else {
-            sdata_a[ty * TILE_SIZE + tx] = __float2half(0.0f);
+            sdata_a[tx * TILE_SIZE + ty] = __float2half(0.0f);
         }
 
-        if (k + ty <= input_len && bx + tx < output_len) {
-            sdata_b[ty * TILE_SIZE + tx] = _to_half(units[calc_index(bx+tx,k+ty,output_len)]);
-        } else if (k + ty == input_len && bx + tx < output_len) {
-            sdata_b[ty * TILE_SIZE + tx] = _to_half(bias[bx + tx]);
+        if (k + ty < input_len && by + tx < output_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(units[calc_index(k+ty,by+tx,output_len)]);
+        } else if (k + ty == input_len && by + tx < output_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(bias[by + tx]);
         } else {
             sdata_b[ty * TILE_SIZE + tx] = __float2half(0.0f);
         }
@@ -465,14 +541,12 @@ __device__ void forward_linear_batch(const T *input, const T *units, const T *bi
         __syncthreads();
     }
 
-    if (ty < 2) {
-        wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
-    }
+    wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
 
     __syncthreads();
 
-    if (tx + bx < output_len && ty + by < batch_size) {
-        output[calc_index(tx+bx,ty+by,output_len)] = (T)sdata_c[ty * TILE_SIZE + tx];
+    if (ty + by < output_len && tx + bx < batch_size) {
+        output[calc_index(tx+bx,ty+by,output_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
     }
 }
 
@@ -500,16 +574,16 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
     __syncthreads();
 
     for (int k = 0; k < output_len; k += TILE_SIZE) {
-        if (k + tx < output_len && by + ty < batch_size) {
-            sdata_a[ty * TILE_SIZE + tx] = _to_half(loss[calc_index(k+tx,by+ty,output_len)]);
+        if (k + ty < output_len && bx + tx < batch_size) {
+            sdata_a[tx * TILE_SIZE + ty] = _to_half(loss[calc_index(bx+tx,k+ty,output_len)]);
         } else {
-            sdata_a[ty * TILE_SIZE + tx] = __float2half(0.0f);
+            sdata_a[tx * TILE_SIZE + ty] = __float2half(0.0f);
         }
 
-        if (k + tx < output_len && bx + ty < input_len) {
-            sdata_b[tx * TILE_SIZE + ty] = _to_half(units[calc_transposed_index(bx+ty,k+tx,output_len)]);
+        if (k + ty < output_len && by + tx < input_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(units[calc_transposed_index(k+ty,by+tx,output_len)]);
         } else {
-            sdata_b[tx * TILE_SIZE + ty] = __float2half(0.0f);
+            sdata_b[ty * TILE_SIZE + tx] = __float2half(0.0f);
         }
 
         __syncthreads();
@@ -522,14 +596,12 @@ __device__ void backward_linear_batch(const T *loss, const T *units, T *output,
         __syncthreads();
     }
 
-    if (ty < 2) {
-        wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
-    }
+    wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
 
     __syncthreads();
 
-    if (tx + bx < input_len && ty + by < batch_size) {
-        output[calc_index(tx+bx,ty+by,input_len)] = (T)sdata_c[ty * TILE_SIZE + tx];
+    if (ty + by < input_len && tx + bx < batch_size) {
+        output[calc_index(tx+bx,ty+by,input_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
     }
 }
 
@@ -558,14 +630,14 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
     __syncthreads();
 
     for (int k = 0; k < batch_size; k += TILE_SIZE) {
-        if (k + ty < batch_size && by + tx < input_len) {
-            sdata_a[tx * TILE_SIZE + ty] = _to_half(input[calc_transposed_index(k+ty,by+tx,input_len)]);
+        if (k + ty < batch_size && bx + tx < input_len) {
+            sdata_a[tx * TILE_SIZE + ty] = _to_half(input[calc_transposed_index(bx+tx,k+ty,input_len)]);
         } else {
             sdata_a[tx * TILE_SIZE + ty] = __float2half(0.0f);
         }
 
-        if (k + ty < batch_size && bx + tx < output_len) {
-            sdata_b[ty * TILE_SIZE + tx] = _to_half(loss[calc_index(bx+tx,k+ty,output_len)]);
+        if (k + ty < batch_size && by + tx < output_len) {
+            sdata_b[ty * TILE_SIZE + tx] = _to_half(loss[calc_index(k+ty,by+tx,output_len)]);
         } else {
             sdata_b[ty * TILE_SIZE + tx] = __float2half(0.0f);
         }
@@ -580,14 +652,12 @@ __device__ void linear_gradient_batch(const T *loss, const T *input, T *output,
         __syncthreads();
     }
 
-    if (ty < 2) {
-        wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
-    }
+    wmma::store_matrix_sync(sdata_c, c_frag, TILE_SIZE, wmma::mem_row_major);
 
     __syncthreads();
 
-    if (tx + bx < output_len && ty + by < input_len) {
-        output[calc_index(tx+bx,ty+by,output_len)] = (T)sdata_c[ty * TILE_SIZE + tx];
+    if (ty + by < output_len && tx + bx < input_len) {
+        output[calc_index(tx+bx,ty+by,output_len)] = (T)sdata_c[tx * TILE_SIZE + ty];
     }
 }
 
@@ -599,7 +669,7 @@ __device__ void loss_linear_batch_by_canonical_link(const T *expected, const T *
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        output[i] = (actual[i] - expected[i]) / batch_size;
+        output[i] = actual[i] - expected[i];
     }
 }
 template<typename T>
@@ -610,7 +680,7 @@ __device__ void loss_linear_batch_mse_derive(const T *t, const T *r, T* output, 
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        output[i] = (r[i] - t[i]) / batch_size;
+        output[i] = r[i] - t[i];
     }
 }
 template<typename T>
@@ -621,7 +691,7 @@ __device__ void loss_linear_batch_cross_entropy_derive(const T *t, const T *r, T
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        output[i] = -((r[i] / (t[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i])) / batch_size;
+        output[i] = -(t[i] / (r[i] + (T)1e-7)) + (1.0 - t[i]) / (1.0 - r[i]);
     }
 }
 template<typename T>
@@ -632,7 +702,7 @@ __device__ void loss_linear_batch_cross_entropy_multiclass_derive(const T *t, co
 
     if (batch_index < batch_size && index < nlen) {
         const size_t i = batch_index * nlen + index;
-        output[i] = -(t[i] / r[i]) / batch_size;
+        output[i] = -(t[i] / r[i]);
     }
 }
 
@@ -733,10 +803,36 @@ __device__ void update_with_adam(T *weight, const T *grad, const size_t size,
 
         e += weight_decay * w;
 
-        _mt = b1 * _mt + (1 - b1) * e;
-        _vt = b2 * _vt + (1 - b2) * e * e;
+        _mt = b1 * _mt + (1.0 - b1) * e;
+        _vt = b2 * _vt + (1.0 - b2) * e * e;
 
-        w = w - a * (_mt / (1 - b1t)) / _sqrt((_vt / (1 - b2t)) + eps);
+        w = w - a * ((_mt / (1.0 - b1t)) / _sqrt((_vt / (1.0 - b2t)) + eps));
+
+        weight[index] = w;
+        mt[index] = _mt;
+        vt[index] = _vt;
+    }
+}
+
+template<typename T>
+
+__device__ void update_with_adamw(T *weight, const T *grad, const size_t size,
+                                 const T a, const T weight_decay, const T eps,
+                                 T *mt, T *vt, const T b1, const T b2, const T b1t, const T b2t) {
+    size_t index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (index < size) {
+        T w = weight[index];
+        T _mt = mt[index];
+        T _vt = vt[index];
+        T e = grad[index];
+
+        w -= weight_decay * w;
+
+        _mt = b1 * _mt + (1.0 - b1) * e;
+        _vt = b2 * _vt + (1.0 - b2) * e * e;
+
+        w = w - a * ((_mt / (1.0 - b1t)) / _sqrt((_vt / (1.0 - b2t)) + eps));
 
         weight[index] = w;
         mt[index] = _mt;
@@ -812,6 +908,14 @@ extern "C" {
         relu_forward(input,output,units_len,batch_size);
     }
 
+	__global__ void clipped_relu_forward_float(const float *input, const float ceiling, float *output, const size_t units_len, const size_t batch_size) {
+        clipped_relu_forward(input,ceiling,output,units_len,batch_size);
+    }
+
+    __global__ void leaky_relu_forward_float(const float *input, float *output, const size_t units_len, const size_t batch_size) {
+        leaky_relu_forward(input,output,units_len,batch_size);
+    }
+
 	__global__ void swish_forward_float(const float *input, float *output, const size_t units_len, const size_t batch_size) {
         swish_forward(input,output,units_len,batch_size);
     }
@@ -832,6 +936,14 @@ extern "C" {
         relu_backward(o,u,loss,output,units_len,batch_size);
     }
 
+	__global__ void clipped_relu_backward_float(const float *o, const float *u, const float *loss, const float ceiling, float *output, const size_t units_len, const size_t batch_size) {
+        clipped_relu_backward(o,u,loss,ceiling,output,units_len,batch_size);
+    }
+
+	__global__ void leaky_relu_backward_float(const float *o, const float *u, const float *loss, float *output, const size_t units_len, const size_t batch_size) {
+        leaky_relu_backward(o,u,loss,output,units_len,batch_size);
+    }
+
 	__global__ void swish_backward_float(const float *o, const float *u, const float *loss, float *output, const size_t units_len, const size_t batch_size) {
         swish_backward(o,u,loss,output,units_len,batch_size);
     }
@@ -849,6 +961,14 @@ extern "C" {
 
 	__global__ void relu_forward_double(const double *input, double *output, const size_t units_len, const size_t batch_size) {
         relu_forward(input,output,units_len,batch_size);
+    }
+
+	__global__ void clipped_relu_forward_double(const double *input, const double ceiling, double *output, const size_t units_len, const size_t batch_size) {
+        clipped_relu_forward(input,ceiling,output,units_len,batch_size);
+    }
+
+    __global__ void leaky_relu_forward_double(const double *input, double *output, const size_t units_len, const size_t batch_size) {
+        leaky_relu_forward(input,output,units_len,batch_size);
     }
 
 	__global__ void swish_forward_double(const double *input, double *output, const size_t units_len, const size_t batch_size) {
@@ -871,6 +991,14 @@ extern "C" {
         relu_backward(o,u,loss,output,units_len,batch_size);
     }
 
+	__global__ void clipped_relu_backward_double(const double *o, const double *u, const double *loss, const double ceiling, double *output, const size_t units_len, const size_t batch_size) {
+        clipped_relu_backward(o,u,loss,ceiling,output,units_len,batch_size);
+    }
+
+	__global__ void leaky_relu_backward_double(const double *o, const double *u, const double *loss, double *output, const size_t units_len, const size_t batch_size) {
+        leaky_relu_backward(o,u,loss,output,units_len,batch_size);
+    }
+
 	__global__ void swish_backward_double(const double *o, const double *u, const double *loss, double *output, const size_t units_len, const size_t batch_size) {
         swish_backward(o,u,loss,output,units_len,batch_size);
     }
@@ -889,6 +1017,14 @@ extern "C" {
 
     __global__ void reduce_linear_batch_double(const double *input, double *output, const int nlen, const int batch_size) {
         reduce_linear_batch(input,output,nlen,batch_size);
+    }
+
+    __global__ void addbias_batch_float(const float *bias, float *input_output, const size_t units_len, const size_t batch_size) {
+        addbias_batch(bias, input_output, units_len, batch_size);
+    }
+
+    __global__ void addbias_batch_double(const double *bias, double *input_output, const size_t units_len, const size_t batch_size) {
+        addbias_batch(bias, input_output, units_len, batch_size);
     }
 
     __global__ void forward_linear_batch_float(const float *input, const float *units, const float *bias, float *output,
@@ -1007,6 +1143,20 @@ extern "C" {
                                             const double eps, double *mt, double *vt,
                                             const double b1, const double b2, const double b1t, const double b2t) {
         update_with_adam(weight,grad,size,a,weight_decay,eps,mt,vt,b1,b2,b1t,b2t);
+    }
+
+    __global__ void update_with_adamw_float(float *weight, const float *grad, const size_t size,
+                                           const float a, const float weight_decay,
+                                           const float eps, float *mt, float *vt,
+                                           const float b1, const float b2, const float b1t, const float b2t) {
+        update_with_adamw(weight,grad,size,a,weight_decay,eps,mt,vt,b1,b2,b1t,b2t);
+    }
+
+    __global__ void update_with_adamw_double(double *weight, const double *grad, const size_t size,
+                                            const double a, const double weight_decay,
+                                            const double eps, double *mt, double *vt,
+                                            const double b1, const double b2, const double b1t, const double b2t) {
+        update_with_adamw(weight,grad,size,a,weight_decay,eps,mt,vt,b1,b2,b1t,b2t);
     }
 
     __global__ void forward_diff_linear_float(const size_t *indexes, const float *input, const float *units, float *output, const size_t output_size, const size_t diff_len) {

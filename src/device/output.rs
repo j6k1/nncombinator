@@ -1,32 +1,40 @@
 //! Implementation of the calculation process for output layers
 
-use cuda_runtime_sys::dim3;
-use libc::c_uint;
 use num_traits::FromPrimitive;
 use rayon::iter::ParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IndexedParallelIterator;
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory};
-use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, LossLinearByCanonicalLink, LossLinearByCanonicalLinkArgs};
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
+use crate::device::{Device, DeviceCpu};
 use crate::error::{TrainingError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::ope::UnitValue;
+#[cfg(feature = "cuda")]
+use core::fmt::Debug;
+#[cfg(feature = "cuda")]
+use crate::error::{TypeConvertError};
+#[cfg(feature = "cuda")]
+use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, ToCuda, ReadMemory, WriteMemory, CudaPtr, AsMutPtr, AsCudaPtr};
+#[cfg(feature = "cuda")]
+use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
+use crate::cuda::kernel::device::{LossLinearBatchByCanonicalLink, LossLinearBatchByCanonicalLinkArgs, LossLinearByCanonicalLink, LossLinearByCanonicalLinkArgs};
+#[cfg(feature = "cuda")]
+use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the linear output layer
 pub trait DeviceLinearOutput<'a,U,const N:usize>: Device<U>
     where U: UnitValue<U> {
-    type IO: BatchDataType;
-    type BatchIO: BatchSize;
+    type IO: BatchDataType + 'static;
+    type BatchIO: BatchSize + 'static;
     /// Calculation of Losses
     /// # Arguments
     /// * `expected` - expected value
     /// * `actual` - actual value
     /// * `lossf` - loss function
     fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a Self::IO, lossf: &L) -> Result<Self::IO,TrainingError>
-        where L: LossFunction<U> + LossFunctionLinear<'a,U,Self::IO,Self,N,Output=Self::IO>;
+        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,Self::IO,Self,N,Output=Self::IO>;
     /// Calculation of Losses by canonical link
     /// # Arguments
     /// * `expected` - expected value
@@ -58,7 +66,7 @@ pub trait DeviceLinearOutput<'a,U,const N:usize>: Device<U>
     fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
                                actual: &'a Self::BatchIO, lossf: &L)
                                -> Result<Self::BatchIO,TrainingError>
-        where L: LossFunction<U> + BatchLossFunctionLinear<'a,U,Self::BatchIO,Self,N,Output=Self::BatchIO>;
+        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self::BatchIO,Self,N,Output=Self::BatchIO>;
     /// Calculation of total Losses (all batch)
     /// # Arguments
     /// * `expected` - expected value
@@ -73,7 +81,7 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
     type IO = Arr<U,N>;
     type BatchIO = SerializedVec<U,Arr<U,N>>;
     fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a Arr<U,N>, lossf: &L) -> Result<Arr<U,N>,TrainingError>
-        where L: LossFunction<U> + LossFunctionLinear<'a,U,Arr<U,N>,DeviceCpu<U>,N,Output=Arr<U,N>> {
+        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,Arr<U,N>,DeviceCpu<U>,N,Output=Arr<U,N>> {
         Ok(lossf.linear_derive(self,actual,expected)?)
     }
 
@@ -112,7 +120,7 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
     fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
                                actual: &'a SerializedVec<U,Arr<U,N>>, lossf: &L)
         -> Result<SerializedVec<U,Arr<U,N>>, TrainingError>
-        where L: LossFunction<U> + BatchLossFunctionLinear<'a,U,Self::BatchIO,DeviceCpu<U>,N,Output=Self::BatchIO> {
+        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self::BatchIO,DeviceCpu<U>,N,Output=Self::BatchIO> {
         lossf.batch_linear_derive(self,expected,actual)
     }
 
@@ -137,53 +145,59 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
         ))
     }
 }
-impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U>
-    where U: DataTypeInfo + UnitValue<U>,
-          DeviceGpu<U>: Device<U>,
+#[cfg(feature = "cuda")]
+impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
+    where U: DataTypeInfo + UnitValue<U> + AsMutPtr<U>,
+          A: CudaAllocator + 'static,
+          DeviceGpu<U,A>: Device<U>,
+          Arr<U,N>: ToCuda<U,A,Output=CudaTensor1dPtr<U,A,N>>,
+          CudaPtr<U,A>: WriteMemory<U>,
+          CudaTensor1dPtr<U,A,N>: Debug + ReadMemory<U> + WriteMemory<U>,
+          CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: ReadMemory<U> + 'a,
+          SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
           f64: From<U>,
-          for<'b> &'b SerializedVec<U,Arr<U,N>>: ToCuda<U,Output=CudaVec<U,CudaTensor1dPtr<U,N>>>,
-          for<'b> LossLinearBatchByCanonicalLink<'b,U,N>: Kernel<Args=LossLinearBatchByCanonicalLinkArgs<'b,U,N>>,
-          for<'b> LossLinearByCanonicalLink<'b,U,N>: Kernel<Args=LossLinearByCanonicalLinkArgs<'b,U,N>> {
-    type IO = CudaTensor1dPtr<U,N>;
-    type BatchIO = CudaVec<U,CudaTensor1dPtr<U,N>>;
-    fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,N>, lossf: &L)
+          for<'b> &'b SerializedVec<U,Arr<U,N>>: ToCuda<U,A,Output=CudaVec<U,CudaTensor1dPtr<U,A,N>,A>>,
+          for<'b> CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: AsCudaPtr<'b>,
+          for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b CudaVec<U,CudaTensor1dPtr<U,A,N>,A>,Error=TypeConvertError>,
+          for<'b> LossLinearBatchByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearBatchByCanonicalLinkArgs<'b,U,A,N>>,
+          for<'b> LossLinearByCanonicalLink<'b,U,A,N>: Kernel<Args=LossLinearByCanonicalLinkArgs<'b,U,A,N>> {
+    type IO = CudaTensor1dPtr<U,A,N>;
+    type BatchIO = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
+    fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,A,N>, lossf: &L)
                          -> Result<Self::IO, TrainingError>
-        where L: LossFunction<U> + LossFunctionLinear<'a,U,CudaTensor1dPtr<U,N>,DeviceGpu<U>,N,Output=CudaTensor1dPtr<U,N>> {
+        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,CudaTensor1dPtr<U,A,N>,DeviceGpu<U,A>,N,Output=CudaTensor1dPtr<U,A,N>> {
         Ok(lossf.linear_derive(self,&actual, &expected.to_cuda(self)?)?)
     }
 
-    fn loss_linear_by_canonical_link(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,N>)
+    fn loss_linear_by_canonical_link(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,A,N>)
         -> Result<Self::IO, TrainingError> {
         let expected = expected.to_cuda(self)?;
         let expected = (&expected).into();
 
         let actual = actual.into();
 
-        let output = CudaTensor1dPtr::<U, N>::new(self.get_memory_pool())?;
+        let output = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
 
         let mut args = LossLinearByCanonicalLinkArgs::new(&expected, &actual, output.into(), N);
 
-        let mut kernel = LossLinearByCanonicalLink::<'a, U, N>::new();
+        let mut kernel = LossLinearByCanonicalLink::<'a,U,A,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 1024 - 1) / 1024, y: 1, z: 1 },
-                      dim3 { x: 1024, y: 1, z: 1 }, &mut args, 0)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
 
     fn loss_linear_total<L: LossFunction<U>>(&self, exptected: &'a Arr<U,N>,
-                                                actual: &'a CudaTensor1dPtr<U,N>, lossf: &L)
+                                                actual: &'a CudaTensor1dPtr<U,A,N>, lossf: &L)
         -> Result<U, TrainingError> {
-        let actual = CudaTensor1dPtrView::<'a,U,N>::from(actual);
-
         Ok(actual.read_to_vec()?.iter().zip(exptected.iter()).fold(U::default(), |mut acc, (&a, &e)| {
             acc += lossf.apply(a, e);
             acc
         }))
     }
 
-    fn loss_linear_batch_by_canonical_link(&self, expected: &'a SerializedVec<U, Arr<U, N>>,
-                                           actual: &'a CudaVec<U,CudaTensor1dPtr<U,N>>)
+    fn loss_linear_batch_by_canonical_link(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
+                                           actual: &'a CudaVec<U,CudaTensor1dPtr<U,A,N>,A>)
         -> Result<Self::BatchIO, TrainingError> {
         let expected_ptr = expected.to_cuda(self)?;
         let expected_ptr = (&expected_ptr).try_into()?;
@@ -192,7 +206,7 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U>
 
         let actual = actual.try_into()?;
 
-        let output = CudaVec::<U, CudaTensor1dPtr<U, N>>::new(len, self.get_memory_pool())?;
+        let output = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(len, self.get_allocator())?;
 
         let mut args = LossLinearBatchByCanonicalLinkArgs::new(
             &expected_ptr,
@@ -202,18 +216,17 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U>
             expected.len()
         );
 
-        let mut kernel = LossLinearBatchByCanonicalLink::<'a, U, N>::new();
+        let mut kernel = LossLinearBatchByCanonicalLink::<'a,U,A,N>::new();
 
-        kernel.launch(dim3 { x: (N as c_uint + 32 - 1) / 32, y: (expected.len() as c_uint + 32 - 1) / 32, z: 1 },
-                      dim3 { x: 32, y: 32, z: 1 }, &mut args, 0)?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
 
-    fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U, Arr<U, N>>,
-                               actual: &'a CudaVec<U,CudaTensor1dPtr<U,N>>, lossf: &L)
+    fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U, Arr<U,N>>,
+                               actual: &'a CudaVec<U,CudaTensor1dPtr<U,A,N>,A>, lossf: &L)
                                -> Result<Self::BatchIO, TrainingError>
-        where L: LossFunction<U> + BatchLossFunctionLinear<'a,U,Self::BatchIO,DeviceGpu<U>,N,Output=Self::BatchIO> {
+        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self::BatchIO,DeviceGpu<U,A>,N,Output=Self::BatchIO> {
         let expected = expected.to_cuda(self)?;
 
         Ok(lossf.batch_linear_derive(self, &expected, actual)?)
@@ -222,7 +235,6 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U>
                                                       actual: &'a Self::BatchIO,
                                                       lossf: &L)
                                                       -> Result<U, TrainingError> {
-        let actual = CudaVecView::<'a,U,CudaTensor1dPtr<U,N>>::try_from(actual)?;
         let actual = SerializedVec::<U,Arr<U,N>>::try_from(actual.read_to_vec()?.into_boxed_slice())?;
 
         let n = f64::from_usize(exptected.len()).ok_or(TrainingError::TypeCastError(

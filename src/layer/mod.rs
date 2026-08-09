@@ -1,30 +1,56 @@
 //! The various layers that make up a neural network and the traits they implement
 
 use std::fmt::Debug;
-use crate::arr::*;
 use crate::device::*;
 use crate::{Stack};
-use crate::cuda::ToCuda;
-use crate::error::{EvaluateError, TrainingError, TypeConvertError};
+use crate::error::{EvaluateError, PersistenceError, TrainingError};
 use crate::ope::UnitValue;
 use crate::lossfunction::*;
+#[cfg(feature = "cuda")]
+use crate::error::{TypeConvertError};
+#[cfg(feature = "cuda")]
+use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
+use crate::cuda::ToCuda;
+use crate::persistence::PersistenceType;
 
 pub mod input;
 pub mod output;
 pub mod linear;
 pub mod activation;
 pub mod bridge;
+pub mod logging;
 pub mod batchnormalization;
 pub mod bias;
 
 /// Differential input
 #[derive(Debug)]
-pub enum DiffInput<T,U,const NI:usize,const NO:usize>
-    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
+pub struct DiffInput<'a,T,O>
+    where T: Debug,
+          O: Debug {
     /// diff input
-    Diff(T,Arr<U,NO>),
-    /// fully input
-    NotDiff(Arr<U,NI>)
+    pub diff: T,
+    pub output: &'a O
+}
+impl<'a,T,O> DiffInput<'a,T,O>
+    where T: Debug + Clone,
+          O: Debug{
+    pub fn new(diff: T, output: &'a O) -> Self {
+        DiffInput {
+            diff,
+            output
+        }
+    }
+}
+impl<'a,T,O> Clone for DiffInput<'a,T,O>
+    where T: Debug + Clone,
+          O: Debug {
+    fn clone(&self) -> Self {
+        DiffInput {
+            diff: self.diff.clone(),
+            output: self.output
+        }
+    }
 }
 /// Trait that defines the data type during batch training corresponding to the data type
 pub trait BatchDataType {
@@ -34,23 +60,32 @@ impl BatchDataType for () {
     type Type = ();
 }
 
-impl<T,U,const NI:usize,const NO:usize> BatchDataType for DiffInput<T,U,NI,NO>
-    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
-    type Type = Vec<DiffInput<T,U,NI,NO>>;
+impl<'a,T,O> BatchDataType for DiffInput<'a,T,O>
+    where T: Debug,
+          O: Debug + 'a {
+    type Type = Vec<DiffInput<'a,T,O>>;
 }
-impl<T,U,const NI:usize,const NO:usize> ToCuda<U> for DiffInput<T,U,NI,NO>
-    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
+#[cfg(feature = "cuda")]
+impl<'a,T,O,U,A> ToCuda<U,A> for DiffInput<'a,T,O>
+    where U: UnitValue<U> + Clone + Copy + Debug,
+          T: Debug,
+          O: Debug + 'a,
+          A: CudaAllocator {
     type Output = Self;
 
-    fn to_cuda(self, _: &DeviceGpu<U>) -> Result<Self::Output, TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<U,A>) -> Result<Self::Output, TypeConvertError> {
         Ok(self)
     }
 }
-impl<T,U,const NI:usize,const NO:usize> ToCuda<U> for Vec<DiffInput<T,U,NI,NO>>
-    where U: UnitValue<U> + Clone + Copy + Debug, T: Debug {
+#[cfg(feature = "cuda")]
+impl<'a,T,O,U,A> ToCuda<U,A> for Vec<DiffInput<'a,T,O>>
+    where U: UnitValue<U> + Clone + Copy + Debug,
+          T: Debug,
+          O: Debug + 'a,
+          A: CudaAllocator {
     type Output = Self;
 
-    fn to_cuda(self, _: &DeviceGpu<U>) -> Result<Self::Output, TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<U,A>) -> Result<Self::Output, TypeConvertError> {
         Ok(self)
     }
 }
@@ -155,19 +190,7 @@ pub trait UpdateWeight<U> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn update_weight(&mut self, stack:Self::GradientStack) -> Result<(), TrainingError>;
-}
-/// Trait that defines the function of differential application of inputs in the process of forward propagation to neural networks.
-pub trait ForwardDiff<U>: PreTrain<U> where U: UnitValue<U> {
-    /// Forward propagation (differential application)
-    /// # Arguments
-    /// * `input` - input
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`EvaluateError`]
-    fn forward_diff(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError>;
+    fn update_weight(&mut self, stack:Self::GradientStack, batch_size: usize) -> Result<(), TrainingError>;
 }
 /// Trait that defines the learning process of a neural network.
 pub trait Train<U,L>: PreTrain<U>
@@ -184,14 +207,61 @@ pub trait Train<U,L>: PreTrain<U>
     /// * [`TrainingError`]
     fn train(&mut self, expected:Self::Output, input:Self::Input, lossf:&L) -> Result<U, TrainingError>;
 }
-/// Trait that defines the function to query information to calculate the difference when applying the difference of neural networks.
-pub trait AskDiffInput<U>: PreTrain<U> where U: UnitValue<U> {
-    /// Diff Input to this layer of the neural network
+/// Implementation of a function to return the intermediate results of forward propagation for difference calculation
+pub trait PartialForward: ForwardAll {
+    /// Data type of intermediate results during forward propagation processing
+    type PartialOutput: Debug;
+    /// Data type of intermediate results based on differential inputs during forward propagation processing
+    type PartialOutputByDiff: Debug;
+    /// Forward Propagation Differential Input Information
     type DiffInput: Debug;
-    /// Data inquiry for creating difference information
+    /// Forward Propagation Differential Output Information
+    type DiffOutput: Debug;
+
+    /// Returns the intermediate result during forward propagation
     /// # Arguments
-    /// * `stack` - Stack to store calculation results at upper layers
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError>;
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
+    fn partial_forward(&self, input:Self::Input) -> Result<Self::PartialOutput, EvaluateError>;
+    /// Take a difference input as input and return the result of the forward propagation up to that point
+    /// # Arguments
+    /// * `input` - diff input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
+    fn partial_forward_by_diff(&self, input:Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError>;
+}
+/// Implementation of a process performing forward propagation calculations from differential input values
+pub trait ForwardDiff: PartialForward {
+    /// Perform forward propagation using the diff input
+    /// # Arguments
+    /// * `input` - diff input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
+    fn forward_diff(&self, input:Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError>;
+}
+/// Implementation of the process for performing forward propagation calculations from precomputed values
+pub trait ContinueForward: PartialForward {
+    /// The data type of the result value when recalculating the overall result from the precomputed result
+    type ConinueOutput;
+    /// Resume forward propagation using the precomputed output of this layer
+    /// # Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
+    fn continue_forward(&self, input:&Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError>;
 }
 /// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForwardBase: ForwardAll {
@@ -287,6 +357,66 @@ pub trait BatchTrain<U,D,L>: BatchPreTrainBase<U> + BatchPreTrain<U> + BatchBack
     /// * [`TrainingError`]
     fn batch_train(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, lossf:&L) -> Result<U, TrainingError>;
 }
+/// Definition of a trait that notifies of progress during learning
+pub trait Step {
+    /// on step notification
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn step(&mut self) -> Result<(), TrainingError>;
+    /// on frequently step notification
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn frequently_step(&mut self) -> Result<(), TrainingError>;
+}
+/// Definition of the feature to notify the number of learning progress steps
+pub trait OnStep {
+    /// on step notification with step count
+    /// # Arguments
+    /// * `step` - step count
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn on_step(&mut self, step:usize) -> Result<(), TrainingError>;
+
+    /// on frequently step notification with step count
+    /// # Arguments
+    /// * `step` - step count
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError>;
+}
+/// Trait that define the persistence of learning progress data
+pub trait PersistProgress<P,K> where K: PersistenceType {
+    /// Load train progress data
+    /// # Arguments
+    /// * `persistence` - train progress persistent object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ModelLoadError`]
+    fn load_progress(&mut self, persistence:&mut P) -> Result<(),TrainingError>;
+    /// Save train progress data
+    /// # Arguments
+    /// * `persistence` - train progress persistent object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`PersistenceError`]
+    fn save_progress(&mut self, persistence:&mut P) -> Result<(), PersistenceError>;
+}
 /// Trait that defines the ability to add layers to a neural network.
 pub trait AddLayer: ForwardAll where Self: Sized {
     /// Adding Layers
@@ -308,16 +438,11 @@ pub trait TryAddLayer: ForwardAll where Self: Sized {
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`E`]
+    /// * `E`
     fn try_add_layer<C,F,E>(self,f:F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E>;
 }
 impl<T> TryAddLayer for T where T: ForwardAll + Sized {
     fn try_add_layer<C,F,E>(self, f: F) -> Result<C,E> where C: ForwardAll, F: FnOnce(Self) -> Result<C,E> {
         f(self)
-    }
-}
-impl<T,U> ForwardDiff<U> for T where T: PreTrain<U> + Sized, U: UnitValue<U> {
-    fn forward_diff(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
-        self.pre_train(input)
     }
 }

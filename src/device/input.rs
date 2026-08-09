@@ -1,11 +1,16 @@
 //! Implementation of the calculation process for input layers
 
 use std::fmt::Debug;
-use crate::cuda::ToCuda;
-use crate::device::{Device, DeviceCpu, DeviceGpu};
+use crate::device::{Device, DeviceCpu};
 use crate::error::{TypeConvertError};
 use crate::layer::BatchDataType;
 use crate::ope::UnitValue;
+#[cfg(feature = "cuda")]
+use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
+use crate::cuda::{ToCuda};
+#[cfg(feature = "cuda")]
+use crate::device::{DeviceGpu};
 
 /// Trait that defines the function of processing data input in the input layer
 /// into a form that can be passed to subsequent intermediate layers.
@@ -54,16 +59,18 @@ impl<U,I> DeviceInput<U,I> for DeviceCpu<U>
         Ok(input)
     }
 }
+#[cfg(feature = "cuda")]
 
-impl<U,I> DeviceInput<U,I> for DeviceGpu<U> 
+impl<U,I,A> DeviceInput<U,I> for DeviceGpu<U,A>
     where U: UnitValue<U>,
-          I: BatchDataType + ToCuda<U> + Debug + 'static,
-          <I as BatchDataType>::Type: ToCuda<U> + Debug + 'static,
-          <I as ToCuda<U>>::Output: Debug + 'static,
-          <<I as BatchDataType>::Type as ToCuda<U>>::Output: Debug + 'static,
-          DeviceGpu<U>: Device<U> {
-    type Output = <I as ToCuda<U>>::Output;
-    type BatchOutput = <<I as BatchDataType>::Type as ToCuda<U>>::Output;
+          I: BatchDataType + ToCuda<U,A> + Debug + 'static,
+          <I as BatchDataType>::Type: ToCuda<U,A> + Debug + 'static,
+          <I as ToCuda<U,A>>::Output: Debug + 'static,
+          <<I as BatchDataType>::Type as ToCuda<U,A>>::Output: Debug + 'static,
+          A: CudaAllocator,
+          DeviceGpu<U,A>: Device<U> {
+    type Output = <I as ToCuda<U,A>>::Output;
+    type BatchOutput = <<I as BatchDataType>::Type as ToCuda<U,A>>::Output;
 
     fn forward_input(&self,input: I) -> Result<Self::Output,TypeConvertError> {
         input.to_cuda(self)

@@ -1,38 +1,56 @@
 //! Implementation of the calculation process for batch normalization
 use std::fmt::Debug;
+#[cfg(feature = "cuda")]
 use rcudnn::{API};
+#[cfg(feature = "cuda")]
 use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BATCHNORM_SPATIAL};
+#[cfg(feature = "cuda")]
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
 
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::ope::Sum;
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
-use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, WriteMemory, ReadMemory, MemoryMoveTo};
-use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
-use crate::device::{DeviceCpu, DeviceGpu, DeviceMemoryPool};
-use crate::error::{EvaluateError, TrainingError, TypeConvertError};
-use crate::layer::{BatchDataType, BatchSize};
+use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
+use crate::layer::{BatchDataType};
 use crate::ope::UnitValue;
+use crate::device::{DeviceCpu};
+#[cfg(feature = "cuda")]
+use crate::mem::AsRawSlice;
+#[cfg(feature = "cuda")]
+use crate::layer::{BatchSize};
+#[cfg(feature = "cuda")]
+use crate::cuda::{AsMutVoidPtr, AsVoidPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, WriteMemory, ReadMemory, MemoryMoveTo, AsCudaMutPtr, AsKernelPtr, AsConstKernelPtr, MemorySize, CudaMutPtr};
+#[cfg(feature = "cuda")]
+use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
+use crate::cuda::cudnn::tensor::CudnnTensor4dDescriptor;
+#[cfg(feature = "cuda")]
+use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Features defining the implementation of the various computational processes in the batch normalization layer
 pub trait DeviceBatchNorm<U,C,I,const N:usize>
     where U: UnitValue<U>,
           I: BatchDataType + Debug + 'static,
           <I as BatchDataType>::Type: Debug + 'static {
-    /// Forward propagation calculation
+    /// Perform generalization of scale, bias, etc., used in batch normalization calculations.
     /// # Arguments
-    /// * `input` - input
-    /// * `scale` - γ
-    /// * `bias` - β
-    /// * `estimated_mean` - μΒ
-    /// * `estimated_variance` - σΒ
+    /// * `vars` - Variables used in batch normalization calculations
     ///
-    /// output = γ * ((input - μΒ) / sqrt(σ^2Β + 1e-6)) + β
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`EvaluateError`]
+    /// * [`GeneralizationError`]
+    fn generalization_vars(&self,vars:&C) -> Result<Arr<U,N>, GeneralizationError>;
+    /// Perform specialization of scale, bias, etc., used in batch normalization calculations.
+    /// # Arguments
+    /// * `vars` - Variables used in batch normalization calculations
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`GeneralizationError`]
+    fn specialization_vars(&self,units:Arr<U,N>) -> Result<C, SpecializationError>;
     fn forward_batch_norm<'a>(&self, input: &'a I, scale: &C, bias: &C,
                           estimated_mean: &C, estimated_variance: &C) -> Result<I,EvaluateError>;
     /// Forward propagation calculation (implemented in training mode)
@@ -122,6 +140,14 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu<U>
           SerializedVec<U,Arr<U,N>>: IntoConverter,
           for<'a> ArrView<'a,U,N>: From<&'a I>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError> {
+    #[inline]
+    fn generalization_vars(&self, vars: &Arr<U,N>) -> Result<Arr<U,N>, GeneralizationError> {
+        Ok(vars.clone())
+    }
+    #[inline]
+    fn specialization_vars(&self, vars: Arr<U,N>) -> Result<Arr<U,N>, SpecializationError> {
+        Ok(vars)
+    }
     #[inline]
     fn forward_batch_norm<'a>(&self, input: &'a I, scale: &Arr<U,N>, bias: &Arr<U,N>,
                           estimated_mean: &Arr<U,N>, estimated_variance: &Arr<U,N>) -> Result<I,EvaluateError> {
@@ -314,23 +340,41 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu<U>
         Ok((dx.into_converter().try_into()?,s,b))
     }
 }
-impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGpu<U>
-    where U: UnitValue<U> + DataTypeInfo + AsVoidPtr,
-          I: BatchDataType + Debug + From<CudaTensor1dPtr<U,N>> + 'static,
+#[cfg(feature = "cuda")]
+impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for DeviceGpu<U,A>
+    where U: UnitValue<U> + Debug + Default + DataTypeInfo + AsVoidPtr,
+          A: CudaAllocator,
+          I: BatchDataType + Debug + From<CudaTensor1dPtr<U,A,N>> + 'static,
           <I as BatchDataType>::Type: Debug + 'static,
-          <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
-          CudaVec<U,CudaTensor1dPtr<U,N>>: IntoConverter,
+          <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,A,N>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
+          CudaTensor1dPtr<U,A,N>: AsMutVoidPtr + ReadMemory<U> + MemoryMoveTo<U,CudaTensor1dPtr<U,A,N>>,
+          CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: IntoConverter,
+          CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsKernelPtr + MemorySize +
+                                  AsCudaMutPtr<Pointee=U,Allocator=A> + ReadMemory<U>,
+          for<'a> CudaMutPtr<'a,U,A>: WriteMemory<U>,
           for<'a> CudaTensor1dPtrView<'a,U,N>: From<&'a I>,
-          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           f64: From<U> {
-    fn forward_batch_norm<'a>(&self, input: &'a I, scale: &CudaTensor1dPtr<U,N>, bias: &CudaTensor1dPtr<U,N>,
-                          estimated_mean: &CudaTensor1dPtr<U,N>, estimated_variance: &CudaTensor1dPtr<U,N>)
+    #[inline]
+    fn generalization_vars(&self, bias: &CudaTensor1dPtr<U,A,N>) -> Result<Arr<U,N>, GeneralizationError> {
+        Ok(bias.read_to_vec()?.try_into()?)
+    }
+    #[inline]
+    fn specialization_vars(&self, bias: Arr<U,N>) -> Result<CudaTensor1dPtr<U,A,N>, SpecializationError> {
+        let mut v = CudaTensor1dPtr::new(self.get_allocator())?;
+
+        v.memcpy(bias.as_raw_slice().as_ptr(),N)?;
+
+        Ok(v)
+    }
+    fn forward_batch_norm<'a>(&self, input: &'a I, scale: &CudaTensor1dPtr<U,A,N>, bias: &CudaTensor1dPtr<U,A,N>,
+                          estimated_mean: &CudaTensor1dPtr<U,A,N>, estimated_variance: &CudaTensor1dPtr<U,A,N>)
         -> Result<I,EvaluateError> {
         let input = CudaTensor1dPtrView::<'a,U,N>::from(input);
 
         let len = N as i32;
 
-        let mut output_ptr = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut output_ptr = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
 
         let bn_scale_bias_mean_var_desc = API::create_tensor_descriptor()?;
         let xd = CudnnTensor4dDescriptor::<U>::new(1,len as usize,1,1)?;
@@ -389,15 +433,15 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
     }
 
     fn forward_batch_norm_train<'a>(&self, input: &'a I,
-                                scale: &CudaTensor1dPtr<U,N>,
-                                bias: &CudaTensor1dPtr<U,N>,
-                                estimated_mean: &CudaTensor1dPtr<U,N>,
-                                estimated_variance: &CudaTensor1dPtr<U,N>) -> Result<(I,CudaTensor1dPtr<U,N>,CudaTensor1dPtr<U,N>),EvaluateError> {
+                                scale: &CudaTensor1dPtr<U,A,N>,
+                                bias: &CudaTensor1dPtr<U,A,N>,
+                                estimated_mean: &CudaTensor1dPtr<U,A,N>,
+                                estimated_variance: &CudaTensor1dPtr<U,A,N>) -> Result<(I,CudaTensor1dPtr<U,A,N>,CudaTensor1dPtr<U,A,N>),EvaluateError> {
         let input = CudaTensor1dPtrView::<'a,U,N>::from(input);
 
         let len = N as i32;
 
-        let mut output_ptr = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut output_ptr = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
 
         let bn_scale_bias_mean_var_desc = API::create_tensor_descriptor()?;
         let xd = CudnnTensor4dDescriptor::<U>::new(1,len as usize,1,1)?;
@@ -422,8 +466,8 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
         let eps = U::from_f64(1e-6).ok_or(
             EvaluateError::TypeCastError(String::from("An error occurred in floating point type conversion.")))?;
 
-        let mut mean = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
-        let mut inv_variance = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut mean = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
+        let mut inv_variance = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
 
         estimated_mean.memcpy_to(&mut mean,N)?;
         inv_variance.memcpy(estimated_variance.read_to_vec()?.into_boxed_slice()
@@ -468,15 +512,15 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
     }
 
     fn batch_forward_batch_norm<'a>(&self, input: &'a <I as BatchDataType>::Type,
-                                    scale: &CudaTensor1dPtr<U,N>,
-                                    bias: &CudaTensor1dPtr<U,N>,
-                                    estimated_mean: &CudaTensor1dPtr<U,N>, estimated_variance: &CudaTensor1dPtr<U,N>)
+                                    scale: &CudaTensor1dPtr<U,A,N>,
+                                    bias: &CudaTensor1dPtr<U,A,N>,
+                                    estimated_mean: &CudaTensor1dPtr<U,A,N>, estimated_variance: &CudaTensor1dPtr<U,A,N>)
         -> Result<<I as BatchDataType>::Type, EvaluateError> {
-        let input = CudaVecView::<'a,U,CudaTensor1dPtr<U,N>>::try_from(input)?;
+        let input = CudaVecView::<'a,U,CudaTensor1dPtrView<U,N>>::try_from(input)?;
 
         let len = input.size();
 
-        let mut output_ptr = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,&self.memory_pool)?;
+        let mut output_ptr = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(len,&self.allocator)?;
 
         let len = len as i32;
 
@@ -537,19 +581,19 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
     }
 
     fn batch_forward_batch_norm_train<'a>(&self, input: &'a <I as BatchDataType>::Type,
-                                      scale: &CudaTensor1dPtr<U,N>, bias: &CudaTensor1dPtr<U,N>,
-                                      running_mean: &CudaTensor1dPtr<U,N>, running_variance: &CudaTensor1dPtr<U,N>,
+                                      scale: &CudaTensor1dPtr<U,A,N>, bias: &CudaTensor1dPtr<U,A,N>,
+                                      running_mean: &CudaTensor1dPtr<U,A,N>, running_variance: &CudaTensor1dPtr<U,A,N>,
                                       momentum: U)
         -> Result<(<I as BatchDataType>::Type,
-                   CudaTensor1dPtr<U,N>,
-                   CudaTensor1dPtr<U,N>,
-                   CudaTensor1dPtr<U,N>,
-                   CudaTensor1dPtr<U,N>), TrainingError> {
-        let input = CudaVecView::<'a,U,CudaTensor1dPtr<U,N>>::try_from(input)?;
+                   CudaTensor1dPtr<U,A,N>,
+                   CudaTensor1dPtr<U,A,N>,
+                   CudaTensor1dPtr<U,A,N>,
+                   CudaTensor1dPtr<U,A,N>), TrainingError> {
+        let input = CudaVecView::<'a,U,CudaTensor1dPtrView<U,N>>::try_from(input)?;
 
         let len = input.size();
 
-        let mut output_ptr = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,self.get_memory_pool())?;
+        let mut output_ptr = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(len,self.get_allocator())?;
 
         let len = len as i32;
 
@@ -575,14 +619,14 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
 
         let eps = 1e-6;
 
-        let mut new_running_mean = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
-        let mut new_running_variance = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut new_running_mean = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
+        let mut new_running_variance = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
 
         running_mean.memcpy_to(&mut new_running_mean, N)?;
         running_variance.memcpy_to(&mut new_running_variance, N)?;
 
-        let mut mean = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
-        let mut inv_variance = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut mean = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
+        let mut inv_variance = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
 
         unsafe {
             match cudnnBatchNormalizationForwardTraining(
@@ -626,16 +670,16 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
     }
 
     fn backward_batch_norm<'a>(&self, loss: &'a I, input: &'a I,
-                               scale: &CudaTensor1dPtr<U,N>,
-                               saved_mean: &CudaTensor1dPtr<U,N>,
-                               saved_inv_variance: &CudaTensor1dPtr<U,N>)
-        -> Result<(I, CudaTensor1dPtr<U,N>, CudaTensor1dPtr<U,N>), TrainingError> {
+                               scale: &CudaTensor1dPtr<U,A,N>,
+                               saved_mean: &CudaTensor1dPtr<U,A,N>,
+                               saved_inv_variance: &CudaTensor1dPtr<U,A,N>)
+        -> Result<(I, CudaTensor1dPtr<U,A,N>, CudaTensor1dPtr<U,A,N>), TrainingError> {
         let loss = CudaTensor1dPtrView::<'a,U,N>::from(loss);
         let input = CudaTensor1dPtrView::<'a,U,N>::from(input);
 
         let len = N as i32;
 
-        let mut output_ptr = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut output_ptr = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
 
         let bn_scale_bias_diff_desc = API::create_tensor_descriptor()?;
         let xd = CudnnTensor4dDescriptor::<U>::new(1,len as usize,1,1)?;
@@ -659,8 +703,8 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
         let alpha = U::one();
         let beta = U::default();
 
-        let mut result_scale= CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
-        let mut result_bias = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut result_scale= CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
+        let mut result_bias = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
 
         unsafe {
             match cudnnBatchNormalizationBackward(
@@ -703,16 +747,16 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
 
     fn batch_backward_batch_norm<'a>(&self, loss: &'a <I as BatchDataType>::Type,
                                  input: &'a <I as BatchDataType>::Type,
-                                 scale: &CudaTensor1dPtr<U,N>,
-                                 saved_mean: &CudaTensor1dPtr<U,N>, saved_inv_variance: &CudaTensor1dPtr<U,N>)
-        -> Result<(<I as BatchDataType>::Type, CudaTensor1dPtr<U,N>, CudaTensor1dPtr<U,N>), TrainingError> {
+                                 scale: &CudaTensor1dPtr<U,A,N>,
+                                 saved_mean: &CudaTensor1dPtr<U,A,N>, saved_inv_variance: &CudaTensor1dPtr<U,A,N>)
+        -> Result<(<I as BatchDataType>::Type, CudaTensor1dPtr<U,A,N>, CudaTensor1dPtr<U,A,N>), TrainingError> {
 
-        let loss = CudaVecView::<'a,U,CudaTensor1dPtr<U,N>>::try_from(loss)?;
-        let input = CudaVecView::<'a,U,CudaTensor1dPtr<U,N>>::try_from(input)?;
+        let loss = CudaVecView::<'a,U,CudaTensor1dPtrView<U,N>>::try_from(loss)?;
+        let input = CudaVecView::<'a,U,CudaTensor1dPtrView<U,N>>::try_from(input)?;
 
         let len = input.size();
 
-        let mut output_ptr = CudaVec::<U,CudaTensor1dPtr<U,N>>::new(len,self.get_memory_pool())?;
+        let mut output_ptr = CudaVec::<U,CudaTensor1dPtr<U,A,N>,A>::new(len,self.get_allocator())?;
 
         let be_scale_bias_diff_desc = API::create_tensor_descriptor()?;
         let xd = CudnnTensor4dDescriptor::<U>::new(len as usize,N,1,1)?;
@@ -736,8 +780,8 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,N>,I,N> for DeviceGp
         let alpha = U::one();
         let beta = U::default();
 
-        let mut result_scale= CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
-        let mut result_bias = CudaTensor1dPtr::<U,N>::new(self.get_memory_pool())?;
+        let mut result_scale= CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
+        let mut result_bias = CudaTensor1dPtr::<U,A,N>::new(self.get_allocator())?;
 
         unsafe {
             match cudnnBatchNormalizationBackward(

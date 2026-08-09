@@ -7,25 +7,35 @@ pub mod output;
 pub mod input;
 
 use std::marker::PhantomData;
-use std::{mem};
 use std::fmt::Debug;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use cuda_runtime_sys::dim3;
-use libc::{c_uint};
-use rcublas::Context;
-use rcublas_sys::{cublasHandle_t};
+use num_traits::FromPrimitive;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+#[cfg(feature = "cuda")]
+use std::rc::Rc;
+#[cfg(feature = "cuda")]
+use rcublas::Context;
+#[cfg(feature = "cuda")]
+use rcublas_sys::{cublasDscal_v2, cublasHandle_t, cublasSscal_v2, cublasStatus_t};
+#[cfg(feature = "cuda")]
 use rcublas::api::PointerMode;
+#[cfg(feature = "cuda")]
 use rcudnn::{Cudnn};
+#[cfg(feature = "cuda")]
 use rcudnn_sys::cudnnHandle_t;
 use crate::arr::{Arr, SerializedVecView};
-use crate::cuda::{CudaTensor1dPtr, CudaVecView, DataTypeInfo, Kernel};
-use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
-use crate::cuda::mem::{MemoryPool};
-use crate::error::{DeviceError, TrainingError, TypeConvertError};
-use crate::layer::BatchSize;
+use crate::error::{TrainingError, TypeConvertError};
+use crate::error::EvaluateError::TypeCastError;
+use crate::mem::AsRawSlice;
 use crate::UnitValue;
+use crate::error::{DeviceError};
+#[cfg(feature = "cuda")]
+use crate::layer::BatchSize;
+#[cfg(feature = "cuda")]
+use crate::cuda::{AsCudaMutPtr, AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVecView, DataTypeInfo, Kernel, MemorySize};
+#[cfg(feature = "cuda")]
+use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
+use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
 
 /// Trait that defines devices responsible for various computational processes of neural networks
 pub trait Device<U>: Clone where U: UnitValue<U> {
@@ -41,6 +51,19 @@ pub trait DeviceReduce<T,R,U,const N:usize> where U: UnitValue<U> {
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn reduce<'a>(&self, input: &'a T) -> Result<R, TrainingError>;
+}
+/// Characteristics defining the device responsible for batch averaging calculations in neural networks
+pub trait DeviceBatchAveraging<T,U> where U: UnitValue<U> {
+    /// Perform batch averaging
+    /// # Arguments
+    /// * `input` - input tensor
+    /// * `batch_size` - batch size
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn batch_averaging<'a>(&self, input: T,batch_size:usize) -> Result<T,TrainingError>;
 }
 /// Implementation of Device to be computed by CPU
 pub struct DeviceCpu<U> where U: UnitValue<U> {
@@ -58,7 +81,7 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
 }
 impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
 }
-impl<U,T,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu<U>
+impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu<U>
     where U: UnitValue<U> + Debug,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a T,Error=TypeConvertError> {
     #[inline]
@@ -74,6 +97,18 @@ impl<U,T,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu<U>
         })?)
     }
 }
+impl<T,U> DeviceBatchAveraging<T,U> for DeviceCpu<U>
+    where U: UnitValue<U> + Default + Clone + Send + FromPrimitive,
+          T: AsRawSlice<U> + TryFrom<Vec<U>,Error=TypeConvertError> {
+    #[inline]
+    fn batch_averaging<'a>(&self, input: T,batch_size:usize) -> Result<T,TrainingError> {
+        let batch_size = U::from_usize(batch_size).ok_or(TypeCastError(
+            format!("Failed to convert batch size type.")
+        ))?;
+
+        Ok(input.as_raw_slice().par_iter().cloned().map(|i| i / batch_size).collect::<Vec<U>>().try_into()?)
+    }
+}
 impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     fn clone(&self) -> Self {
         DeviceCpu {
@@ -82,9 +117,11 @@ impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
     }
 }
 /// cublas context
+#[cfg(feature = "cuda")]
 pub struct CublasContext {
     raw:Rc<Context>
 }
+#[cfg(feature = "cuda")]
 impl CublasContext {
     /// Create an instance of CublasContext
     /// # Arguments
@@ -118,6 +155,7 @@ impl CublasContext {
         self.raw.pointer_mode()
     }
 }
+#[cfg(feature = "cuda")]
 impl Clone for CublasContext {
     fn clone(&self) -> Self {
         CublasContext {
@@ -126,9 +164,11 @@ impl Clone for CublasContext {
     }
 }
 /// cudnn context
+#[cfg(feature = "cuda")]
 pub struct CudnnContext {
     raw:Rc<Cudnn>
 }
+#[cfg(feature = "cuda")]
 impl CudnnContext {
     /// Create an instance of CudnnContext
     ///
@@ -149,6 +189,7 @@ impl CudnnContext {
         self.raw.id_c()
     }
 }
+#[cfg(feature = "cuda")]
 impl Clone for CudnnContext {
     fn clone(&self) -> Self {
         CudnnContext {
@@ -157,14 +198,16 @@ impl Clone for CudnnContext {
     }
 }
 /// Implementation of Device to be computed by GPU
-pub struct DeviceGpu<U> {
+#[cfg(feature = "cuda")]
+pub struct DeviceGpu<U,A> where A: CudaAllocator {
     u:PhantomData<U>,
     cublas:CublasContext,
     cudnn:CudnnContext,
     /// Memory pool for cuda memory allocation
-    pub memory_pool:Arc<Mutex<MemoryPool>>
+    allocator:A
 }
-impl<U> DeviceGpu<U> where U: UnitValue<U> {
+#[cfg(feature = "cuda")]
+impl<U,A> DeviceGpu<U,A> where U: UnitValue<U>, A: CudaAllocator {
     /// Create an instance of DeviceGpu
     /// # Arguments
     /// * `memory_pool` - Memory pool for cuda memory allocation
@@ -173,7 +216,7 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
     ///
     /// This function may return the following errors
     /// * [`DeviceError`]
-    pub fn new(memory_pool:&Arc<Mutex<MemoryPool>>) -> Result<DeviceGpu<U>,DeviceError> {
+    pub fn new(allocator:&A) -> Result<DeviceGpu<U,A>,DeviceError> {
         let context = CublasContext::new(PointerMode::Device)?;
         let cudnn = CudnnContext::new()?;
 
@@ -181,7 +224,7 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
             u:PhantomData::<U>,
             cublas:context,
             cudnn:cudnn,
-            memory_pool:Arc::clone(memory_pool)
+            allocator:allocator.clone()
         })
     }
 
@@ -195,46 +238,142 @@ impl<U> DeviceGpu<U> where U: UnitValue<U> {
         &self.cudnn
     }
 }
-pub trait DeviceMemoryPool {
+/// A trait defining the implementation of a memory allocator for CUDA
+#[cfg(feature = "cuda")]
+pub trait DeviceAllocator<A: CudaAllocator> {
     /// Returns the memory pool object owned by itself
-    fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>>;
+    fn get_allocator(&self) -> &A;
 }
-impl<U> DeviceMemoryPool for DeviceGpu<U> {
-    fn get_memory_pool(&self) -> &Arc<Mutex<MemoryPool>> {
-        &self.memory_pool
+#[cfg(feature = "cuda")]
+impl<U,A> DeviceAllocator<A> for DeviceGpu<U,A> where A: CudaAllocator {
+    fn get_allocator(&self) -> &A {
+        &self.allocator
     }
 }
-impl Device<f32> for DeviceGpu<f32> {
+#[cfg(feature = "cuda")]
+impl<A: CudaAllocator> Device<f32> for DeviceGpu<f32,A> {
 }
-impl<U,T,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,N>,U,N> for DeviceGpu<U>
+#[cfg(feature = "cuda")]
+impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceGpu<U,A>
     where U: UnitValue<U> + DataTypeInfo,
           T: BatchSize,
-          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,N>>: TryFrom<&'a T,Error=TypeConvertError>,
-          for<'a> ReduceLinearBatch::<'a,U,N>: Kernel<Args=ReduceLinearBatchArgs<'a,U,N>> {
+          A: CudaAllocator,
+          for<'a> CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a T,Error=TypeConvertError>,
+          for<'a> ReduceLinearBatch::<'a,U,A,N>: Kernel<Args=ReduceLinearBatchArgs<'a,U,A,N>> {
     #[inline]
-    fn reduce<'a>(&self, input: &'a T) -> Result<CudaTensor1dPtr<U, N>, TrainingError> {
+    fn reduce<'a>(&self, input: &'a T) -> Result<CudaTensor1dPtr<U,A,N>, TrainingError> {
         let input_ptr = input.try_into()?;
-        let output_ptr = CudaTensor1dPtr::<U,N>::with_initializer(&self.memory_pool,Default::default)?;
+        let output_ptr = CudaTensor1dPtr::<U,A,N>::new(&self.allocator)?;
 
         let mut args = ReduceLinearBatchArgs::new(&input_ptr,output_ptr,N,input.size());
 
-        let mut kernel = ReduceLinearBatch::<U,N>::new();
+        let mut kernel = ReduceLinearBatch::<U,A,N>::new();
 
-        kernel.launch(dim3 { x: N as c_uint, y: 1, z: (input.size() as c_uint + 1023) / 1024 },
-                      dim3 { x: 1024, y: 1, z: 1 },&mut args,32 * mem::size_of::<U>())?;
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
 }
-impl Device<f64> for DeviceGpu<f64> {
+#[cfg(feature = "cuda")]
+impl<T,A> DeviceBatchAveraging<T,f32> for DeviceGpu<f32,A>
+    where A: CudaAllocator,
+          T: MemorySize + AsCudaMutPtr<Pointee=f32,Allocator=A> {
+    fn batch_averaging<'a>(&self, input: T, batch_size: usize) -> Result<T, TrainingError> {
+        let batch_size = f32::from_usize(batch_size).ok_or(TypeCastError(
+            format!("Failed to convert batch size type.")
+        ))?;
+
+        let mut input = input;
+
+        let alpha = CudaPtr::try_from(1. / batch_size)?;
+
+        let tensor_size = T::size();
+
+        match unsafe {
+            cublasSscal_v2(*self.cublas.id_c(),
+                           tensor_size as ::libc::c_int,
+                           alpha.as_ptr(),
+                           input.as_mut_ptr(),
+                           1
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(input),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSscal_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+
+    }
 }
-impl<U> Clone for DeviceGpu<U> where U: UnitValue<U> + Debug {
+#[cfg(feature = "cuda")]
+impl<T,A> DeviceBatchAveraging<T,f64> for DeviceGpu<f64,A>
+    where A: CudaAllocator,
+          T: MemorySize + AsCudaMutPtr<Pointee=f64,Allocator=A> {
+    fn batch_averaging<'a>(&self, input: T, batch_size: usize) -> Result<T, TrainingError> {
+        let batch_size = f64::from_usize(batch_size).ok_or(TypeCastError(
+            format!("Failed to convert batch size type.")
+        ))?;
+
+        let mut input = input;
+
+        let alpha = CudaPtr::try_from(1. / batch_size)?;
+
+        let tensor_size = T::size();
+
+        match unsafe {
+            cublasDscal_v2(*self.cublas.id_c(),
+                           tensor_size as ::libc::c_int,
+                           alpha.as_ptr(),
+                           input.as_mut_ptr(),
+                           1
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(input),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasDscal_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+    }
+}
+#[cfg(feature = "cuda")]
+impl<A: CudaAllocator> Device<f64> for DeviceGpu<f64,A> {
+}
+#[cfg(feature = "cuda")]
+impl<U,A> Clone for DeviceGpu<U,A> where U: UnitValue<U> + Debug, A: CudaAllocator {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,
             cublas:self.cublas.clone(),
             cudnn:self.cudnn.clone(),
-            memory_pool:Arc::clone(&self.memory_pool)
+            allocator:self.allocator.clone()
         }
     }
 }

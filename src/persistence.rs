@@ -1,6 +1,5 @@
 //! Implementation on persistence of neural network models
 
-use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
@@ -16,8 +15,8 @@ pub trait Persistence<U,P,K> where K: PersistenceType {
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`ConfigReadError`]
-    fn load(&mut self, persistence:&mut P) -> Result<(),ConfigReadError>;
+    /// * [`ModelLoadError`]
+    fn load(&mut self, persistence:&mut P) -> Result<(), ModelLoadError>;
     /// Save Model
     /// # Arguments
     /// * `persistence` - model persistent object
@@ -35,7 +34,7 @@ impl PersistenceType for Specialized {}
 impl PersistenceType for Linear {}
 
 /// Trait that defines the implementation of the ability to save a model to a file
-pub trait SaveToFile<U> {
+pub trait SaveToFile {
     /// Save to File
     /// # Arguments
     /// * `file` - Destination path
@@ -46,6 +45,16 @@ pub trait SaveToFile<U> {
     /// * [`io::Error`]
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error>;
 }
+/// A trait that verifies that a read operation on the persistence layer has reached EOF
+pub trait VerifyEof {
+    /// Has the read position of the persisted information reached EOF?
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`ModelLoadError`]
+    fn verify_eof(&mut self) -> Result<(), ModelLoadError>;
+}
 /// Trait to define an implementation to persist the model in a flat data structure
 pub trait LinearPersistence<U> {
     /// Read to restore the persisted model
@@ -53,8 +62,8 @@ pub trait LinearPersistence<U> {
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`ConfigReadError`]
-    fn read(&mut self) -> Result<U, ConfigReadError>;
+    /// * [`ModelLoadError`]
+    fn read(&mut self) -> Result<U, ModelLoadError>;
     /// Write to persist model information
     /// # Arguments
     /// * `u` - Weight value
@@ -64,31 +73,58 @@ pub trait LinearPersistence<U> {
     /// This function may return the following errors
     /// * [`PersistenceError`]
     fn write(&mut self, u:U) -> Result<(), PersistenceError>;
-    /// Has the read position of the persisted information reached EOF?
+}
+/// Record type for saving models in text format
+pub enum TextRecord {
+    F32(f32),
+    F64(f64),
+    U64(u64),
+    LayerStart,
+    LayerEnd,
+    UnitsStart
+}
+impl From<f32> for TextRecord {
+    fn from(f:f32) -> Self {
+        TextRecord::F32(f)
+    }
+}
+impl From<f64> for TextRecord {
+    fn from(f:f64) -> Self {
+        TextRecord::F64(f)
+    }
+}
+impl From<u64> for TextRecord {
+    fn from(i:u64) -> Self {
+        TextRecord::U64(i)
+    }
+}
+/// A feature that defines an implementation for persisting a model to a text-based data structure
+pub trait TextPersistence<U> {
+    /// Read to restore the persisted model
     ///
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`ConfigReadError`]
-    fn verify_eof(&mut self) -> Result<(),ConfigReadError>;
-}
-/// Types for passing identifiable information about layers and unit boundaries when persisting models
-pub enum UnitOrMarker<U> {
-    /// Not a boundary.
-    Unit(U),
-    /// layer boundary
-    LayerStart,
-    /// boundary
-    UnitsStart
+    /// * [`ModelLoadError`]
+    fn read(&mut self) -> Result<U, ModelLoadError>;
+    /// Write to persist model information
+    /// # Arguments
+    /// * `u` - Weight value
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`PersistenceError`]
+    fn write(&mut self, u:U);
 }
 /// Persistent object for saving to a text file
-pub struct TextFilePersistence<U> where U: FromStr + Sized {
+pub struct TextFilePersistence {
     reader:Option<BufReader<File>>,
     line:Option<Vec<String>>,
     index:usize,
-    data:Vec<UnitOrMarker<U>>
+    data:Vec<TextRecord>
 }
-impl<U> TextFilePersistence<U> where U: FromStr + Sized {
+impl TextFilePersistence {
     /// Create an instance of TextFilePersistence
     /// # Arguments
     /// * `file` - File path to be persisted
@@ -96,8 +132,8 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`ConfigReadError`]
-    pub fn new<P: AsRef<Path>>(file:P) -> Result<TextFilePersistence<U>,ConfigReadError> {
+    /// * [`ModelLoadError`]
+    pub fn new<P: AsRef<Path>>(file:P) -> Result<TextFilePersistence, ModelLoadError> {
         if file.as_ref().exists() {
             Ok(TextFilePersistence {
                 reader:Some(BufReader::new(OpenOptions::new().read(true).create(false).open(file)?)),
@@ -115,7 +151,7 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
         }
     }
 
-    fn read_line(&mut self) -> Result<String, ConfigReadError> {
+    fn read_line(&mut self) -> Result<String, ModelLoadError> {
         match self.reader {
             Some(ref mut reader) => {
                 let mut buf = String::new();
@@ -124,20 +160,20 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
                 buf = buf.trim().to_string();
 
                 if n == 0 {
-                    Err(ConfigReadError::InvalidState(String::from(
+                    Err(ModelLoadError::InvalidState(String::from(
                         "End of input has been reached.")))
                 } else {
                     Ok(buf)
                 }
             },
             None => {
-                Err(ConfigReadError::InvalidState(String::from(
+                Err(ModelLoadError::InvalidState(String::from(
                     "File does not exist yet.")))
             }
         }
     }
 
-    fn next_token(&mut self) -> Result<String, ConfigReadError> {
+    fn next_token(&mut self) -> Result<String, ModelLoadError> {
         let t = match self.line {
             None => {
                 self.index = 0;
@@ -180,13 +216,30 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
         Ok(t)
     }
 
-    /// Has the read position of the persisted information reached EOF?
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`ConfigReadError`]
-    pub fn verify_eof(&mut self) -> Result<(),ConfigReadError> {
+    pub fn write_layer_start(&mut self) {
+        self.data.push(TextRecord::LayerStart);
+    }
+    pub fn write_layer_end(&mut self) {
+        self.data.push(TextRecord::LayerEnd);
+    }
+    pub fn write_units_start(&mut self) {
+        self.data.push(TextRecord::UnitsStart);
+    }
+}
+impl<U> TextPersistence<U> for TextFilePersistence
+    where U: FromStr + Sized,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err>
+{
+    fn read(&mut self) -> Result<U, ModelLoadError> {
+        Ok(self.next_token()?.parse::<U>()?)
+    }
+    fn write(&mut self, v: U) {
+        self.data.push(v.into());
+    }
+}
+impl VerifyEof for TextFilePersistence {
+    fn verify_eof(&mut self) -> Result<(), ModelLoadError> {
         match self.reader {
             Some(ref mut reader) => {
                 let mut buf = String::new();
@@ -200,8 +253,10 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
 
                     buf = buf.trim().to_string();
 
-                    if !buf.is_empty() {
-                        return Err(ConfigReadError::InvalidState(
+                    if !buf.is_empty() && buf.chars().nth(0) == Some('#') {
+                        buf.clear();
+                    } else if !buf.is_empty() {
+                        return Err(ModelLoadError::InvalidState(
                             String::from("Data loaded , but the input has not reached the end.")));
                     } else {
                         buf.clear();
@@ -209,44 +264,34 @@ impl<U> TextFilePersistence<U> where U: FromStr + Sized {
                 }
             },
             None => {
-                Err(ConfigReadError::InvalidState(String::from(
+                Err(ModelLoadError::InvalidState(String::from(
                     "File does not exist yet.")))
             }
         }
     }
 }
-impl<U> TextFilePersistence<U> where U: FromStr + Sized, ConfigReadError: From<<U as FromStr>::Err> {
-    /// Read the weight values from a file
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`ConfigReadError`]
-    pub fn read(&mut self) -> Result<U, ConfigReadError> {
-        Ok(self.next_token()?.parse::<U>()?)
-    }
-}
-impl<U> TextFilePersistence<U> where U: FromStr + Sized {
-    /// Layer weights are added to the end of the internal buffer
-    /// # Arguments
-    /// * `v` - Weight value
-    pub fn write(&mut self,v:UnitOrMarker<U>) {
-        self.data.push(v);
-    }
-}
-impl<U> SaveToFile<U> for TextFilePersistence<U> where U: FromStr + Sized + Display {
+impl SaveToFile for TextFilePersistence {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
-        let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
+        let mut bw = BufWriter::new(OpenOptions::new()
+                                                            .write(true)
+                                                            .create(true)
+                                                            .truncate(true).open(file)?);
 
         for u in self.data.iter() {
             match u {
-                UnitOrMarker::Unit(u) => {
+                TextRecord::F32(u) => {
                     bw.write(format!("{} ",u).as_bytes())?;
                 },
-                UnitOrMarker::LayerStart => {
+                TextRecord::F64(u) => {
+                    bw.write(format!("{} ",u).as_bytes())?;
+                },
+                TextRecord::U64(u) => {
+                    bw.write(format!("{} ",u).as_bytes())?;
+                },
+                TextRecord::LayerStart => {
                     bw.write(b"#layer\n")?;
                 },
-                UnitOrMarker::UnitsStart => {
+                TextRecord::UnitsStart | TextRecord::LayerEnd => {
                     bw.write(b"\n")?;
                 }
             }
@@ -257,20 +302,20 @@ impl<U> SaveToFile<U> for TextFilePersistence<U> where U: FromStr + Sized + Disp
 }
 /// Trait that defines a Persistence implementation
 /// that stores and loads in fixed length record format.
-pub struct BinFilePersistence<U> {
+pub struct BinFilePersistence {
     reader:Option<BufReader<File>>,
-    data:Vec<U>
+    data:Vec<u8>
 }
-impl<U> BinFilePersistence<U> {
-    /// Create an instance of TextFilePersistence
+impl BinFilePersistence {
+    /// Create an instance of BinFilePersistence
     /// # Arguments
     /// * `file` - File path to be persisted
     ///
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`ConfigReadError`]
-    pub fn new<P: AsRef<Path>>(file:P) -> Result<BinFilePersistence<U>, ConfigReadError> {
+    /// * [`ModelLoadError`]
+    pub fn new<P: AsRef<Path>>(file:P) -> Result<BinFilePersistence, ModelLoadError> {
         if file.as_ref().exists() {
             Ok(BinFilePersistence {
                 reader:Some(BufReader::new(OpenOptions::new().read(true).create(false).open(file)?)),
@@ -284,8 +329,8 @@ impl<U> BinFilePersistence<U> {
         }
     }
 }
-impl LinearPersistence<f64> for BinFilePersistence<f64> {
-    fn read(&mut self) -> Result<f64, ConfigReadError> {
+impl LinearPersistence<f64> for BinFilePersistence {
+    fn read(&mut self) -> Result<f64, ModelLoadError> {
         match self.reader {
             Some(ref mut reader) => {
                 let mut buf = [0; 8];
@@ -304,39 +349,29 @@ impl LinearPersistence<f64> for BinFilePersistence<f64> {
                 )
             },
             None => {
-                Err(ConfigReadError::InvalidState(String::from(
+                Err(ModelLoadError::InvalidState(String::from(
                     "File does not exist yet.")))
             }
         }
     }
 
     fn write(&mut self, u: f64) -> Result<(), PersistenceError> {
-        self.data.push(u);
+        let bits = u.to_bits();
+
+        self.data.push((bits >> 56 & 0xff) as u8);
+        self.data.push((bits >> 48 & 0xff) as u8);
+        self.data.push((bits >> 40 & 0xff) as u8);
+        self.data.push((bits >> 32 & 0xff) as u8);
+        self.data.push((bits >> 24 & 0xff) as u8);
+        self.data.push((bits >> 16 & 0xff) as u8);
+        self.data.push((bits >> 8 & 0xff) as u8);
+        self.data.push((bits & 0xff) as u8);
+
         Ok(())
     }
-
-    fn verify_eof(&mut self) -> Result<(), ConfigReadError> {
-        match self.reader {
-            Some(ref mut reader) => {
-                let mut buf: [u8; 1] = [0];
-
-                let n = reader.read(&mut buf)?;
-
-                if n == 0 {
-                    Ok(())
-                } else {
-                    Err(ConfigReadError::InvalidState(String::from("Data loaded , but the input has not reached the end.")))
-                }
-            },
-            None => {
-                Err(ConfigReadError::InvalidState(String::from(
-                    "File does not exist yet.")))
-            }
-        }
-    }
 }
-impl LinearPersistence<f32> for BinFilePersistence<f32> {
-    fn read(&mut self) -> Result<f32, ConfigReadError> {
+impl LinearPersistence<f32> for BinFilePersistence {
+    fn read(&mut self) -> Result<f32, ModelLoadError> {
         match self.reader {
             Some(ref mut reader) => {
                 let mut buf = [0; 4];
@@ -351,18 +386,63 @@ impl LinearPersistence<f32> for BinFilePersistence<f32> {
                 )
             },
             None => {
-                Err(ConfigReadError::InvalidState(String::from(
+                Err(ModelLoadError::InvalidState(String::from(
                     "File does not exist yet.")))
             }
         }
     }
 
     fn write(&mut self, u: f32) -> Result<(), PersistenceError> {
-        self.data.push(u);
+        let bits = u.to_bits();
+        self.data.push((bits >> 24 & 0xff) as u8);
+        self.data.push((bits >> 16 & 0xff) as u8);
+        self.data.push((bits >> 8 & 0xff) as u8);
+        self.data.push((bits & 0xff) as u8);
         Ok(())
     }
+}
+impl LinearPersistence<u64> for BinFilePersistence {
+    fn read(&mut self) -> Result<u64, ModelLoadError> {
+        match self.reader {
+            Some(ref mut reader) => {
+                let mut buf = [0; 8];
 
-    fn verify_eof(&mut self) -> Result<(), ConfigReadError> {
+                reader.read_exact(&mut buf)?;
+
+                Ok((buf[0] as u64) << 56 |
+                   (buf[1] as u64) << 48 |
+                   (buf[2] as u64) << 40 |
+                   (buf[3] as u64) << 32 |
+                   (buf[4] as u64) << 24 |
+                   (buf[5] as u64) << 16 |
+                   (buf[6] as u64) << 8 |
+                    buf[7] as u64
+                )
+            },
+            None => {
+                Err(ModelLoadError::InvalidState(String::from(
+                    "File does not exist yet.")))
+            }
+        }
+    }
+
+    fn write(&mut self, u: u64) -> Result<(), PersistenceError> {
+        let bits = u;
+
+        self.data.push((bits >> 56 & 0xff) as u8);
+        self.data.push((bits >> 48 & 0xff) as u8);
+        self.data.push((bits >> 40 & 0xff) as u8);
+        self.data.push((bits >> 32 & 0xff) as u8);
+        self.data.push((bits >> 24 & 0xff) as u8);
+        self.data.push((bits >> 16 & 0xff) as u8);
+        self.data.push((bits >> 8 & 0xff) as u8);
+        self.data.push((bits & 0xff) as u8);
+
+        Ok(())
+    }
+}
+impl VerifyEof for BinFilePersistence {
+    fn verify_eof(&mut self) -> Result<(), ModelLoadError> {
         match self.reader {
             Some(ref mut reader) => {
                 let mut buf: [u8; 1] = [0];
@@ -372,52 +452,33 @@ impl LinearPersistence<f32> for BinFilePersistence<f32> {
                 if n == 0 {
                     Ok(())
                 } else {
-                    Err(ConfigReadError::InvalidState(String::from("Data loaded , but the input has not reached the end.")))
+                    Err(ModelLoadError::InvalidState(String::from("Data loaded , but the input has not reached the end.")))
                 }
             },
             None => {
-                Err(ConfigReadError::InvalidState(String::from(
+                Err(ModelLoadError::InvalidState(String::from(
                     "File does not exist yet.")))
             }
         }
     }
 }
-impl SaveToFile<f64> for BinFilePersistence<f64> {
+impl SaveToFile for BinFilePersistence {
     fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
-        let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
+        const BLOCK_SIZE:usize = 4096;
 
-        for u in self.data.iter() {
-            let mut buf = [0; 8];
-            let bits = u.to_bits();
+        let mut bw = BufWriter::new(OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true).open(file)?);
 
-            buf[0] = (bits >> 56 & 0xff) as u8;
-            buf[1] = (bits >> 48 & 0xff) as u8;
-            buf[2] = (bits >> 40 & 0xff) as u8;
-            buf[3] = (bits >> 32 & 0xff) as u8;
-            buf[4] = (bits >> 24 & 0xff) as u8;
-            buf[5] = (bits >> 16 & 0xff) as u8;
-            buf[6] = (bits >> 8 & 0xff) as u8;
-            buf[7] = (bits & 0xff) as u8;
-
-            bw.write(&buf)?;
+        for offset in (0..(self.data.len() / BLOCK_SIZE * BLOCK_SIZE)).step_by(BLOCK_SIZE) {
+            bw.write(&self.data[offset..offset + BLOCK_SIZE])?;
         }
 
-        Ok(())
-    }
-}
-impl SaveToFile<f32> for BinFilePersistence<f32> {
-    fn save<P: AsRef<Path>>(&self,file:P) -> Result<(),io::Error> {
-        let mut bw = BufWriter::new(OpenOptions::new().write(true).create(true).open(file)?);
+        if self.data.len() % BLOCK_SIZE != 0 {
+            let offset = self.data.len() / BLOCK_SIZE * BLOCK_SIZE;
 
-        for u in self.data.iter() {
-            let mut buf = [0; 4];
-            let bits = u.to_bits();
-            buf[0] = (bits >> 24 & 0xff) as u8;
-            buf[1] = (bits >> 16 & 0xff) as u8;
-            buf[2] = (bits >> 8 & 0xff) as u8;
-            buf[3] = (bits & 0xff) as u8;
-
-            bw.write(&buf)?;
+            bw.write(&self.data[offset..])?;
         }
 
         Ok(())

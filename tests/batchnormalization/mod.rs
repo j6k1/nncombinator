@@ -67,7 +67,7 @@ fn test_mnist_batch_norm() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -243,7 +243,7 @@ fn test_fashion_mnist_batch_norm() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let Mnist {
@@ -398,7 +398,7 @@ fn test_mnist_batch_norm_double() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -574,7 +574,7 @@ fn test_fashion_mnist_batch_norm_double() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let Mnist {
@@ -823,7 +823,7 @@ fn test_mnist_batch_norm_for_gpu() {
         assert_batch_backward(&l);
         assert_batch_loss(&l);
 
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     assert_forward_all(&net);
@@ -1009,7 +1009,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let Mnist {
@@ -1166,7 +1166,7 @@ fn test_mnist_batch_norm_for_gpu_double() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
@@ -1344,7 +1344,7 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
     }).add_layer(|l| {
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {
-        LinearOutputLayer::new(l,&device)
+        LinearOutputLayer::new(l,&device).unwrap()
     });
 
     let Mnist {

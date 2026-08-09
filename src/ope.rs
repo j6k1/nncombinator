@@ -8,7 +8,7 @@ use num_traits::FromPrimitive;
 pub trait UnitValue<T>: Add<Output=T> + Sub<Output=T> + Mul<Output=T> + Div<Output=T> + Neg<Output=T> +
     AddAssign + PartialOrd +
     Clone + Copy + Default + Debug + Send + Sync + 'static +
-    Exp + Tanh + Ln + One + Max + Min + MaxValue + InitialMaxValue + Abs + Sqrt +
+    Exp + Tanh + Cos + Ln + One + Max + Min + MaxValue + InitialMaxValue + Abs + Sqrt +
     Infinity + Neginfinity + IsNaN +
     Bias + FromPrimitive {
 }
@@ -112,13 +112,13 @@ pub trait Exp {
     fn exp(&self) -> Self;
 }
 impl Exp for f64 {
-    #[inline]
+    #[inline(always)]
     fn exp(&self) -> f64 {
         (*self).exp()
     }
 }
 impl Exp for f32 {
-    #[inline]
+    #[inline(always)]
     fn exp(&self) -> f32 {
         (*self).exp()
     }
@@ -137,6 +137,22 @@ impl Tanh for f32 {
     #[inline]
     fn tanh(&self) -> f32 {
         (*self).tanh()
+    }
+}
+/// Trait that returns the result of applying cosine
+pub trait Cos {
+    fn cos(&self) -> Self;
+}
+impl Cos for f64 {
+    #[inline]
+    fn cos(&self) -> f64 {
+        (*self).cos()
+    }
+}
+impl Cos for f32 {
+    #[inline]
+    fn cos(&self) -> f32 {
+        (*self).cos()
     }
 }
 /// Trait to return absolute value

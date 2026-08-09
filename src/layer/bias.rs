@@ -5,16 +5,14 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::arr::{Arr, IntoConverter};
 use crate::{Cons, Stack};
-use crate::cuda::{CudaTensor1dPtr, ReadMemory, WriteMemory};
-use crate::device::{Device, DeviceCpu, DeviceGpu, DeviceMemoryPool};
+use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::bias::DeviceBias;
-use crate::error::{ConfigReadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{AskDiffInput, Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
+use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
 use crate::lossfunction::LossFunction;
-use crate::mem::AsRawSlice;
 use crate::ope::{UnitValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, UnitOrMarker};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
 
 /// Trait for BiasLayer instance creation
 pub trait BiasLayerInstantiation<U,C,P,OP,D,I,PI,const N:usize>
@@ -48,46 +46,18 @@ pub struct BiasLayer<U,C,P,OP,D,I,PI,const N:usize>
     u:PhantomData<U>,
     optimizer:OP
 }
-impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for BiasLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
+             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
-          PI: Debug,
-          OP: Optimizer<U,DeviceCpu<U>>,
-          ConfigReadError: From<<U as FromStr>::Err> {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
-        self.parent.load(persistence)?;
-
-        for b in self.bias.iter_mut() {
-            *b = persistence.read()?;
-        }
-
-        Ok(())
-    }
-
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
-        self.parent.save(persistence)?;
-
-        persistence.write(UnitOrMarker::LayerStart);
-
-        for b in self.bias.iter() {
-            persistence.write(UnitOrMarker::Unit(*b));
-        }
-
-        Ok(())
-    }
-}
-impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence<U>,Specialized>,
-          U: Default + Clone + Copy + UnitValue<U> + FromStr,
-          I: Debug + Send + Sync,
-          PI: Debug,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U>,
-          ConfigReadError: From<<U as FromStr>::Err> {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err>,
+          D: Device<U> + DeviceBias<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + BatchSize {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
         let mut bias = Arr::<U,N>::new();
@@ -96,63 +66,40 @@ impl<U,P,OP,I,PI,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized
             *b = persistence.read()?;
         }
 
-        self.bias.memcpy(bias.as_raw_slice().as_ptr(),N)?;
+        self.bias = self.device.specialization_bias(bias)?;
 
         Ok(())
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        persistence.write(UnitOrMarker::LayerStart);
+        persistence.write_layer_start();
 
-        let bias = self.bias.read_to_vec()?;
+        let bias = self.device.generalization_bias(&self.bias)?;
+
+        persistence.write_units_start();
 
         for b in bias.iter() {
-            persistence.write(UnitOrMarker::Unit(*b));
+            persistence.write(*b);
         }
+
+        persistence.write_layer_end();
 
         Ok(())
     }
 }
-impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,N>
+impl<T,U,C,P,OP,D,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
-          PI: Debug,
-          OP: Optimizer<U,DeviceCpu<U>> {
-    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
-        self.parent.load(persistence)?;
-
-        for b in self.bias.iter_mut() {
-            *b = persistence.read()?;
-        }
-
-        Ok(())
-    }
-
-    fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
-        self.parent.save(persistence)?;
-
-        for b in self.bias.iter() {
-            persistence.write(*b)?;
-        }
-
-        Ok(())
-    }
-}
-impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
-    where T: LinearPersistence<U>,
-          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
-          U: Default + Clone + Copy + UnitValue<U>,
-          I: Debug + Send + Sync,
-          PI: Debug,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U> {
-    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceBias<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + BatchSize {
+    fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
         let mut bias = Arr::<U,N>::new();
@@ -161,7 +108,7 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,CudaTe
             *b = persistence.read()?;
         }
 
-        self.bias.memcpy(bias.as_raw_slice().as_ptr(),N)?;
+        self.bias = self.device.specialization_bias(bias)?;
 
         Ok(())
     }
@@ -169,7 +116,7 @@ impl<T,U,P,OP,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,CudaTe
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         self.parent.save(persistence)?;
 
-        let bias = self.bias.read_to_vec()?;
+        let bias = self.device.generalization_bias(&self.bias)?;
 
         for b in bias.iter() {
             persistence.write(*b)?;
@@ -237,16 +184,17 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Backward<U,PI,Result<PI,TrainingError>> for 
         self.device.backward_bias(input)
     }
 }
-impl<U,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,Arr<U,N>,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: BackwardAll<U,LossInput=PI> + ForwardAll<Input=I,Output=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U> + DeviceBias<U,Arr<U,N>,PI,N>,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
+          C: Debug,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a Arr<U,N>>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
@@ -267,56 +215,101 @@ impl<U,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,Arr<U,N>,P,OP,D
         Ok((l,Cons(s,g)))
     }
 }
-impl<U,P,OP,D,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,Arr<U,N>,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrain<U,PreOutput=PI> + Loss<U> + UpdateWeight<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
+          C: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U>,
+          D: Device<U> + DeviceBatchAveraging<C,U>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           OP: Optimizer<U,D>,
-          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a Arr<U,N>>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,Arr<U,N>>;
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,C>;
 
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
+    fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
         let (s,bias) = stack.pop();
+
+        let bias = self.device.batch_averaging(bias,batch_size)?;
 
         self.optimizer.update((&bias).into(),(&mut self.bias).into())?;
 
-        Ok(self.parent.update_weight(s)?)
+        Ok(self.parent.update_weight(s,batch_size)?)
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> AskDiffInput<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
-    where P: PreTrain<U,OutStack=<<Self as PreTrain<U>>::OutStack as Stack>::Remaining> +
-             ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> +
-             AskDiffInput<U>,
+impl<U,C,P,OP,D,I,PI,const N:usize> PartialForward for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          D: Device<U> + DeviceBias<U,C,PI,N>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
-          D: Device<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-          Self: PreTrain<U,PreOutput=PI> {
-    type DiffInput = P::DiffInput;
+          Self: ForwardAll<Input=I,Output=PI>,
+          Self: PreTrain<U> {
+    type PartialOutput = <P as PartialForward>::PartialOutput;
+    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
+    type DiffInput = <P as PartialForward>::DiffInput;
+    type DiffOutput = PI;
 
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
-        stack.map_remaining(|s| self.parent.ask_diff_input(s))
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward(input)?)
+    }
+
+    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input)?)
     }
 }
-impl<U,P,OP,D,I,PI,const N:usize> Loss<U> for BiasLayer<U,Arr<U,N>,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> ForwardDiff for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> + ForwardDiff +
+             BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+      D: Device<U> + DeviceBias<U,C,PI,N>,
+      U: Default + Clone + Copy + Send + UnitValue<U>,
+      I: Debug + Send + Sync,
+      PI: Debug + BatchDataType + 'static,
+      OP: Optimizer<U,D>,
+      <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+      Self: ForwardAll<Input=I,Output=PI>,
+      Self: PreTrain<U> {
+    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
+        let input = self.parent.forward_diff(input)?;
+
+        Ok(self.forward(&input)?)
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> ContinueForward for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI> +
+          BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+      D: Device<U> + DeviceBias<U,C,PI,N>,
+      U: Default + Clone + Copy + Send + UnitValue<U>,
+      I: Debug + Send + Sync,
+      PI: Debug + BatchDataType + 'static,
+      OP: Optimizer<U,D>,
+      <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+      Self: ForwardAll<Input=I,Output=PI>,
+      Self: PreTrain<U> {
+    type ConinueOutput = Self::Output;
+    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+        let input = self.parent.continue_forward(input)?;
+
+        Ok(self.forward(&input)?)
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> Loss<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
+          C: Debug,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-          D: Device<U> + DeviceBias<U,Arr<U,N>,PI,N>,
-          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a Arr<U,N>>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchForwardBase for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
@@ -358,6 +351,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrainBase<U> for BiasLayer<U,C,P,OP,
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug,
+          C: Debug,
           OP: Optimizer<U,D>,
           Self: PreTrain<U,PreOutput=PI> {
     type BatchPreOutput = <PI as BatchDataType>::Type;
@@ -373,6 +367,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain<U> for BiasLayer<U,C,P,OP,D,I,
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug,
+          C: Debug,
           OP: Optimizer<U,D> {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let r = self.parent.batch_pre_train(input)?;
@@ -382,7 +377,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain<U> for BiasLayer<U,C,P,OP,D,I,
         Ok(Cons(r,u))
     }
 }
-impl<U,P,OP,D,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,Arr<U,N>,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
@@ -392,10 +387,11 @@ impl<U,P,OP,D,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,Arr<U,N>,P,OP
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
           <I as BatchDataType>::Type: Debug,
+          C: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceBias<U,Arr<U,N>,PI,N>,
-          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a Arr<U,N>>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type BatchLossInput = <PI as BatchDataType>::Type;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
@@ -418,7 +414,7 @@ impl<U,P,OP,D,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,Arr<U,N>,P,OP
         Ok((l,Cons(s,g)))
     }
 }
-impl<U,P,OP,D,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,Arr<U,N>,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain<U> +
@@ -428,19 +424,100 @@ impl<U,P,OP,D,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,Arr<U,N>,P,OP,D,I
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
           <I as BatchDataType>::Type: Debug,
+          C: Debug,
           OP: Optimizer<U,D>,
-          D: Device<U> + DeviceBias<U,Arr<U,N>,PI,N>,
-          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a Arr<U,N>>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut Arr<U,N>> {
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
 }
-impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,N> for BiasLayer<U,Arr<U,N>,P,OP,DeviceCpu<U>,I,PI,N>
+// OnStep implementation
+impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + OnStep,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          PI: Debug,
+          OP: Optimizer<U,D> {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        self.optimizer.on_step(step)?;
+        Ok(self.parent.on_step(step)?)
+    }
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.optimizer.on_frequently_step(step,frequently_step)?;
+        Ok(self.parent.on_frequently_step(step,frequently_step)?)
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<U> + Loss<U> +
+             PersistProgress<TextFilePersistence,Specialized>,
+          U: Default + Clone + Copy + UnitValue<U> + FromStr,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
+          D: Device<U> + DeviceBias<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + BatchSize,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)?;
+
+        self.optimizer.load(persistence)?;
+
+        Ok(())
+    }
+
+    fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)?;
+
+        persistence.write_layer_start();
+
+        persistence.write_units_start();
+
+        self.optimizer.save(persistence)?;
+
+        persistence.write_layer_end();
+
+        Ok(())
+    }
+}
+impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<U> + Loss<U> +
+             PersistProgress<T,Linear>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType,
+          OP: Optimizer<U,D> + Persistence<U,T,Linear>,
+          D: Device<U> + DeviceBias<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + BatchSize {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)?;
+
+        self.optimizer.load(persistence)?;
+
+        Ok(())
+    }
+
+    fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)?;
+
+        self.optimizer.save(persistence)?;
+
+        Ok(())
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> BiasLayerInstantiation<U,C,P,OP,D,I,PI,N> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
-          OP: Optimizer<U,DeviceCpu<U>> {
-    fn instantiation<UI: FnMut() -> U,B: OptimizerBuilder<U,DeviceCpu<U>,Output=OP>>(parent: P, device: &DeviceCpu<U>, ui: UI, b: &B)
-        -> Result<BiasLayer<U, Arr<U,N>, P, OP, DeviceCpu<U>, I, PI, N>, LayerInstantiationError> {
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceBias<U,C,PI,N>,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
+    fn instantiation<UI: FnMut() -> U,B: OptimizerBuilder<U,D,Output=OP>>(parent: P, device: &D, ui: UI, b: &B)
+        -> Result<BiasLayer<U,C,P,OP,D,I,PI,N>, LayerInstantiationError> {
         let mut ui = ui;
 
         let mut bias = Arr::new();
@@ -449,28 +526,12 @@ impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,Arr<U,N>,P,OP,DeviceCpu
             *it = ui();
         }
 
+        let bias = device.specialization_bias(bias)?;
+
         Ok(BiasLayer {
             parent: parent,
             device: device.clone(),
             bias: bias,
-            u:PhantomData::<U>,
-            optimizer:b.build(N)?
-        })
-    }
-}
-impl<U,P,OP,I,PI,const N:usize> BiasLayerInstantiation<U,CudaTensor1dPtr<U,N>,P,OP,DeviceGpu<U>,I,PI,N> for BiasLayer<U,Arr<U,N>,P,OP,DeviceGpu<U>,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
-          U: Default + Clone + Copy + Send + UnitValue<U>,
-          I: Debug + Send + Sync,
-          PI: Debug + BatchDataType,
-          OP: Optimizer<U,DeviceGpu<U>>,
-          DeviceGpu<U>: Device<U> {
-    fn instantiation<UI: FnMut() -> U,B: OptimizerBuilder<U,DeviceGpu<U>,Output=OP>>(parent: P, device: &DeviceGpu<U>, ui: UI, b: &B)
-        -> Result<BiasLayer<U, CudaTensor1dPtr<U,N>, P, OP, DeviceGpu<U>, I, PI, N>, LayerInstantiationError> {
-        Ok(BiasLayer {
-            parent: parent,
-            device: device.clone(),
-            bias: CudaTensor1dPtr::with_initializer(device.get_memory_pool(),ui)?,
             u:PhantomData::<U>,
             optimizer:b.build(N)?
         })

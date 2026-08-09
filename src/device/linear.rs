@@ -1,18 +1,30 @@
 //! Implementation of the calculation process for full connected layers
 
 use std::fmt::Debug;
-use std::mem;
-use cuda_runtime_sys::dim3;
-use libc::c_uint;
 use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
-use crate::cuda::{CudaMemoryPoolPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, DataTypeInfo, Kernel, WriteMemory};
-use crate::cuda::kernel::device::{BackwardLinear, BackwardLinearArgs, BackwardLinearBatch, BackwardLinearBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, ForwardLinearBatch, ForwardLinearBatchArgs, LinearGradient, LinearGradientArgs, LinearGradientBatch, LinearGradientBatchArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
-use crate::device::{DeviceCpu, DeviceGpu, DeviceMemoryPool, DeviceReduce};
-use crate::error::{EvaluateError, TrainingError, TypeConvertError, UnsupportedOperationError};
-use crate::layer::{BatchDataType, BatchSize, DiffInput};
+use crate::device::{DeviceCpu, DeviceReduce};
+use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
+use crate::layer::{DiffInput};
 use crate::ope::UnitValue;
 use crate::ope::Product;
+use crate::layer::{BatchDataType};
+#[cfg(feature = "cuda")]
+use crate::mem::AsRawSlice;
+#[cfg(feature = "cuda")]
+use crate::layer::{BatchSize};
+#[cfg(feature = "cuda")]
+use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
+#[cfg(feature = "cuda")]
+use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaPtr, AsCudaReadOnlyPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize, MemoryType, ReadMemory};
+#[cfg(feature = "cuda")]
+use crate::cuda::{DataTypeInfo, Kernel, MemoryMoveTo, WriteMemory};
+#[cfg(feature = "cuda")]
+use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
+use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
+#[cfg(feature = "cuda")]
+use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the linear layer
 pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
@@ -22,6 +34,42 @@ pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
     type BatchOutput: Debug + 'static;
     type LossOutput: BatchDataType + Debug + 'static;
     type BatchLossOutput: Debug + 'static;
+    /// Perform generalization of the unit weight data
+    /// # Arguments
+    /// * `units` - Set of weights applied to the inputs of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`GeneralizationError`]
+    fn generalization_units(&self,units:&T) -> Result<Arr2<U,NI,NO>, GeneralizationError>;
+    /// Perform generalization of bias data
+    /// # Arguments
+    /// * `bias` - Set of biases applied to the output of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`GeneralizationError`]
+    fn generalization_bias(&self,bias:&B) -> Result<Arr<U,NO>, GeneralizationError>;
+    /// Perform specialization of the unit weight data
+    /// # Arguments
+    /// * `units` - Set of weights applied to the inputs of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`SpecializationError`]
+    fn specialization_units(&self,units:Arr2<U,NI,NO>) -> Result<T, SpecializationError>;
+    /// Perform specialization of bias data
+    /// # Arguments
+    /// * `bias` - Set of biases applied to the output of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`SpecializationError`]
+    fn specialization_bias(&self,bias:Arr<U,NO>) -> Result<B, SpecializationError>;
     /// Forward propagation calculation
     /// # Arguments
     /// * `bias` - bias weights
@@ -115,7 +163,23 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
     type LossOutput = I;
     type BatchLossOutput = <I as BatchDataType>::Type;
     #[inline]
-    fn forward_linear<'a>(&self, bias: &Arr<U, NO>, units: &Arr2<U, NI, NO>, input: &'a I) -> Result<Arr<U, NO>, EvaluateError> {
+    fn generalization_units(&self, units: &Arr2<U,NI,NO>) -> Result<Arr2<U,NI,NO>, GeneralizationError> {
+        Ok(units.clone())
+    }
+    #[inline]
+    fn generalization_bias(&self, bias: &Arr<U,NO>) -> Result<Arr<U,NO>, GeneralizationError> {
+        Ok(bias.clone())
+    }
+    #[inline]
+    fn specialization_units(&self, units: Arr2<U,NI,NO>) -> Result<Arr2<U,NI,NO>, SpecializationError> {
+        Ok(units)
+    }
+    #[inline]
+    fn specialization_bias(&self, bias: Arr<U,NO>) -> Result<Arr<U,NO>, SpecializationError> {
+        Ok(bias)
+    }
+    #[inline]
+    fn forward_linear<'a>(&self, bias: &Arr<U,NO>, units: &Arr2<U,NI,NO>, input: &'a I) -> Result<Arr<U,NO>, EvaluateError> {
         Ok(ArrView::<'a,U,NI>::from(input).product(units) + bias)
     }
 
@@ -185,310 +249,829 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
         self.reduce(loss)
     }
 }
-impl<U,I,const NI: usize, const NO: usize> DeviceLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,I,NI,NO> for DeviceGpu<U>
-    where U: DataTypeInfo + UnitValue<U>,
-          I: BatchDataType + From<CudaTensor1dPtr<U,NI>> + Debug + 'static,
-          <I as BatchDataType>::Type: BatchSize + Debug + 'static,
-          <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
-          CudaVec<U,CudaTensor1dPtr<U,NI>>: IntoConverter,
-          Self: DeviceReduce<CudaVec<U,CudaTensor1dPtr<U,NO>>,CudaTensor1dPtr<U,NO>,U,NO>,
-          for<'a> CudaTensor1dPtrView<'a,U,NI>: From<&'a I>,
-          for<'a> CudaVecView<'a,U,CudaTensor1dPtr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
-          for<'b> ForwardLinear::<'b,U,NI,NO>: Kernel<Args=ForwardLinearArgs<'b,U,NI,NO>>,
-          for<'b> BackwardLinear::<'b,U,NI,NO>: Kernel<Args=BackwardLinearArgs<'b,U,NI,NO>>,
-          for<'b> LinearGradient::<'b,U,NI,NO>: Kernel<Args=LinearGradientArgs<'b,U,NI,NO>>,
-          for<'b> ForwardLinearBatch::<'b,U,NI,NO>: Kernel<Args=ForwardLinearBatchArgs<'b,U,NI,NO>>,
-          for<'b> BackwardLinearBatch::<'b,U,NI,NO>: Kernel<Args=BackwardLinearBatchArgs<'b,U,NI,NO>>,
-          for<'b> LinearGradientBatch::<'b,U,NI,NO>: Kernel<Args=LinearGradientBatchArgs<'b,U,NI,NO>>,
-          for<'b> ReduceLinearBatch::<'b,U,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,U,NO>> {
-    type Output = CudaTensor1dPtr<U,NO>;
-    type BatchOutput = CudaVec<U,CudaTensor1dPtr<U,NO>>;
+#[cfg(feature = "cuda")]
+impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,I,NI,NO> for DeviceGpu<f32,A>
+    where I: BatchDataType + MemorySize + AsConstKernelPtr + AsKernelPtr + From<CudaTensor1dPtr<f32,A,NI>> + Debug + 'static,
+          <I as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
+          <I as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
+          A: CudaAllocator + MemoryType + 'static,
+          CudaPtr<f32,A>: AsPtr<f32> + WriteMemory<f32>,
+          CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: IntoConverter,
+          CudaTensor1dPtr<f32,A,NO>: AsConstKernelPtr + AsKernelPtr +
+                                     MemorySize + MemoryMoveTo<f32,CudaTensor1dPtr<f32,A,NO>> +
+                                     ReadMemory<f32> + WriteMemory<f32>,
+          CudaTensor2dPtr<f32,A,NI,NO>: ReadMemory<f32> + WriteMemory<f32>,
+          Self: DeviceReduce<CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,CudaTensor1dPtr<f32,A,NO>,f32,NO>,
+          for<'a> I: CudaView<'a>,
+          for<'a> <I as BatchDataType>::Type: CudaView<'a>,
+          for<'a> CudaTensor1dPtr<f32,A,NI>: AsCudaPtr<'a> + AsCudaMutPtr<Pointee=f32,Allocator=A> + AsCudaReadOnlyPtr<Pointee=f32>,
+          for<'a> CudaMutPtr<'a,f32,A>: AsMutPtr<f32>,
+          for<'a> CudaTensor1dPtr<f32,A,NO>: CudaView<'a>,
+          for<'a> &'a I: AsCudaView<'a>,
+          for<'a> &'a <I as BatchDataType>::Type: AsCudaView<'a>,
+          for<'a> &'a CudaTensor1dPtr<f32,A,NO>: AsCudaView<'a>,
+          for<'a> CudaTensor1dPtrView<'a,f32,NI>: MemorySize + AsConstKernelPtr + From<<I as CudaView<'a>>::Type> + From<<&'a I as CudaView<'a>>::Type>,
+          for<'a> CudaTensor1dPtrView<'a,f32,NO>: MemorySize + AsConstKernelPtr +
+                                                  From<<CudaTensor1dPtr<f32,A,NO> as CudaView<'a>>::Type> +
+                                                  From<<&'a CudaTensor1dPtr<f32,A,NO> as CudaView<'a>>::Type>,
+          for<'a> <&'a <I as BatchDataType>::Type as CudaView<'a>>::Type: IntoConverter,
+          for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NI>>: TryFrom<<<&'a <I as BatchDataType>::Type as CudaView<'a>>::Type as IntoConverter>::Converter,Error=TypeConvertError>,
+          for<'a> CudaVecView<'a,f32,CudaTensor1dPtrView<'a,f32,NO>>: TryFrom<&'a CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,Error=TypeConvertError>,
+          for<'a> AddBias<'a,f32,A,NO>: Kernel<Args=AddBiasArgs<'a,f32,A,NO>>,
+          for<'a> AddBiasBatch<'a,f32,A,NO>: Kernel<Args=AddBiasBatchArgs<'a,f32,A,NO>>,
+          for<'a> ReduceLinearBatch::<'a,f32,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'a,f32,A,NO>> {
+    type Output = CudaTensor1dPtr<f32,A,NO>;
+    type BatchOutput = CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>;
     type LossOutput = I;
     type BatchLossOutput = <I as BatchDataType>::Type;
     #[inline]
-    fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<U,NO>, units: &CudaTensor2dPtr<U,NI,NO>, input: &'a I)
-        -> Result<CudaTensor1dPtr<U,NO>, EvaluateError> {
-        let input = input.into();
-        let output = CudaTensor1dPtr::<U,NO>::with_initializer(self.get_memory_pool(),Default::default)?;
+    fn generalization_units(&self, units: &CudaTensor2dPtr<f32, A,NI,NO>) -> Result<Arr2<f32,NI,NO>, GeneralizationError> {
+        Ok(units.read_to_vec()?.try_into()?)
+    }
+    #[inline]
+    fn generalization_bias(&self, bias: &CudaTensor1dPtr<f32,A,NO>) -> Result<Arr<f32,NO>, GeneralizationError> {
+        Ok(bias.read_to_vec()?.try_into()?)
+    }
+    #[inline]
+    fn specialization_units(&self, units: Arr2<f32,NI,NO>) -> Result<CudaTensor2dPtr<f32,A,NI,NO>, SpecializationError> {
+        let mut u = CudaTensor2dPtr::new(self.get_allocator())?;
 
-        let mut args = ForwardLinearArgs::new(
-                                                   &input,
-                                                   units,
-                                                   bias,
-                                                   output);
+        u.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
 
-        let mut kernel = ForwardLinear::<U,NI,NO>::new();
+        Ok(u)
+    }
+    #[inline]
+    fn specialization_bias(&self, bias: Arr<f32,NO>) -> Result<CudaTensor1dPtr<f32,A,NO>, SpecializationError> {
+        let mut b = CudaTensor1dPtr::new(self.get_allocator())?;
 
-        kernel.launch(dim3 { x: (NO as c_uint + 15) / 16, y: 1, z: 1 },
-                      dim3 { x: 16, y: 16, z: 1 },&mut args,
-                      2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>())?;
+        b.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
 
-        Ok(args.output)
+        Ok(b)
+    }
+    #[inline]
+    fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<f32,A,NO>, units: &CudaTensor2dPtr<f32,A,NI,NO>, input: &'a I)
+                          -> Result<CudaTensor1dPtr<f32,A,NO>, EvaluateError> {
+        let input = CudaTensor1dPtrView::<f32,NI>::from(input.as_cuda_view());
+        let mut output = CudaTensor1dPtr::<f32,A,NO>::new(self.get_allocator())?;
+        bias.memcpy_to(&mut output,NO)?;
+
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(1.0f32)?;
+
+        match unsafe {
+            cublasSgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           1,
+                           NI as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input.as_ptr(),
+                           NI as libc::c_int,
+                           beta.as_ptr(),
+                           output.as_mut_ptr(),
+                           NO as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemv_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
     }
 
     #[inline]
-    fn backward_linear<'a>(&self, units: &CudaTensor2dPtr<U,NI,NO>, input: &'a Self::Output)
-        -> Result<I, TrainingError> {
-        let input_ptr = input.into();
-        let output = CudaTensor1dPtr::<U,NI>::new(&self.memory_pool)?;
+    fn backward_linear<'a>(&self, units: &CudaTensor2dPtr<f32,A,NI,NO>, input: &'a Self::Output)
+                           -> Result<I, TrainingError> {
+        let input = input.as_cuda_view();
+        let input = CudaTensor1dPtrView::<f32,NO>::from(input);
+        let mut output = CudaTensor1dPtr::<f32,A,NI>::new(self.get_allocator())?;
 
-        let mut args = BackwardLinearArgs::new(&input_ptr,
-                                                    units,
-                                                    output);
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(0.0f32)?;
 
-        let mut kernel = BackwardLinear::<U,NI,NO>::new();
-
-        kernel.launch(dim3 { x: (NI as c_uint + 15) / 16, y: 1, z: 1 },
-                      dim3 { x: 16, y: 16, z: 1 },&mut args,
-                      2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>())?;
-
-        Ok(args.output.into())
+        match unsafe {
+            cublasSgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NI as ::libc::c_int,
+                           1 as libc::c_int,
+                           NO as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input.as_ptr(),
+                           NO as libc::c_int,
+                           beta.as_ptr(),
+                           output.as_mut_ptr(),
+                           NI as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output.into()),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemm_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
     }
 
     #[inline]
-    fn backward_weight_gradient<'a>(&self, o: &'a I, loss: &'a Self::Output) -> Result<CudaTensor2dPtr<U,NI,NO>, TrainingError> {
-        let input_ptr = o.into();
-        let loss_ptr = loss.into();
-        let output = CudaTensor2dPtr::<U,NI,NO>::with_initializer(&self.memory_pool,Default::default)?;
+    fn backward_weight_gradient<'a>(&self, o: &'a I, loss: &'a Self::Output) -> Result<CudaTensor2dPtr<f32,A,NI,NO>, TrainingError> {
+        let o_ptr = CudaTensor1dPtrView::<f32,NI>::from(o.as_cuda_view());
+        let loss = loss.as_cuda_view();
+        let loss_ptr = CudaTensor1dPtrView::<f32,NO>::from(loss);
+        let mut output_ptr = CudaTensor2dPtr::<f32,A,NI,NO>::new(self.get_allocator())?;
 
-        let mut args = LinearGradientArgs::new(
-            &loss_ptr,
-            &input_ptr,
-            output
-        );
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(0.0f32)?;
 
-        let mut kernel = LinearGradient::<U,NI,NO>::new();
-
-        kernel.launch(dim3 { x: (NO as c_uint + 15) / 16, y: (NI as c_uint + 15) / 16, z: 1 },
-                      dim3 { x: 16, y: 16, z: 1 },&mut args,
-                      2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>())?;
-
-        Ok(args.output)
+        match unsafe {
+            cublasSgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           NI as libc::c_int,
+                           1 as ::libc::c_int,
+                           alpha.as_ptr(),
+                           loss_ptr.as_ptr(),
+                           NO as libc::c_int,
+                           o_ptr.as_ptr(),
+                           1 as libc::c_int,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           NO as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output_ptr)
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemm_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
     }
 
-    fn backward_bias_weight_gradient<'a>(&self, loss: Self::Output) -> Result<CudaTensor1dPtr<U,NO>, TrainingError> {
+    fn backward_bias_weight_gradient<'a>(&self, loss: Self::Output) -> Result<CudaTensor1dPtr<f32,A,NO>, TrainingError> {
         Ok(loss.into())
     }
     #[inline]
-    fn batch_forward_linear<'a>(&self,bias:&CudaTensor1dPtr<U,NO>,units:&CudaTensor2dPtr<U,NI,NO>,
+    fn batch_forward_linear<'a>(&self,bias:&CudaTensor1dPtr<f32,A,NO>,units:&CudaTensor2dPtr<f32,A,NI,NO>,
                                 input: &'a <I as BatchDataType>::Type)
                                 -> Result<Self::BatchOutput,TrainingError> {
-        let n = input.size();
+        let size = input.size();
+        let converter = input.as_cuda_view().into_converter();
+        let input_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NI>>::try_from(converter)?;
+        let mut output = CudaVec::<f32,CudaTensor1dPtr<f32,A,NO>,A>::new(size,self.get_allocator())?;
 
-        let input = input.try_into()?;
-        let output = CudaVec::<U,CudaTensor1dPtr<U,NO>>::with_initializer(n,&self.memory_pool,Default::default)?;
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(0.0f32)?;
 
-        let mut args = ForwardLinearBatchArgs::new(&input,
-                                                   units,
-                                                   bias,
-                                                   output,
-                                                   n);
+        match unsafe {
+            cublasSgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           size as libc::c_int,
+                           NI as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input_ptr.as_ptr(),
+                           NI as libc::c_int,
+                           beta.as_ptr(),
+                           output.as_mut_ptr(),
+                           NO as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemm_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
 
-        let mut kernel = ForwardLinearBatch::<U,NI,NO>::new();
+        let mut args = AddBiasBatchArgs::new(
+            bias,
+            output,
+            size
+        );
 
-        kernel.launch(dim3 { x: (NO as c_uint + 15) / 16, y: (n as c_uint + 15) / 16, z: 1 },
-                      dim3 { x: 16, y: 16, z: 1 },&mut args,
-                      2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>())?;
+        let mut kernel = AddBiasBatch::<'_,f32,A,NO>::new();
 
-        Ok(args.output)
+        kernel.launch(&mut args)?;
+
+        Ok(args.input_output)
+
     }
 
     #[inline]
-    fn batch_backward_linear<'a>(&self, units: &CudaTensor2dPtr<U, NI, NO>, input: &'a Self::BatchOutput)
-        -> Result<<I as BatchDataType>::Type, TrainingError> {
+    fn batch_backward_linear<'a>(&self, units: &CudaTensor2dPtr<f32,A, NI, NO>, input: &'a Self::BatchOutput)
+                                 -> Result<<I as BatchDataType>::Type, TrainingError> {
         let n = input.size();
 
-        let input_ptr = input.try_into()?;
+        let input = CudaVecView::<f32,CudaTensor1dPtrView<f32,NO>>::try_from(input)?;
+        let mut output = CudaVec::<f32,CudaTensor1dPtr<f32,A,NI>,A>::new(n,self.get_allocator())?;
 
-        let output = CudaVec::<U,CudaTensor1dPtr<U,NI>>::new(n,&self.memory_pool)?;
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(0.0f32)?;
 
-        let mut args = BackwardLinearBatchArgs::new(&input_ptr,
-                                                    units,
-                                                    output,
-                                                    n);
-
-        let mut kernel = BackwardLinearBatch::<U,NI,NO>::new();
-
-        kernel.launch(dim3 { x: (NI as c_uint + 15) / 16, y: (n as c_uint + 15) / 16, z: 1 },
-                      dim3 { x: 16, y: 16, z: 4 },&mut args,
-                      2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>())?;
-
-        Ok(args.output.into_converter().try_into()?)
+        match unsafe {
+            cublasSgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NI as libc::c_int,
+                           input.size() as ::libc::c_int,
+                           NO as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input.as_ptr(),
+                           NO as libc::c_int,
+                           beta.as_ptr(),
+                           output.as_mut_ptr(),
+                           NI as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output.into_converter().try_into()?)
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemm_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
     }
 
     #[inline]
     fn batch_backward_weight_gradient<'a>(&self, o: &'a <I as BatchDataType>::Type,
                                           loss: &'a Self::BatchOutput)
-        -> Result<CudaTensor2dPtr<U, NI, NO>, TrainingError> {
+                                          -> Result<CudaTensor2dPtr<f32,A, NI, NO>, TrainingError> {
         let n = loss.size();
 
-        let o = o.try_into()?;
-        let loss_ptr = loss.try_into()?;
-        let output = CudaTensor2dPtr::<U,NI,NO>::with_initializer(&self.memory_pool,Default::default)?;
+        let converter = o.as_cuda_view().into_converter();
+        let o_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NI>>::try_from(converter)?;
+        let loss_ptr = CudaVecView::<f32,CudaTensor1dPtrView<f32,NO>>::try_from(loss)?;
+        let mut output_ptr = CudaTensor2dPtr::<f32,A,NI,NO>::new(self.get_allocator())?;
 
-        let mut args = LinearGradientBatchArgs::new(
-            &loss_ptr,
-            &o,
+        let alpha = CudaPtr::try_from(1.0f32)?;
+        let beta = CudaPtr::try_from(0.0f32)?;
+
+        match unsafe {
+            cublasSgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_T,
+                           NO as ::libc::c_int,
+                           NI as libc::c_int,
+                           n as ::libc::c_int,
+                           alpha.as_ptr(),
+                           loss_ptr.as_ptr(),
+                           NO as libc::c_int,
+                           o_ptr.as_ptr(),
+                           NI as libc::c_int,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           NO as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output_ptr)
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasSgemm_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+    }
+
+    #[inline]
+    fn batch_linear_reduce<'a>(&self, loss: &'a Self::BatchOutput) -> Result<CudaTensor1dPtr<f32,A,NO>,TrainingError> {
+        self.reduce(loss)
+    }
+}
+#[cfg(feature = "cuda")]
+impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,A,NI,NO>,CudaTensor1dPtr<f64,A,NO>,I,NI,NO> for DeviceGpu<f64,A>
+    where I: BatchDataType + From<CudaTensor1dPtr<f64,A,NI>> + Debug + 'static,
+          <I as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <I as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
+          A: CudaAllocator + 'static,
+          CudaPtr<f64,A>: ReadMemory<f64> + WriteMemory<f64>,
+          CudaTensor1dPtr<f64,A,NO>: MemoryMoveTo<f64,CudaTensor1dPtr<f64,A,NO>> + ReadMemory<f64> + WriteMemory<f64>,
+          CudaTensor2dPtr<f64,A,NI,NO>: ReadMemory<f64> + WriteMemory<f64>,
+          CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>: IntoConverter,
+          CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>: IntoConverter,
+          Self: DeviceReduce<CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>,CudaTensor1dPtr<f64,A,NO>,f64,NO>,
+          for<'a> CudaTensor1dPtrView<'a,f64,NI>: From<&'a I>,
+          for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,NO>>: TryFrom<&'a CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>,Error=TypeConvertError>,
+          for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> AddBias<'a,f64,A,NO>: Kernel<Args=AddBiasArgs<'a,f64,A,NO>>,
+          for<'a> AddBiasBatch<'a,f64,A,NO>: Kernel<Args=AddBiasBatchArgs<'a,f64,A,NO>>,
+          for<'b> ReduceLinearBatch::<'b,f64,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,f64,A,NO>> {
+    type Output = CudaTensor1dPtr<f64,A,NO>;
+    type BatchOutput = CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>;
+    type LossOutput = I;
+    type BatchLossOutput = <I as BatchDataType>::Type;
+    #[inline]
+    fn generalization_units(&self, units: &CudaTensor2dPtr<f64,A,NI,NO>) -> Result<Arr2<f64,NI,NO>, GeneralizationError> {
+        Ok(units.read_to_vec()?.try_into()?)
+    }
+    #[inline]
+    fn generalization_bias(&self, bias: &CudaTensor1dPtr<f64,A,NO>) -> Result<Arr<f64,NO>, GeneralizationError> {
+        Ok(bias.read_to_vec()?.try_into()?)
+    }
+    #[inline]
+    fn specialization_units(&self, units: Arr2<f64,NI,NO>) -> Result<CudaTensor2dPtr<f64,A,NI,NO>, SpecializationError> {
+        let mut u = CudaTensor2dPtr::new(self.get_allocator())?;
+
+        u.memcpy(units.as_raw_slice().as_ptr(),NI*NO)?;
+
+        Ok(u)
+    }
+    #[inline]
+    fn specialization_bias(&self, bias: Arr<f64,NO>) -> Result<CudaTensor1dPtr<f64,A,NO>, SpecializationError> {
+        let mut b = CudaTensor1dPtr::new(self.get_allocator())?;
+
+        b.memcpy(bias.as_raw_slice().as_ptr(),NO)?;
+
+        Ok(b)
+    }
+    #[inline]
+    fn forward_linear<'a>(&self, bias: &CudaTensor1dPtr<f64,A,NO>, units: &CudaTensor2dPtr<f64,A,NI,NO>, input: &'a I)
+                          -> Result<CudaTensor1dPtr<f64,A,NO>, EvaluateError> {
+        let input = CudaTensor1dPtrView::<f64,NI>::from(input);
+        let mut output = CudaTensor1dPtr::<f64,A,NO>::new(self.get_allocator())?;
+        bias.memcpy_to(&mut output,NO)?;
+
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(1.0f64)?;
+
+        match unsafe {
+            cublasDgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           1,
+                           NI as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input.as_ptr(),
+                           NI as libc::c_int,
+                           beta.as_ptr(),
+                           output.as_mut_ptr(),
+                           NO as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(EvaluateError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(EvaluateError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(EvaluateError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(EvaluateError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasDgemv_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+    }
+
+    #[inline]
+    fn backward_linear<'a>(&self, units: &CudaTensor2dPtr<f64,A,NI,NO>, input: &'a Self::Output)
+                           -> Result<I, TrainingError> {
+        let input = CudaTensor1dPtrView::<f64,NO>::from(input);
+        let mut output = CudaTensor1dPtr::<f64,A,NI>::new(self.get_allocator())?;
+
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(0.0f64)?;
+
+        match unsafe {
+            cublasDgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NI as ::libc::c_int,
+                           1 as libc::c_int,
+                           NO as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input.as_ptr(),
+                           NO as libc::c_int,
+                           beta.as_ptr(),
+                           output.as_mut_ptr(),
+                           NI as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => Ok(output.into()),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasDgemm_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+    }
+
+    #[inline]
+    fn backward_weight_gradient<'a>(&self, o: &'a I, loss: &'a Self::Output) -> Result<CudaTensor2dPtr<f64,A,NI,NO>, TrainingError> {
+        let o_ptr = CudaTensor1dPtrView::<f64,NI>::from(o);
+        let loss_ptr = CudaTensor1dPtrView::<f64,NO>::from(loss);
+        let mut output_ptr = CudaTensor2dPtr::<f64,A,NI,NO>::new(self.get_allocator())?;
+
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(0.0f64)?;
+
+        match unsafe {
+            cublasDgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           NI as libc::c_int,
+                           1 as ::libc::c_int,
+                           alpha.as_ptr(),
+                           loss_ptr.as_ptr(),
+                           NO as libc::c_int,
+                           o_ptr.as_ptr(),
+                           1 as libc::c_int,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           NO as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output_ptr)
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasDgemm_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+    }
+
+    fn backward_bias_weight_gradient<'a>(&self, loss: Self::Output) -> Result<CudaTensor1dPtr<f64,A,NO>, TrainingError> {
+        Ok(loss.into())
+    }
+    #[inline]
+    fn batch_forward_linear<'a>(&self,bias:&CudaTensor1dPtr<f64,A,NO>,units:&CudaTensor2dPtr<f64,A,NI,NO>,
+                                input: &'a <I as BatchDataType>::Type)
+                                -> Result<Self::BatchOutput,TrainingError> {
+        let input_ptr = CudaVecView::<f64,CudaTensor1dPtrView<f64,NI>>::try_from(input)?;
+        let mut output = CudaVec::<f64,CudaTensor1dPtr<f64,A,NO>,A>::new(input.size(),self.get_allocator())?;
+
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(0.0f64)?;
+
+        match unsafe {
+            cublasDgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NO as ::libc::c_int,
+                           input.size() as libc::c_int,
+                           NI as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input_ptr.as_ptr(),
+                           NI as libc::c_int,
+                           beta.as_ptr(),
+                           output.as_mut_ptr(),
+                           NO as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => (),
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasDgemm_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+
+        let mut args = AddBiasBatchArgs::new(
+            bias,
             output,
-            n
+            input.size()
         );
 
-        let mut kernel = LinearGradientBatch::<U,NI,NO>::new();
+        let mut kernel = AddBiasBatch::<'_,f64,A,NO>::new();
 
-        kernel.launch(dim3 { x: (NO as c_uint + 15) / 16, y: (NI as c_uint + 15) / 16, z: 1 },
-                      dim3 { x: 16, y: 16, z: 1 },&mut args,
-                      2 * 256 * mem::size_of::<f32>() / 2 + 256 * mem::size_of::<f32>())?;
+        kernel.launch(&mut args)?;
+
+        Ok(args.input_output)
+
+    }
+
+    #[inline]
+    fn batch_backward_linear<'a>(&self, units: &CudaTensor2dPtr<f64, A, NI, NO>, input: &'a Self::BatchOutput)
+                                 -> Result<<I as BatchDataType>::Type, TrainingError> {
+        let n = input.size();
+
+        let input = CudaVecView::<f64,CudaTensor1dPtrView<f64,NO>>::try_from(input)?;
+        let mut output = CudaVec::<f64,CudaTensor1dPtr<f64,A,NI>,A>::new(n,self.get_allocator())?;
+
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(0.0f64)?;
+
+        match unsafe {
+            cublasDgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_T,
+                           cublasOperation_t::CUBLAS_OP_N,
+                           NI as libc::c_int,
+                           input.size() as ::libc::c_int,
+                           NO as ::libc::c_int,
+                           alpha.as_ptr(),
+                           units.as_ptr(),
+                           NO as libc::c_int,
+                           input.as_ptr(),
+                           NO as libc::c_int,
+                           beta.as_ptr(),
+                           output.as_mut_ptr(),
+                           NI as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output.into_converter().try_into()?)
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasDgemm_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+    }
+
+    #[inline]
+    fn batch_backward_weight_gradient<'a>(&self, o: &'a <I as BatchDataType>::Type,
+                                          loss: &'a Self::BatchOutput)
+                                          -> Result<CudaTensor2dPtr<f64, A, NI, NO>, TrainingError> {
+        let n = loss.size();
+
+        let o_ptr = CudaVecView::<f64,CudaTensor1dPtrView<f64,NI>>::try_from(o)?;
+        let loss_ptr = CudaVecView::<f64,CudaTensor1dPtrView<f64,NO>>::try_from(loss)?;
+        let mut output_ptr = CudaTensor2dPtr::<f64,A,NI,NO>::new(self.get_allocator())?;
+
+        let alpha = CudaPtr::try_from(1.0f64)?;
+        let beta = CudaPtr::try_from(0.0f64)?;
+
+        match unsafe {
+            cublasDgemm_v2(*self.cublas.id_c(),
+                           cublasOperation_t::CUBLAS_OP_N,
+                           cublasOperation_t::CUBLAS_OP_T,
+                           NO as ::libc::c_int,
+                           NI as libc::c_int,
+                           n as ::libc::c_int,
+                           alpha.as_ptr(),
+                           loss_ptr.as_ptr(),
+                           NO as libc::c_int,
+                           o_ptr.as_ptr(),
+                           NI as libc::c_int,
+                           beta.as_ptr(),
+                           output_ptr.as_mut_ptr(),
+                           NO as ::libc::c_int
+            )
+        } {
+            cublasStatus_t::CUBLAS_STATUS_SUCCESS => {
+                Ok(output_ptr)
+            },
+            cublasStatus_t::CUBLAS_STATUS_NOT_INITIALIZED => {
+                return Err(TrainingError::CublasError(rcublas::Error::NotInitialized));
+            },
+            cublasStatus_t::CUBLAS_STATUS_INVALID_VALUE => {
+                return Err(TrainingError::CublasError(rcublas::Error::InvalidValue(
+                    "Parameters m or n are less than 0, or incx or incy was specified as 0."
+                )));
+            },
+            cublasStatus_t::CUBLAS_STATUS_EXECUTION_FAILED => {
+                return Err(TrainingError::CublasError(rcublas::Error::ExecutionFailed));
+            },
+            status => {
+                return Err(TrainingError::CublasError(rcublas::Error::Unknown(
+                    "Unable to get cuBLAS cublasDgemm_v2",
+                    status as i32 as u64
+                )));
+            }
+        }
+    }
+
+    #[inline]
+    fn batch_linear_reduce<'a>(&self, loss: &'a Self::BatchOutput) -> Result<CudaTensor1dPtr<f64,A,NO>,TrainingError> {
+        self.reduce(loss)
+    }
+}
+
+/// Trait that defines the implementation of various computational processes in the differentially applicable linear layer
+pub trait DeviceDiffLinear<'a,U,I,T,const NI: usize,const NO: usize>
+    where U: UnitValue<U> {
+    type Output: Debug + 'static;
+    fn forward_diff_linear(&self, units: &T, input: I) -> Result<Self::Output, EvaluateError>;
+    fn clone_diff_linear_forward_output(&self, output: &Self::Output) -> Result<Self::Output, EvaluateError>;
+}
+impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,DiffArr<U,NI>,Arr<U,NO>>,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U>
+    where U: UnitValue<U> {
+    type Output = Arr<U,NO>;
+    #[inline]
+    fn forward_diff_linear(&self, units: &Arr2<U, NI, NO>, input: DiffInput<DiffArr<U,NI>,Arr<U,NO>>) -> Result<Arr<U, NO>,EvaluateError> {
+        let mut output = input.output.clone();
+
+        for &(i,d) in input.diff.iter() {
+            for (o,j) in output.iter_mut().zip(0..NO) {
+                *o += units[(i,j)] * d;
+            }
+        }
+        Ok(output)
+    }
+
+    fn clone_diff_linear_forward_output(&self, output: &Self::Output) -> Result<Self::Output, EvaluateError> {
+        Ok(output.clone())
+    }
+}
+#[cfg(feature = "cuda")]
+impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,DiffArr<U,NI>,CudaTensor1dPtr<U,A,NO>>,CudaTensor2dPtr<U,A,NI,NO>,NI,NO> for DeviceGpu<U,A>
+    where U: UnitValue<U> + DataTypeInfo,
+          A: CudaAllocator + 'static,
+          CudaPtr<U,A>: WriteMemory<U>,
+          CudaPtr<usize,A>: WriteMemory<usize>,
+          CudaTensor1dPtr<U,A,NI>: WriteMemory<U>,
+          CudaTensor1dPtr<U,A,NO>: WriteMemory<U> + MemoryMoveTo<U,CudaTensor1dPtr<U,A,NO>>,
+          for<'b> CudaTensor1dPtrView<'b,U,NI>: From<&'b CudaTensor1dPtr<U,A,NI>>,
+          for<'b> ForwardLinear::<'b,U,A,NI,NO>: Kernel<Args=ForwardLinearArgs<'b,U,A,NI,NO>>,
+          for<'b> LinearGradient::<'b,U,A,NI,NO>: Kernel<Args=LinearGradientArgs<'b,U,A,NI,NO>>,
+          for<'b> ReduceLinearBatch::<'b,U,A,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,U,A,NO>>,
+          for<'b> DiffLinearForward<'b,U,A,NI,NO>: Kernel<Args=DiffLinearForwardArgs<'b,U,A,NI,NO>> {
+    type Output = CudaTensor1dPtr<U,A,NO>;
+
+    #[inline]
+    fn forward_diff_linear(&self, units: &CudaTensor2dPtr<U,A,NI,NO>, input: DiffInput<'a,DiffArr<U,NI>,CudaTensor1dPtr<U,A,NO>>)
+        -> Result<CudaTensor1dPtr<U,A,NO>,EvaluateError> {
+        let len = input.diff.len();
+        let output = input.output;
+
+        let (indexes, input) = input.diff.iter().fold((Vec::new(), Vec::new()), |mut acc, &(i, d)| {
+            acc.0.push(i);
+            acc.1.push(d);
+
+            acc
+        });
+
+        let mut indexes_ptr = CudaPtr::new(len, self.get_allocator())?;
+        let mut input_ptr = CudaPtr::new(len, self.get_allocator())?;
+
+        indexes_ptr.memcpy(indexes.as_ptr(), len)?;
+        input_ptr.memcpy(input.as_ptr(), len)?;
+
+        let mut output_ptr = CudaTensor1dPtr::<U,A,NO>::new(self.get_allocator())?;
+
+        output.memcpy_to(&mut output_ptr,NO)?;
+
+        let mut args = DiffLinearForwardArgs::new(indexes_ptr, input_ptr, units, output_ptr, NO, len);
+
+        let mut kernel = DiffLinearForward::new();
+
+        kernel.launch(&mut args)?;
 
         Ok(args.output)
     }
 
-    #[inline]
-    fn batch_linear_reduce<'a>(&self, loss: &'a Self::BatchOutput) -> Result<CudaTensor1dPtr<U,NO>,TrainingError> {
-        self.reduce(loss)
-    }
-}
-/// Trait that defines the implementation of various computational processes in the differentially applicable linear layer
-pub trait DeviceDiffLinear<U,T,B,const NI: usize,const NO: usize>
-    where U: UnitValue<U> {
-    type Output;
-    fn forward_diff_linear<'a>(&self,units: &T,bias: &B, input: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>) -> Result<Self::Output,EvaluateError>;
-    fn backward_diff_weight_gradient<'a>(&self, o: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>, loss: &'a Self::Output) -> Result<T, TrainingError>;
-}
-impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,NI,NO> for DeviceCpu<U>
-    where U: UnitValue<U> {
-    type Output = Arr<U,NO>;
-    #[inline]
-    fn forward_diff_linear<'a>(&self, units: &Arr2<U, NI, NO>, bias: &Arr<U,NO>, input: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>) -> Result<Arr<U, NO>,EvaluateError> {
-        match input {
-            DiffInput::Diff(d,output) => {
-                let mut output:Arr<U,NO> = output.clone();
+    fn clone_diff_linear_forward_output(&self, output: &Self::Output) -> Result<Self::Output, EvaluateError> {
+        let mut o = CudaTensor1dPtr::<U,A,NO>::new(self.get_allocator())?;
 
-                for &(i,d) in d.iter() {
-                    for (o,j) in output.iter_mut().zip(0..NO) {
-                        *o += units[(i,j)] * d;
-                    }
-                }
-                Ok(output)
-            },
-            DiffInput::NotDiff(input) => {
-                Ok(ArrView::<'a,U,NI>::from(input).product(units) + bias)
-            }
-        }
-    }
+        output.memcpy_to(&mut o, NO)?;
 
-    #[inline]
-    fn backward_diff_weight_gradient<'a>(&self, o: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>, loss: &'a Arr<U,NO>) -> Result<Arr2<U,NI,NO>, TrainingError> {
-        match o {
-            DiffInput::Diff(_,_) => {
-                Err(TrainingError::UnsupportedOperationError(UnsupportedOperationError(
-                    String::from("Training from difference information is not supported.")
-                )))
-            },
-            DiffInput::NotDiff(o) => {
-                Ok(ArrView::<'a,U,NI>::from(o).iter().cloned().map(|o| {
-                    loss.iter().cloned().map(|l| o * l).collect::<Vec<U>>().try_into()
-                }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.try_into().map_err(|e| TrainingError::from(e))?)
-            }
-        }
-    }
-}
-impl<U,const NI:usize,const NO:usize> DeviceDiffLinear<U,CudaTensor2dPtr<U,NI,NO>,CudaTensor1dPtr<U,NO>,NI,NO> for DeviceGpu<U>
-    where U: UnitValue<U> + DataTypeInfo,
-          for<'b> ForwardLinear::<'b,U,NI,NO>: Kernel<Args=ForwardLinearArgs<'b,U,NI,NO>>,
-          for<'b> LinearGradient::<'b,U,NI,NO>: Kernel<Args=LinearGradientArgs<'b,U,NI,NO>>,
-          for<'b> ReduceLinearBatch::<'b,U,NO>: Kernel<Args=ReduceLinearBatchArgs<'b,U,NO>>,
-          for<'b> DiffLinearForward<'b,U,NI,NO>: Kernel<Args=DiffLinearForwardArgs<'b,U,NI,NO>> {
-    type Output = CudaTensor1dPtr<U,NO>;
-
-    #[inline]
-    fn forward_diff_linear<'a>(&self, units: &CudaTensor2dPtr<U,NI,NO>, bias: &CudaTensor1dPtr<U,NO>, input: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>)
-        -> Result<CudaTensor1dPtr<U,NO>,EvaluateError> {
-        match input {
-            DiffInput::Diff(d, output) => {
-                let len = d.len();
-
-                let (indexes, input) = d.iter().fold((Vec::new(), Vec::new()), |mut acc, &(i, d)| {
-                    acc.0.push(i);
-                    acc.1.push(d);
-
-                    acc
-                });
-
-                let mut indexes_ptr = CudaMemoryPoolPtr::new(len, self.get_memory_pool())?;
-                let mut input_ptr = CudaMemoryPoolPtr::new(len, self.get_memory_pool())?;
-
-                indexes_ptr.memcpy(indexes.as_ptr(), len)?;
-                input_ptr.memcpy(input.as_ptr(), len)?;
-
-                let mut output_ptr = CudaTensor1dPtr::<U, NO>::new(self.get_memory_pool())?;
-
-                output_ptr.memcpy(output.as_ptr(), NO)?;
-
-                let mut args = DiffLinearForwardArgs::new(indexes_ptr, input_ptr, units, output_ptr, NO, len);
-
-                let mut kernel = DiffLinearForward::new();
-
-                kernel.launch(dim3 { x: NO as c_uint, y: 1, z: 1 },
-                              dim3 { x: 1024, y: 1, z: 1 }, &mut args, 1024 * mem::size_of::<U>())?;
-
-                Ok(args.output)
-            },
-            DiffInput::NotDiff(input) => {
-                let output = CudaTensor1dPtr::<U, NO>::with_initializer(self.get_memory_pool(), Default::default)?;
-
-                let mut input_ptr = CudaTensor1dPtr::<U,NI>::new(self.get_memory_pool())?;
-
-                input_ptr.memcpy(input.as_ptr(),NI)?;
-
-                let input_ptr = (&input_ptr).into();
-
-                let mut args = ForwardLinearArgs::new(
-                    &input_ptr,
-                    units,
-                    bias,
-                    output);
-
-                let mut kernel = ForwardLinear::<U, NI, NO>::new();
-
-                kernel.launch(dim3 { x: NO as c_uint, y: 1, z: (NI as c_uint + 1023) / 1024 },
-                              dim3 { x: 1024, y: 1, z: 1 }, &mut args, 32 * 2 * mem::size_of::<U>())?;
-
-                Ok(args.output)
-            }
-        }
-    }
-
-    #[inline]
-    fn backward_diff_weight_gradient<'a>(&self, o: &'a DiffInput<DiffArr<U,NI>,U,NI,NO>, loss: &'a Self::Output) -> Result<CudaTensor2dPtr<U,NI,NO>, TrainingError> {
-        match o {
-            DiffInput::Diff(_, _) => {
-                Err(TrainingError::UnsupportedOperationError(UnsupportedOperationError(
-                    String::from("Training from difference information is not supported.")
-                )))
-            },
-            DiffInput::NotDiff(o) => {
-                let mut input_ptr = CudaTensor1dPtr::<U,NI>::new(self.get_memory_pool())?;
-
-                input_ptr.memcpy(o.as_ptr(),NI)?;
-
-                let input_ptr = (&input_ptr).into();
-
-                let loss_ptr = loss.into();
-                let output = CudaTensor2dPtr::<U, NI, NO>::with_initializer(&self.memory_pool, Default::default)?;
-
-                let mut args = LinearGradientArgs::new(
-                    &loss_ptr,
-                    &input_ptr,
-                    output
-                );
-
-                let mut kernel = LinearGradient::<U, NI, NO>::new();
-
-                kernel.launch(dim3 { x: (NI * NO) as c_uint, y: 1, z: 1 },
-                              dim3 { x: 1024, y: 1, z: 1 }, &mut args, 32 * mem::size_of::<U>())?;
-
-                Ok(args.output)
-            }
-        }
+        Ok(o)
     }
 }

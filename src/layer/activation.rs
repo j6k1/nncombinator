@@ -2,14 +2,15 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::str::FromStr;
 use crate::{Cons, Stack};
 use crate::device::activation::DeviceActivation;
 use crate::device::Device;
-use crate::error::{ConfigReadError, EvaluateError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{AskDiffInput, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, Forward, ForwardAll, Loss, PreTrain, UpdateWeight};
+use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 /// Activation layer Implementation
 pub struct ActivationLayer<U,P,A,I,PI,D,const N:usize> where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
@@ -46,19 +47,26 @@ impl<U,P,A,I,PI,D,const N:usize> ActivationLayer<U,P,A,I,PI,D,N>
         }
     }
 }
-impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence<U>,Specialized> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence<U>,Specialized> +
+impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence,Specialized> for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence,Specialized> +
              BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
           U: UnitValue<U> + std::str::FromStr,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + 'static,
-          I: Debug + Send + Sync {
-    fn load(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(),ConfigReadError> {
+          I: Debug + Send + Sync,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
     }
 
-    fn save(&mut self, persistence: &mut TextFilePersistence<U>) -> Result<(), PersistenceError> {
-        self.parent.save(persistence)
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        self.parent.save(persistence)?;
+
+        persistence.write_layer_start();
+        persistence.write_layer_end();
+
+        Ok(())
     }
 }
 impl<T,U,P,A,I,PI,D,const N:usize> Persistence<U,T,Linear> for ActivationLayer<U,P,A,I,PI,D,N>
@@ -69,7 +77,7 @@ impl<T,U,P,A,I,PI,D,const N:usize> Persistence<U,T,Linear> for ActivationLayer<U
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync {
-    fn load(&mut self, persistence: &mut T) -> Result<(),ConfigReadError> {
+    fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
     }
 
@@ -147,21 +155,55 @@ impl<U,P,A,I,PI,D,const N:usize> UpdateWeight<U> for ActivationLayer<U,P,A,I,PI,
           I: Debug + Send + Sync {
     type GradientStack = <P as UpdateWeight<U>>::GradientStack;
 
-    fn update_weight(&mut self, stack: Self::GradientStack) -> Result<(), TrainingError> {
-        Ok(self.parent.update_weight(stack)?)
+    fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.update_weight(stack,batch_size)?)
     }
 }
-impl<U,P,A,I,PI,D,const N:usize> AskDiffInput<U> for ActivationLayer<U,P,A,I,PI,D,N>
+impl<U,P,A,I,PI,D,const N:usize> PartialForward for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> + AskDiffInput<U>,
+             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward<DiffOutput=PI>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType,
           I: Debug + Send + Sync {
-    type DiffInput = P::DiffInput;
+    type PartialOutput = <P as PartialForward>::PartialOutput;
+    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
+    type DiffInput = <P as PartialForward>::DiffInput;
+    type DiffOutput = PI;
 
-    fn ask_diff_input(&self, stack: &Self::OutStack) -> Result<Self::DiffInput,TypeConvertError> {
-        stack.map_remaining(|s| self.parent.ask_diff_input(s))
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward(input)?)
+    }
+
+    fn partial_forward_by_diff(&self, input:Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input)?)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> ForwardDiff for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward<DiffOutput=PI> + ForwardDiff,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync {
+    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
+        let input = self.parent.forward_diff(input)?;
+
+        Ok(self.forward(&input)?)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> ContinueForward for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI>,
+      U: Default + Clone + Copy + UnitValue<U>,
+      D: Device<U> + DeviceActivation<U,PI,A,N>,
+      PI: Debug + BatchDataType,
+      I: Debug + Send + Sync {
+    type ConinueOutput = Self::Output;
+    fn continue_forward<'a>(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+        let input = self.parent.continue_forward(input)?;
+
+        Ok(self.forward(&input)?)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,PI,D,N>
@@ -287,3 +329,58 @@ impl<U,P,A,I,PI,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,PI,D,N
         Ok((Cons(s,o),r))
     }
 }
+
+impl<U,P,A,I,PI,D,const N:usize> OnStep for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + OnStep,
+          U: UnitValue<U>,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + 'static,
+          I: Debug + Send + Sync {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.on_step(step)?)
+    }
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.on_frequently_step(step,frequently_step)?)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> PersistProgress<TextFilePersistence,Specialized> for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             PersistProgress<TextFilePersistence,Specialized> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+          U: UnitValue<U> + std::str::FromStr,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + 'static,
+          I: Debug + Send + Sync,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
+    fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)
+    }
+
+    fn save_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)?;
+        persistence.write_layer_start();
+        persistence.write_layer_end();
+
+        Ok(())
+    }
+}
+impl<T,U,P,A,I,PI,D,const N:usize> PersistProgress<T,Linear> for ActivationLayer<U,P,A,I,PI,D,N>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=PI> +
+             PersistProgress<T,Linear> +
+             BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+          U: UnitValue<U>,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + 'static,
+          I: Debug + Send + Sync {
+    fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
+        self.parent.load_progress(persistence)
+    }
+
+    fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save_progress(persistence)
+    }
+}
+

@@ -13,6 +13,7 @@ extern crate rcudnn;
 #[cfg(feature = "cuda")]
 extern crate rcudnn_sys;
 
+use crate::layer::BatchDataType;
 use crate::ope::UnitValue;
 
 pub mod error;
@@ -35,6 +36,11 @@ pub mod bridge;
 #[macro_use]
 mod macros;
 
+#[derive(Debug)]
+pub enum Never {}
+impl BatchDataType for Never {
+    type Type = Never;
+}
 /// Trait that defines a stack to store the results computed by forward propagation when training a neural network.
 pub trait Stack {
     /// Stack containing elements that do not include the top element of the stack

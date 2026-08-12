@@ -161,46 +161,45 @@ impl<U,P,A,I,PI,D,const N:usize> UpdateWeight<U> for ActivationLayer<U,P,A,I,PI,
 }
 impl<U,P,A,I,PI,D,const N:usize> PartialForward for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward<DiffOutput=PI>,
+             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType,
           I: Debug + Send + Sync {
+    type PartialInput = <P as PartialForward>::PartialInput;
     type PartialOutput = <P as PartialForward>::PartialOutput;
-    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
     type DiffInput = <P as PartialForward>::DiffInput;
-    type DiffOutput = PI;
-
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input:Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
-        Ok(self.parent.partial_forward_by_diff(input)?)
+    fn partial_forward_by_diff(&self, input:Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input, partial_input)?)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> ForwardDiff for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward<DiffOutput=PI> + ForwardDiff,
+             BackwardAll<U,LossInput=PI> + Loss<U> +
+             PartialForward + ForwardDiff,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType,
           I: Debug + Send + Sync {
-    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
-        let input = self.parent.forward_diff(input)?;
+    fn forward_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::Output, EvaluateError> {
+        let input = self.parent.forward_diff(input, partial_input)?;
 
         Ok(self.forward(&input)?)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> ContinueForward for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI>,
+             BackwardAll<U,LossInput=PI> + Loss<U> +
+             PartialForward + ContinueForward,
       U: Default + Clone + Copy + UnitValue<U>,
       D: Device<U> + DeviceActivation<U,PI,A,N>,
       PI: Debug + BatchDataType,
       I: Debug + Send + Sync {
-    type ConinueOutput = Self::Output;
-    fn continue_forward<'a>(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+    fn continue_forward<'a>(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.continue_forward(input)?;
 
         Ok(self.forward(&input)?)

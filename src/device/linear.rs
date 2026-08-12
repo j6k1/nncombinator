@@ -5,7 +5,6 @@ use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelI
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
 use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
-use crate::layer::{DiffInput};
 use crate::ope::UnitValue;
 use crate::ope::Product;
 use crate::layer::{BatchDataType};
@@ -998,17 +997,19 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
 pub trait DeviceDiffLinear<'a,U,I,T,const NI: usize,const NO: usize>
     where U: UnitValue<U> {
     type Output: Debug + 'static;
-    fn forward_diff_linear(&self, units: &T, input: I) -> Result<Self::Output, EvaluateError>;
+    fn forward_diff_linear(&self, units: &T, input: I, partial_input: &Self::Output) -> Result<Self::Output, EvaluateError>;
     fn clone_diff_linear_forward_output(&self, output: &Self::Output) -> Result<Self::Output, EvaluateError>;
 }
-impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,DiffArr<U,NI>,Arr<U,NO>>,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U>
+impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U>
     where U: UnitValue<U> {
     type Output = Arr<U,NO>;
     #[inline]
-    fn forward_diff_linear(&self, units: &Arr2<U, NI, NO>, input: DiffInput<DiffArr<U,NI>,Arr<U,NO>>) -> Result<Arr<U, NO>,EvaluateError> {
-        let mut output = input.output.clone();
+    fn forward_diff_linear(&self, units: &Arr2<U, NI, NO>,
+                           input: DiffArr<U,NI>, partial_input: &Arr<U,NO>)
+        -> Result<Arr<U, NO>,EvaluateError> {
+        let mut output = partial_input.clone();
 
-        for &(i,d) in input.diff.iter() {
+        for &(i,d) in input.iter() {
             for (o,j) in output.iter_mut().zip(0..NO) {
                 *o += units[(i,j)] * d;
             }
@@ -1021,7 +1022,7 @@ impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,Diff
     }
 }
 #[cfg(feature = "cuda")]
-impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,DiffArr<U,NI>,CudaTensor1dPtr<U,A,NO>>,CudaTensor2dPtr<U,A,NI,NO>,NI,NO> for DeviceGpu<U,A>
+impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,CudaTensor2dPtr<U,A,NI,NO>,NI,NO> for DeviceGpu<U,A>
     where U: UnitValue<U> + DataTypeInfo,
           A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -1036,12 +1037,13 @@ impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,Di
     type Output = CudaTensor1dPtr<U,A,NO>;
 
     #[inline]
-    fn forward_diff_linear(&self, units: &CudaTensor2dPtr<U,A,NI,NO>, input: DiffInput<'a,DiffArr<U,NI>,CudaTensor1dPtr<U,A,NO>>)
+    fn forward_diff_linear(&self, units: &CudaTensor2dPtr<U,A,NI,NO>,
+                           input: DiffArr<U,NI>,
+                           partial_input: &CudaTensor1dPtr<U,A,NO>)
         -> Result<CudaTensor1dPtr<U,A,NO>,EvaluateError> {
-        let len = input.diff.len();
-        let output = input.output;
+        let len = input.len();
 
-        let (indexes, input) = input.diff.iter().fold((Vec::new(), Vec::new()), |mut acc, &(i, d)| {
+        let (indexes, input) = input.iter().fold((Vec::new(), Vec::new()), |mut acc, &(i, d)| {
             acc.0.push(i);
             acc.1.push(d);
 
@@ -1056,7 +1058,7 @@ impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffInput<'a,Di
 
         let mut output_ptr = CudaTensor1dPtr::<U,A,NO>::new(self.get_allocator())?;
 
-        output.memcpy_to(&mut output_ptr,NO)?;
+        partial_input.memcpy_to(&mut output_ptr,NO)?;
 
         let mut args = DiffLinearForwardArgs::new(indexes_ptr, input_ptr, units, output_ptr, NO, len);
 

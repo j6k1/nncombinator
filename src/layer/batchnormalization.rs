@@ -435,7 +435,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> UpdateWeight<U> for BatchNormalizationLayer<
 }
 impl<U,P,OP,D,C,I,PI,const N:usize> PartialForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PartialForward<DiffOutput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+             PartialForward + PreTrain<U,PreOutput=PI> + Loss<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
@@ -443,22 +443,22 @@ impl<U,P,OP,D,C,I,PI,const N:usize> PartialForward for BatchNormalizationLayer<U
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + 'static,
           Self: ForwardAll<Input=I,Output=PI> + PreTrain<U> {
+    type PartialInput = <P as PartialForward>::PartialInput;
     type PartialOutput = <P as PartialForward>::PartialOutput;
-    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
     type DiffInput = <P as PartialForward>::DiffInput;
-    type DiffOutput = PI;
 
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
-        Ok(self.parent.partial_forward_by_diff(input)?)
+    fn partial_forward_by_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput)
+        -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input, partial_input)?)
     }
 }
 impl<U,P,OP,D,C,I,PI,const N:usize> ForwardDiff for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-          PartialForward<DiffOutput=PI> + ForwardDiff + PreTrain<U,PreOutput=PI> + Loss<U>,
+          PartialForward + ForwardDiff + PreTrain<U,PreOutput=PI> + Loss<U>,
       U: Default + Clone + Copy + Send + UnitValue<U>,
       D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
       I: Debug + Send + Sync,
@@ -466,15 +466,15 @@ impl<U,P,OP,D,C,I,PI,const N:usize> ForwardDiff for BatchNormalizationLayer<U,C,
       OP: Optimizer<U,D>,
       <PI as BatchDataType>::Type: Debug + 'static,
       Self: ForwardAll<Input=I,Output=PI> + PreTrain<U> {
-    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
-        let input = self.parent.forward_diff(input)?;
+    fn forward_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::Output, EvaluateError> {
+        let input = self.parent.forward_diff(input, partial_input)?;
 
         Ok(self.forward(&input)?)
     }
 }
 impl<U,P,OP,D,C,I,PI,const N:usize> ContinueForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-          PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
+          PartialForward + ContinueForward + PreTrain<U,PreOutput=PI> + Loss<U>,
       U: Default + Clone + Copy + Send + UnitValue<U>,
       D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
       I: Debug + Send + Sync,
@@ -482,8 +482,7 @@ impl<U,P,OP,D,C,I,PI,const N:usize> ContinueForward for BatchNormalizationLayer<
       OP: Optimizer<U,D>,
       <PI as BatchDataType>::Type: Debug + 'static,
       Self: ForwardAll<Input=I,Output=PI> + PreTrain<U> {
-    type ConinueOutput = Self::Output;
-    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+    fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.continue_forward(input)?;
 
         Ok(self.forward(&input)?)

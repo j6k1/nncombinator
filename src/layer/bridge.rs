@@ -126,49 +126,48 @@ impl<U,P,I,PI,CI,D> UpdateWeight<U> for BridgeLayer<U,P,I,PI,CI,D>
 }
 impl<U,P,I,PI,CI,D> PartialForward for BridgeLayer<U,P,I,PI,CI,D>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward<DiffOutput=PI>,
+             BackwardAll<U,LossInput=PI> + Loss<U> + PartialForward,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           PI: Debug + From<CI>,
           CI: Debug + 'static,
           I: Debug + Send + Sync {
+    type PartialInput = <P as PartialForward>::PartialInput;
     type PartialOutput = <P as PartialForward>::PartialOutput;
-    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
     type DiffInput = <P as PartialForward>::DiffInput;
-    type DiffOutput = PI;
 
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
-        Ok(self.parent.partial_forward_by_diff(input)?)
+    fn partial_forward_by_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput)
+        -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input,partial_input)?)
     }
 }
 impl<U,P,I,PI,CI,D> ForwardDiff for BridgeLayer<U,P,I,PI,CI,D>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             PartialForward<DiffOutput=PI> + ForwardDiff +
+             PartialForward + ForwardDiff +
              BackwardAll<U,LossInput=PI> + Loss<U>,
       U: Default + Clone + Copy + UnitValue<U>,
       D: Device<U>,
       PI: Debug + From<CI>,
       CI: Debug + 'static,
       I: Debug + Send + Sync {
-    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
-        Ok(self.parent.forward_diff(input)?)
+    fn forward_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::Output, EvaluateError> {
+        Ok(self.parent.forward_diff(input,partial_input)?)
     }
 }
 impl<U,P,I,PI,CI,D> ContinueForward for BridgeLayer<U,P,I,PI,CI,D>
     where P: PreTrain<U,PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-          PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI> +
+          PartialForward + ContinueForward +
           BackwardAll<U,LossInput=PI> + Loss<U>,
       U: Default + Clone + Copy + UnitValue<U>,
       D: Device<U>,
       PI: Debug + From<CI>,
       CI: Debug + 'static,
       I: Debug + Send + Sync {
-    type ConinueOutput = Self::Output;
-    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+    fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         Ok(self.parent.continue_forward(input)?)
     }
 }

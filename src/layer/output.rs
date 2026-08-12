@@ -152,51 +152,50 @@ impl<U,P,D,I,PI,const N:usize> UpdateWeight<U> for LinearOutputLayer<U,P,D,I,PI,
 impl<U,P,D,I,PI,const N:usize> PartialForward for LinearOutputLayer<U,P,D,I,PI,N>
     where P: BackwardAll<U,LossInput=PI> +
              ForwardAll<Input=I,Output=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
-             PartialForward<DiffOutput=PI>,
+             PartialForward,
           U: Default + Clone + Copy + UnitValue<U>,
           PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
-          for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI>{
+          for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
+    type PartialInput = <P as PartialForward>::PartialInput;
     type PartialOutput = <P as PartialForward>::PartialOutput;
-    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
     type DiffInput = <P as PartialForward>::DiffInput;
-    type DiffOutput = <PI as ToHost<U>>::Output;
 
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput,EvaluateError> {
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff,EvaluateError> {
-        Ok(self.parent.partial_forward_by_diff(input)?)
+    fn partial_forward_by_diff(&self, input: Self::DiffInput, partial_input: &Self::PartialInput)
+        -> Result<Self::PartialOutput,EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input,partial_input)?)
     }
 }
 impl<U,P,D,I,PI,const N:usize> ForwardDiff for LinearOutputLayer<U,P,D,I,PI,N>
     where P: BackwardAll<U,LossInput=PI> +
           ForwardAll<Input=I,Output=PI> + ForwardDiff +
           PreTrain<U,PreOutput=PI> + Loss<U> +
-          PartialForward<DiffOutput=PI>,
+          PartialForward,
       U: Default + Clone + Copy + UnitValue<U>,
       PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
       I: Debug + Send + Sync,
       <PI as ToHost<U>>::Output: Debug + 'static,
       for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
-    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
-        Ok(self.parent.forward_diff(input)?.to_host()?)
+    fn forward_diff(&self, input: Self::DiffInput, partial_input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
+        Ok(self.parent.forward_diff(input,partial_input)?.to_host()?)
     }
 }
 impl<U,P,D,I,PI,const N:usize> ContinueForward for LinearOutputLayer<U,P,D,I,PI,N>
     where P: BackwardAll<U,LossInput=PI> +
           ForwardAll<Input=I,Output=PI> + ForwardDiff +
           PreTrain<U,PreOutput=PI> + Loss<U> +
-          PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI>,
+          PartialForward + ContinueForward,
           U: Default + Clone + Copy + UnitValue<U>,
           PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
-    type ConinueOutput = <PI as ToHost<U>>::Output;
-    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+    fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         Ok(self.parent.continue_forward(input)?.to_host()?)
     }
 }

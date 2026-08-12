@@ -209,14 +209,12 @@ pub trait Train<U,L>: PreTrain<U>
 }
 /// Implementation of a function to return the intermediate results of forward propagation for difference calculation
 pub trait PartialForward: ForwardAll {
-    /// Data type of intermediate results during forward propagation processing
+    /// Input data types for intermediate results during forward propagation
+    type PartialInput: Debug;
+    /// Output data types for intermediate results during forward propagation
     type PartialOutput: Debug;
-    /// Data type of intermediate results based on differential inputs during forward propagation processing
-    type PartialOutputByDiff: Debug;
     /// Forward Propagation Differential Input Information
     type DiffInput: Debug;
-    /// Forward Propagation Differential Output Information
-    type DiffOutput: Debug;
 
     /// Returns the intermediate result during forward propagation
     /// # Arguments
@@ -235,7 +233,8 @@ pub trait PartialForward: ForwardAll {
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn partial_forward_by_diff(&self, input:Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError>;
+    fn partial_forward_by_diff(&self, input:Self::DiffInput, partial_input:&Self::PartialInput)
+        -> Result<Self::PartialOutput, EvaluateError>;
 }
 /// Implementation of a process performing forward propagation calculations from differential input values
 pub trait ForwardDiff: PartialForward {
@@ -247,12 +246,10 @@ pub trait ForwardDiff: PartialForward {
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn forward_diff(&self, input:Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError>;
+    fn forward_diff(&self, input:Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::Output, EvaluateError>;
 }
 /// Implementation of the process for performing forward propagation calculations from precomputed values
 pub trait ContinueForward: PartialForward {
-    /// The data type of the result value when recalculating the overall result from the precomputed result
-    type ConinueOutput;
     /// Resume forward propagation using the precomputed output of this layer
     /// # Arguments
     /// * `input` - input
@@ -261,7 +258,7 @@ pub trait ContinueForward: PartialForward {
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn continue_forward(&self, input:&Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError>;
+    fn continue_forward(&self, input:&Self::PartialInput) -> Result<Self::Output, EvaluateError>;
 }
 /// Trait defining the relevant type of implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForwardBase: ForwardAll {

@@ -34,7 +34,7 @@ use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ClippedReLu, LeakyReLu, ReLu, Sigmoid, SoftMax, Swish, Tanh};
 use nncombinator::arr::{Arr, DiffArr};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
-use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, DiffInput, ForwardAll, ForwardDiff, PartialForward, ContinueForward, Train};
+use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll, ForwardDiff, PartialForward, ContinueForward, Train};
 use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::input::{DiffInputLayer, InputLayer};
 use nncombinator::layer::linear::{DiffLinearLayerBuilder, LinearLayerBuilder};
@@ -43,7 +43,7 @@ use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{AdagradBuilder, AdamBuilder, AdamWBuilder, MomentumSGDBuilder, SGDBuilder};
 use nncombinator::cuda::allocator::{DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
 use nncombinator::cuda::{CudaTensor1dPtr, ReadMemory};
-use crate::common::{assert_backward_all, assert_continue_forward, assert_forward_all, assert_loss, assert_partial_forward, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
+use crate::common::{assert_backward_all, assert_continue_forward, assert_forward_all, assert_forward_diff, assert_loss, assert_partial_forward, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
 
 #[test]
 fn test_mnist_for_cpu() {
@@ -1528,7 +1528,7 @@ fn test_weather_by_forward_diff() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:DiffInputLayer<f32,Arr<f32,14>,DiffInput<'_,DiffArr<f32,14>,Arr<f32,100>>,Arr<f32,100>,_,_> = DiffInputLayer::new(&device);
+    let net:DiffInputLayer<f32,Arr<f32,14>,DiffArr<f32,14>,Arr<f32,100>,_,_> = DiffInputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -1554,6 +1554,7 @@ fn test_weather_by_forward_diff() {
         assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
+        assert_forward_diff(&l);
 
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
@@ -1563,6 +1564,7 @@ fn test_weather_by_forward_diff() {
         assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
+        assert_forward_diff(&l);
 
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -1576,6 +1578,7 @@ fn test_weather_by_forward_diff() {
         assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
+        assert_forward_diff(&l);
 
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
@@ -1585,6 +1588,7 @@ fn test_weather_by_forward_diff() {
         assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
+        assert_forward_diff(&l);
 
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1594,6 +1598,7 @@ fn test_weather_by_forward_diff() {
     assert_backward_all(&net);
     assert_update_weight(&net);
     assert_partial_forward(&net);
+    assert_forward_diff(&net);
 
     let mut teachers:Vec<(bool,Vec<f32>)> = Vec::new();
 
@@ -1738,11 +1743,11 @@ fn test_weather_by_forward_diff() {
 
             let po = {
                 let d = d.clone();
-                net.partial_forward_by_diff(DiffInput::new(d, &prev)).unwrap()
+                net.partial_forward_by_diff(d, &prev).unwrap()
             };
 
             {
-                let r = net.forward_diff(DiffInput::new(d,&prev)).unwrap()[0];
+                let r = net.forward_diff(d,&prev).unwrap()[0];
 
                 if (t && r >= 0.5) || !t && r < 0.5 {
                     correct_answers += 1;
@@ -2926,7 +2931,7 @@ fn test_weather_by_forward_diff_for_gpu() {
 
     type A = MemoryPoolAllocator<DeviceAlloc>;
 
-    let net:DiffInputLayer<f32,Arr<f32,14>,DiffInput<'_,DiffArr<f32,14>,CudaTensor1dPtr<f32,A,100>>,CudaTensor1dPtr<f32,A,100>,_,_> = DiffInputLayer::new(&device);
+    let net:DiffInputLayer<f32,Arr<f32,14>,DiffArr<f32,14>,CudaTensor1dPtr<f32,A,100>,_,_> = DiffInputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -3096,10 +3101,10 @@ fn test_weather_by_forward_diff_for_gpu() {
 
             let po = {
                 let d = d.clone();
-                net.partial_forward_by_diff(DiffInput::new(d, &prev)).unwrap()
+                net.partial_forward_by_diff(d, &prev).unwrap()
             };
 
-            let r = net.forward_diff(DiffInput::new(d, &prev)).unwrap()[0];
+            let r = net.forward_diff(d, &prev).unwrap()[0];
 
             if (t && r >= 0.5) || !t && r < 0.5 {
                 correct_answers += 1;
@@ -3124,7 +3129,7 @@ fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
 
     type A = MemoryPoolAllocator<DeviceAlloc>;
 
-    let net:DiffInputLayer<f32,Arr<f32,14>,DiffInput<'_,DiffArr<f32,14>,CudaTensor1dPtr<f32,A,100>>,CudaTensor1dPtr<f32,A,100>,_,_> = DiffInputLayer::new(&device);
+    let net:DiffInputLayer<f32,Arr<f32,14>,DiffArr<f32,14>,CudaTensor1dPtr<f32,A,100>,_,_> = DiffInputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -3324,7 +3329,7 @@ fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
                     acc
                 });
 
-            let po = net.partial_forward_by_diff(DiffInput::new(d, &prev)).unwrap();
+            let po = net.partial_forward_by_diff(d, &prev).unwrap();
 
             let r = net.continue_forward(&po).unwrap()[0];
 
@@ -3733,7 +3738,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
     let device = DeviceGpu::new(&SHARED_MEMORY_POOL.clone()).unwrap();
 
     type A = MemoryPoolAllocator<DeviceAlloc>;
-    let net:DiffInputLayer<f64,Arr<f64,14>,DiffInput<'_,DiffArr<f64,14>,CudaTensor1dPtr<f64,A,100>>,CudaTensor1dPtr<f64,A,100>,_,_> = DiffInputLayer::new(&device);
+    let net:DiffInputLayer<f64,Arr<f64,14>,DiffArr<f64,14>,CudaTensor1dPtr<f64,A,100>,_,_> = DiffInputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -3902,10 +3907,10 @@ fn test_weather_by_forward_diff_for_gpu_double() {
 
             let po = {
                 let d = d.clone();
-                net.partial_forward_by_diff(DiffInput::new(d, &prev)).unwrap()
+                net.partial_forward_by_diff(d, &prev).unwrap()
             };
 
-            let r = net.forward_diff(DiffInput::new(d,&prev)).unwrap()[0];
+            let r = net.forward_diff(d,&prev).unwrap()[0];
 
             if (t && r >= 0.5) || !t && r < 0.5 {
                 correct_answers += 1;
@@ -5045,7 +5050,7 @@ fn test_weather_by_forward_diff_in_thread() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:DiffInputLayer<f32,Arr<f32,14>,DiffInput<'_,DiffArr<f32,14>,Arr<f32,100>>,Arr<f32,100>,_,_> = DiffInputLayer::new(&device);
+    let net:DiffInputLayer<f32,Arr<f32,14>,DiffArr<f32,14>,Arr<f32,100>,_,_> = DiffInputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -5261,11 +5266,11 @@ fn test_weather_by_forward_diff_in_thread() {
 
                     let po = {
                         let d = d.clone();
-                        net.partial_forward_by_diff(DiffInput::new(d, &prev)).unwrap()
+                        net.partial_forward_by_diff(d, &prev).unwrap()
                     };
 
                     {
-                        let r = net.forward_diff(DiffInput::new(d,&prev)).unwrap()[0];
+                        let r = net.forward_diff(d,&prev).unwrap()[0];
 
                         if (t && r >= 0.5) || !t && r < 0.5 {
                             correct_answers += 1;
@@ -5295,7 +5300,7 @@ fn test_weather_by_forward_diff_for_continue_forward() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:DiffInputLayer<f32,Arr<f32,14>,DiffInput<'_,DiffArr<f32,14>,Arr<f32,100>>,Arr<f32,100>,_,_> = DiffInputLayer::new(&device);
+    let net:DiffInputLayer<f32,Arr<f32,14>,DiffArr<f32,14>,Arr<f32,100>,_,_> = DiffInputLayer::new(&device);
 
     let rnd = rnd_base.clone();
 
@@ -5508,7 +5513,7 @@ fn test_weather_by_forward_diff_for_continue_forward() {
                     acc
                 });
 
-            let po =  net.partial_forward_by_diff(DiffInput::new(d, &prev)).unwrap();
+            let po =  net.partial_forward_by_diff(d, &prev).unwrap();
 
             {
                 let r = net.continue_forward(&prev).unwrap()[0];

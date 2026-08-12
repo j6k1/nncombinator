@@ -241,7 +241,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> UpdateWeight<U> for BiasLayer<U,C,P,OP,D,I,P
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> PartialForward for BiasLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> +
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward +
              BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
@@ -251,21 +251,21 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PartialForward for BiasLayer<U,C,P,OP,D,I,PI
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           Self: ForwardAll<Input=I,Output=PI>,
           Self: PreTrain<U> {
+    type PartialInput = <P as PartialForward>::PartialInput;
     type PartialOutput = <P as PartialForward>::PartialOutput;
-    type PartialOutputByDiff = <P as PartialForward>::PartialOutputByDiff;
     type DiffInput = <P as PartialForward>::DiffInput;
-    type DiffOutput = PI;
 
     fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
         Ok(self.parent.partial_forward(input)?)
     }
 
-    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
-        Ok(self.parent.partial_forward_by_diff(input)?)
+    fn partial_forward_by_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput)
+        -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input, partial_input)?)
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> ForwardDiff for BiasLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> + ForwardDiff +
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward + ForwardDiff +
              BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
       D: Device<U> + DeviceBias<U,C,PI,N>,
       U: Default + Clone + Copy + Send + UnitValue<U>,
@@ -275,14 +275,14 @@ impl<U,C,P,OP,D,I,PI,const N:usize> ForwardDiff for BiasLayer<U,C,P,OP,D,I,PI,N>
       <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
       Self: ForwardAll<Input=I,Output=PI>,
       Self: PreTrain<U> {
-    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
-        let input = self.parent.forward_diff(input)?;
+    fn forward_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::Output, EvaluateError> {
+        let input = self.parent.forward_diff(input, partial_input)?;
 
         Ok(self.forward(&input)?)
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> ContinueForward for BiasLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + PartialForward<DiffOutput=PI> + ContinueForward<ConinueOutput=PI> +
+    where P: ForwardAll<Input=I,Output=PI> + PartialForward + ContinueForward +
           BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U>,
       D: Device<U> + DeviceBias<U,C,PI,N>,
       U: Default + Clone + Copy + Send + UnitValue<U>,
@@ -292,8 +292,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> ContinueForward for BiasLayer<U,C,P,OP,D,I,P
       <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
       Self: ForwardAll<Input=I,Output=PI>,
       Self: PreTrain<U> {
-    type ConinueOutput = Self::Output;
-    fn continue_forward(&self, input: &Self::PartialOutput) -> Result<Self::ConinueOutput, EvaluateError> {
+    fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.continue_forward(input)?;
 
         Ok(self.forward(&input)?)

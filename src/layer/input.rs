@@ -2,11 +2,11 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use crate::{Cons, Nil};
+use crate::{Cons, Never, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PersistProgress, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, OnStep, PartialForward, PersistProgress, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
@@ -260,28 +260,24 @@ impl<U,O,DI,PO,LI,D> PartialForward for DiffInputLayer<U,O,DI,PO,LI,D>
           LI: Debug,
           D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {
-    type PartialOutput = <D as DeviceInput<U,O>>::Output;
-    type PartialOutputByDiff = DI;
-    type DiffOutput = DI;
+    type PartialInput = Never;
+    type PartialOutput = Never;
     type DiffInput = DI;
-    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
-        Ok(self.device.forward_input(input)?)
+    /// When implementing diff application,
+    /// do so in a lower-level layer and avoid calling this method of the `DiffInputLayer`.
+    fn partial_forward(&self, _: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        // Since the argument is an enum type without a variant,
+        // it cannot be instantiated, so this code will never be executed.
+        unreachable!()
     }
 
-    fn partial_forward_by_diff(&self, input: Self::DiffInput) -> Result<Self::PartialOutputByDiff, EvaluateError> {
-        Ok(input)
-    }
-}
-impl<U,O,DI,PO,LI,D> ForwardDiff for DiffInputLayer<U,O,DI,PO,LI,D>
-    where U: UnitValue<U>,
-          O: Debug + BatchDataType + Send + Sync + 'static,
-          DI: Debug,
-          PO: Debug,
-          LI: Debug,
-          D: Device<U> + DeviceInput<U,O>,
-          <O as BatchDataType>::Type: Debug + 'static {
-    fn forward_diff(&self, input: Self::DiffInput) -> Result<Self::DiffOutput, EvaluateError> {
-        Ok(input)
+    /// When implementing diff application,
+    /// do so in a lower-level layer and avoid calling this method of the `DiffInputLayer`.
+    fn partial_forward_by_diff(&self, _: Self::DiffInput, _: &Self::PartialInput)
+        -> Result<Self::PartialOutput, EvaluateError> {
+        // Since the argument is an enum type without a variant,
+        // it cannot be instantiated, so this code will never be executed.
+        unreachable!()
     }
 }
 impl<U,O,DI,PO,LI,D> PreTrain<U> for DiffInputLayer<U,O,DI,PO,LI,D>

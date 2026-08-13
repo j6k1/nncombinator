@@ -1,5 +1,6 @@
 //! Implementing the loss function of a neural network
 
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
@@ -33,7 +34,8 @@ pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy {
 }
 /// A property that defines the implementation of the loss function used in the linear layer when training a neural network.
 pub trait LossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Send + Sync + 'static
-    where U: Clone + Copy + UnitValue<U>, D: Device<U> {
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
+          D: Device<U> {
     type Output;
     /// Differentiation of loss functions
     /// # Arguments
@@ -43,7 +45,7 @@ pub trait LossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Send + S
 }
 /// Trait defining the implementation of a linear layer loss function with batch processing
 pub trait BatchLossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Send + Sync + 'static
-    where U: Clone + Copy + UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           D: Device<U> {
     type Output: BatchSize;
     /// Differentiation of loss functions
@@ -55,7 +57,7 @@ pub trait BatchLossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Sen
 }
 impl<'a,T,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for T
     where T: LossFunction<U>,
-          U: UnitValue<U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           for<'b> ArrView<'b,U,N>: From<&'b I> {
     type Output = Arr<U,N>;
     fn linear_derive(&self,_:&DeviceCpu<U>,actual: &'a I, expected: &'a I)
@@ -74,7 +76,7 @@ impl<'a,T,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for T
 }
 impl<'a,T,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for T
     where T: LossFunction<U>,
-          U: UnitValue<U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           I: BatchSize,
           for<'b> SerializedVecView<'b,U,Arr<U,N>>: TryFrom<&'b I,Error=TypeConvertError> {
     type Output = SerializedVec<U,Arr<U,N>>;

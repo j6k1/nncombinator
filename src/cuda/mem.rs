@@ -329,7 +329,7 @@ impl Drop for MemoryPool {
 /// Mutable object that automatically updates cuda memory when exiting scope
 #[derive(Debug)]
 pub struct ScopedMut<'a,U,T,A>
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -337,7 +337,7 @@ pub struct ScopedMut<'a,U,T,A>
     ptr:&'a mut CudaPtr<U,A>
 }
 impl<'a,U,T,A> ScopedMut<'a,U,T,A>
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -353,7 +353,7 @@ impl<'a,U,T,A> ScopedMut<'a,U,T,A>
     }
 }
 impl<'a,U,T,A> Deref for ScopedMut<'a,U,T,A>
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -364,7 +364,7 @@ impl<'a,U,T,A> Deref for ScopedMut<'a,U,T,A>
     }
 }
 impl<'a,U,T,A> DerefMut for ScopedMut<'a,U,T,A>
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -373,7 +373,7 @@ impl<'a,U,T,A> DerefMut for ScopedMut<'a,U,T,A>
     }
 }
 impl<'a,U,T,A> Drop for ScopedMut<'a,U,T,A>
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -386,7 +386,7 @@ impl<'a,U,T,A> Drop for ScopedMut<'a,U,T,A>
 /// Object that collectively manages cuda memory paired with a value of a specified type
 #[derive(Debug)]
 pub struct CachedTensor<U,T,A>
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -394,7 +394,7 @@ pub struct CachedTensor<U,T,A>
     ptr:CudaPtr<U,A>
 }
 impl<U,T,A> CachedTensor<U,T,A>
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -429,7 +429,7 @@ impl<U,T,A> CachedTensor<U,T,A>
     }
 }
 impl<U,T,A> Deref for CachedTensor<U,T,A>
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -440,7 +440,7 @@ impl<U,T,A> Deref for CachedTensor<U,T,A>
     }
 }
 impl<U,T,A> Index<(usize,usize)> for CachedTensor<U,T,A>
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: Index<(usize,usize),Output=U> + AsRawSlice<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -451,7 +451,7 @@ impl<U,T,A> Index<(usize,usize)> for CachedTensor<U,T,A>
     }
 }
 impl<U,T,A> AsCudaPtr<'_> for CachedTensor<U,T,A>
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -461,7 +461,7 @@ impl<U,T,A> AsCudaPtr<'_> for CachedTensor<U,T,A>
     }
 }
 impl<'a,U,T,A> AsCudaMutPtr for CachedTensor<U,T,A>
-    where U: Debug + Default + 'a,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U> + 'a,
           A: CudaAllocator + 'a,
           CudaPtr<U,A>: WriteMemory<U> {
@@ -473,7 +473,7 @@ impl<'a,U,T,A> AsCudaMutPtr for CachedTensor<U,T,A>
     }
 }
 impl<'a,U,T,A> From<&'a mut CachedTensor<U,T,A>> for &'a mut [U]
-    where U: Debug + Default,
+    where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
           A: CudaAllocator,
           &'a mut [U]: From<&'a mut T> ,

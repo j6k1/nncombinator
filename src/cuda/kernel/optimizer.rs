@@ -23,7 +23,9 @@ extern "C" {
     fn update_with_adamw_double(weight: *mut f64, grad: *const f64, size: size_t, a: f64, weight_decay: f64, eps: f64, mt: *mut f64, vt: *mut f64, b1: f64, b2: f64, b1t: f64, b2t: f64);
 }
 /// Defines the list passed to the cuda kernel function as arguments to the SGD optimizer.
-pub struct SGDArgs<'a,T,A> where T: Debug, A: CudaAllocator {
+pub struct SGDArgs<'a,T,A>
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
+          A: CudaAllocator {
     weight: &'a mut CudaMutPtr<'a,T,A>,
     grad: CudaConstPtr<'a,CudaPtr<T,A>>,
     size: usize,
@@ -32,7 +34,8 @@ pub struct SGDArgs<'a,T,A> where T: Debug, A: CudaAllocator {
 }
 /// Create an instance of an object representing the argument list of the SGD optimizer.
 impl<'a,T,A> SGDArgs<'a,T,A>
-    where T: Debug, A: CudaAllocator,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
+          A: CudaAllocator,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a SGDArgs instance
     /// # Arguments
@@ -52,7 +55,7 @@ impl<'a,T,A> SGDArgs<'a,T,A>
     }
 }
 impl<'a,T,A> KernelArgs for SGDArgs<'a,T,A>
-    where T: AsKernelPtr + Debug,
+    where T: AsKernelPtr + Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
@@ -67,7 +70,7 @@ impl<'a,T,A> KernelArgs for SGDArgs<'a,T,A>
 }
 /// Implementation SGD optimizer
 pub struct SGD<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
@@ -75,7 +78,7 @@ pub struct SGD<'a,T,A>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A> SGD<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a SGD optimizer instance
@@ -117,7 +120,7 @@ impl<'a,A> Kernel for SGD<'a,f64,A>
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Momentum SGD optimizer.
 pub struct MomentumSGDArgs<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     weight: &'a mut CudaMutPtr<'a,T,A>,
@@ -130,7 +133,7 @@ pub struct MomentumSGDArgs<'a,T,A>
 }
 /// Create an instance of an object representing the argument list of the Momentum SGD optimizer.
 impl<'a,T,A> MomentumSGDArgs<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a MomentumSGDArgs instance
@@ -157,7 +160,7 @@ impl<'a,T,A> MomentumSGDArgs<'a,T,A>
     }
 }
 impl<'a,T,A> KernelArgs for MomentumSGDArgs<'a,T,A>
-    where T: AsKernelPtr + Debug,
+    where T: AsKernelPtr + Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
@@ -174,7 +177,7 @@ impl<'a,T,A> KernelArgs for MomentumSGDArgs<'a,T,A>
 }
 /// Implementation Momentum SGD optimizer
 pub struct MomentumSGD<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
@@ -182,7 +185,7 @@ pub struct MomentumSGD<'a,T,A>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A> MomentumSGD<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a Momentum SGD optimizer instance
@@ -224,7 +227,7 @@ impl<'a,A> Kernel for MomentumSGD<'a,f64,A>
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Adagrad optimizer.
 pub struct AdagradArgs<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     weight: &'a mut CudaMutPtr<'a,T,A>,
@@ -237,7 +240,7 @@ pub struct AdagradArgs<'a,T,A>
 }
 /// Create an instance of an object representing the argument list of the Adagrad optimizer.
 impl<'a,T,A> AdagradArgs<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a AdagradArgs instance
@@ -264,7 +267,7 @@ impl<'a,T,A> AdagradArgs<'a,T,A>
     }
 }
 impl<'a,T,A> KernelArgs for AdagradArgs<'a,T,A>
-    where T: AsKernelPtr + Debug,
+    where T: AsKernelPtr + Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
@@ -281,7 +284,7 @@ impl<'a,T,A> KernelArgs for AdagradArgs<'a,T,A>
 }
 /// Implementation Adagrad optimizer
 pub struct Adagrad<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
@@ -289,7 +292,7 @@ pub struct Adagrad<'a,T,A>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A> Adagrad<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a Adagrad optimizer instance
@@ -331,7 +334,7 @@ impl<'a,A> Kernel for Adagrad<'a,f64,A>
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Rmsprop optimizer.
 pub struct RMSpropArgs<'a,T,A>
-    where T: Debug + 'a, A: CudaAllocator + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static, A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     weight: &'a mut CudaMutPtr<'a,T,A>,
     grad: CudaConstPtr<'a,CudaPtr<T,A>>,
@@ -346,7 +349,7 @@ pub struct RMSpropArgs<'a,T,A>
 }
 /// Create an instance of an object representing the argument list of the Rmsprop optimizer.
 impl<'a,T,A> RMSpropArgs<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a RmspropArgs instance
@@ -379,7 +382,7 @@ impl<'a,T,A> RMSpropArgs<'a,T,A>
     }
 }
 impl<'a,T,A> KernelArgs for RMSpropArgs<'a,T,A>
-    where T: AsKernelPtr + Debug,
+    where T: AsKernelPtr + Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
@@ -399,7 +402,7 @@ impl<'a,T,A> KernelArgs for RMSpropArgs<'a,T,A>
 }
 /// Implementation Rmsprop optimizer
 pub struct RMSprop<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
@@ -407,7 +410,7 @@ pub struct RMSprop<'a,T,A>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A> RMSprop<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a Rmsprop optimizer instance
@@ -449,7 +452,7 @@ impl<'a,A> Kernel for RMSprop<'a,f64,A>
 }
 /// Defines the list passed to the cuda kernel function as arguments to the Adam optimizer.
 pub struct AdamArgs<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     weight: &'a mut CudaMutPtr<'a,T,A>,
@@ -467,7 +470,7 @@ pub struct AdamArgs<'a,T,A>
 }
 /// Create an instance of an object representing the argument list of the Adam optimizer.
 impl<'a,T,A> AdamArgs<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a AdamArgs instance
@@ -505,7 +508,7 @@ impl<'a,T,A> AdamArgs<'a,T,A>
     }
 }
 impl<'a,T,A> KernelArgs for AdamArgs<'a,T,A>
-    where T: AsKernelPtr + Debug,
+    where T: AsKernelPtr + Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
@@ -527,7 +530,7 @@ impl<'a,T,A> KernelArgs for AdamArgs<'a,T,A>
 }
 /// Implementation Adam optimizer
 pub struct Adam<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
@@ -535,7 +538,7 @@ pub struct Adam<'a,T,A>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A> Adam<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a Adam optimizer instance
@@ -578,7 +581,7 @@ impl<'a,A> Kernel for Adam<'a,f64,A>
 
 /// Defines the list passed to the cuda kernel function as arguments to the AdamW optimizer.
 pub struct AdamWArgs<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     weight: &'a mut CudaMutPtr<'a,T,A>,
@@ -596,7 +599,7 @@ pub struct AdamWArgs<'a,T,A>
 }
 /// Create an instance of an object representing the argument list of the AdamW optimizer.
 impl<'a,T,A> AdamWArgs<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a AdamWArgs instance
@@ -634,7 +637,7 @@ impl<'a,T,A> AdamWArgs<'a,T,A>
     }
 }
 impl<'a,T,A> KernelArgs for AdamWArgs<'a,T,A>
-    where T: AsKernelPtr + Debug,
+    where T: AsKernelPtr + Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
@@ -656,7 +659,7 @@ impl<'a,T,A> KernelArgs for AdamWArgs<'a,T,A>
 }
 /// Implementation AdamW optimizer
 pub struct AdamW<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     t:PhantomData<T>,
@@ -664,7 +667,7 @@ pub struct AdamW<'a,T,A>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A> AdamW<'a,T,A>
-    where T: Debug + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     /// Create a AdamW optimizer instance

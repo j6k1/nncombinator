@@ -23,10 +23,10 @@ pub fn assert_forward_all<T: ForwardAll>(_:&T) {
 pub fn assert_pre_train<T: PreTrain>(_:&T) {
 
 }
-pub fn assert_backward_all<U: UnitValue<U>,T: BackwardAll<U>>(_:&T) {
+pub fn assert_backward_all<U: Clone + Copy + Debug,T: BackwardAll<U>>(_:&T) {
 
 }
-pub fn assert_loss<U: UnitValue<U>,T: Loss<U>>(_:&T) {
+pub fn assert_loss<U: Clone + Copy + Debug,T: Loss<U>>(_:&T) {
 
 }
 pub fn assert_update_weight<T: UpdateWeight>(_:&T) {
@@ -41,10 +41,10 @@ pub fn assert_batch_forward<T: BatchForward>(_:&T) {
 pub fn assert_batch_pre_train<T: BatchPreTrain>(_:&T) {
 
 }
-pub fn assert_batch_backward<U: UnitValue<U>,T: BatchBackward<U>>(_:&T) {
+pub fn assert_batch_backward<U: Clone + Copy + Debug,T: BatchBackward<U>>(_:&T) {
 
 }
-pub fn assert_batch_loss<U: UnitValue<U>,T: BatchLoss<U>>(_:&T) {
+pub fn assert_batch_loss<U: Clone + Copy + Debug,T: BatchLoss<U>>(_:&T) {
 
 }
 

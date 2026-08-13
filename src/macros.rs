@@ -297,7 +297,7 @@ macro_rules! derive_arr_like_arithmetic {
             where for<'b> &'b $clt: Add<&'b $crt,Output=$ot>,
             for<'b> &'b $clt: From<&'b $lt>,
             for<'b> &'b $crt: From<&'b $rt>,
-            T: Default + Clone + Send {
+            T: Default + Clone + Copy + Send {
             type Output = $ot;
 
             #[inline]
@@ -310,7 +310,7 @@ macro_rules! derive_arr_like_arithmetic {
             where for<'b> &'b $clt: Sub<&'b $crt,Output=$ot>,
             for<'b> &'b $clt: From<&'b $lt>,
             for<'b> &'b $crt: From<&'b $rt>,
-            T: Default + Clone + Send {
+            T: Default + Clone + Copy + Send {
             type Output = $ot;
 
             #[inline]
@@ -323,7 +323,7 @@ macro_rules! derive_arr_like_arithmetic {
             where for<'b> &'b $clt: Mul<&'b $crt,Output=$ot>,
             for<'b> &'b $clt: From<&'b $lt>,
             for<'b> &'b $crt: From<&'b $rt>,
-            T: Default + Clone + Send {
+            T: Default + Clone + Copy + Send {
             type Output = $ot;
 
             #[inline]
@@ -336,7 +336,7 @@ macro_rules! derive_arr_like_arithmetic {
             where for<'b> &'b $clt: Div<&'b $crt,Output=$ot>,
             for<'b> &'b $clt: From<&'b $lt>,
             for<'b> &'b $crt: From<&'b $rt>,
-            T: Default + Clone + Send {
+            T: Default + Clone + Copy + Send {
             type Output = $ot;
 
             #[inline]

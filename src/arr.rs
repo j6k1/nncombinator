@@ -12,12 +12,12 @@ use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::{Product, Sum};
 #[cfg(feature = "cuda")]
-use crate::ope::{UnitValue};
 use crate::bridge::{ToHost};
 #[cfg(feature = "cuda")]
 use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, AsMutPtr, AsCudaMutPtr, CudaMutPtr, CudaPtr};
 #[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::DataTypeInfo;
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
 
@@ -54,10 +54,10 @@ impl<'a,T> ShieldSlice<'a,T> {
 }
 /// Fixed-length one-dimensional array implementation
 #[derive(Debug,Eq,PartialEq)]
-pub struct Arr<T,const N:usize> where T: Default + Clone + Send {
+pub struct Arr<T,const N:usize> where T: Default + Clone + Copy + Send {
     arr:Box<[T]>
 }
-impl<T,const N:usize> Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> Arr<T,N> where T: Default + Clone + Copy + Send {
     /// Create an instance of Arr
     pub fn new() -> Arr<T,N> {
         let mut arr = Vec::with_capacity(N);
@@ -78,25 +78,25 @@ impl<T,const N:usize> Arr<T,N> where T: Default + Clone + Send {
         self.arr.as_mut_ptr()
     }
 }
-impl<T,const N:usize> Default for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> Default for Arr<T,N> where T: Default + Clone + Copy + Send {
     fn default() -> Self {
         Arr::new()
     }
 }
-impl<T,const N:usize> Deref for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> Deref for Arr<T,N> where T: Default + Clone + Copy + Send {
     type Target = Box<[T]>;
     fn deref(&self) -> &Self::Target {
         &self.arr
     }
 }
-impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> Clone for Arr<T,N> where T: Default + Clone + Copy + Send {
     fn clone(&self) -> Self {
         Arr {
             arr:self.arr.clone()
         }
     }
 }
-impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
+impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + Copy + Send + Sync + 'a {
     fn make_view(arr: &'a [T]) -> Result<Self::ViewType,SizeMismatchError> {
         if arr.len() != Arr::<T,N>::slice_size() {
             Err(SizeMismatchError(Arr::<T,N>::slice_size(),arr.len()))
@@ -107,7 +107,7 @@ impl<'a,T,const N:usize> MakeView<'a,T> for Arr<T,N> where T: Default + Clone + 
         }
     }
 }
-impl<'a,T,const N:usize> MakeViewMut<'a,T> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
+impl<'a,T,const N:usize> MakeViewMut<'a,T> for Arr<T,N> where T: Default + Clone + Copy + Send + Sync + 'a {
     fn make_view_mut(arr: &'a mut [T]) -> Result<Self::ViewType,SizeMismatchError> {
         if arr.len() != Arr::<T,N>::slice_size() {
             Err(SizeMismatchError(Arr::<T,N>::slice_size(),arr.len()))
@@ -118,7 +118,7 @@ impl<'a,T,const N:usize> MakeViewMut<'a,T> for Arr<T,N> where T: Default + Clone
         }
     }
 }
-impl<'a,T,const N:usize> AsView<'a> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
+impl<'a,T,const N:usize> AsView<'a> for Arr<T,N> where T: Default + Clone + Copy + Send + Sync + 'a {
     type ViewType = ArrView<'a,T,N>;
 
     fn as_view(&'a self) -> Self::ViewType {
@@ -127,7 +127,7 @@ impl<'a,T,const N:usize> AsView<'a> for Arr<T,N> where T: Default + Clone + Send
         }
     }
 }
-impl<'a,T,const N:usize> AsViewMut<'a> for Arr<T,N> where T: Default + Clone + Send + Sync + 'a {
+impl<'a,T,const N:usize> AsViewMut<'a> for Arr<T,N> where T: Default + Clone + Copy + Send + Sync + 'a {
     type ViewType = ArrViewMut<'a,T,N>;
 
     fn as_view(&'a mut self) -> Self::ViewType {
@@ -137,7 +137,7 @@ impl<'a,T,const N:usize> AsViewMut<'a> for Arr<T,N> where T: Default + Clone + S
     }
 }
 impl<'a,'b,U,const N:usize> From<&'b &'a Arr<U,N>> for &'b Arr<U,N>
-    where U: Default + Clone + Send {
+    where U: Default + Clone + Copy + Send {
     fn from(s: &'b &'a Arr<U,N>) -> Self {
         *s
     }
@@ -153,14 +153,14 @@ impl<'data,U,const N:usize> From<ArrView<'data,U,N>> for Arr<U,N> where U: Defau
         }
     }
 }
-impl<T,const N:usize> From<[T;N]> for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> From<[T;N]> for Arr<T,N> where T: Default + Clone + Copy + Send {
     fn from(value: [T; N]) -> Self {
         Arr {
             arr:Box::new(value)
         }
     }
 }
-impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Copy + Send {
     type Error = TypeConvertError;
 
     fn try_from(v: Vec<T>) -> Result<Self, Self::Error> {
@@ -175,7 +175,7 @@ impl<T,const N:usize> TryFrom<Vec<T>> for Arr<T,N> where T: Default + Clone + Se
         }
     }
 }
-impl<T,const N:usize> TryFrom<Box<[T]>> for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> TryFrom<Box<[T]>> for Arr<T,N> where T: Default + Clone + Copy + Send {
     type Error = TypeConvertError;
 
     fn try_from(arr: Box<[T]>) -> Result<Self, Self::Error> {
@@ -186,24 +186,24 @@ impl<T,const N:usize> TryFrom<Box<[T]>> for Arr<T,N> where T: Default + Clone + 
         }
     }
 }
-impl<T,const N:usize> From<Arr<T,N>> for Box<[T]> where T: Default + Clone + Send {
+impl<T,const N:usize> From<Arr<T,N>> for Box<[T]> where T: Default + Clone + Copy + Send {
     fn from(value: Arr<T,N>) -> Self {
         value.arr
     }
 }
-impl<'a,T,const N:usize> From<&'a Arr<T,N>> for &'a [T] where T: Default + Clone + Send {
+impl<'a,T,const N:usize> From<&'a Arr<T,N>> for &'a [T] where T: Default + Clone + Copy + Send {
     fn from(arr: &'a Arr<T, N>) -> Self {
         &arr.arr
     }
 }
-impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: Default + Clone + Copy + Send {
     fn from(arr: &'a mut Arr<T, N>) -> Self {
         ShieldSlice::new(&mut arr.arr)
     }
 }
 #[cfg(feature = "cuda")]
 impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
-    where T: UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator,
           CudaPtr<T,A>: WriteMemory<T>,
           CudaTensor1dPtr<T,A,N>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -220,7 +220,7 @@ impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
 }
 #[cfg(feature = "cuda")]
 impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a Arr<T,N>
-    where T: UnitValue<T> + 'a,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaPtr<T,A>: WriteMemory<T>,
           CudaTensor1dPtr::<T,A,N>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -235,24 +235,24 @@ impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a Arr<T,N>
         Ok(ptr)
     }
 }
-impl<T,const N:usize> ToHost<T> for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> ToHost<T> for Arr<T,N> where T: Default + Clone + Copy + Send {
     type Output = Arr<T,N>;
 
     fn to_host(self) -> Result<Self::Output, TypeConvertError> {
         Ok(self)
     }
 }
-impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N;
 }
-impl<T,const N:usize> Index<usize> for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> Index<usize> for Arr<T,N> where T: Default + Clone + Copy + Send {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.arr[index]
     }
 }
-impl<T,const N:usize> IndexMut<usize> for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> IndexMut<usize> for Arr<T,N> where T: Default + Clone + Copy + Send {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.arr[index]
     }
@@ -360,20 +360,20 @@ derive_arr_like_arithmetic! (Arr<T,N> > ArrView<'a,T,N> = Arr<T,N>);
 derive_arr_like_arithmetic! (&'a Arr<T,N> > ArrView<'a,T,N> = Arr<T,N>);
 derive_arr_like_arithmetic! (Arr<T,N> > &'a ArrView<'a,T,N> = Arr<T,N>);
 
-impl<'a,T,const N:usize> AsRawSlice<T> for Arr<T,N> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> AsRawSlice<T> for Arr<T,N> where T: Default + Clone + Copy + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr
     }
 }
-impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for Arr<T,N> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for Arr<T,N> where T: Default + Clone + Copy + Send {
     fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
         ShieldSlice::new(&mut self.arr)
     }
 }
-impl<T,const N:usize> BatchDataType for Arr<T,N> where T: Default + Clone + Send {
+impl<T,const N:usize> BatchDataType for Arr<T,N> where T: Default + Clone + Copy + Send {
     type Type = SerializedVec<T,Arr<T,N>>;
 }
-impl<'a,T,const N:usize> BatchDataType for &'a Arr<T,N> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> BatchDataType for &'a Arr<T,N> where T: Default + Clone + Copy + Send {
     type Type = &'a SerializedVec<T,Arr<T,N>>;
 }
 impl<'a,T,const N1:usize, const N2:usize> Product<&'a Arr2<T,N1,N2>> for &'a Arr<T,N1>
@@ -430,7 +430,7 @@ impl<T,const N1:usize,const N2:usize> Arr2<T,N1,N2> where T: Default {
         self.arr.as_mut_ptr()
     }
 }
-impl<T,const N1:usize, const N2:usize> Clone for Arr2<T,N1,N2> where T: Default + Clone + Send {
+impl<T,const N1:usize, const N2:usize> Clone for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     fn clone(&self) -> Self {
         Arr2 {
             arr:self.arr.clone()
@@ -485,17 +485,17 @@ impl<T,const N1:usize, const N2:usize> IndexMut<usize> for Arr2<T,N1,N2> where T
         &mut self.arr[offset..(offset + N2)]
     }
 }
-impl<'a,T,const N1:usize, const N2: usize> AsRawSlice<T> for Arr2<T,N1,N2> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize, const N2: usize> AsRawSlice<T> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr
     }
 }
-impl<'a,T,const N1:usize, const N2:usize> AsRawMutSlice<'a,T> for Arr2<T,N1,N2> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize, const N2:usize> AsRawMutSlice<'a,T> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
         ShieldSlice::new(&mut self.arr)
     }
 }
-impl<T,const N1:usize, const N2: usize> TryFrom<Vec<T>> for Arr2<T,N1,N2> where T: Default + Clone + Send {
+impl<T,const N1:usize, const N2: usize> TryFrom<Vec<T>> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     type Error = TypeConvertError;
 
     fn try_from(v: Vec<T>) -> Result<Self, Self::Error> {
@@ -510,7 +510,7 @@ impl<T,const N1:usize, const N2: usize> TryFrom<Vec<T>> for Arr2<T,N1,N2> where 
         }
     }
 }
-impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2> where T: Default + Clone + Send {
+impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     type Error = TypeConvertError;
 
     fn try_from(v: Vec<Arr<T,N2>>) -> Result<Self, Self::Error> {
@@ -528,17 +528,17 @@ impl<T,const N1:usize, const N2: usize> TryFrom<Vec<Arr<T,N2>>> for Arr2<T,N1,N2
         }
     }
 }
-impl<'a,T,const N1:usize,const N2:usize> From<&'a Arr2<T,N1,N2>> for &'a [T] where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize> From<&'a Arr2<T,N1,N2>> for &'a [T] where T: Default + Clone + Copy + Send {
     fn from(arr: &'a Arr2<T, N1, N2>) -> Self {
         arr.as_raw_slice()
     }
 }
-impl<'a,T,const N1:usize,const N2:usize> From<&'a mut Arr2<T,N1,N2>> for ShieldSlice<'a,T> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize> From<&'a mut Arr2<T,N1,N2>> for ShieldSlice<'a,T> where T: Default + Clone + Copy + Send {
     fn from(arr: &'a mut Arr2<T, N1, N2>) -> Self {
         arr.as_raw_mut_slice()
     }
 }
-impl<T,const N1:usize,const N2:usize> SliceSize for Arr2<T,N1,N2> where T: Default + Clone + Send {
+impl<T,const N1:usize,const N2:usize> SliceSize for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N1 * N2;
 }
 /// Fixed-length 3D array implementation
@@ -546,7 +546,7 @@ impl<T,const N1:usize,const N2:usize> SliceSize for Arr2<T,N1,N2> where T: Defau
 pub struct Arr3<T,const N1:usize, const N2:usize, const N3:usize> where T: Default {
     arr:Box<[T]>
 }
-impl<T,const N1:usize,const N2:usize,const N3:usize> Clone for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
+impl<T,const N1:usize,const N2:usize,const N3:usize> Clone for Arr3<T,N1,N2,N3> where T: Default + Clone + Copy + Send {
     fn clone(&self) -> Self {
         Arr3 {
             arr:self.arr.clone()
@@ -611,7 +611,7 @@ impl<T,const N1:usize, const N2:usize, const N3:usize> IndexMut<(usize,usize,usi
         &mut self.arr[z * N2 * N3 + y * N3 + x]
     }
 }
-impl<T,const N1:usize, const N2: usize, const N3:usize> TryFrom<Vec<Arr2<T,N2,N3>>> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
+impl<T,const N1:usize, const N2: usize, const N3:usize> TryFrom<Vec<Arr2<T,N2,N3>>> for Arr3<T,N1,N2,N3> where T: Default + Clone + Copy + Send {
     type Error = TypeConvertError;
 
     fn try_from(v: Vec<Arr2<T,N2,N3>>) -> Result<Self, Self::Error> {
@@ -630,15 +630,15 @@ impl<T,const N1:usize, const N2: usize, const N3:usize> TryFrom<Vec<Arr2<T,N2,N3
     }
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3<T,N1,N2,N3>
-    where T: Default + Clone + Send {
+    where T: Default + Clone + Copy + Send {
     const SIZE: usize = N1 * N2 * N3;
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3<T,N1,N2,N3> where T: Default + Clone + Copy + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr
     }
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for Arr3<T,N1,N2,N3> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for Arr3<T,N1,N2,N3> where T: Default + Clone + Copy + Send {
     fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
         ShieldSlice::new(&mut self.arr)
     }
@@ -648,7 +648,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for 
 pub struct Arr4<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> where T: Default {
     arr:Box<[T]>
 }
-impl<T,const N1:usize,const N2:usize,const N3:usize, const N4:usize> Clone for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
+impl<T,const N1:usize,const N2:usize,const N3:usize, const N4:usize> Clone for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Copy + Send {
     fn clone(&self) -> Self {
         Arr4 {
             arr:self.arr.clone()
@@ -720,7 +720,7 @@ impl<T,const N1:usize, const N2:usize, const N3:usize, const N4:usize> IndexMut<
     }
 }
 impl<T,const N1:usize, const N2: usize, const N3:usize, const N4:usize> TryFrom<Vec<Arr3<T,N2,N3,N4>>>
-    for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
+    for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Copy + Send {
     type Error = TypeConvertError;
 
     fn try_from(v: Vec<Arr3<T,N2,N3,N4>>) -> Result<Self, Self::Error> {
@@ -739,15 +739,15 @@ impl<T,const N1:usize, const N2: usize, const N3:usize, const N4:usize> TryFrom<
     }
 }
 impl<T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> SliceSize for Arr4<T,N1,N2,N3,N4>
-    where T: Default + Clone + Send {
+    where T: Default + Clone + Copy + Send {
     const SIZE: usize = N1 * N2 * N3 * N4;
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawSlice<T> for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawSlice<T> for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Copy + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr
     }
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawMutSlice<'a,T> for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawMutSlice<'a,T> for Arr4<T,N1,N2,N3,N4> where T: Default + Clone + Copy + Send {
     fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
         ShieldSlice::new(&mut self.arr)
     }
@@ -757,7 +757,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize,const N4:usize> AsRawMutS
 pub struct ArrView<'a,T,const N:usize> {
     pub(crate) arr:&'a [T]
 }
-impl<'a,T,const N:usize> Clone for ArrView<'a,T,N> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> Clone for ArrView<'a,T,N> where T: Default + Clone + Copy + Send {
     fn clone(&self) -> Self {
         ArrView {
             arr:self.arr
@@ -771,14 +771,14 @@ impl<'a,T,const N:usize> Deref for ArrView<'a,T,N> {
         &self.arr
     }
 }
-impl<'a,T,const N:usize> From<&'a Arr<T,N>> for ArrView<'a,T,N> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> From<&'a Arr<T,N>> for ArrView<'a,T,N> where T: Default + Clone + Copy + Send {
     fn from(value: &'a Arr<T, N>) -> Self {
         ArrView {
             arr: &value.arr
         }
     }
 }
-impl<'a,T,const N:usize> TryFrom<&'a [T]> for ArrView<'a,T,N> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> TryFrom<&'a [T]> for ArrView<'a,T,N> where T: Default + Clone + Copy + Send {
     type Error = TypeConvertError;
 
     fn try_from(arr: &'a [T]) -> Result<Self, Self::Error> {
@@ -794,7 +794,7 @@ impl<'a,T,const N:usize> AsRawSlice<T> for ArrView<'a,T,N> where T: Default + Cl
         &self.arr
     }
 }
-impl<'a,T,const N:usize> SliceSize for ArrView<'a,T,N> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> SliceSize for ArrView<'a,T,N> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N;
 }
 impl<'a,T,const N:usize> Add<T> for &'a ArrView<'a,T,N>
@@ -949,7 +949,7 @@ impl<'a,T,const N:usize> IndexMut<usize> for ArrViewMut<'a,T,N> {
         &mut self.arr[index]
     }
 }
-impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: Default + Clone + Copy + Send {
     type Error = TypeConvertError;
 
     fn try_from(arr: &'a mut [T]) -> Result<Self, Self::Error> {
@@ -960,7 +960,7 @@ impl<'a,T,const N:usize> TryFrom<&'a mut [T]> for ArrViewMut<'a,T,N> where T: De
         }
     }
 }
-impl<'a,T,const N:usize> SliceSize for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> SliceSize for ArrViewMut<'a,T,N> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N;
 }
 impl<'a,T,const N:usize> AsRawSlice<T> for ArrViewMut<'a,T,N> where T: Default + Clone {
@@ -968,7 +968,7 @@ impl<'a,T,const N:usize> AsRawSlice<T> for ArrViewMut<'a,T,N> where T: Default +
         &self.arr
     }
 }
-impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for ArrViewMut<'a,T,N> where T: Default + Clone + Send {
+impl<'a,T,const N:usize> AsRawMutSlice<'a,T> for ArrViewMut<'a,T,N> where T: Default + Clone + Copy + Send {
     fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
         ShieldSlice::new(&mut self.arr)
     }
@@ -994,7 +994,7 @@ impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2View<'a,T,N1,N2> 
         &self.arr
     }
 }
-impl<'a,T,const N1:usize,const N2:usize> SliceSize for Arr2View<'a,T,N1,N2> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize> SliceSize for Arr2View<'a,T,N1,N2> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N1 * N2;
 }
 /// Implementation of an immutable iterator for fixed-length 2D arrays
@@ -1007,7 +1007,7 @@ impl<'a,T,const N:usize> Arr2Iter<'a,T,N> {
     }
 }
 impl<'a,T,const N:usize> Iterator for Arr2Iter<'a,T,N>
-    where T: Default + Clone + Send {
+    where T: Default + Clone + Copy + Send {
     type Item = ArrView<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1073,7 +1073,7 @@ impl<'a,T,const N1:usize,const N2:usize> Arr2ViewMut<'a,T,N1,N2> {
         self.arr.as_mut_ptr()
     }
 }
-impl<'a,T,const N1:usize,const N2:usize> SliceSize for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize> SliceSize for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N1 * N2;
 }
 impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone {
@@ -1081,7 +1081,7 @@ impl<'a,T,const N1:usize,const N2:usize> AsRawSlice<T> for Arr2ViewMut<'a,T,N1,N
         &self.arr
     }
 }
-impl<'a,T,const N1:usize,const N2:usize> AsRawMutSlice<'a,T> for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize> AsRawMutSlice<'a,T> for Arr2ViewMut<'a,T,N1,N2> where T: Default + Clone + Copy + Send {
     fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
         ShieldSlice::new(&mut self.arr)
     }
@@ -1097,7 +1097,7 @@ impl<'a,T,const N:usize> Arr2IterMut<'a,T,N> {
     }
 }
 impl<'a,T,const N:usize> Iterator for Arr2IterMut<'a,T,N>
-    where T: Default + Clone + Send {
+    where T: Default + Clone + Copy + Send {
     type Item = ArrViewMut<'a,T,N>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1158,7 +1158,7 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3Vi
         &self.arr
     }
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3View<'a,T,N1,N2,N3> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3View<'a,T,N1,N2,N3> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N1 * N2 * N3;
 }
 /// Implementation of an immutable iterator for fixed-length 3D arrays
@@ -1205,12 +1205,12 @@ impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawSlice<T> for Arr3Vi
         &self.arr
     }
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> AsRawMutSlice<'a,T> for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Copy + Send {
     fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,T> {
         ShieldSlice::new(&mut self.arr)
     }
 }
-impl<'a,T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Send {
+impl<'a,T,const N1:usize,const N2:usize,const N3:usize> SliceSize for Arr3ViewMut<'a,T,N1,N2,N3> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N1 * N2 * N3;
 }
 /// Implementation of an mutable iterator for fixed-length 3D arrays
@@ -1566,7 +1566,7 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
 }
 #[cfg(feature = "cuda")]
 impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
-    where U: Debug + Default + Clone + Copy + Send + UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           T: Debug,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -1589,7 +1589,7 @@ impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,T,A> ToCuda<U,A> for &'a SerializedVec<U,T>
-    where U: Debug + Default + Clone + Copy + Send + UnitValue<U> + AsMutPtr<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + AsMutPtr<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'b> T: Debug + Default + SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> + ToCuda<U,A>,
@@ -1653,7 +1653,7 @@ impl<'a,U,T> From<&'a SerializedVecView<'a,U,T>> for SerializedVec<U,T>
     }
 }
 impl<U,T> TryFrom<Box<[U]>> for SerializedVec<U,T> 
-    where U: Default + Clone + Send,
+    where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + MakeView<'a,U> {
     type Error = TypeConvertError;
 
@@ -1674,20 +1674,20 @@ impl<U,T> TryFrom<Box<[U]>> for SerializedVec<U,T>
         }
     }
 }
-impl<U,T> From<SerializedVec<U,T>> for Box<[U]> where U: Default + Clone + Send {
+impl<U,T> From<SerializedVec<U,T>> for Box<[U]> where U: Default + Clone + Copy + Send {
     fn from(value: SerializedVec<U,T>) -> Self {
         value.arr
     }
 }
 impl<'a,U,T> AsRawSlice<U> for SerializedVec<U,T>
-    where U: Default + Clone + Send,
+    where U: Default + Clone + Copy + Send,
           T: SliceSize {
     fn as_raw_slice(&self) -> &[U] {
         &self.arr
     }
 }
 impl<'a,U,T> AsRawMutSlice<'a,U> for SerializedVec<U,T>
-    where U: Default + Clone + Send,
+    where U: Default + Clone + Copy + Send,
           T: SliceSize {
     fn as_raw_mut_slice(&'a mut self) -> ShieldSlice<'a,U> {
         ShieldSlice::new(&mut self.arr)
@@ -1900,7 +1900,7 @@ impl<'a,U,T> Clone for SerializedVecView<'a,U,T> {
 }
 impl<'a,U,T> Copy for SerializedVecView<'a,U,T> {}
 impl<'a,U,T> AsRawSlice<U> for SerializedVecView<'a,U,T>
-    where U: Default + Clone + Send,
+    where U: Default + Clone + Copy + Send,
           T: SliceSize {
     fn as_raw_slice(&self) -> &[U] {
         &self.arr
@@ -2094,7 +2094,7 @@ impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for &'data ArrView<'
     }
 }
 impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for Arr<T,N>
-    where T: Send + Sync + Default + Clone + 'static {
+    where T: Send + Sync + Default + Clone + Copy + 'static {
     type Iter = rayon::slice::Iter<'data,T>;
     type Item = &'data T;
 
@@ -2103,7 +2103,7 @@ impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for Arr<T,N>
     }
 }
 impl<'data,T, const N:usize> IntoParallelRefIterator<'data> for &'data Arr<T,N>
-    where T: Send + Sync + Default + Clone + 'static {
+    where T: Send + Sync + Default + Clone + Copy + 'static {
     type Iter = rayon::slice::Iter<'data,T>;
     type Item = &'data T;
 
@@ -2462,7 +2462,7 @@ impl<'data,T, const N1:usize, const N2:usize, const N3:usize, const N4:usize> In
 /// Implementation of ParallelIterator for SerializedVec
 #[derive(Debug)]
 pub struct SerializedVecParIter<'data,C,T>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send{
     arr: &'data [T],
@@ -2473,7 +2473,7 @@ pub struct SerializedVecParIter<'data,C,T>
 /// Implementation of plumbing::Producer for SerializedVec
 #[derive(Debug)]
 pub struct SerializedVecIterProducer<'data,C,T>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     arr: &'data [T],
@@ -2482,7 +2482,7 @@ pub struct SerializedVecIterProducer<'data,C,T>
 }
 
 impl<'data,C,T> SerializedVecIterProducer<'data,C,T>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     #[inline]
@@ -2492,7 +2492,7 @@ impl<'data,C,T> SerializedVecIterProducer<'data,C,T>
     }
 }
 impl<'data,C,T> Iterator for SerializedVecIterProducer<'data,C,T>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     type Item = <C as AsView<'data>>::ViewType;
@@ -2516,7 +2516,7 @@ impl<'data,C,T> Iterator for SerializedVecIterProducer<'data,C,T>
     }
 }
 impl<'data,C,T> std::iter::ExactSizeIterator for SerializedVecIterProducer<'data,C,T>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     fn len(&self) -> usize {
@@ -2524,7 +2524,7 @@ impl<'data,C,T> std::iter::ExactSizeIterator for SerializedVecIterProducer<'data
     }
 }
 impl<'data,C,T> std::iter::DoubleEndedIterator for SerializedVecIterProducer<'data,C,T>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     fn next_back(&mut self) -> Option<Self::Item> {
@@ -2542,7 +2542,7 @@ impl<'data,C,T> std::iter::DoubleEndedIterator for SerializedVecIterProducer<'da
     }
 }
 impl<'data, C, T> plumbing::Producer for SerializedVecIterProducer<'data,C,T>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     type Item = <C as AsView<'data>>::ViewType;
@@ -2565,7 +2565,7 @@ impl<'data, C, T> plumbing::Producer for SerializedVecIterProducer<'data,C,T>
     }
 }
 impl<'data, C, T> ParallelIterator for SerializedVecParIter<'data,C,T>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     type Item = <C as AsView<'data>>::ViewType;
@@ -2580,7 +2580,7 @@ impl<'data, C, T> ParallelIterator for SerializedVecParIter<'data,C,T>
     }
 }
 impl<'data, C, T> IndexedParallelIterator for SerializedVecParIter<'data,C,T>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     fn len(&self) -> usize { self.len }
@@ -2604,7 +2604,7 @@ impl<'data, C, T> IndexedParallelIterator for SerializedVecParIter<'data,C,T>
     }
 }
 impl<'data,C,T> IntoParallelRefIterator<'data> for SerializedVec<T,C>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     type Iter = SerializedVecParIter<'data,C,T>;
@@ -2619,7 +2619,7 @@ impl<'data,C,T> IntoParallelRefIterator<'data> for SerializedVec<T,C>
     }
 }
 impl<'data,C,T> IntoParallelRefIterator<'data> for &'data SerializedVec<T,C>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     type Iter = SerializedVecParIter<'data,C,T>;
@@ -2634,7 +2634,7 @@ impl<'data,C,T> IntoParallelRefIterator<'data> for &'data SerializedVec<T,C>
     }
 }
 impl<'data,C,T> IntoParallelRefIterator<'data> for SerializedVecView<'data,T,C>
-    where T: Default + Clone + Send + Sync + 'static,
+    where T: Default + Clone + Copy + Send + Sync + 'static,
           C: SliceSize + MakeView<'data,T> + Send + Sync,
           <C as AsView<'data>>::ViewType: Send {
     type Iter = SerializedVecParIter<'data,C,T>;

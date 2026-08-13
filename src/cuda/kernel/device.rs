@@ -4,8 +4,10 @@ use std::ffi::c_uint;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::mem;
+use std::ops::{Add, AddAssign, Div, Sub};
 use cuda_runtime_sys::dim3;
 use libc::{c_int, c_void, size_t};
+use num_traits::FromPrimitive;
 use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs, KernelLaunchConfig};
 use crate::cuda::allocator::CudaAllocator;
 use crate::ope::UnitValue;
@@ -28,7 +30,7 @@ extern "C" {
 }
 /// Defines the list that is passed to the cuda kernel function as arguments for the convolution calculation.
 pub struct ReduceLinearBatchArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator {
     input: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
     /// output
@@ -38,7 +40,7 @@ pub struct ReduceLinearBatchArgs<'a,T,A,const N:usize>
 }
 /// Create an instance of an object representing the argument list during convolution computation.
 impl<'a,T,A,const N:usize> ReduceLinearBatchArgs<'a,T,A,N>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator {
     /// Create a ReduceLinearBatchArgs instance
     /// # Arguments
@@ -57,7 +59,7 @@ impl<'a,T,A,const N:usize> ReduceLinearBatchArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for ReduceLinearBatchArgs<'a,T,A,N>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -70,7 +72,7 @@ impl<'a,T,A,const N:usize> KernelArgs for ReduceLinearBatchArgs<'a,T,A,N>
 }
 /// Implementation of convolutional computation
 pub struct ReduceLinearBatch<'a,T,A,const N:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator {
     t:PhantomData<T>,
     a:PhantomData<A>,
@@ -78,7 +80,7 @@ pub struct ReduceLinearBatch<'a,T,A,const N:usize>
     n:PhantomData<[();N]>
 }
 impl<'a,T,A,const N:usize> ReduceLinearBatch<'a,T,A,N>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator {
     /// Create a ReduceLinearBatch instance
     pub fn new() -> ReduceLinearBatch<'a,T,A,N> {
@@ -117,7 +119,9 @@ impl<'a,A,const N:usize> Kernel for ReduceLinearBatch<'a,f64,A,N> where A: CudaA
 /// Defines the list that is passed to the cuda kernel function as arguments
 /// for the calculation that applies the canonical link during the mini-batch execution.
 pub struct LossLinearBatchByCanonicalLinkArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync +
+             Add<Output=T> + Sub<Output=T> + Div<Output=T> + AddAssign +
+             FromPrimitive + 'static + DataTypeInfo,
           A: CudaAllocator {
     expected: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
     /// Actual Value
@@ -129,7 +133,9 @@ pub struct LossLinearBatchByCanonicalLinkArgs<'a,T,A,const N:usize>
 /// Create an instance of an object representing the argument list
 /// for the regular link application calculation at the time of mini-batch execution.
 impl<'a,T,A,const N:usize> LossLinearBatchByCanonicalLinkArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync +
+             Add<Output=T> + Sub<Output=T> + Div<Output=T> + AddAssign +
+             FromPrimitive + 'static + DataTypeInfo,
           A: CudaAllocator {
     /// Create a LossLinearBatchByCanonicalLinkArgs instance
     /// # Arguments
@@ -163,13 +169,19 @@ impl<'a,T,A,const N:usize> KernelArgs for LossLinearBatchByCanonicalLinkArgs<'a,
     }
 }
 pub struct LossLinearBatchByCanonicalLink<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator {
+    where T: Default + Clone + Copy + Debug + Send + Sync +
+             Add<Output=T> + Sub<Output=T> + Div<Output=T> + AddAssign +
+             FromPrimitive + 'static + DataTypeInfo,
+          A: CudaAllocator {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> LossLinearBatchByCanonicalLink<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator {
+    where T: Default + Clone + Copy + Debug + Send + Sync +
+             Add<Output=T> + Sub<Output=T> + Div<Output=T> + AddAssign +
+             FromPrimitive + 'static + DataTypeInfo,
+          A: CudaAllocator {
     /// Create a LossLinearBatchByCanonicalLink instance
     pub fn new() -> LossLinearBatchByCanonicalLink<'a,T,A,N> {
         LossLinearBatchByCanonicalLink {
@@ -205,7 +217,10 @@ impl<'a,A,const N:usize> Kernel for LossLinearBatchByCanonicalLink<'a,f64,A,N> w
 }
 /// Defines the list that is passed to the cuda kernel function as the argument for the calculation of applying canonical link.
 pub struct LossLinearByCanonicalLinkArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator {
+    where T: Default + Clone + Copy + Debug + Send + Sync +
+             Add<Output=T> + Sub<Output=T> + Div<Output=T> + AddAssign +
+             FromPrimitive + 'static + DataTypeInfo,
+          A: CudaAllocator {
     expected: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
     /// Actual Value
     actual: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
@@ -215,7 +230,10 @@ pub struct LossLinearByCanonicalLinkArgs<'a,T,A,const N:usize>
 }
 /// Create an instance of an object that represents the argument list for the canonical link application calculation.
 impl<'a,T,A,const N:usize> LossLinearByCanonicalLinkArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator {
+    where T: Default + Clone + Copy + Debug + Send + Sync +
+             Add<Output=T> + Sub<Output=T> + Div<Output=T> + AddAssign +
+             FromPrimitive + 'static + DataTypeInfo,
+          A: CudaAllocator {
     /// Create a LossLinearByCanonicalLinkArgs instance
     /// # Arguments
     /// * `expected` - Expected Value
@@ -247,13 +265,19 @@ impl<'a,T,A,const N:usize> KernelArgs for LossLinearByCanonicalLinkArgs<'a,T,A,N
     }
 }
 pub struct LossLinearByCanonicalLink<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator {
+    where T: Default + Clone + Copy + Debug + Send + Sync +
+             Add<Output=T> + Sub<Output=T> + Div<Output=T> + AddAssign +
+             FromPrimitive + 'static + DataTypeInfo,
+          A: CudaAllocator {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> LossLinearByCanonicalLink<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator {
+    where T: Default + Clone + Copy + Debug + Send + Sync +
+             Add<Output=T> + Sub<Output=T> + Div<Output=T> + AddAssign +
+             FromPrimitive + 'static + DataTypeInfo,
+          A: CudaAllocator {
     /// Create a LossLinearByCanonicalLink instance
     pub fn new() -> LossLinearByCanonicalLink<'a,T,A,N> {
         LossLinearByCanonicalLink {
@@ -289,7 +313,7 @@ impl<'a,A,const N:usize> Kernel for LossLinearByCanonicalLink<'a,f64,A,N> where 
 }
 /// Defines the list that is passed to the cuda kernel function as arguments for forward propagation difference calculations.
 pub struct DiffLinearForwardArgs<'a,T,A,const NI:usize,const NO:usize>
-    where T: Debug + Default,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator {
     indexes: CudaPtr<usize,A>,
     input: CudaPtr<T,A>,
@@ -300,7 +324,7 @@ pub struct DiffLinearForwardArgs<'a,T,A,const NI:usize,const NO:usize>
 }
 /// Create an instance of an object representing the argument list for the forward propagation difference calculation.
 impl<'a,T,A,const NI:usize,const NO:usize> DiffLinearForwardArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator {
     /// Create a DiffLinearForwardArgs instance
     /// # Arguments
@@ -327,7 +351,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> DiffLinearForwardArgs<'a,T,A,NI,NO>
     }
 }
 impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for DiffLinearForwardArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -348,7 +372,7 @@ pub struct DiffLinearForward<'a,T,A,const NI:usize,const NO:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const NI:usize,const NO:usize> DiffLinearForward<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator {
     /// Create a DiffLinearForward instance
     pub fn new() -> DiffLinearForward<'a,T,A,NI,NO> {
@@ -387,7 +411,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for DiffLinearForward<'a,f64,A,N
 /// as arguments for the mini-batch computation
 /// of forward propagation of linear layers.
 pub struct ForwardLinearBatchArgs<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     input: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,NI>>>,
     units: CudaConstPtr<'a,CudaTensor2dPtr<T,A,NI,NO>>,
@@ -400,7 +424,7 @@ pub struct ForwardLinearBatchArgs<'a,T,A,const NI:usize,const NO:usize>
 /// Create an instance of an object representing the argument list during
 /// the forward propagation calculation of a mini-batch of linear layers.
 impl<'a,T,A,const NI:usize,const NO:usize> ForwardLinearBatchArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a ForwardLinearBatchArgs instance
     /// # Arguments
@@ -425,7 +449,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> ForwardLinearBatchArgs<'a,T,A,NI,NO>
     }
 }
 impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for ForwardLinearBatchArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -441,7 +465,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for ForwardLinearBatchArgs
 }
 /// Implementation of forward propagation calculations for mini-batches of linear layers
 pub struct ForwardLinearBatch<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     ni:PhantomData<[();NI]>,
@@ -450,7 +474,7 @@ pub struct ForwardLinearBatch<'a,T,A,const NI:usize,const NO:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const NI:usize,const NO:usize> ForwardLinearBatch<'a,T,A,NI,NO,>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a ForwardLinearBatch instance
     pub fn new() -> ForwardLinearBatch<'a,T,A,NI,NO> {
@@ -490,7 +514,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for ForwardLinearBatch<'a,f64,A,
 /// Defines the list that is passed to the cuda kernel function as arguments for the computation
 /// of the forward propagation of the linear layer.
 pub struct ForwardLinearArgs<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     input: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,NI>>,
     units: CudaConstPtr<'a,CudaTensor2dPtr<T,A,NI,NO>>,
@@ -503,7 +527,7 @@ pub struct ForwardLinearArgs<'a,T,A,const NI:usize,const NO:usize>
 /// Create an instance of an object representing the argument list during
 /// the forward propagation calculation of the linear layer.
 impl<'a,T,A,const NI:usize,const NO:usize> ForwardLinearArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a ForwardLinearArgs instance
     /// # Arguments
@@ -527,7 +551,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> ForwardLinearArgs<'a,T,A,NI,NO>
     }
 }
 impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for ForwardLinearArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -543,7 +567,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for ForwardLinearArgs<'a,T
 }
 /// Implementation of forward propagation calculations for linear layers
 pub struct ForwardLinear<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     ni:PhantomData<[();NI]>,
@@ -552,7 +576,7 @@ pub struct ForwardLinear<'a,T,A,const NI:usize,const NO:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const NI:usize,const NO:usize> ForwardLinear<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a ForwardLinear instance
     pub fn new() -> ForwardLinear<'a,T,A,NI,NO> {
@@ -592,7 +616,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for ForwardLinear<'a,f64,A,NI,NO
 /// Defines the list passed to the cuda kernel function as arguments
 /// for the computation of the error back propagation of a mini-batch of linear layers.
 pub struct BackwardLinearBatchArgs<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     loss: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,NO>>>,
     units: CudaConstPtr<'a,CudaTensor2dPtr<T,A,NI,NO>>,
@@ -604,7 +628,7 @@ pub struct BackwardLinearBatchArgs<'a,T,A,const NI:usize,const NO:usize>
 /// Create an instance of an object representing a list of arguments
 /// during the computation of the error back propagation of a mini-batch of linear layers.
 impl<'a,T,A,const NI:usize,const NO:usize> BackwardLinearBatchArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a BackwardLinearBatchArgs instance
     /// # Arguments
@@ -626,7 +650,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> BackwardLinearBatchArgs<'a,T,A,NI,NO>
     }
 }
 impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for BackwardLinearBatchArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -641,7 +665,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for BackwardLinearBatchArg
 }
 /// Implementation of mini-batch error back propagation computation for linear layers
 pub struct BackwardLinearBatch<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     ni:PhantomData<[();NI]>,
@@ -650,7 +674,7 @@ pub struct BackwardLinearBatch<'a,T,A,const NI:usize,const NO:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const NI:usize,const NO:usize> BackwardLinearBatch<'a,T,A,NI,NO,>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a BackwardLinearBatch instance
     pub fn new() -> BackwardLinearBatch<'a,T,A,NI,NO> {
@@ -690,7 +714,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for BackwardLinearBatch<'a,f64,A
 /// Defines the list that is passed to the cuda kernel function as arguments for
 /// the computation of the error back propagation of the linear layer.
 pub struct BackwardLinearArgs<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     loss: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,NO>>,
     units: CudaConstPtr<'a,CudaTensor2dPtr<T,A,NI,NO>>,
@@ -702,7 +726,7 @@ pub struct BackwardLinearArgs<'a,T,A,const NI:usize,const NO:usize>
 /// Create an instance of an object representing the list of arguments during
 /// the computation of the error back propagation of the linear layer.
 impl<'a,T,A,const NI:usize,const NO:usize> BackwardLinearArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a BackwardLinearArgs instance
     /// # Arguments
@@ -723,7 +747,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> BackwardLinearArgs<'a,T,A,NI,NO>
     }
 }
 impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for BackwardLinearArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -738,7 +762,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for BackwardLinearArgs<'a,
 }
 /// Implementation of error back propagation calculations for linear layers
 pub struct BackwardLinear<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     ni:PhantomData<[();NI]>,
@@ -747,7 +771,7 @@ pub struct BackwardLinear<'a,T,A,const NI:usize,const NO:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const NI:usize,const NO:usize> BackwardLinear<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a BackwardLinear instance
     pub fn new() -> BackwardLinear<'a,T,A,NI,NO> {
@@ -787,7 +811,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for BackwardLinear<'a,f64,A,NI,N
 /// Defines the list that is passed to the cuda kernel function as arguments
 /// for the calculation of the amount of update of the linear layer weights during the mini-batch.
 pub struct LinearGradientBatchArgs<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     loss: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,NO>>>,
     input: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,NI>>>,
@@ -800,7 +824,7 @@ pub struct LinearGradientBatchArgs<'a,T,A,const NI:usize,const NO:usize>
 /// Create an instance of an object representing the list of arguments
 ///s for calculating the amount of updates to the linear layer weights during a mini-batch run.
 impl<'a,T,A,const NI:usize,const NO:usize> LinearGradientBatchArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a LinearGradientBatchArgs instance
     /// # Arguments
@@ -822,7 +846,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> LinearGradientBatchArgs<'a,T,A,NI,NO>
     }
 }
 impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for LinearGradientBatchArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -838,7 +862,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for LinearGradientBatchArg
 }
 /// Implementation of gradient calculation during mini-batch execution of linear layers
 pub struct LinearGradientBatch<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     ni:PhantomData<[();NI]>,
@@ -847,7 +871,7 @@ pub struct LinearGradientBatch<'a,T,A,const NI:usize,const NO:usize>
     lt:PhantomData<&'a ()>
 }
 impl<'a,T,A,const NI:usize,const NO:usize> LinearGradientBatch<'a,T,A,NI,NO,>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a LinearGradientBatch instance
     pub fn new() -> LinearGradientBatch<'a,T,A,NI,NO> {
@@ -887,7 +911,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for LinearGradientBatch<'a,f64,A
 /// Defines the list that is passed to the cuda kernel function as arguments
 /// for the computation of the amount of update of the linear layer weights.
 pub struct LinearGradientArgs<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     loss: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,NO>>,
     input: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,NI>>,
@@ -900,7 +924,7 @@ pub struct LinearGradientArgs<'a,T,A,const NI:usize,const NO:usize>
 /// Create an instance of an object representing the argument list
 /// for the calculation of the update amount of the linear layer weights.
 impl<'a,T,A,const NI:usize,const NO:usize> LinearGradientArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a LinearGradientBatchArgs instance
     /// # Arguments
@@ -921,7 +945,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> LinearGradientArgs<'a,T,A,NI,NO>
     }
 }
 impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for LinearGradientArgs<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -937,7 +961,7 @@ impl<'a,T,A,const NI:usize,const NO:usize> KernelArgs for LinearGradientArgs<'a,
 }
 /// Implementation of gradient calculation for linear layers
 pub struct LinearGradient<'a,T,A,const NI:usize,const NO:usize>
-    where T: DataTypeInfo + Debug + Default,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     ni:PhantomData<[();NI]>,
@@ -946,7 +970,7 @@ pub struct LinearGradient<'a,T,A,const NI:usize,const NO:usize>
     lt:PhantomData<&'a ()>
 }
 impl<'a,T,A,const NI:usize,const NO:usize> LinearGradient<'a,T,A,NI,NO>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a LinearGradientBatch instance
     pub fn new() -> LinearGradient<'a,T,A,NI,NO> {
@@ -986,7 +1010,7 @@ impl<'a,A,const NI:usize,const NO:usize> Kernel for LinearGradient<'a,f64,A,NI,N
 /// Defines the list of arguments passed to the cuda function
 /// that performs the addition of the bias to the mini-batch.
 pub struct AddBiasBatchArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     bias: CudaConstPtr<'a,CudaTensor1dPtr<T,A,N>>,
     pub input_output: CudaVec<T,CudaTensor1dPtr<T,A,N>,A>,
@@ -995,7 +1019,7 @@ pub struct AddBiasBatchArgs<'a,T,A,const N:usize>
 }
 /// Create an instance of the type that represents the list of arguments passed to the bias addition process
 impl<'a,T,A,const N:usize> AddBiasBatchArgs<'a,T,A,N>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a AddBiasBatchArgs instance
     /// # Arguments
@@ -1014,7 +1038,7 @@ impl<'a,T,A,const N:usize> AddBiasBatchArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for AddBiasBatchArgs<'a,T,A,N>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -1027,7 +1051,7 @@ impl<'a,T,A,const N:usize> KernelArgs for AddBiasBatchArgs<'a,T,A,N>
 }
 /// Implementation of process to add bias to mini-batch
 pub struct AddBiasBatch<'a,T,A,const N:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
@@ -1035,7 +1059,7 @@ pub struct AddBiasBatch<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> AddBiasBatch<'a,T,A,N>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a AddBiasBatch instance
     pub fn new() -> AddBiasBatch<'a,T,A,N> {
@@ -1073,7 +1097,7 @@ impl<'a,A,const N:usize> Kernel for AddBiasBatch<'a,f64,A,N> where A: CudaAlloca
 }
 /// Defines the type of the argument list passed to the kernel as arguments for bias addition.
 pub struct AddBiasArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     bias: CudaConstPtr<'a,CudaTensor1dPtr<T,A,N>>,
     pub input_output: CudaTensor1dPtr<T,A,N>,
@@ -1082,7 +1106,7 @@ pub struct AddBiasArgs<'a,T,A,const N:usize>
 }
 /// Create an instance of the type of the argument list passed to the bias addition process
 impl<'a,T,A,const N:usize> AddBiasArgs<'a,T,A,N>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a AddBiasArgs instance
     /// # Arguments
@@ -1112,7 +1136,7 @@ impl<'a,T,A,const N:usize> KernelArgs for AddBiasArgs<'a,T,A,N>
 }
 /// Implementation of the process of adding bias
 pub struct AddBias<'a,T,A,const N:usize>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
@@ -1120,7 +1144,7 @@ pub struct AddBias<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> AddBias<'a,T,A,N>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a AddBias instance
     pub fn new() -> AddBias<'a,T,A,N> {

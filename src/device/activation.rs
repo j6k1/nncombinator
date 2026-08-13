@@ -1,21 +1,23 @@
 //! Implementation of the calculation process for the activation layer
+
+use std::fmt::Debug;
 use crate::activation::{Activation, BatchActivation};
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
 use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::layer::BatchDataType;
 use crate::lossfunction::LossFunction;
-use crate::ope::UnitValue;
 use crate::device::{Device, DeviceCpu};
 #[cfg(feature = "cuda")]
 use crate::cuda::{CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView};
 #[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::DataTypeInfo;
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu};
 
 /// Trait that defines the implementation of various calculation processes in the activation layer
 pub trait DeviceActivation<U,I,A,const N:usize>: Device<U>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           I: BatchDataType {
     /// Apply the activation function
     /// # Arguments
@@ -69,7 +71,7 @@ pub trait DeviceActivation<U,I,A,const N:usize>: Device<U>
     fn is_canonical_link<L: LossFunction<U>>(&self,f:&A,l:&L) -> bool;
 }
 impl<'a,U,I,A,const N:usize> DeviceActivation<U,I,A,N> for DeviceCpu<U>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a,
           I: BatchDataType,
           I: From<Arr<U,N>>,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
@@ -105,7 +107,7 @@ impl<'a,U,I,A,const N:usize> DeviceActivation<U,I,A,N> for DeviceCpu<U>
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,A,AC,const N:usize> DeviceActivation<U,I,A,N> for DeviceGpu<U,AC>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           AC: CudaAllocator,
           I: BatchDataType,
           I: From<CudaTensor1dPtr<U,AC,N>>,

@@ -9,9 +9,9 @@ use crate::device::{Device, DeviceCpu};
 use crate::error::{TrainingError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
-use crate::ope::UnitValue;
 #[cfg(feature = "cuda")]
 use core::fmt::Debug;
+use std::ops::{Add, AddAssign, Div, Sub};
 #[cfg(feature = "cuda")]
 use crate::error::{TypeConvertError};
 #[cfg(feature = "cuda")]
@@ -25,7 +25,9 @@ use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the linear output layer
 pub trait DeviceLinearOutput<'a,U,const N:usize>: Device<U>
-    where U: UnitValue<U> {
+    where U: Default + Clone + Copy + Debug + Send + Sync +
+             Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign +
+             FromPrimitive + 'static + DataTypeInfo {
     type IO: BatchDataType + 'static;
     type BatchIO: BatchSize + 'static;
     /// Calculation of Losses
@@ -77,7 +79,7 @@ pub trait DeviceLinearOutput<'a,U,const N:usize>: Device<U>
         -> Result<U,TrainingError> where f64: From<U> + FromPrimitive, f64: FromPrimitive;
 }
 impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
-    where U: UnitValue<U> {
+    where U: Default + Clone + Copy + Debug + Send + Sync + Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo {
     type IO = Arr<U,N>;
     type BatchIO = SerializedVec<U,Arr<U,N>>;
     fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a Arr<U,N>, lossf: &L) -> Result<Arr<U,N>,TrainingError>
@@ -147,7 +149,9 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
-    where U: DataTypeInfo + UnitValue<U> + AsMutPtr<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync +
+             Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static +
+             DataTypeInfo + AsMutPtr<U>,
           A: CudaAllocator + 'static,
           DeviceGpu<U,A>: Device<U>,
           Arr<U,N>: ToCuda<U,A,Output=CudaTensor1dPtr<U,A,N>>,

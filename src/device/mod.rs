@@ -8,6 +8,7 @@ pub mod input;
 
 use std::marker::PhantomData;
 use std::fmt::Debug;
+use std::ops::{Add, Div};
 use num_traits::FromPrimitive;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 #[cfg(feature = "cuda")]
@@ -26,7 +27,6 @@ use crate::arr::{Arr, SerializedVecView};
 use crate::error::{TrainingError, TypeConvertError};
 use crate::error::EvaluateError::TypeCastError;
 use crate::mem::AsRawSlice;
-use crate::UnitValue;
 use crate::error::{DeviceError};
 #[cfg(feature = "cuda")]
 use crate::layer::BatchSize;
@@ -38,10 +38,12 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
 
 /// Trait that defines devices responsible for various computational processes of neural networks
-pub trait Device<U>: Clone {
+pub trait Device<U>: Clone
+    where U: Default + Clone + Debug + Send + Sync + 'static {
 }
 /// Characteristics defining devices responsible for various convolutional computations of neural networks
-pub trait DeviceReduce<T,R,U,const N:usize> where U: UnitValue<U> {
+pub trait DeviceReduce<T,R,U,const N:usize>
+    where U: Default + Clone + Debug + Send + Sync + 'static {
     /// Convolutional computation of input
     /// # Arguments
     /// * `input` - convolutional input
@@ -53,7 +55,8 @@ pub trait DeviceReduce<T,R,U,const N:usize> where U: UnitValue<U> {
     fn reduce<'a>(&self, input: &'a T) -> Result<R, TrainingError>;
 }
 /// Characteristics defining the device responsible for batch averaging calculations in neural networks
-pub trait DeviceBatchAveraging<T,U> where U: UnitValue<U> {
+pub trait DeviceBatchAveraging<T,U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     /// Perform batch averaging
     /// # Arguments
     /// * `input` - input tensor
@@ -66,10 +69,12 @@ pub trait DeviceBatchAveraging<T,U> where U: UnitValue<U> {
     fn batch_averaging<'a>(&self, input: T,batch_size:usize) -> Result<T,TrainingError>;
 }
 /// Implementation of Device to be computed by CPU
-pub struct DeviceCpu<U> where U: UnitValue<U> {
+pub struct DeviceCpu<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     u:PhantomData<U>,
 }
-impl<U> DeviceCpu<U> where U: UnitValue<U> {
+impl<U> DeviceCpu<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     /// note: For the sake of implementation uniformity,
     /// DeviceCpu::new is defined as if it may return a DeviceError of type Result,
     /// but this error is never actually returned.
@@ -79,10 +84,12 @@ impl<U> DeviceCpu<U> where U: UnitValue<U> {
         })
     }
 }
-impl<U> Device<U> for DeviceCpu<U> where U: UnitValue<U> {
+impl<U> Device<U> for DeviceCpu<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
 }
 impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu<U>
-    where U: UnitValue<U> + Debug,
+    where U: Default + Clone + Copy + Debug + Send + Sync + Add<Output=U> + 'static,
+          T: BatchSize,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a T,Error=TypeConvertError> {
     #[inline]
     fn reduce<'a>(&self, input: &'a T) -> Result<Arr<U,N>,  TrainingError> {
@@ -98,7 +105,7 @@ impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu<U>
     }
 }
 impl<T,U> DeviceBatchAveraging<T,U> for DeviceCpu<U>
-    where U: UnitValue<U> + Default + Clone + Send + FromPrimitive,
+    where U: Default + Clone + Copy + Debug + Send + Sync + Div<Output=U> + 'static + FromPrimitive,
           T: AsRawSlice<U> + TryFrom<Vec<U>,Error=TypeConvertError> {
     #[inline]
     fn batch_averaging<'a>(&self, input: T,batch_size:usize) -> Result<T,TrainingError> {
@@ -109,7 +116,8 @@ impl<T,U> DeviceBatchAveraging<T,U> for DeviceCpu<U>
         Ok(input.as_raw_slice().par_iter().cloned().map(|i| i / batch_size).collect::<Vec<U>>().try_into()?)
     }
 }
-impl<U> Clone for DeviceCpu<U> where U: UnitValue<U> {
+impl<U> Clone for DeviceCpu<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     fn clone(&self) -> Self {
         DeviceCpu {
             u:PhantomData::<U>
@@ -207,7 +215,8 @@ pub struct DeviceGpu<U,A> where A: CudaAllocator {
     allocator:A
 }
 #[cfg(feature = "cuda")]
-impl<U,A> DeviceGpu<U,A> where U: UnitValue<U>, A: CudaAllocator {
+impl<U,A> DeviceGpu<U,A>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static, A: CudaAllocator {
     /// Create an instance of DeviceGpu
     /// # Arguments
     /// * `memory_pool` - Memory pool for cuda memory allocation
@@ -255,7 +264,7 @@ impl<A: CudaAllocator> Device<f32> for DeviceGpu<f32,A> {
 }
 #[cfg(feature = "cuda")]
 impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceGpu<U,A>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           T: BatchSize,
           A: CudaAllocator,
           for<'a> CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a T,Error=TypeConvertError>,
@@ -367,7 +376,9 @@ impl<T,A> DeviceBatchAveraging<T,f64> for DeviceGpu<f64,A>
 impl<A: CudaAllocator> Device<f64> for DeviceGpu<f64,A> {
 }
 #[cfg(feature = "cuda")]
-impl<U,A> Clone for DeviceGpu<U,A> where U: UnitValue<U> + Debug, A: CudaAllocator {
+impl<U,A> Clone for DeviceGpu<U,A>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + Debug,
+          A: CudaAllocator {
     fn clone(&self) -> Self {
         DeviceGpu {
             u:PhantomData::<U>,

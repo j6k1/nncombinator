@@ -4,7 +4,6 @@ use std::fmt::Debug;
 use crate::device::{Device, DeviceCpu};
 use crate::error::{TypeConvertError};
 use crate::layer::BatchDataType;
-use crate::ope::UnitValue;
 #[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
 #[cfg(feature = "cuda")]
@@ -15,7 +14,7 @@ use crate::device::{DeviceGpu};
 /// Trait that defines the function of processing data input in the input layer
 /// into a form that can be passed to subsequent intermediate layers.
 pub trait DeviceInput<U,I>: Device<U>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: BatchDataType + Debug + 'static,
           <I as BatchDataType>::Type: Debug + 'static {
     type Output: Debug + 'static;
@@ -45,7 +44,7 @@ pub trait DeviceInput<U,I>: Device<U>
 }
 
 impl<U,I> DeviceInput<U,I> for DeviceCpu<U>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: BatchDataType + Debug + 'static,
           <I as BatchDataType>::Type: Debug + 'static {
     type Output = I;
@@ -62,7 +61,7 @@ impl<U,I> DeviceInput<U,I> for DeviceCpu<U>
 #[cfg(feature = "cuda")]
 
 impl<U,I,A> DeviceInput<U,I> for DeviceGpu<U,A>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: BatchDataType + ToCuda<U,A> + Debug + 'static,
           <I as BatchDataType>::Type: ToCuda<U,A> + Debug + 'static,
           <I as ToCuda<U,A>>::Output: Debug + 'static,

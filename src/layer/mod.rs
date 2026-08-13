@@ -10,6 +10,7 @@ use crate::lossfunction::*;
 use crate::error::{TypeConvertError};
 #[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+use crate::cuda::DataTypeInfo;
 #[cfg(feature = "cuda")]
 use crate::cuda::ToCuda;
 use crate::persistence::PersistenceType;
@@ -339,7 +340,7 @@ pub trait BatchPreTrain: BatchPreTrainBase + BatchForwardBase + BatchForward {
 }
 /// Trait that defines the implementation of neural network training by batch processing.
 pub trait BatchTrain<U,D,L>: BatchPreTrainBase + BatchPreTrain + BatchBackward<U> + PreTrain
-    where U: Clone + Copy + Debug,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           D: Device<U>,
           L: LossFunction<U> {
     /// Train neural networks.

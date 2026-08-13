@@ -1,6 +1,7 @@
 //! Implementation of the calculation process for bias layers
 
 use std::fmt::Debug;
+use std::ops::Add;
 #[cfg(feature = "cuda")]
 use libc::c_int;
 #[cfg(feature = "cuda")]
@@ -10,8 +11,6 @@ use crate::collection::Broadcast;
 use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
-use crate::ope::UnitValue;
-#[cfg(feature = "cuda")]
 use crate::mem::AsRawSlice;
 #[cfg(feature = "cuda")]
 use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsCudaMutPtr, CudaMutPtr, AsCudaPtr, Kernel};
@@ -24,7 +23,7 @@ use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the bias layer
 pub trait DeviceBias<U,T,IO,const N: usize>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           IO: BatchDataType + Debug,
           <IO as BatchDataType>::Type: BatchSize + Debug {
     /// Perform generalization of bias data
@@ -113,15 +112,16 @@ pub trait DeviceBias<U,T,IO,const N: usize>
     fn batch_backward_bias_weight_gradient<'a>(&self, loss: &'a <IO as BatchDataType>::Type) -> Result<T, TrainingError>;
 }
 impl<U,IO,const N:usize> DeviceBias<U,Arr<U,N>,IO,N> for DeviceCpu<U>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           IO: BatchDataType + Debug + Clone,
           <IO as BatchDataType>::Type: BatchSize + Debug,
           IO: From<Arr<U,N>>,
           Arr<U,N>: From<IO>,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
           <IO as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
-          for<'a> ArrView<'a,U,N>: From<&'a IO>,
+          for<'a> ArrView<'a,U,N>: From<&'a IO> + Add<&'a Arr<U,N>,Output=Arr<U,N>>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: Add<Broadcast<Arr<U,N>>,Output=SerializedVec<U,Arr<U,N>>>,
           Self: DeviceReduce<<IO as BatchDataType>::Type,Arr<U,N>,U,N> {
     #[inline]
     fn generalization_bias(&self, bias:&Arr<U,N>) -> Result<Arr<U,N>, GeneralizationError> {

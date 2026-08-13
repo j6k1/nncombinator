@@ -1,5 +1,7 @@
 //! Implementation of the calculation process for batch normalization
 use std::fmt::Debug;
+use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub};
+use num_traits::FromPrimitive;
 #[cfg(feature = "cuda")]
 use rcudnn::{API};
 #[cfg(feature = "cuda")]
@@ -8,12 +10,11 @@ use rcudnn_sys::cudnnBatchNormMode_t::{CUDNN_BATCHNORM_PER_ACTIVATION, CUDNN_BAT
 use rcudnn_sys::{cudnnBatchNormalizationBackward, cudnnBatchNormalizationForwardInference, cudnnBatchNormalizationForwardTraining, cudnnDeriveBNTensorDescriptor, cudnnStatus_t};
 
 use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
-use crate::ope::Sum;
+use crate::ope::{One, Sqrt, Sum};
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType};
-use crate::ope::UnitValue;
 use crate::device::{DeviceCpu};
 #[cfg(feature = "cuda")]
 use crate::mem::AsRawSlice;
@@ -30,7 +31,7 @@ use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Features defining the implementation of the various computational processes in the batch normalization layer
 pub trait DeviceBatchNorm<U,C,I,const N:usize>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: BatchDataType + Debug + 'static,
           <I as BatchDataType>::Type: Debug + 'static {
     /// Perform generalization of scale, bias, etc., used in batch normalization calculations.
@@ -133,7 +134,10 @@ pub trait DeviceBatchNorm<U,C,I,const N:usize>
         -> Result<(<I as BatchDataType>::Type,C,C), TrainingError>;
 }
 impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu<U>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Mul<Output=U> + Div<Output=U> + Sub<Output=U> + AddAssign + Neg<Output=U> +
+             One + Sqrt +
+             Send + Sync + DataTypeInfo + 'static,
           I: BatchDataType + Debug + From<Arr<U,N>> + 'static,
           <I as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
@@ -342,7 +346,10 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu<U>
 }
 #[cfg(feature = "cuda")]
 impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for DeviceGpu<U,A>
-    where U: UnitValue<U> + Debug + Default + DataTypeInfo + AsVoidPtr,
+    where U: Default + Clone + Copy + Debug +
+             Add<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
+             One + Sqrt + FromPrimitive +
+             Send + Sync + 'static + DataTypeInfo + AsVoidPtr,
           A: CudaAllocator,
           I: BatchDataType + Debug + From<CudaTensor1dPtr<U,A,N>> + 'static,
           <I as BatchDataType>::Type: Debug + 'static,

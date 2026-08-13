@@ -4,7 +4,6 @@ use std::fmt::Debug;
 use crate::device::*;
 use crate::{Stack};
 use crate::error::{EvaluateError, PersistenceError, TrainingError};
-use crate::ope::UnitValue;
 use crate::lossfunction::*;
 #[cfg(feature = "cuda")]
 use crate::error::{TypeConvertError};
@@ -68,7 +67,7 @@ impl<'a,T,O> BatchDataType for DiffInput<'a,T,O>
 }
 #[cfg(feature = "cuda")]
 impl<'a,T,O,U,A> ToCuda<U,A> for DiffInput<'a,T,O>
-    where U: UnitValue<U> + Clone + Copy + Debug,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           T: Debug,
           O: Debug + 'a,
           A: CudaAllocator {
@@ -80,7 +79,7 @@ impl<'a,T,O,U,A> ToCuda<U,A> for DiffInput<'a,T,O>
 }
 #[cfg(feature = "cuda")]
 impl<'a,T,O,U,A> ToCuda<U,A> for Vec<DiffInput<'a,T,O>>
-    where U: UnitValue<U> + Clone + Copy + Debug,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           T: Debug,
           O: Debug + 'a,
           A: CudaAllocator {

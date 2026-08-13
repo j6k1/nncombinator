@@ -2,12 +2,13 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::ops::{Add, Div, Mul, Neg, Sub};
+use num_traits::FromPrimitive;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::arr::{Arr, ArrView, SerializedVec, SerializedVecView};
 use crate::device::{Device, DeviceCpu};
 use crate::error::{TrainingError, TypeConvertError};
 use crate::layer::{BatchSize};
-use crate::UnitValue;
 #[cfg(feature = "cuda")]
 use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsMutKernelPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, WriteMemory};
 #[cfg(feature = "cuda")]
@@ -16,6 +17,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCrossEntropyArgs, LinearBatchCrossEntropyMulticlass, LinearBatchCrossEntropyMulticlassArgs, LinearBatchMse, LinearBatchMseArgs, LinearCrossEntropy, LinearCrossEntropyArgs, LinearCrossEntropyMulticlass, LinearCrossEntropyMulticlassArgs, LinearMse, LinearMseArgs};
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
+use crate::ope::{Ln, Max, One};
 
 /// Trait that defines the implementation of the loss function used in neural networks during training.
 pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy {
@@ -96,10 +98,12 @@ impl<'a,T,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for 
 
 }
 /// Mse implementation
-pub struct Mse<U> where U: Clone + Copy + UnitValue<U> {
+pub struct Mse<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     u:PhantomData<U>
 }
-impl<U> Mse<U> where U: UnitValue<U> {
+impl<U> Mse<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     /// Create a Mse instance
     pub fn new() -> Mse<U> {
         Mse {
@@ -107,7 +111,10 @@ impl<U> Mse<U> where U: UnitValue<U> {
         }
     }
 }
-impl<U> LossFunction<U> for Mse<U> where U: Clone + Copy + UnitValue<U> {
+impl<U> LossFunction<U> for Mse<U>
+    where U: Default + Clone + Copy + Debug +
+             FromPrimitive + Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             Send + Sync + 'static {
     fn derive(&self, r: U, t: U) -> U {
         r - t
     }
@@ -122,7 +129,9 @@ impl<U> LossFunction<U> for Mse<U> where U: Clone + Copy + UnitValue<U> {
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse<U>
-    where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             Send + Sync + 'static + DataTypeInfo,
           I: 'a,
           DeviceGpu<U,A>: Device<U>,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -149,7 +158,9 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse<U>
-    where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             Send + Sync + 'static + DataTypeInfo,
           I: 'a,
           A: CudaAllocator + 'a,
           DeviceGpu<U,A>:  Device<U>,
@@ -177,10 +188,12 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
     }
 }
 /// CrossEntropy implementation
-pub struct CrossEntropy<U>  where U: Clone + Copy + UnitValue<U> {
+pub struct CrossEntropy<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     u:PhantomData<U>
 }
-impl<U> CrossEntropy<U> where U: Clone + Copy + UnitValue<U> {
+impl<U> CrossEntropy<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     /// Create a CrossEntropy instance
     pub fn new() -> CrossEntropy<U> {
         CrossEntropy {
@@ -188,7 +201,11 @@ impl<U> CrossEntropy<U> where U: Clone + Copy + UnitValue<U> {
         }
     }
 }
-impl<U> LossFunction<U> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U> {
+impl<U> LossFunction<U> for CrossEntropy<U>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
+             One + Max + Ln +
+             Send + Sync + 'static {
     fn derive(&self, r: U, t: U) -> U {
         -(t / (r + U::from_f64(1e-7).unwrap())) + (U::one() - t) / (U::one() - r)
     }
@@ -203,7 +220,10 @@ impl<U> LossFunction<U> for CrossEntropy<U> where U: Clone + Copy + UnitValue<U>
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropy<U>
-    where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
+             One + Max + Ln +
+             Send + Sync + 'static + DataTypeInfo,
           I: 'a,
           A: CudaAllocator + 'a,
           DeviceGpu<U,A>: Device<U>,
@@ -231,7 +251,10 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropy<U>
-    where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
+             One + Max + Ln +
+             Send + Sync + 'static + DataTypeInfo,
           I: 'a,
           A: CudaAllocator + 'a,
           DeviceGpu<U,A>:  Device<U>,
@@ -260,10 +283,12 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
     }
 }
 /// CrossEntropyMulticlass implementation
-pub struct CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {
+pub struct CrossEntropyMulticlass<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     u:PhantomData<U>
 }
-impl<U> CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {
+impl<U> CrossEntropyMulticlass<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     /// Create a CrossEntropyMulticlass instance
     pub fn new() -> CrossEntropyMulticlass<U> {
         CrossEntropyMulticlass {
@@ -271,7 +296,11 @@ impl<U> CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {
         }
     }
 }
-impl<U> LossFunction<U> for CrossEntropyMulticlass<U> where U: Clone + Copy + UnitValue<U> {
+impl<U> LossFunction<U> for CrossEntropyMulticlass<U>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
+             One + Max + Ln +
+             Send + Sync + 'static {
     fn derive(&self, r: U, t: U) -> U {
         -t / r
     }
@@ -286,7 +315,9 @@ impl<U> LossFunction<U> for CrossEntropyMulticlass<U> where U: Clone + Copy + Un
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropyMulticlass<U>
-    where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
+             One + Max + Ln +Send + Sync + 'static + DataTypeInfo,
           I: 'a,
           DeviceGpu<U,A>: Device<U>,
           for<'b> A: CudaAllocator + 'b,
@@ -312,7 +343,9 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropyMulticlass<U>
-    where U: Clone + Copy + UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
+             One + Max + Ln + Send + Sync + 'static + DataTypeInfo,
           I: 'a,
           A: CudaAllocator + 'a,
           DeviceGpu<U,A>:  Device<U>,

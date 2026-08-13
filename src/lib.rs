@@ -14,7 +14,6 @@ extern crate rcudnn;
 extern crate rcudnn_sys;
 
 use crate::layer::BatchDataType;
-use crate::ope::UnitValue;
 
 pub mod error;
 pub mod ope;

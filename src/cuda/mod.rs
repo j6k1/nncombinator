@@ -15,7 +15,6 @@ use crate::device::{DeviceGpu};
 use crate::error::{CudaError, CudaRuntimeError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 use crate::mem::AsRawSlice;
-use crate::ope::UnitValue;
 use crate::bridge::ToHost;
 
 pub mod ffi;
@@ -2262,7 +2261,7 @@ pub trait ToCuda<T,A>
     fn to_cuda(self,device:&DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError>;
 }
 impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a CudaTensor1dPtr<T,A,N>
-    where T :UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator,
           CudaPtr<T,A>: WriteMemory<T> {
     type Output = CudaTensor1dPtrView<'a,T,N>;
@@ -2272,7 +2271,7 @@ impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a CudaTensor1dPtr<T,A,N>
     }
 }
 impl<T,A,const N:usize> ToCuda<T,A> for CudaTensor1dPtr<T,A,N>
-    where T :UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator {
     type Output = CudaTensor1dPtr<T,A,N>;
 
@@ -2281,7 +2280,7 @@ impl<T,A,const N:usize> ToCuda<T,A> for CudaTensor1dPtr<T,A,N>
     }
 }
 impl<'a,T,A,const N1:usize,const N2:usize> ToCuda<T,A> for &'a CudaTensor2dPtr<T,A,N1,N2>
-    where T :UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator,
           CudaPtr<T,A>: WriteMemory<T> {
     type Output = CudaTensor2dPtrView<'a,T,N1,N2>;
@@ -2291,7 +2290,7 @@ impl<'a,T,A,const N1:usize,const N2:usize> ToCuda<T,A> for &'a CudaTensor2dPtr<T
     }
 }
 impl<T,A,const N1:usize,const N2:usize> ToCuda<T,A> for CudaTensor2dPtr<T,A,N1,N2>
-    where T :UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator,
           CudaPtr<T,A>: WriteMemory<T> {
     type Output = CudaTensor2dPtr<T,A,N1,N2>;
@@ -2301,7 +2300,7 @@ impl<T,A,const N1:usize,const N2:usize> ToCuda<T,A> for CudaTensor2dPtr<T,A,N1,N
     }
 }
 impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> ToCuda<T,A> for &'a CudaTensor3dPtr<T,A,N1,N2,N3>
-    where T :UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator,
           CudaPtr<T,A>: WriteMemory<T> {
     type Output = CudaTensor3dPtrView<'a,T,N1,N2,N3>;
@@ -2311,7 +2310,7 @@ impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize> ToCuda<T,A> for &'a Cu
     }
 }
 impl<T,A,const N1:usize,const N2:usize,const N3:usize> ToCuda<T,A> for CudaTensor3dPtr<T,A,N1,N2,N3>
-    where T :UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator {
     type Output = CudaTensor3dPtr<T,A,N1,N2,N3>;
 
@@ -2320,7 +2319,7 @@ impl<T,A,const N1:usize,const N2:usize,const N3:usize> ToCuda<T,A> for CudaTenso
     }
 }
 impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<T,A> for &'a CudaTensor4dPtr<T,A,N1,N2,N3,N4>
-    where T :UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator,
           CudaPtr<T,A>: WriteMemory<T> {
     type Output = CudaTensor4dPtrView<'a,T,N1,N2,N3,N4>;
@@ -2330,7 +2329,7 @@ impl<'a,T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<
     }
 }
 impl<T,A,const N1:usize,const N2:usize,const N3:usize,const N4:usize> ToCuda<T,A> for CudaTensor4dPtr<T,A,N1,N2,N3,N4>
-    where T :UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator {
     type Output = CudaTensor4dPtr<T,A,N1,N2,N3,N4>;
 

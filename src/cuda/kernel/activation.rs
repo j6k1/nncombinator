@@ -8,7 +8,6 @@ use cuda_runtime_sys::dim3;
 use libc::{c_void, size_t};
 use crate::cuda::{AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaMutPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs, KernelLaunchConfig};
 use crate::cuda::allocator::CudaAllocator;
-use crate::ope::UnitValue;
 
 extern "C" {
     fn sigmoid_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
@@ -597,7 +596,9 @@ pub struct SigmoidBatchBackward<'a,T,A,const N:usize>
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> SigmoidBatchBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> SigmoidBatchBackward<'a,T,A,N>
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
+          A: CudaAllocator + 'a {
     /// Create a SigmoidBackwardForBatch instance
     pub fn new() -> SigmoidBatchBackward<'a,T,A,N> {
         SigmoidBatchBackward {
@@ -638,12 +639,12 @@ impl<'a,A,const N:usize> Kernel for SigmoidBatchBackward<'a,f64,A,N>
     }
 }
 /// ReLu activation function implementation activation function implementation
-pub struct ReLuForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct ReLuForward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> ReLuForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> ReLuForward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a ReLuForward instance
     pub fn new() -> ReLuForward<'a,T,A,N> {
         ReLuForward {
@@ -683,7 +684,7 @@ impl<'a,A,const N:usize> Kernel for ReLuForward<'a,f64,A,N>
 }
 /// Implementation of derivatives of the ReLu activation function
 pub struct ReLuBackward<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     t:PhantomData<T>,
@@ -691,7 +692,7 @@ pub struct ReLuBackward<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> ReLuBackward<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     /// Create a ReLuBackward instance
@@ -732,12 +733,12 @@ impl<'a,A,const N:usize> Kernel for ReLuBackward<'a,f64,A,N>
     }
 }
 /// Implementation of ReLu activation functions for batch execution
-pub struct ReLuBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct ReLuBatchForward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> ReLuBatchForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> ReLuBatchForward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a ReLuForwardBatch instance
     pub fn new() -> ReLuBatchForward<'a,T,A,N> {
         ReLuBatchForward {
@@ -778,12 +779,12 @@ impl<'a,A,const N:usize> Kernel for ReLuBatchForward<'a,f64,A,N>
     }
 }
 /// Implement derivatives of the ReLu activation function for batch execution
-pub struct ReLuBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct ReLuBatchBackward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> ReLuBatchBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> ReLuBatchBackward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a ReLuBackwardForBatch instance
     pub fn new() -> ReLuBatchBackward<'a,T,A,N> {
         ReLuBatchBackward {
@@ -825,13 +826,15 @@ impl<'a,A,const N:usize> Kernel for ReLuBatchBackward<'a,f64,A,N>
 }
 /// Implementation of ClippedReLu activation functions for batch execution
 pub struct ClippedReLuForward<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr, A: CudaAllocator + 'a {
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo + AsKernelPtr,
+          A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> ClippedReLuForward<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr, A: CudaAllocator + 'a {
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo + AsKernelPtr,
+          A: CudaAllocator + 'a {
     /// Create a ClippedReLuForward instance
     pub fn new() -> ClippedReLuForward<'a,T,A,N> {
         ClippedReLuForward {
@@ -871,7 +874,7 @@ impl<'a,A,const N:usize> Kernel for ClippedReLuForward<'a,f64,A,N>
 }
 /// Implementation of derivatives of the ClippedReLU activation function
 pub struct ClippedReLuBackward<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo + AsKernelPtr,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     t:PhantomData<T>,
@@ -879,7 +882,7 @@ pub struct ClippedReLuBackward<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> ClippedReLuBackward<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo + AsKernelPtr,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     /// Create a ClippedReLuBackward instance
@@ -921,13 +924,13 @@ impl<'a,A,const N:usize> Kernel for ClippedReLuBackward<'a,f64,A,N>
 }
 /// Implementation of ClippedReLU activation functions for batch execution
 pub struct ClippedReLuBatchForward<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr, A: CudaAllocator + 'a {
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo + AsKernelPtr, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> ClippedReLuBatchForward<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + AsKernelPtr, A: CudaAllocator + 'a {
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo + AsKernelPtr, A: CudaAllocator + 'a {
     /// Create a ClippedReLuForwardBatch instance
     pub fn new() -> ClippedReLuBatchForward<'a,T,A,N> {
         ClippedReLuBatchForward {
@@ -968,12 +971,12 @@ impl<'a,A,const N:usize> Kernel for ClippedReLuBatchForward<'a,f64,A,N>
     }
 }
 /// Implement derivatives of the ClippedReLU activation function for batch execution
-pub struct ClippedReLuBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct ClippedReLuBatchBackward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> ClippedReLuBatchBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> ClippedReLuBatchBackward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a ClippedReLuBackwardForBatch instance
     pub fn new() -> ClippedReLuBatchBackward<'a,T,A,N> {
         ClippedReLuBatchBackward {
@@ -1014,12 +1017,12 @@ impl<'a,A,const N:usize> Kernel for ClippedReLuBatchBackward<'a,f64,A,N>
     }
 }
 /// Swish activation function implementation
-pub struct SwishForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct SwishForward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> SwishForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> SwishForward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a SwishForward instance
     pub fn new() -> SwishForward<'a,T,A,N> {
         SwishForward {
@@ -1058,12 +1061,12 @@ impl<'a,A,const N:usize> Kernel for SwishForward<'a,f64,A,N>
     }
 }
 /// Implementation of derivatives of the Swish activation function
-pub struct SwishBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct SwishBackward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> SwishBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> SwishBackward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a SwishBackward instance
     pub fn new() -> SwishBackward<'a,T,A,N> {
         SwishBackward {
@@ -1102,12 +1105,12 @@ impl<'a,A,const N:usize> Kernel for SwishBackward<'a,f64,A,N>
     }
 }
 /// Implementation of Swish activation functions for batch execution
-pub struct SwishBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct SwishBatchForward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> SwishBatchForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> SwishBatchForward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a SwishForwardForBatch instance
     pub fn new() -> SwishBatchForward<'a,T,A,N> {
         SwishBatchForward {
@@ -1148,12 +1151,12 @@ impl<'a,A,const N:usize> Kernel for SwishBatchForward<'a,f64,A,N>
     }
 }
 /// Implement derivatives of the Swish activation function for batch execution
-pub struct SwishBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct SwishBatchBackward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> SwishBatchBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> SwishBatchBackward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a SwishBackwardForBatch instance
     pub fn new() -> SwishBatchBackward<'a,T,A,N> {
         SwishBatchBackward {
@@ -1194,12 +1197,12 @@ impl<'a,A,const N:usize> Kernel for SwishBatchBackward<'a,f64,A,N>
     }
 }
 /// Tanh activation function implementation
-pub struct TanhForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct TanhForward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> TanhForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> TanhForward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a TanhForward instance
     pub fn new() -> TanhForward<'a,T,A,N> {
         TanhForward {
@@ -1238,12 +1241,12 @@ impl<'a,A,const N:usize> Kernel for TanhForward<'a,f64,A,N>
     }
 }
 /// Implementation of derivatives of the Tanh activation function
-pub struct TanhBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct TanhBackward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> TanhBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> TanhBackward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a TanhBackward instance
     pub fn new() -> TanhBackward<'a,T,A,N> {
         TanhBackward {
@@ -1282,12 +1285,12 @@ impl<'a,A,const N:usize> Kernel for TanhBackward<'a,f64,A,N>
     }
 }
 /// Implementation of Tanh activation functions for batch execution
-pub struct TanhBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct TanhBatchForward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> TanhBatchForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> TanhBatchForward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a TanhForwardForBatch instance
     pub fn new() -> TanhBatchForward<'a,T,A,N> {
         TanhBatchForward {
@@ -1328,12 +1331,12 @@ impl<'a,A,const N:usize> Kernel for TanhBatchForward<'a,f64,A,N>
     }
 }
 /// Implement derivatives of the Tanh activation function for batch execution
-pub struct TanhBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct TanhBatchBackward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> TanhBatchBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> TanhBatchBackward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a TanhBackwardForBatch instance
     pub fn new() -> TanhBatchBackward<'a,T,A,N> {
         TanhBatchBackward {
@@ -1374,12 +1377,12 @@ impl<'a,A,const N:usize> Kernel for TanhBatchBackward<'a,f64,A,N>
     }
 }
 /// SoftMax activation function implementation
-pub struct SoftMaxForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct SoftMaxForward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> SoftMaxForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> SoftMaxForward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a SoftMaxForward instance
     pub fn new() -> SoftMaxForward<'a,T,A,N> {
         SoftMaxForward {
@@ -1418,12 +1421,12 @@ impl<'a,A,const N:usize> Kernel for SoftMaxForward<'a,f64,A,N>
     }
 }
 /// Implementation of derivatives of the softmax activation function
-pub struct SoftMaxBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct SoftMaxBackward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> SoftMaxBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> SoftMaxBackward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a SoftMaxForward instance
     pub fn new() -> SoftMaxBackward<'a,T,A,N> {
         SoftMaxBackward {
@@ -1462,12 +1465,12 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBackward<'a,f64,A,N>
     }
 }
 /// Implementation of Softmax activation functions for batch execution
-pub struct SoftMaxBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct SoftMaxBatchForward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> SoftMaxBatchForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> SoftMaxBatchForward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a SoftMaxForwardForBatch instance
     pub fn new() -> SoftMaxBatchForward<'a,T,A,N> {
         SoftMaxBatchForward {
@@ -1508,12 +1511,12 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBatchForward<'a,f64,A,N>
     }
 }
 /// Implement derivatives of the Softmax activation function for batch execution
-pub struct SoftMaxBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct SoftMaxBatchBackward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> SoftMaxBatchBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> SoftMaxBatchBackward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a SoftMaxForwardForBatch instance
     pub fn new() -> SoftMaxBatchBackward<'a,T,A,N> {
         SoftMaxBatchBackward {
@@ -1554,12 +1557,12 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBatchBackward<'a,f64,A,N>
     }
 }
 /// LeakyReLu activation function implementation activation function implementation
-pub struct LeakyReLuForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct LeakyReLuForward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> LeakyReLuForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> LeakyReLuForward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a LeakyReLuForward instance
     pub fn new() -> LeakyReLuForward<'a,T,A,N> {
         LeakyReLuForward {
@@ -1599,7 +1602,7 @@ impl<'a,A,const N:usize> Kernel for LeakyReLuForward<'a,f64,A,N>
 }
 /// Implementation of derivatives of the LeakyReLu activation function
 pub struct LeakyReLuBackward<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     t:PhantomData<T>,
@@ -1607,7 +1610,7 @@ pub struct LeakyReLuBackward<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> LeakyReLuBackward<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     /// Create a LeakyReLuBackward instance
@@ -1648,12 +1651,12 @@ impl<'a,A,const N:usize> Kernel for LeakyReLuBackward<'a,f64,A,N>
     }
 }
 /// Implementation of LeakyReLu activation functions for batch execution
-pub struct LeakyReLuBatchForward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct LeakyReLuBatchForward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> LeakyReLuBatchForward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> LeakyReLuBatchForward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a LeakyReLuForwardBatch instance
     pub fn new() -> LeakyReLuBatchForward<'a,T,A,N> {
         LeakyReLuBatchForward {
@@ -1694,12 +1697,12 @@ impl<'a,A,const N:usize> Kernel for LeakyReLuBatchForward<'a,f64,A,N>
     }
 }
 /// Implement derivatives of the LeakyReLu activation function for batch execution
-pub struct LeakyReLuBatchBackward<'a,T,A,const N:usize> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+pub struct LeakyReLuBatchBackward<'a,T,A,const N:usize> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
     l:PhantomData<&'a ()>
 }
-impl<'a,T,A,const N:usize> LeakyReLuBatchBackward<'a,T,A,N> where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator + 'a {
+impl<'a,T,A,const N:usize> LeakyReLuBatchBackward<'a,T,A,N> where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo, A: CudaAllocator + 'a {
     /// Create a LeakyReLuBackwardForBatch instance
     pub fn new() -> LeakyReLuBatchBackward<'a,T,A,N> {
         LeakyReLuBatchBackward {

@@ -2,12 +2,13 @@
 
 use std::marker::PhantomData;
 use crate::device::{Device, DeviceCpu};
-use crate::{UnitValue};
 use crate::arr::ShieldSlice;
 use crate::error::{ModelLoadError, OptimizerBuildError, PersistenceError, TrainingError};
 use crate::scheduler::{Scheduler, IdentityLR};
 use std::str::FromStr;
 use std::fmt::Debug;
+use std::ops::{Add, AddAssign, Div, Mul, Sub};
+use num_traits::FromPrimitive;
 #[cfg(feature = "cuda")]
 use crate::cuda::{CudaMutPtr, CudaPtr, kernel, Kernel, WriteMemory};
 #[cfg(feature = "cuda")]
@@ -18,10 +19,13 @@ use crate::cuda::kernel::optimizer::{AdagradArgs, AdamArgs, AdamWArgs, MomentumS
 use crate::cuda::ReadMemory;
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
+use crate::ope::{One, Sqrt};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
 
 /// OptimizerBuilder Definition
-pub trait OptimizerBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
+pub trait OptimizerBuilder<U,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
     type Output: Optimizer<U,D>;
     /// Create and return an optimizer
     /// # Arguments
@@ -29,7 +33,9 @@ pub trait OptimizerBuilder<U,D> where U: UnitValue<U>, D: Device<U> {
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError>;
 }
 /// Optimizer Definition
-pub trait Optimizer<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
+pub trait Optimizer<U,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
     type InternalType: ?Sized;
     type InternalUpdateType<'a>: ?Sized;
     /// Update Weights
@@ -47,12 +53,17 @@ pub trait Optimizer<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
     fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(),TrainingError>;
 }
 /// Optimizer State Definition
-pub trait OptimizerState<U,D> where U: Clone + Copy + UnitValue<U>, D: Device<U> {
+pub trait OptimizerState<U,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
     /// State type
     type Type;
 }
 /// SGD Implementation
-pub struct SGD<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> {
+pub struct SGD<U,D,SD>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U> {
     d:PhantomData<D>,
     #[allow(dead_code)]
     size: usize,
@@ -63,7 +74,7 @@ pub struct SGD<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> {
     /// Learning rate scheduler
     scheduler: SD
 }
-impl<U,D> SGD<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> {
+impl<U,D> SGD<U,D,IdentityLR> where U: Default + Clone + Copy + Debug + Send + Sync + 'static, D: Device<U> {
     /// Create an instance of SGD
     /// # Arguments
     /// * `size` - input size
@@ -79,7 +90,7 @@ impl<U,D> SGD<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> {
     }
 }
 
-impl<U,D,S> SGD<U,D,S> where U: UnitValue<U>, D: Device<U>, S: Scheduler<U> {
+impl<U,D,S> SGD<U,D,S> where U: Default + Clone + Copy + Debug + Send + Sync + 'static, D: Device<U>, S: Scheduler<U> {
     /// Create an instance of SGD
     /// # Arguments
     /// * `size` - input size
@@ -96,7 +107,10 @@ impl<U,D,S> SGD<U,D,S> where U: UnitValue<U>, D: Device<U>, S: Scheduler<U> {
         }
     }
 }
-impl<U,SD> Optimizer<U,DeviceCpu<U>> for SGD<U,DeviceCpu<U>,SD> where U: UnitValue<U>, DeviceCpu<U>: Device<U>, SD: Scheduler<U> {
+impl<U,SD> Optimizer<U,DeviceCpu<U>> for SGD<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Send + Sync + 'static,
+          DeviceCpu<U>: Device<U>, SD: Scheduler<U> {
     type InternalType = [U];
     type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
@@ -125,7 +139,7 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for SGD<U,DeviceCpu<U>,SD> where U: UnitVal
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator + 'static,
           DeviceGpu<U,A>: Device<U>,
           for<'a> kernel::optimizer::SGD<'a,U,A>: Kernel<Args=SGDArgs<'a,U,A>>, SD: Scheduler<U> {
@@ -156,7 +170,7 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for SGD<U,DeviceGpu<U,A>,SD>
     }
 }
 impl<U,D,S> Persistence<U,TextFilePersistence,Specialized> for SGD<U,D,S>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           D: Device<U>,
           S: Scheduler<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
@@ -170,7 +184,7 @@ impl<U,D,S> Persistence<U,TextFilePersistence,Specialized> for SGD<U,D,S>
 }
 impl<T,U,D,S> Persistence<U,T,Linear> for SGD<U,D,S>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + FromStr,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           D: Device<U>,
           S: Scheduler<U> {
     fn load(&mut self, _: &mut T) -> Result<(), ModelLoadError> {
@@ -182,7 +196,9 @@ impl<T,U,D,S> Persistence<U,T,Linear> for SGD<U,D,S>
     }
 }
 /// Implementation of a builder to generate SGD optimizers
-pub struct SGDBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+pub struct SGDBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + Send + Sync + FromPrimitive + 'static,
+          D: Device<U>, SD: Scheduler<U> + Clone {
     d:PhantomData<D>,
     /// Learning rate
     lr:U,
@@ -191,7 +207,9 @@ pub struct SGDBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler
     /// Learning rate scheduler
     scheduler: SD
 }
-impl<U,D> SGDBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> + Clone {
+impl<U,D> SGDBuilder<U,D,IdentityLR>
+    where U: Default + Clone + Copy + Debug + Send + Sync + FromPrimitive + 'static,
+          D: Device<U> + Clone {
     /// Create an instance of SGDBuilder
     /// # Arguments
     /// * `device` - device
@@ -204,7 +222,9 @@ impl<U,D> SGDBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> + Clone
         }
     }
 }
-impl<U,D,SD> SGDBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+impl<U,D,SD> SGDBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + Send + Sync + FromPrimitive + 'static,
+          D: Device<U>, SD: Scheduler<U> + Clone {
     /// Replaces the value of field lr in SGDBuilder with the passed value and returns it.
     /// # Arguments
     /// * `lr` - Learning rate
@@ -243,7 +263,11 @@ impl<U,D,SD> SGDBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Schedul
         }
     }
 }
-impl<U,D,SD> OptimizerBuilder<U,D> for SGDBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone, SGD<U,D,SD>: Optimizer<U,D> {
+impl<U,D,SD> OptimizerBuilder<U,D> for SGDBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + Send + Sync + FromPrimitive + 'static,
+          D: Device<U>,
+          SD: Scheduler<U> + Clone,
+          SGD<U,D,SD>: Optimizer<U,D> {
     type Output = SGD<U,D,SD>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
@@ -252,7 +276,10 @@ impl<U,D,SD> OptimizerBuilder<U,D> for SGDBuilder<U,D,SD> where U: UnitValue<U>,
 }
 /// MomentumSGD Implementation
 pub struct MomentumSGD<U,D,SD>
-    where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U>,
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
     #[allow(dead_code)]
@@ -263,7 +290,8 @@ pub struct MomentumSGD<U,D,SD>
     vt:<Self as OptimizerState<U,D>>::Type,
     scheduler: SD
 }
-impl<U> MomentumSGD<U,DeviceCpu<U>,IdentityLR> where U: UnitValue<U>
+impl<U> MomentumSGD<U,DeviceCpu<U>,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive + Send + Sync + 'static
 {
     /// Create an instance of MomentumSGD
     /// # Arguments
@@ -281,7 +309,9 @@ impl<U> MomentumSGD<U,DeviceCpu<U>,IdentityLR> where U: UnitValue<U>
         }
     }
 }
-impl<U,SD> MomentumSGD<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> + Clone {
+impl<U,SD> MomentumSGD<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static, SD: Scheduler<U> + Clone {
     /// Create an instance of MomentumSGD with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
@@ -302,7 +332,10 @@ impl<U,SD> MomentumSGD<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U
         }
     }
 }
-impl<U,SD> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> {
+impl<U,SD> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + FromPrimitive +
+             Send + Sync + 'static, SD: Scheduler<U> {
     type InternalType = [U];
     type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
@@ -335,7 +368,8 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>,SD> where U:
 }
 #[cfg(feature = "cuda")]
 impl<U,A> MomentumSGD<U,DeviceGpu<U,A>,IdentityLR>
-    where U: UnitValue<U> + Debug + Default,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator,
           TextRecord: From<U>,
           DeviceGpu<U,A>: Device<U>,
@@ -360,7 +394,8 @@ impl<U,A> MomentumSGD<U,DeviceGpu<U,A>,IdentityLR>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> MomentumSGD<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U> + Debug + Default,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator,
           SD: Scheduler<U>,
           TextRecord: From<U>,
@@ -390,7 +425,8 @@ impl<U,A,SD> MomentumSGD<U,DeviceGpu<U,A>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U> + Debug + Default,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           TextRecord: From<U>,
@@ -424,14 +460,16 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,SD>
     }
 }
 impl<U,SD> OptimizerState<U,DeviceCpu<U>> for MomentumSGD<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           DeviceCpu<U>: Device<U> {
     type Type = Box<[U]>;
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U> + Debug + Default,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator,
           TextRecord: From<U>,
@@ -440,7 +478,8 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for MomentumSGD<U,DeviceGpu<U,A>,S
     type Type = CudaPtr<U,A>;
 }
 impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
@@ -462,7 +501,8 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,Devi
 }
 impl<T,U,SD> Persistence<U,T,Linear> for MomentumSGD<U,DeviceCpu<U>,SD>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + Debug + Default,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U> {
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         for &vt in self.vt.iter() {
@@ -480,7 +520,8 @@ impl<T,U,SD> Persistence<U,T,Linear> for MomentumSGD<U,DeviceCpu<U>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           TextRecord: From<U>,
@@ -511,7 +552,8 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,De
 #[cfg(feature = "cuda")]
 impl<T,U,A,SD> Persistence<U,T,Linear> for MomentumSGD<U,DeviceGpu<U,A>,SD>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + Debug + Default,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           TextRecord: From<U>,
@@ -537,15 +579,16 @@ impl<T,U,A,SD> Persistence<U,T,Linear> for MomentumSGD<U,DeviceGpu<U,A>,SD>
     }
 }
 /// Implementation of a builder to generate MomentumSGD optimizers
-pub struct MomentumSGDBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+pub struct MomentumSGDBuilder<U,D,SD> where U: Default + Clone + Copy + Debug + Send + Sync + 'static, D: Device<U>, SD: Scheduler<U> + Clone {
     device:D,
     lr:U,
     mu:U,
     weight_decay:U,
     scheduler: SD
 }
-impl<U,D> MomentumSGDBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> + Clone
-{
+impl<U,D> MomentumSGDBuilder<U,D,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static, D: Device<U> + Clone {
     /// Create an instance of MomentumSGDBuilder
     /// # Arguments
     /// * `device` - device
@@ -559,7 +602,7 @@ impl<U,D> MomentumSGDBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U>
         }
     }
 }
-impl<U,D,SD> MomentumSGDBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U> + Clone, SD: Scheduler<U> + Clone {
+impl<U,D,SD> MomentumSGDBuilder<U,D,SD> where U: Default + Clone + Copy + Debug + Send + Sync + 'static, D: Device<U> + Clone, SD: Scheduler<U> + Clone {
     /// Replaces the value of field lr in MomentumSGDBuilder with the passed value and returns it.
     /// # Arguments
     /// * `lr` - Learning rate
@@ -613,7 +656,9 @@ impl<U,D,SD> MomentumSGDBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U> + Cl
     }
 }
 impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for MomentumSGDBuilder<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U>, SD: Scheduler<U> + Clone, MomentumSGD<U,DeviceCpu<U>,SD>: Optimizer<U,DeviceCpu<U>> {
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static, SD: Scheduler<U> + Clone,
+          MomentumSGD<U,DeviceCpu<U>,SD>: Optimizer<U,DeviceCpu<U>> {
     type Output = MomentumSGD<U,DeviceCpu<U>,SD>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
@@ -622,7 +667,8 @@ impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for MomentumSGDBuilder<U,DeviceCpu<U
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for MomentumSGDBuilder<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U> + Clone,
           A: CudaAllocator,
           TextRecord: From<U>,
@@ -637,7 +683,7 @@ impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for MomentumSGDBuilder<U,DeviceG
 }
 /// Adagrad Implementation
 pub struct Adagrad<U,D,SD>
-    where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static, D: Device<U>, SD: Scheduler<U>,
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
     #[allow(dead_code)]
@@ -648,7 +694,9 @@ pub struct Adagrad<U,D,SD>
     eps:U,
     scheduler: SD
 }
-impl<U> Adagrad<U,DeviceCpu<U>,IdentityLR> where U: UnitValue<U> {
+impl<U> Adagrad<U,DeviceCpu<U>,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static {
     /// Create an instance of Adagrad
     /// # Arguments
     /// * `device` - device
@@ -662,7 +710,10 @@ impl<U> Adagrad<U,DeviceCpu<U>,IdentityLR> where U: UnitValue<U> {
         )
     }
 }
-impl<U,SD> Adagrad<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> + Clone {
+impl<U,SD> Adagrad<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          SD: Scheduler<U> + Clone {
     /// Create an instance of Adagrad with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
@@ -679,7 +730,10 @@ impl<U,SD> Adagrad<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> + 
         }
     }
 }
-impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> {
+impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + AddAssign + Sqrt +
+             Send + Sync + 'static, SD: Scheduler<U> {
     type InternalType = [U];
     type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
@@ -712,7 +766,8 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>,SD> where U: Uni
 }
 #[cfg(feature = "cuda")]
 impl<U,A> Adagrad<U,DeviceGpu<U,A>,IdentityLR>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator,
           TextRecord: From<U>,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -732,7 +787,8 @@ impl<U,A> Adagrad<U,DeviceGpu<U,A>,IdentityLR>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Adagrad<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator,
           SD: Scheduler<U>,
           TextRecord: From<U>,
@@ -756,7 +812,8 @@ impl<U,A,SD> Adagrad<U,DeviceGpu<U,A>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           TextRecord: From<U>,
@@ -790,14 +847,16 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
     }
 }
 impl<U,SD> OptimizerState<U,DeviceCpu<U>> for Adagrad<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           DeviceCpu<U>: Device<U> {
     type Type = Box<[U]>;
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator,
           TextRecord: From<U>,
@@ -806,7 +865,8 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for Adagrad<U,DeviceGpu<U,A>,SD>
     type Type = CudaPtr<U,A>;
 }
 impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
@@ -828,7 +888,8 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,DeviceCp
 }
 impl<T,U,SD> Persistence<U,T,Linear> for Adagrad<U,DeviceCpu<U>,SD>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + Debug + Default,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U> {
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         for &gt in self.gt.iter() {
@@ -846,7 +907,8 @@ impl<T,U,SD> Persistence<U,T,Linear> for Adagrad<U,DeviceCpu<U>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           TextRecord: From<U>,
@@ -877,7 +939,8 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,Device
 #[cfg(feature = "cuda")]
 impl<T,U,A,SD> Persistence<U,T,Linear> for Adagrad<U,DeviceGpu<U,A>,SD>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + Debug + Default,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           TextRecord: From<U>,
@@ -903,13 +966,18 @@ impl<T,U,A,SD> Persistence<U,T,Linear> for Adagrad<U,DeviceGpu<U,A>,SD>
     }
 }
 /// Implementation of a builder to generate Adagrad optimizers
-pub struct AdagradBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+pub struct AdagradBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static, D: Device<U>, SD: Scheduler<U> + Clone {
     lr:U,
     weight_decay:U,
     device:D,
     scheduler: SD
 }
-impl<U,D> AdagradBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> {
+impl<U,D> AdagradBuilder<U,D,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U> {
     /// Create an instance of AdagradBuilder
     /// # Arguments
     /// * `device` - device
@@ -922,7 +990,11 @@ impl<U,D> AdagradBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,D,SD> AdagradBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+impl<U,D,SD> AdagradBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U> + Clone {
     /// Replaces the value of field lr in AdagradBuilder with the passed value and returns it.
     /// # Arguments
     /// * `lr` - Learning rate
@@ -962,7 +1034,9 @@ impl<U,D,SD> AdagradBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Sch
     }
 }
 impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for AdagradBuilder<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U>, SD: Scheduler<U> + Clone, Adagrad<U,DeviceCpu<U>,SD>: Optimizer<U,DeviceCpu<U>> {
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static, SD: Scheduler<U> + Clone,
+          Adagrad<U,DeviceCpu<U>,SD>: Optimizer<U,DeviceCpu<U>> {
     type Output = Adagrad<U,DeviceCpu<U>,SD>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
@@ -971,7 +1045,8 @@ impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for AdagradBuilder<U,DeviceCpu<U>,SD
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for AdagradBuilder<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U> + Clone,
           A: CudaAllocator,
           TextRecord: From<U>,
@@ -986,7 +1061,10 @@ impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for AdagradBuilder<U,DeviceGpu<U
 }
 /// RMSprop Implementation
 pub struct RMSprop<U,D,SD>
-    where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U>,
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
     #[allow(dead_code)]
@@ -1000,7 +1078,9 @@ pub struct RMSprop<U,D,SD>
     eps:U,
     scheduler: SD
 }
-impl<U> RMSprop<U,DeviceCpu<U>,IdentityLR> where U: UnitValue<U> {
+impl<U> RMSprop<U,DeviceCpu<U>,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static {
     /// Create an instance of RMSprop
     /// # Arguments
     /// * `size` - input size
@@ -1022,7 +1102,9 @@ impl<U> RMSprop<U,DeviceCpu<U>,IdentityLR> where U: UnitValue<U> {
         )
     }
 }
-impl<U,SD> RMSprop<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> + Clone {
+impl<U,SD> RMSprop<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static, SD: Scheduler<U> + Clone {
     /// Create an instance of RMSprop with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
@@ -1044,7 +1126,12 @@ impl<U,SD> RMSprop<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> + 
         }
     }
 }
-impl<U,SD> Optimizer<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> {
+impl<U,SD> Optimizer<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             One + Sqrt +
+             Send + Sync + 'static,
+          SD: Scheduler<U> {
     type InternalType = [U];
     type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
@@ -1082,7 +1169,8 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>,SD> where U: Uni
 }
 #[cfg(feature = "cuda")]
 impl<U,A> RMSprop<U,DeviceGpu<U,A>,IdentityLR>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
@@ -1113,7 +1201,8 @@ impl<U,A> RMSprop<U,DeviceGpu<U,A>,IdentityLR>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> RMSprop<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -1143,7 +1232,8 @@ impl<U,A,SD> RMSprop<U,DeviceGpu<U,A>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -1176,14 +1266,16 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>,SD>
     }
 }
 impl<U,SD> OptimizerState<U,DeviceCpu<U>> for RMSprop<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           DeviceCpu<U>: Device<U> {
     type Type = Box<[U]>;
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -1191,7 +1283,8 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for RMSprop<U,DeviceGpu<U,A>,SD>
     type Type = CudaPtr<U,A>;
 }
 impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
@@ -1223,7 +1316,8 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,DeviceCp
 }
 impl<T,U,SD> Persistence<U,T,Linear> for RMSprop<U,DeviceCpu<U>,SD>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + Debug + Default,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U> {
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         for &gt in self.gt.iter() {
@@ -1249,7 +1343,8 @@ impl<T,U,SD> Persistence<U,T,Linear> for RMSprop<U,DeviceCpu<U>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           TextRecord: From<U>,
@@ -1294,7 +1389,8 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,Device
 #[cfg(feature = "cuda")]
 impl<T,U,A,SD> Persistence<U,T,Linear> for RMSprop<U,DeviceGpu<U,A>,SD>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + Debug + Default,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           DeviceGpu<U,A>: Device<U>,
@@ -1331,7 +1427,11 @@ impl<T,U,A,SD> Persistence<U,T,Linear> for RMSprop<U,DeviceGpu<U,A>,SD>
     }
 }
 /// Implementation of a builder to generate RMSprop optimizers
-pub struct RMSpropBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+pub struct RMSpropBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U> + Clone {
     lr:U,
     weight_decay:U,
     alpha:U,
@@ -1339,7 +1439,10 @@ pub struct RMSpropBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Sched
     device:D,
     scheduler: SD
 }
-impl<U,D> RMSpropBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> {
+impl<U,D> RMSpropBuilder<U,D,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U> {
     /// Create an instance of RMSpropBuilder with additional parameters other than the default values
     /// # Arguments
     /// * `device` - device
@@ -1354,7 +1457,11 @@ impl<U,D> RMSpropBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,D,SD> RMSpropBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+impl<U,D,SD> RMSpropBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U> + Clone {
     /// Replaces the value of field lr in RMSpropBuilder with the passed value and returns it.
     /// # Arguments
     /// * `lr` - Learning rate
@@ -1428,7 +1535,10 @@ impl<U,D,SD> RMSpropBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Sch
     }
 }
 impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for RMSpropBuilder<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U>, SD: Scheduler<U> + Clone, RMSprop<U,DeviceCpu<U>,SD>: Optimizer<U,DeviceCpu<U>> {
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          SD: Scheduler<U> + Clone,
+          RMSprop<U,DeviceCpu<U>,SD>: Optimizer<U,DeviceCpu<U>> {
     type Output = RMSprop<U,DeviceCpu<U>,SD>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
@@ -1437,7 +1547,8 @@ impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for RMSpropBuilder<U,DeviceCpu<U>,SD
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for RMSpropBuilder<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U> + Clone,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -1451,7 +1562,10 @@ impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for RMSpropBuilder<U,DeviceGpu<U
 }
 /// Adam Implementation
 pub struct Adam<U,D,SD>
-    where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U>,
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
     #[allow(dead_code)]
@@ -1467,7 +1581,9 @@ pub struct Adam<U,D,SD>
     eps:U,
     scheduler: SD
 }
-impl<U> Adam<U,DeviceCpu<U>,IdentityLR> where U: UnitValue<U> {
+impl<U> Adam<U,DeviceCpu<U>,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static {
     /// Create an instance of Adam
     /// # Arguments
     /// * `size` - input size
@@ -1488,7 +1604,10 @@ impl<U> Adam<U,DeviceCpu<U>,IdentityLR> where U: UnitValue<U> {
                           IdentityLR)
     }
 }
-impl<U,SD> Adam<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> + Clone {
+impl<U,SD> Adam<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          SD: Scheduler<U> + Clone {
     /// Create an instance of Adam with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
@@ -1512,7 +1631,12 @@ impl<U,SD> Adam<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> + Clo
         }
     }
 }
-impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> {
+impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             One + Sqrt +
+             Send + Sync + 'static,
+          SD: Scheduler<U> {
     type InternalType = [U];
     type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
@@ -1554,7 +1678,8 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>,SD> where U: UnitVa
 }
 #[cfg(feature = "cuda")]
 impl<U,A> Adam<U,DeviceGpu<U,A>,IdentityLR>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
@@ -1582,7 +1707,8 @@ impl<U,A> Adam<U,DeviceGpu<U,A>,IdentityLR>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Adam<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -1613,7 +1739,9 @@ impl<U,A,SD> Adam<U,DeviceGpu<U,A>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -1651,14 +1779,16 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>,SD>
     }
 }
 impl<U,SD> OptimizerState<U,DeviceCpu<U>> for Adam<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           DeviceCpu<U>: Device<U> {
     type Type = Box<[U]>;
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -1666,7 +1796,8 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for Adam<U,DeviceGpu<U,A>,SD>
     type Type = CudaPtr<U,A>;
 }
 impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
@@ -1711,7 +1842,8 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceCpu<U
 }
 impl<T,U,SD> Persistence<U,T,Linear> for Adam<U,DeviceCpu<U>,SD>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + Debug + Default,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U> {
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         for &mt in self.mt.iter() {
@@ -1745,7 +1877,8 @@ impl<T,U,SD> Persistence<U,T,Linear> for Adam<U,DeviceCpu<U>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           TextRecord: From<U>,
@@ -1802,7 +1935,8 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceGpu
 #[cfg(feature = "cuda")]
 impl<T,U,A,SD> Persistence<U,T,Linear> for Adam<U,DeviceGpu<U,A>,SD>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + Debug + Default,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           DeviceGpu<U,A>: Device<U>,
@@ -1846,7 +1980,11 @@ impl<T,U,A,SD> Persistence<U,T,Linear> for Adam<U,DeviceGpu<U,A>,SD>
     }
 }
 /// Implementation of a builder to generate Adam optimizers
-pub struct AdamBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+pub struct AdamBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U> + Clone {
     lr:U,
     weight_decay:U,
     b1:U,
@@ -1854,7 +1992,10 @@ pub struct AdamBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Schedule
     device:D,
     scheduler: SD
 }
-impl<U,D> AdamBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> {
+impl<U,D> AdamBuilder<U,D,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U> {
     /// Create an instance of AdamBuilder with additional parameters other than the default values
     /// # Arguments
     /// * `device` - device
@@ -1869,7 +2010,11 @@ impl<U,D> AdamBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,D,SD> AdamBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+impl<U,D,SD> AdamBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U> + Clone {
     /// Replaces the value of field lr in AdamBuilder with the passed value and returns it.
     /// # Arguments
     /// * `lr` - Learning rate
@@ -1943,7 +2088,10 @@ impl<U,D,SD> AdamBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Schedu
     }
 }
 impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for AdamBuilder<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U>, SD: Scheduler<U> + Clone, Adam<U,DeviceCpu<U>,SD>: Optimizer<U,DeviceCpu<U>> {
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          SD: Scheduler<U> + Clone,
+          Adam<U,DeviceCpu<U>,SD>: Optimizer<U,DeviceCpu<U>> {
     type Output = Adam<U,DeviceCpu<U>,SD>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
@@ -1952,7 +2100,8 @@ impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for AdamBuilder<U,DeviceCpu<U>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for AdamBuilder<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U> + Clone,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -1966,7 +2115,10 @@ impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for AdamBuilder<U,DeviceGpu<U,A>
 }
 /// AdamW Implementation
 pub struct AdamW<U,D,SD>
-    where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U>,
           Self: OptimizerState<U,D> {
     d:PhantomData<D>,
     #[allow(dead_code)]
@@ -1982,7 +2134,9 @@ pub struct AdamW<U,D,SD>
     eps:U,
     scheduler: SD
 }
-impl<U> AdamW<U,DeviceCpu<U>,IdentityLR> where U: UnitValue<U> {
+impl<U> AdamW<U,DeviceCpu<U>,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static {
     /// Create an instance of AdamW
     /// # Arguments
     /// * `size` - input size
@@ -2003,7 +2157,10 @@ impl<U> AdamW<U,DeviceCpu<U>,IdentityLR> where U: UnitValue<U> {
                                              IdentityLR)
     }
 }
-impl<U,SD> AdamW<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> + Clone {
+impl<U,SD> AdamW<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          SD: Scheduler<U> + Clone {
     /// Create an instance of AdamW with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
@@ -2027,7 +2184,12 @@ impl<U,SD> AdamW<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> + Cl
         }
     }
 }
-impl<U,SD> Optimizer<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>,SD> where U: UnitValue<U>, SD: Scheduler<U> {
+impl<U,SD> Optimizer<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             One + Sqrt +
+             Send + Sync + 'static,
+          SD: Scheduler<U> {
     type InternalType = [U];
     type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
@@ -2069,7 +2231,8 @@ impl<U,SD> Optimizer<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>,SD> where U: UnitV
 }
 #[cfg(feature = "cuda")]
 impl<U,A> AdamW<U,DeviceGpu<U,A>,IdentityLR>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
           DeviceGpu<U,A>: Device<U> {
@@ -2097,7 +2260,8 @@ impl<U,A> AdamW<U,DeviceGpu<U,A>,IdentityLR>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> AdamW<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -2128,7 +2292,9 @@ impl<U,A,SD> AdamW<U,DeviceGpu<U,A>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -2166,14 +2332,16 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>,SD>
     }
 }
 impl<U,SD> OptimizerState<U,DeviceCpu<U>> for AdamW<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           DeviceCpu<U>: Device<U> {
     type Type = Box<[U]>;
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U>,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,
@@ -2181,7 +2349,8 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<U,A>> for AdamW<U,DeviceGpu<U,A>,SD>
     type Type = CudaPtr<U,A>;
 }
 impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
@@ -2226,7 +2395,8 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceCpu<
 }
 impl<T,U,SD> Persistence<U,T,Linear> for AdamW<U,DeviceCpu<U>,SD>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + Debug + Default,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U> {
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         for &mt in self.mt.iter() {
@@ -2260,7 +2430,8 @@ impl<T,U,SD> Persistence<U,T,Linear> for AdamW<U,DeviceCpu<U>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U> + FromStr,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           DeviceGpu<U,A>: Device<U>,
@@ -2317,7 +2488,8 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceGp
 #[cfg(feature = "cuda")]
 impl<T,U,A,SD> Persistence<U,T,Linear> for AdamW<U,DeviceGpu<U,A>,SD>
     where T: LinearPersistence<U>,
-          U: UnitValue<U> + Debug + Default,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           A: CudaAllocator + 'static,
           SD: Scheduler<U>,
           DeviceGpu<U,A>: Device<U>,
@@ -2361,7 +2533,10 @@ impl<T,U,A,SD> Persistence<U,T,Linear> for AdamW<U,DeviceGpu<U,A>,SD>
     }
 }
 /// Implementation of a builder to generate AdamW optimizers
-pub struct AdamWBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+pub struct AdamWBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U> + Clone {
     lr:U,
     weight_decay:U,
     b1:U,
@@ -2369,7 +2544,10 @@ pub struct AdamWBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Schedul
     device:D,
     scheduler: SD
 }
-impl<U,D> AdamWBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> {
+impl<U,D> AdamWBuilder<U,D,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U> {
     /// Create an instance of AdamWBuilder with additional parameters other than the default values
     /// # Arguments
     /// * `device` - device
@@ -2384,7 +2562,11 @@ impl<U,D> AdamWBuilder<U,D,IdentityLR> where U: UnitValue<U>, D: Device<U> {
         }
     }
 }
-impl<U,D,SD> AdamWBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Scheduler<U> + Clone {
+impl<U,D,SD> AdamWBuilder<U,D,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          D: Device<U>,
+          SD: Scheduler<U> + Clone {
     /// Replaces the value of field lr in AdamWBuilder with the passed value and returns it.
     /// # Arguments
     /// * `lr` - Learning rate
@@ -2458,7 +2640,10 @@ impl<U,D,SD> AdamWBuilder<U,D,SD> where U: UnitValue<U>, D: Device<U>, SD: Sched
     }
 }
 impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for AdamWBuilder<U,DeviceCpu<U>,SD>
-    where U: UnitValue<U>, SD: Scheduler<U> + Clone, AdamW<U,DeviceCpu<U>,SD>: Optimizer<U,DeviceCpu<U>> {
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          SD: Scheduler<U> + Clone,
+          AdamW<U,DeviceCpu<U>,SD>: Optimizer<U,DeviceCpu<U>> {
     type Output = AdamW<U,DeviceCpu<U>,SD>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
@@ -2467,7 +2652,8 @@ impl<U,SD> OptimizerBuilder<U,DeviceCpu<U>> for AdamWBuilder<U,DeviceCpu<U>,SD>
 }
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<U,A>> for AdamWBuilder<U,DeviceGpu<U,A>,SD>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
           SD: Scheduler<U> + Clone,
           A: CudaAllocator,
           CudaPtr<U,A>: WriteMemory<U>,

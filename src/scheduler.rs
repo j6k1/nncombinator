@@ -1,14 +1,17 @@
 //! Implementation of a Learning Rate Scheduler
 
 use std::f64::consts::PI;
+use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::ops::{Add, Div, Mul, Sub};
 use std::sync::Arc;
 use try_from_primitive::TryFromPrimitive;
 use crate::error::TrainingError;
-use crate::ope::UnitValue;
+use crate::ope::{Cos, One};
 
 /// Trait that defines learning rate scheduler.
-pub trait Scheduler<U> where U: UnitValue<U> {
+pub trait Scheduler<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     /// Retrieve the adjusted learning rate
     /// # Arguments
     /// * `lr` - learning rate
@@ -51,18 +54,23 @@ pub trait Scheduler<U> where U: UnitValue<U> {
 /// Scheduler that does not update the learning rate
 #[derive(Clone)]
 pub struct IdentityLR;
-impl<U> Scheduler<U> for IdentityLR where U: UnitValue<U> {
+impl<U> Scheduler<U> for IdentityLR
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     fn schedule(&mut self, lr: U, _: usize) -> Result<U,TrainingError> {
         Ok(lr)
     }
 }
 /// A scheduler that adjusts the learning rate using a callback that calculates the ratio relative
 /// to the initial learning rate
-pub struct LambdaLR<U,F> where U: UnitValue<U>, F: Fn(usize) -> Result<U,TrainingError> {
+pub struct LambdaLR<U,F>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          F: Fn(usize) -> Result<U,TrainingError> {
     base_lr:U,
     callback: Arc<F>
 }
-impl<U,F> LambdaLR<U,F> where U: UnitValue<U>, F: Fn(usize) -> Result<U,TrainingError> {
+impl<U,F> LambdaLR<U,F>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          F: Fn(usize) -> Result<U,TrainingError> {
     /// Create a new LambdaLR
     ///
     /// # Arguments
@@ -77,12 +85,16 @@ impl<U,F> LambdaLR<U,F> where U: UnitValue<U>, F: Fn(usize) -> Result<U,Training
         }
     }
 }
-impl<U,F> Scheduler<U> for LambdaLR<U,F> where U: UnitValue<U>, F: Fn(usize) -> Result<U,TrainingError> {
+impl<U,F> Scheduler<U> for LambdaLR<U,F>
+    where U: Default + Clone + Copy + Debug + Mul<Output=U> + Send + Sync + 'static,
+          F: Fn(usize) -> Result<U,TrainingError> {
     fn schedule(&mut self, _: U, step: usize) -> Result<U,TrainingError> {
         Ok(self.base_lr * (self.callback)(step)?)
     }
 }
-impl<U,F> Clone for LambdaLR<U,F> where U: UnitValue<U>, F: Fn(usize) -> Result<U,TrainingError> + Clone {
+impl<U,F> Clone for LambdaLR<U,F>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          F: Fn(usize) -> Result<U,TrainingError> + Clone {
     fn clone(&self) -> Self {
         LambdaLR {
             base_lr: self.base_lr,
@@ -92,11 +104,13 @@ impl<U,F> Clone for LambdaLR<U,F> where U: UnitValue<U>, F: Fn(usize) -> Result<
 }
 /// A learning rate decay scheduler using gamma per step size
 #[derive(Clone)]
-pub struct StepLR<U> where U: UnitValue<U> {
+pub struct StepLR<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     step_size: usize,
     gamma: U
 }
-impl<U> StepLR<U> where U: UnitValue<U> {
+impl<U> StepLR<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     /// Create a new instance of `StepLR` with the specified number of steps and decay rate.
     ///
     /// # Arguments
@@ -117,7 +131,8 @@ impl<U> StepLR<U> where U: UnitValue<U> {
         StepLR { step_size, gamma }
     }
 }
-impl<U> Scheduler<U> for StepLR<U> where U: UnitValue<U> {
+impl<U> Scheduler<U> for StepLR<U>
+    where U: Default + Clone + Copy + Debug + Mul<Output=U> + Send + Sync + 'static, {
     fn schedule(&mut self, lr: U, step: usize) -> Result<U,TrainingError> {
         Ok(if step > 0 && step % self.step_size == 0 {
             lr * self.gamma
@@ -128,12 +143,14 @@ impl<U> Scheduler<U> for StepLR<U> where U: UnitValue<U> {
 }
 /// A scheduler that gradually increases the learning rate from a low starting point
 #[derive(Clone)]
-pub struct LinearWarmupLR<U> where U: UnitValue<U> {
+pub struct LinearWarmupLR<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     warmup_steps: usize,
     base_lr: U,
     start_factor: U,
 }
-impl<U> LinearWarmupLR<U> where U: UnitValue<U> {
+impl<U> LinearWarmupLR<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     /// Creates a new instance of `LinearWarmupLR` with the specified number of warmup steps
     /// and a base learning rate.
     ///
@@ -162,7 +179,11 @@ impl<U> LinearWarmupLR<U> where U: UnitValue<U> {
         }
     }
 }
-impl<U> Scheduler<U> for LinearWarmupLR<U> where U: UnitValue<U> + TryFromPrimitive {
+impl<U> Scheduler<U> for LinearWarmupLR<U>
+    where U: Default + Clone + Copy + Debug +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             Send + Sync + 'static +
+             One + TryFromPrimitive {
     fn schedule_frequently(&mut self, _: U, _: usize, frequently_step: usize) -> Result<U,TrainingError> {
         Ok(if frequently_step < self.warmup_steps {
             self.base_lr * (self.start_factor + (U::one() - self.start_factor) *
@@ -175,12 +196,14 @@ impl<U> Scheduler<U> for LinearWarmupLR<U> where U: UnitValue<U> + TryFromPrimit
 }
 /// Scheduler using cosine annealing schedule.
 #[derive(Clone)]
-pub struct CosineAnnealingLR<U> where U: UnitValue<U> {
+pub struct CosineAnnealingLR<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     base_lr: U,
     total_steps: usize,
     eta_min: U
 }
-impl<U> CosineAnnealingLR<U> where U: UnitValue<U> {
+impl<U> CosineAnnealingLR<U>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static {
     /// Creates a new instance of `CosineAnnealingLR`.
     ///
     /// This method initializes the struct with the total number of steps and the
@@ -210,7 +233,11 @@ impl<U> CosineAnnealingLR<U> where U: UnitValue<U> {
         }
     }
 }
-impl<U> Scheduler<U> for CosineAnnealingLR<U> where U: UnitValue<U> {
+impl<U> Scheduler<U> for CosineAnnealingLR<U>
+    where U: Default + Clone + Copy + Debug +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             Send + Sync + 'static +
+             One + Cos + TryFromPrimitive {
     fn schedule(&mut self, _: U, step: usize) -> Result<U, TrainingError> {
         Ok(self.eta_min + (self.base_lr - self.eta_min) / U::try_from_usize(2)? * (
             U::one() + (
@@ -221,7 +248,10 @@ impl<U> Scheduler<U> for CosineAnnealingLR<U> where U: UnitValue<U> {
     }
 }
 /// Scheduler that executes two schedulers sequentially.
-pub struct SequentialLR<U,PS,S> where U: UnitValue<U>, PS: Scheduler<U> + Clone, S: Scheduler<U> + Clone {
+pub struct SequentialLR<U,PS,S>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          PS: Scheduler<U> + Clone,
+          S: Scheduler<U> + Clone {
     prev_scheduler: PS,
     next_scheduler: S,
     milestone: usize,
@@ -229,7 +259,9 @@ pub struct SequentialLR<U,PS,S> where U: UnitValue<U>, PS: Scheduler<U> + Clone,
 }
 
 impl<U,PS,S> Clone for SequentialLR<U,PS,S>
-    where U: UnitValue<U>, PS: Scheduler<U> + Clone, S: Scheduler<U> + Clone {
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          PS: Scheduler<U> + Clone,
+          S: Scheduler<U> + Clone {
     fn clone(&self) -> Self {
         SequentialLR {
             prev_scheduler: self.prev_scheduler.clone(),
@@ -239,7 +271,10 @@ impl<U,PS,S> Clone for SequentialLR<U,PS,S>
         }
     }
 }
-impl<U,PS,S> SequentialLR<U,PS,S> where U: UnitValue<U>, PS: Scheduler<U> + Clone, S: Scheduler<U> + Clone {
+impl<U,PS,S> SequentialLR<U,PS,S>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          PS: Scheduler<U> + Clone,
+          S: Scheduler<U> + Clone {
     /// Creates a new instance of `SequentialLR`.
     ///
     /// This function initializes a sequential learning rate scheduler, which transitions
@@ -271,7 +306,10 @@ impl<U,PS,S> SequentialLR<U,PS,S> where U: UnitValue<U>, PS: Scheduler<U> + Clon
         }
     }
 }
-impl<U,PS,S> Scheduler<U> for SequentialLR<U,PS,S> where U: UnitValue<U>, PS: Scheduler<U> + Clone, S: Scheduler<U> + Clone {
+impl<U,PS,S> Scheduler<U> for SequentialLR<U,PS,S>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          PS: Scheduler<U> + Clone,
+          S: Scheduler<U> + Clone {
     fn schedule(&mut self, lr: U, step: usize) -> Result<U,TrainingError> {
         if step < self.milestone {
             self.prev_scheduler.schedule(lr, step)

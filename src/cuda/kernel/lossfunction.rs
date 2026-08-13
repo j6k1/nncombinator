@@ -6,7 +6,6 @@ use cuda_runtime_sys::dim3;
 use libc::{c_int, c_void};
 use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaMutPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs, KernelLaunchConfig};
 use crate::cuda::allocator::CudaAllocator;
-use crate::ope::UnitValue;
 
 extern "C" {
     fn loss_linear_batch_mse_derive_float(r: *const f32, t: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
@@ -18,7 +17,7 @@ extern "C" {
 }
 /// Define a list to be passed to the cuda kernel function during mini-batch execution as the argument of mse.
 pub struct LinearBatchMseArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
@@ -33,7 +32,7 @@ pub struct LinearBatchMseArgs<'a,T,A,const N:usize>
 /// Create an instance of an object representing the list of arguments to
 /// compute the loss function mse during mini-batch execution.
 impl<'a,T,A,const N:usize> LinearBatchMseArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -56,7 +55,7 @@ impl<'a,T,A,const N:usize> LinearBatchMseArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for LinearBatchMseArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -72,7 +71,7 @@ impl<'a,T,A,const N:usize> KernelArgs for LinearBatchMseArgs<'a,T,A,N>
     }
 }
 pub struct LinearBatchMse<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -83,7 +82,7 @@ pub struct LinearBatchMse<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> LinearBatchMse<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -132,7 +131,7 @@ impl<'a,A,const N:usize> Kernel for LinearBatchMse<'a,f64,A,N>
 }
 /// Defines the list passed to the cuda kernel function as the argument of mse.
 pub struct LinearMseArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// expected value
     expected: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
@@ -144,7 +143,7 @@ pub struct LinearMseArgs<'a,T,A,const N:usize>
 }
 /// Create an instance of an object representing the argument list for computing the loss function mse.
 impl<'a,T,A,const N:usize> LinearMseArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a LinearMseArgs instance
     /// # Arguments
@@ -165,7 +164,7 @@ impl<'a,T,A,const N:usize> LinearMseArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for LinearMseArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -178,7 +177,7 @@ impl<'a,T,A,const N:usize> KernelArgs for LinearMseArgs<'a,T,A,N>
     }
 }
 pub struct LinearMse<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
@@ -186,7 +185,7 @@ pub struct LinearMse<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> LinearMse<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a LinearMse instance
     pub fn new() -> LinearMse<'a,T,A,N> {
@@ -224,7 +223,7 @@ impl<'a,A,const N:usize> Kernel for LinearMse<'a,f64,A,N> where A: CudaAllocator
 }
 /// Defines the list that is passed to the cuda kernel function as cross-entropy arguments during mini-batch execution.
 pub struct LinearBatchCrossEntropyArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -240,7 +239,7 @@ pub struct LinearBatchCrossEntropyArgs<'a,T,A,const N:usize>
 /// Create an instance of an object representing a list of arguments to calculate
 /// the result of passing a mini-batch to the loss function cross entropy.
 impl<'a,T,A,const N:usize> LinearBatchCrossEntropyArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -265,7 +264,7 @@ impl<'a,T,A,const N:usize> LinearBatchCrossEntropyArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for LinearBatchCrossEntropyArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -281,7 +280,7 @@ impl<'a,T,A,const N:usize> KernelArgs for LinearBatchCrossEntropyArgs<'a,T,A,N>
     }
 }
 pub struct LinearBatchCrossEntropy<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -292,7 +291,7 @@ pub struct LinearBatchCrossEntropy<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> LinearBatchCrossEntropy<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -341,7 +340,7 @@ impl<'a,A,const N:usize> Kernel for LinearBatchCrossEntropy<'a,f64,A,N>
 }
 /// Defines the list passed to the cuda kernel function as the argument of cross entropy.
 pub struct LinearCrossEntropyArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// expected value
     expected: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
@@ -353,7 +352,7 @@ pub struct LinearCrossEntropyArgs<'a,T,A,const N:usize>
 }
 /// Create an instance of an object representing the argument list for computing the loss function cross entropy.
 impl<'a,T,A,const N:usize> LinearCrossEntropyArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a LinearCrossEntropyArgs instance
     /// # Arguments
@@ -374,7 +373,7 @@ impl<'a,T,A,const N:usize> LinearCrossEntropyArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for LinearCrossEntropyArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -387,7 +386,7 @@ impl<'a,T,A,const N:usize> KernelArgs for LinearCrossEntropyArgs<'a,T,A,N>
     }
 }
 pub struct LinearCrossEntropy<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
@@ -395,7 +394,7 @@ pub struct LinearCrossEntropy<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> LinearCrossEntropy<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a LinearCrossEntropy instance
     pub fn new() -> LinearCrossEntropy<'a,T,A,N> {
@@ -434,7 +433,7 @@ impl<'a,A,const N:usize> Kernel for LinearCrossEntropy<'a,f64,A,N> where A: Cuda
 /// Defines the list that is passed to the cuda kernel function as arguments
 /// to the croos entropy multiclass during mini-batch execution.
 pub struct LinearBatchCrossEntropyMulticlassArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -450,7 +449,7 @@ pub struct LinearBatchCrossEntropyMulticlassArgs<'a,T,A,const N:usize>
 /// Create an instance of an object representing a list of arguments to compute the result of passing a mini-batch
 /// to the loss function cross entropy multiclass.
 impl<'a,T,A,const N:usize> LinearBatchCrossEntropyMulticlassArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -475,7 +474,7 @@ impl<'a,T,A,const N:usize> LinearBatchCrossEntropyMulticlassArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for LinearBatchCrossEntropyMulticlassArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -491,7 +490,7 @@ impl<'a,T,A,const N:usize> KernelArgs for LinearBatchCrossEntropyMulticlassArgs<
     }
 }
 pub struct LinearBatchCrossEntropyMulticlass<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -502,7 +501,7 @@ pub struct LinearBatchCrossEntropyMulticlass<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> LinearBatchCrossEntropyMulticlass<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T> + 'a,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a,
           CudaTensor1dPtr<T,A,N>: AsConstKernelPtr + AsKernelPtr + Debug + 'a,
           for<'b> CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
@@ -551,7 +550,7 @@ impl<'a,A,const N:usize> Kernel for LinearBatchCrossEntropyMulticlass<'a,f64,A,N
 }
 /// Defines the list passed to the cuda kernel function as the argument of croos entropy multiclass
 pub struct LinearCrossEntropyMulticlassArgs<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// expected value
     expected: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
@@ -563,7 +562,7 @@ pub struct LinearCrossEntropyMulticlassArgs<'a,T,A,const N:usize>
 }
 /// Create an instance of an object representing the argument list for computing the loss function cross entropy multiclass.
 impl<'a,T,A,const N:usize> LinearCrossEntropyMulticlassArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a LinearCrossEntropyMulticlassArgs instance
     /// # Arguments
@@ -584,7 +583,7 @@ impl<'a,T,A,const N:usize> LinearCrossEntropyMulticlassArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for LinearCrossEntropyMulticlassArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
@@ -597,7 +596,7 @@ impl<'a,T,A,const N:usize> KernelArgs for LinearCrossEntropyMulticlassArgs<'a,T,
     }
 }
 pub struct LinearCrossEntropyMulticlass<'a,T,A,const N:usize>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     t:PhantomData<T>,
     a:PhantomData<A>,
@@ -605,7 +604,7 @@ pub struct LinearCrossEntropyMulticlass<'a,T,A,const N:usize>
     l:PhantomData<&'a ()>
 }
 impl<'a,T,A,const N:usize> LinearCrossEntropyMulticlass<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     /// Create a LinearCrossEntropyMulticlass instance
     pub fn new() -> LinearCrossEntropyMulticlass<'a,T,A,N> {

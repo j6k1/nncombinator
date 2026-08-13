@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use std::ops::{Add, Deref, Div, Mul, Neg, Sub};
 use num_traits::FromPrimitive;
 use rayon::prelude::{FromParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use crate::{ope, UnitValue};
+use crate::{ope};
 use crate::arr::*;
 use crate::device::*;
 use crate::error::{EvaluateError, TrainingError};
@@ -255,7 +255,7 @@ impl<U,D> Sigmoid<U,D>
 }
 impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo +
-             Add<Output=U> + Sub<Output=U> + Div<Output=U> + Mul<Output=U> + Neg<Output=U> + One + Exp + Sqrt + From<U>,
+             Add<Output=U> + Sub<Output=U> + Div<Output=U> + Mul<Output=U> + Neg<Output=U> + One + Exp + Sqrt,
           Arr<U,N>: Deref<Target=Box<[U]>> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
@@ -272,7 +272,7 @@ impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<
 }
 impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo +
-             Add<Output=U> + Sub<Output=U> + Div<Output=U> + Mul<Output=U> + Neg<Output=U> + One + Exp + Sqrt + From<U>,
+             Add<Output=U> + Sub<Output=U> + Div<Output=U> + Mul<Output=U> + Neg<Output=U> + One + Exp + Sqrt,
           Arr<U,N>: Deref<Target=Box<[U]>> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
@@ -290,7 +290,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
              Div<Output=U> + Mul<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
-             One + Exp + Sqrt + From<U>,
+             One + Exp + Sqrt,
           I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &'a I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| U::one() / (U::one() + (-i).exp())).collect::<Vec<U>>().try_into()?)
@@ -356,7 +356,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo +
              Div<Output=U> + Mul<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
-             One + Exp + Sqrt + From<U>,
+             One + Exp + Sqrt,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -374,7 +374,7 @@ impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec
 impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Sigmoid<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
              Div<Output=U> + Mul<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
-             One + Exp + Sqrt + From<U>,
+             One + Exp + Sqrt,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -394,7 +394,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Sigmoid<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           I: BatchSize,
           AC: CudaAllocator + 'a,
           DeviceGpu<U,AC>: Device<U>,
@@ -458,7 +458,7 @@ impl<U,D> ReLu<U,D>
     }
 }
 impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + PartialOrd + Max + From<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + PartialOrd + Max,
           Arr<U,N>: Deref<Target=Box<[U]>> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
@@ -474,7 +474,7 @@ impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,D
     }
 }
 impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + PartialOrd + Max + From<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + PartialOrd + Max,
           Arr<U,N>: Deref<Target=Box<[U]>> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
@@ -490,7 +490,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     }
 }
 impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + Max + PartialOrd + From<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + Max + PartialOrd,
           I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &'a I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| {
@@ -514,7 +514,7 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for ReLu<U,
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for ReLu<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           CudaPtr<U,AC>: WriteMemory<U>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator + 'a,
@@ -560,7 +560,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
     }
 }
 impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + PartialOrd + Max + From<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + PartialOrd + Max,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -576,7 +576,7 @@ impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec
     }
 }
 impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for ReLu<U,DeviceCpu<U>>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + PartialOrd + Max + From<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + PartialOrd + Max,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -596,7 +596,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for ReLu<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           I: BatchSize,
           AC: CudaAllocator + 'a,
           DeviceGpu<U,AC>: Device<U>,
@@ -645,14 +645,16 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 }
 /// ClippedReLu Implementation
 pub struct ClippedReLu<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + PartialOrd + Max + From<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync +
+             DataTypeInfo + 'static + PartialOrd + Max + Min,
           D: Device<U> {
     ceiling: U,
     u:PhantomData<U>,
     d:PhantomData<D>
 }
 impl<U,D> ClippedReLu<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + PartialOrd + Max + From<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync +
+             DataTypeInfo + 'static + PartialOrd + Max + Min,
           D: Device<U> {
     /// Create an instance of ClippedReLu
     pub fn new(_:&D, ceiling: U) -> ClippedReLu<U,D> {
@@ -664,8 +666,9 @@ impl<U,D> ClippedReLu<U,D>
     }
 }
 impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ClippedReLu<U,DeviceCpu<U>>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
-             PartialOrd + Max + Min + From<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync +
+             DataTypeInfo + 'static +
+             PartialOrd + Max + Min,
           Arr<U,N>: Deref<Target=Box<[U]>> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
@@ -681,8 +684,9 @@ impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for ClippedR
     }
 }
 impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for ClippedReLu<U,DeviceCpu<U>>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
-             PartialOrd + Max + Min + From<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync +
+             DataTypeInfo + 'a +
+             PartialOrd + Max + Min,
           Arr<U,N>: Deref<Target=Box<[U]>> {
 
     fn apply(&self, device: &DeviceCpu<U>, input: ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
@@ -698,8 +702,9 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
     }
 }
 impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for ClippedReLu<U,DeviceCpu<U>>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
-             PartialOrd + Max + Min + From<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync +
+             DataTypeInfo + 'a +
+             PartialOrd + Max + Min,
           I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &'a I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| {
@@ -723,7 +728,8 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Clipped
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for ClippedReLu<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo + AsKernelPtr,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
+             Max + Min + DataTypeInfo + PartialOrd + AsKernelPtr,
           CudaPtr<U,AC>: WriteMemory<U>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator + 'a,
@@ -770,7 +776,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 }
 impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for ClippedReLu<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
-             PartialOrd + Max + Min + From<U>,
+             PartialOrd + Max + Min,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -787,7 +793,7 @@ impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec
 }
 impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for ClippedReLu<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
-             PartialOrd + Max + Min + From<U>,
+             PartialOrd + Max + Min,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -805,7 +811,8 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for ClippedReLu<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo + AsKernelPtr,
+    where U: Default + Clone + Copy + Debug + Send + Sync + Max + Min + PartialOrd + 'static +
+             AsKernelPtr + DataTypeInfo,
           I: BatchSize,
           AC: CudaAllocator + 'a,
           DeviceGpu<U,AC>: Device<U>,
@@ -855,15 +862,15 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 
 /// LeakyReLu Implementation
 pub struct LeakyReLu<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
-             PartialOrd + Max + Min + From<U>,
+    where U: Default + Clone + Copy + Debug + Max + Min + PartialOrd + Send + Sync + DataTypeInfo + 'static +
+             PartialOrd + Max + Min,
           D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>
 }
 impl<U,D> LeakyReLu<U,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
-             PartialOrd + Max + Min + From<U>,
+             PartialOrd + Max + Min,
           D: Device<U> {
     /// Create an instance of LeakyReLu
     pub fn new(_:&D) -> LeakyReLu<U,D> {
@@ -876,7 +883,7 @@ impl<U,D> LeakyReLu<U,D>
 impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for LeakyReLu<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
              PartialOrd + Max + Min +
-             Mul<Output=U> + Add<Output=U> + From<U> + FromPrimitive,
+             Mul<Output=U> + Add<Output=U> + FromPrimitive,
           Arr<U,N>: Deref<Target=Box<[U]>> {
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         self.apply(device,&input.iter().cloned())
@@ -893,7 +900,7 @@ impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for LeakyReL
 impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for LeakyReLu<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
              PartialOrd + Max + Min +
-             Mul<Output=U> + Add<Output=U> + From<U> + FromPrimitive,
+             Mul<Output=U> + Add<Output=U> + FromPrimitive,
           Arr<U,N>: Deref<Target=Box<[U]>> {
     fn apply(&self, device: &DeviceCpu<U>, input: ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
         self.apply(device,&input.iter().cloned())
@@ -910,7 +917,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for LeakyReLu<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
              PartialOrd + Max + Min +
-             Mul<Output=U> + Add<Output=U> + From<U> + FromPrimitive,
+             Mul<Output=U> + Add<Output=U> + FromPrimitive,
           I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &'a I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| {
@@ -934,7 +941,7 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for LeakyRe
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for LeakyReLu<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + PartialOrd + Max + Min + DataTypeInfo,
           CudaPtr<U,AC>: WriteMemory<U>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator + 'a,
@@ -982,7 +989,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for LeakyReLu<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
              PartialOrd + Max + Min +
-             Mul<Output=U> + Add<Output=U> + From<U> + FromPrimitive,
+             Mul<Output=U> + Add<Output=U> + FromPrimitive,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -1000,7 +1007,7 @@ impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec
 impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for LeakyReLu<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
              PartialOrd + Max + Min +
-             Mul<Output=U> + Add<Output=U> + From<U> + FromPrimitive,
+             Mul<Output=U> + Add<Output=U> + FromPrimitive,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
     fn batch_apply(&self, device: &DeviceCpu<U>, input: SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
@@ -1019,7 +1026,7 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for LeakyReLu<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Max + Min + PartialOrd + Send + Sync + 'static + DataTypeInfo,
           I: BatchSize,
           AC: CudaAllocator + 'a,
           DeviceGpu<U,AC>: Device<U>,
@@ -1069,7 +1076,7 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
 /// Swish Implementation
 pub struct Swish<U,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
-             One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg + From<U> + FromPrimitive,
+             One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg + FromPrimitive,
           D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>
@@ -1077,7 +1084,7 @@ pub struct Swish<U,D>
 impl<U,D> Swish<U,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
              One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
-             Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg<Output=U> + From<U> + FromPrimitive,
+             Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg<Output=U> + FromPrimitive,
           D: Device<U> {
     /// Create an instance of Swish
     pub fn new(_:&D) -> Swish<U,D> {
@@ -1089,7 +1096,7 @@ impl<U,D> Swish<U,D>
 }
 impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
-             Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> + From<U> + FromPrimitive,
+             Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> + FromPrimitive,
           Arr<U,N>: Deref<Target=Box<[U]>> {
     fn apply(&self, device: &DeviceCpu<U>, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         self.apply(device,&input.iter().cloned())
@@ -1106,7 +1113,7 @@ impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,
 impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
              Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
-             From<U> + FromPrimitive,
+             FromPrimitive,
           Arr<U,N>: Deref<Target=Box<[U]>> {
     fn apply(&self, device: &DeviceCpu<U>, input: ArrView<'a,U,N>) -> Result<Arr<U,N>, EvaluateError> {
         self.apply(device,&input.iter().cloned())
@@ -1123,7 +1130,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu<U>> for
 impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
              One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
-             Exp + From<U> + FromPrimitive,
+             Exp + FromPrimitive,
           I: Iterator<Item=U> + Clone {
     fn apply(&self, _: &DeviceCpu<U>, input: &'a I) -> Result<Arr<U,N>, EvaluateError> {
         Ok(input.clone().map(|i| i * (U::one() / (U::one() + (-i).exp()))).collect::<Vec<U>>().try_into()?)
@@ -1141,7 +1148,9 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Swish<U
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for Swish<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug +
+             One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg + FromPrimitive +
+             Send + Sync + 'static + DataTypeInfo,
           CudaPtr<U,AC>: WriteMemory<U>,
           DeviceGpu<U,AC>: Device<U>,
           AC: CudaAllocator + 'a,
@@ -1189,7 +1198,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
              One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
-             Exp + From<U> + FromPrimitive,
+             Exp + FromPrimitive,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -1207,7 +1216,7 @@ impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec
 impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Swish<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
              One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
-             Exp + From<U> + FromPrimitive,
+             Exp + FromPrimitive,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
 
     fn batch_apply(&self, device: &DeviceCpu<U>, input: SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -1227,7 +1236,9 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Swish<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug +
+             One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg +
+                   FromPrimitive + Send + Sync + 'static + DataTypeInfo,
           I: BatchSize,
           AC: CudaAllocator + 'a,
           DeviceGpu<U,AC>: Device<U>,
@@ -1352,7 +1363,9 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for Tanh<U,
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for Tanh<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug +
+             One + ope::Tanh + Mul<Output=U> + Sub<Output=U> +
+             Send + Sync + 'static + DataTypeInfo,
           I: BatchDataType + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
@@ -1402,8 +1415,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
 }
 impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
-             One + Mul<Output=U> + Sub<Output=U> +
-             ope::Tanh,
+             One + ope::Tanh + Mul<Output=U> + Sub<Output=U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
     fn batch_apply(&self, device: &DeviceCpu<U>, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
@@ -1419,8 +1431,7 @@ impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec
 }
 impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu<U>> for Tanh<U,DeviceCpu<U>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
-             One + Mul<Output=U> + Sub<Output=U> +
-             ope::Tanh,
+             One + ope::Tanh + Mul<Output=U> + Sub<Output=U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
     fn batch_apply(&self, device: &DeviceCpu<U>, input: SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
         Ok(input.par_iter().map(|i| {
@@ -1439,7 +1450,9 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for Tanh<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug +
+             One + ope::Tanh + Mul<Output=U> + Sub<Output=U> +
+             Send + Sync + 'static + DataTypeInfo,
           I: BatchSize,
           AC: CudaAllocator + 'a,
           DeviceGpu<U,AC>: Device<U>,
@@ -1592,7 +1605,10 @@ impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu<U>> for SoftMax
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceGpu<U,AC>> for SoftMax<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
+             Send + Sync + 'static +
+             Max + InitialMaxValue + One + Exp + FromPrimitive + DataTypeInfo,
           I: BatchDataType + 'a,
           <I as BatchDataType>::Type: BatchSize + 'a,
           CudaPtr<U,AC>: WriteMemory<U>,
@@ -1684,7 +1700,10 @@ impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,Seri
 #[cfg(feature = "cuda")]
 impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>,DeviceGpu<U,AC>>
     for SoftMax<U,DeviceGpu<U,AC>>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
+             Send + Sync + 'static +
+             Max + InitialMaxValue + One + Exp + FromPrimitive + DataTypeInfo,
           I: BatchSize,
           AC: CudaAllocator + 'a,
           DeviceGpu<U,AC>: Device<U>,

@@ -1,11 +1,12 @@
 //! Implementation of the calculation process for full connected layers
 
 use std::fmt::Debug;
-use rayon::prelude::{ParallelIterator, IntoParallelRefIterator, IndexedParallelIterator};
+use std::ops::{Add, AddAssign, Mul};
+use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator};
+use rayon::prelude::ParallelIterator;
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
 use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
-use crate::ope::UnitValue;
 use crate::ope::Product;
 use crate::layer::{BatchDataType};
 #[cfg(feature = "cuda")]
@@ -27,7 +28,7 @@ use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of various calculation processes in the linear layer
 pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: BatchDataType {
     type Output: BatchDataType + Debug + 'static;
     type BatchOutput: Debug + 'static;
@@ -149,7 +150,8 @@ pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
     fn batch_linear_reduce<'a>(&self, loss: &'a Self::BatchOutput) -> Result<B,TrainingError>;
 }
 impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,I,NI,NO> for DeviceCpu<U>
-    where U: UnitValue<U>,
+    where U: Default + Clone + Copy + Debug +
+             Add<Output=U> + Mul<Output=U> + AddAssign + Send + Sync + 'static,
           I: BatchDataType + From<Arr<U,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
@@ -995,13 +997,14 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
 
 /// Trait that defines the implementation of various computational processes in the differentially applicable linear layer
 pub trait DeviceDiffLinear<'a,U,I,T,const NI: usize,const NO: usize>
-    where U: UnitValue<U> {
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static, {
     type Output: Debug + 'static;
     fn forward_diff_linear(&self, units: &T, input: I, partial_input: &Self::Output) -> Result<Self::Output, EvaluateError>;
     fn clone_diff_linear_forward_output(&self, output: &Self::Output) -> Result<Self::Output, EvaluateError>;
 }
 impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U>
-    where U: UnitValue<U> {
+    where U: Default + Clone + Copy + Add<Output=U> + Mul<Output=U> +
+             AddAssign + Debug + Send + Sync + 'static, {
     type Output = Arr<U,NO>;
     #[inline]
     fn forward_diff_linear(&self, units: &Arr2<U, NI, NO>,
@@ -1023,7 +1026,7 @@ impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,Arr
 }
 #[cfg(feature = "cuda")]
 impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,CudaTensor2dPtr<U,A,NI,NO>,NI,NO> for DeviceGpu<U,A>
-    where U: UnitValue<U> + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U>,
           CudaPtr<usize,A>: WriteMemory<usize>,

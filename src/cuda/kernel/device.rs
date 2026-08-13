@@ -10,7 +10,6 @@ use libc::{c_int, c_void, size_t};
 use num_traits::FromPrimitive;
 use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, DataTypeInfo, Kernel, KernelArgs, KernelLaunchConfig};
 use crate::cuda::allocator::CudaAllocator;
-use crate::ope::UnitValue;
 
 extern "C" {
     fn reduce_linear_batch_float(input: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
@@ -157,7 +156,10 @@ impl<'a,T,A,const N:usize> LossLinearBatchByCanonicalLinkArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for LossLinearBatchByCanonicalLinkArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator {
+    where T: DataTypeInfo + Default + Clone + Copy + Debug +
+             Add<Output=T> + Sub<Output=T> + Div<Output=T> + AddAssign + FromPrimitive +
+             Send + Sync + DataTypeInfo + 'static,
+          A: CudaAllocator {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             &mut self.expected,
@@ -253,7 +255,10 @@ impl<'a,T,A,const N:usize> LossLinearByCanonicalLinkArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for LossLinearByCanonicalLinkArgs<'a,T,A,N>
-    where T: DataTypeInfo + UnitValue<T>, A: CudaAllocator {
+    where T: DataTypeInfo + Default + Clone + Copy + Debug +
+             Add<Output=T> + Sub<Output=T> + Div<Output=T> + AddAssign + FromPrimitive +
+             Send + Sync + DataTypeInfo + 'static,
+          A: CudaAllocator {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![
             &mut self.expected,
@@ -1123,7 +1128,7 @@ impl<'a,T,A,const N:usize> AddBiasArgs<'a,T,A,N>
     }
 }
 impl<'a,T,A,const N:usize> KernelArgs for AddBiasArgs<'a,T,A,N>
-    where T: DataTypeInfo + Debug + Default + UnitValue<T>,
+    where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'a {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
         vec![

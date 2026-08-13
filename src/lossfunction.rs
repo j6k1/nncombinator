@@ -17,7 +17,7 @@ use crate::cuda::kernel::lossfunction::{LinearBatchCrossEntropy, LinearBatchCros
 use crate::device::{DeviceGpu, DeviceAllocator};
 
 /// Trait that defines the implementation of the loss function used in neural networks during training.
-pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy + UnitValue<U> {
+pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy {
     /// Differentiation of loss functions
     /// # Arguments
     /// * `r` - actual value

@@ -38,7 +38,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
 
 /// Trait that defines devices responsible for various computational processes of neural networks
-pub trait Device<U>: Clone where U: UnitValue<U> {
+pub trait Device<U>: Clone {
 }
 /// Characteristics defining devices responsible for various convolutional computations of neural networks
 pub trait DeviceReduce<T,R,U,const N:usize> where U: UnitValue<U> {

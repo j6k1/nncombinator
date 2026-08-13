@@ -7,7 +7,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear};
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::optimizer::{Optimizer, OptimizerBuilder};
@@ -16,7 +16,7 @@ use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, Te
 /// Linear Layer Implementation
 pub struct LinearLayer<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U>,
+             PreTrain + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
@@ -30,8 +30,27 @@ pub struct LinearLayer<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
     unit_optimizer:OP,
     bias_optimizer:OP,
 }
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> InputTensorScalar<U>
+    for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain + Loss<U> + OutputTensorScalar<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          PI: Debug,
+          OP: Optimizer<U,D> {}
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputTensorScalar<U>
+    for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain + Loss<U> + OutputTensorScalar<U>,
+          U: Default + Clone + Copy + Send + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          PI: Debug,
+          OP: Optimizer<U,D> {}
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
@@ -77,7 +96,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> LinearLayer<U,C,BC,P,D,I,
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence,Specialized> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U> + Persistence<U,TextFilePersistence,Specialized>,
+             PreTrain + Loss<U> + OutputTensorScalar<U> + Persistence<U,TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
@@ -137,7 +156,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePer
 impl<T,U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,T,Linear> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U> + Persistence<U,T,Linear>,
+             PreTrain + Loss<U> + OutputTensorScalar<U> + Persistence<U,T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
@@ -188,7 +207,7 @@ impl<T,U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,T,Linear>
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Forward<PI,Result<<Self as ForwardAll>::Output,EvaluateError>>
     for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U>,
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
@@ -202,7 +221,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Forward<PI,Result<<Self a
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ForwardAll for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U>,
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
@@ -214,16 +233,17 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ForwardAll for LinearLaye
         self.forward(&self.parent.forward_all(input)?)
     }
 }
-impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PreTrain<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
-    where P: PreTrain<U,PreOutput=PI> +
-             ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PreTrain for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: PreTrain<PreOutput=PI> +
+             ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,D>,
           PI: Debug + BatchDataType + From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO> {
     type PreOutput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
-    type OutStack = Cons<<P as PreTrain<U>>::OutStack,Self::PreOutput>;
+    type OutStack = Cons<<P as PreTrain>::OutStack,Self::PreOutput>;
 
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
         let r = self.parent.pre_train(input)?;
@@ -236,7 +256,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PreTrain<U> for LinearLay
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
     Backward<U,&<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output,Result<PI,TrainingError>> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U>,
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           OP: Optimizer<U,D>,
@@ -248,7 +268,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: BackwardAll<U,LossInput=PI> + ForwardAll<Input=I,Output=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U>,
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           C: Debug,
@@ -265,7 +285,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for Linear
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
         let loss = input;
@@ -288,14 +308,14 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for Linear
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PartialForward for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward +
              BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U>,
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
           Self: ForwardAll<Input=I>,
-          Self: PreTrain<U> {
+          Self: PreTrain {
     type PartialInput = <P as PartialForward>::PartialInput;
     type PartialOutput = <P as PartialForward>::PartialOutput;
     type DiffInput = <P as PartialForward>::DiffInput;
@@ -312,13 +332,13 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PartialForward for Linear
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ForwardDiff for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward + ForwardDiff +
              BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U>,
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
-          Self: ForwardAll<Input=I,Output=<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output> + PreTrain<U> {
+          Self: ForwardAll<Input=I,Output=<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output> + PreTrain {
     fn forward_diff(&self, input: Self::DiffInput, partial_input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.forward_diff(input,partial_input)?;
 
@@ -328,23 +348,23 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ForwardDiff for LinearLay
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ContinueForward for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward + ContinueForward +
              BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U>,
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
-          Self: ForwardAll<Input=I,Output=<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output> + PreTrain<U> {
+          Self: ForwardAll<Input=I,Output=<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output> + PreTrain {
     fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.continue_forward(input)?;
 
         Ok(self.device.forward_linear(&self.bias,&self.units,&input.into())?)
     }
 }
-impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> +
-             Loss<U> + UpdateWeight<U>,
+             PreTrain<PreOutput=PI> +
+             Loss<U> + UpdateWeight + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           C: Debug,
@@ -356,7 +376,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for Linea
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(C,BC)>;
+    type GradientStack = Cons<<P as UpdateWeight>::GradientStack,(C,BC)>;
 
     fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
         let (s,(g,bg)) = stack.pop();
@@ -371,8 +391,9 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight<U> for Linea
     }
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
-    where P: PreTrain<U,PreOutput=PI> +
-             ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U>,
+    where P: PreTrain<PreOutput=PI> +
+             ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           C: Debug,
@@ -387,8 +408,9 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Loss<U> for LinearLayer<U
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchForwardBase for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> +
-             Loss<U> + BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
+             PreTrain<PreOutput=PI> +
+             Loss<U> + OutputTensorScalar<U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
@@ -401,7 +423,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchForwardBase for Line
 }
 impl<U,C,BC,P,OP,D,I,PI,const NI:usize,const NO:usize> BatchForward for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
@@ -416,10 +438,11 @@ impl<U,C,BC,P,OP,D,I,PI,const NI:usize,const NO:usize> BatchForward for LinearLa
         Ok(self.device.batch_forward_linear(&self.bias,&self.units,&input)?)
     }
 }
-impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrainBase<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U,PreOutput=PI> + Loss<U> +
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrainBase for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
-             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type>,
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,D>,
@@ -428,17 +451,17 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrainBase<U> for 
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
           PI: Debug + BatchDataType + From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput> + BatchDataType,
           <D as DeviceLinear<U,C,BC,PI,NI,NO>>::BatchOutput: Debug,
-          Self: PreTrain<U,PreOutput=<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output> {
+          Self: PreTrain<PreOutput=<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output> {
     type BatchPreOutput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::BatchOutput;
-    type BatchOutStack = Cons<<P as BatchPreTrainBase<U>>::BatchOutStack,Self::BatchPreOutput>;
+    type BatchOutStack = Cons<<P as BatchPreTrainBase>::BatchOutStack,Self::BatchPreOutput>;
 }
-impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrain<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrain for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchForward +
-             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrain<U>,
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,D>,
@@ -459,10 +482,10 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrain<U> for Line
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> +
+             PreTrain<PreOutput=PI> + OutputTensorScalar<U> +
              Loss<U> + BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
-             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrain<U> +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
@@ -486,7 +509,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for Line
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s, _) = stack.pop();
 
         let loss = input;
@@ -510,10 +533,10 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for Line
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchLoss<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
-             BatchPreTrainBase<U,BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrain<U> +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync + BatchDataType,
@@ -536,7 +559,8 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchLoss<U> for LinearLa
 }
 // OnStep implementation for LinearLayer
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OnStep for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + PreTrain<U> + Loss<U> + OnStep,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrain + Loss<U> + OutputTensorScalar<U> + OnStep,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
@@ -555,7 +579,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OnStep for LinearLayer<U,
 }
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFilePersistence,Specialized> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U> +
+             PreTrain + Loss<U> + OutputTensorScalar<U> +
              PersistProgress<TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
@@ -593,7 +617,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFileP
 impl<T,U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<T,Linear> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U> + Loss<U> +
+             PreTrain + Loss<U> + OutputTensorScalar<U> +
              PersistProgress<T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -621,7 +645,7 @@ impl<T,U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<T,Linea
 /// Trait for LinearLayer instance creation
 pub trait LinearLayerInstantiation<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U>,
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug,
@@ -645,7 +669,7 @@ pub trait LinearLayerInstantiation<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:us
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> LinearLayerInstantiation<U,C,BC,P,D,I,PI,OP,NI,NO>
     for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U>,
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
@@ -685,7 +709,7 @@ impl<const NI:usize,const NO:usize> LinearLayerBuilder<NI,NO> {
     pub fn build<U,C,BC,P,D,I,PI,OP,B>(&self,parent: P, device:&D, ui: impl FnMut() -> U, bi: impl FnMut() -> U, b: &B)
         -> Result<LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-                 PreTrain<U,PreOutput=PI> + Loss<U>,
+                 PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
               U: Default + Clone + Copy + UnitValue<U>,
               I: Debug + Send + Sync,
               PI: Debug,
@@ -699,7 +723,8 @@ impl<const NI:usize,const NO:usize> LinearLayerBuilder<NI,NO> {
 }
 /// Implementation of differentially applicable linear layers
 pub struct DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize>
-    where P: ForwardAll<Input=I,Output=PI> + PreTrain<U> + Loss<U>,
+    where P: ForwardAll<Input=I,Output=PI> +
+             PreTrain + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
@@ -717,9 +742,30 @@ pub struct DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usiz
     unit_optimizer: OP,
     bias_optimizer: OP
 }
+impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> InputTensorScalar<U>
+    for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> +
+             PreTrain + Loss<U> + OutputTensorScalar<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          DI: Debug,
+          PI: Debug,
+          OP: Optimizer<U,D> {}
+impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> OutputTensorScalar<U>
+    for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> +
+             PreTrain + Loss<U> + OutputTensorScalar<U>,
+          U: Default + Clone + Copy + UnitValue<U>,
+          D: Device<U>,
+          I: Debug + Send + Sync,
+          DI: Debug,
+          PI: Debug,
+          OP: Optimizer<U,D> {}
 impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=()> + PreTrain<U> + Loss<U>,
+             BackwardAll<U,LossInput=()> +
+             PreTrain + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
@@ -770,7 +816,7 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> DiffLinearLayer<'a,
 impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence,Specialized>
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=()> + PreTrain<U> + Loss<U> +
+             BackwardAll<U,LossInput=()> + PreTrain + Loss<U> + OutputTensorScalar<U> +
              Persistence<U,TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
@@ -833,7 +879,7 @@ impl<'a,T,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,T,L
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=()> + PreTrain<U> + Loss<U> +
+             BackwardAll<U,LossInput=()> + PreTrain + Loss<U> + OutputTensorScalar<U> +
              Persistence<U,T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -886,7 +932,7 @@ impl<'a,T,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,T,L
 impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> ForwardAll for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=()> +
-             PreTrain<U,PreOutput=PI> + Loss<U>,
+             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           DI: Debug,
@@ -902,10 +948,10 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> ForwardAll for Diff
         Ok(self.device.forward_linear(&self.bias,&self.units,&input)?)
     }
 }
-impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PreTrain<U> for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
-    where P: PreTrain<U,PreOutput=PI> +
+impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PreTrain for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
+    where P: PreTrain<PreOutput=PI> +
              ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=()> + Loss<U>,
+             BackwardAll<U,LossInput=()> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           DI: Debug,
@@ -914,7 +960,7 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PreTrain<U> for Dif
           D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
           <D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output: Debug + 'static {
     type PreOutput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
-    type OutStack = Cons<<P as PreTrain<U>>::OutStack,Self::PreOutput>;
+    type OutStack = Cons<<P as PreTrain>::OutStack,Self::PreOutput>;
 
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
         let s = self.parent.pre_train(input)?;
@@ -929,8 +975,8 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PreTrain<U> for Dif
 impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: BackwardAll<U,LossInput=()> +
              ForwardAll<Input=I,Output=PI> +
-             PreTrain<U,PreOutput=PI> +
-             Loss<U>,
+             PreTrain<PreOutput=PI> +
+             Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           DI: Debug,
@@ -946,12 +992,12 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> BackwardAll<U> for 
           for<'b> &'b <OP as Optimizer<U,D>>::InternalType: From<&'b BC>,
           for<'b> <OP as Optimizer<U,D>>::InternalUpdateType<'b>: From<&'b mut C>,
           for<'b> <OP as Optimizer<U,D>>::InternalUpdateType<'b>: From<&'b mut BC>,
-          Self: ForwardAll + PreTrain<U,OutStack=Cons<<P as PreTrain<U>>::OutStack,BC>> {
+          Self: ForwardAll + PreTrain<OutStack=Cons<<P as PreTrain>::OutStack,BC>> {
     type LossInput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
         let loss = input;
@@ -967,10 +1013,10 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> BackwardAll<U> for 
         Ok((l,Cons(s,(g,bg.into()))))
     }
 }
-impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> UpdateWeight<U> for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
+impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> UpdateWeight for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             PreTrain<U> +
-             Loss<U> + UpdateWeight<U>,
+             PreTrain +
+             Loss<U> + UpdateWeight + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Send + UnitValue<U>,
           I: Debug + Send + Sync,
           DI: Debug,
@@ -983,7 +1029,7 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> UpdateWeight<U> for
           for<'b> &'b <OP as Optimizer<U,D>>::InternalType: From<&'b BC>,
           for<'b> <OP as Optimizer<U,D>>::InternalUpdateType<'b>: From<&'b mut C>,
           for<'b> <OP as Optimizer<U,D>>::InternalUpdateType<'b>: From<&'b mut BC> {
-    type GradientStack = Cons<<P as UpdateWeight<U>>::GradientStack,(C,BC)>;
+    type GradientStack = Cons<<P as UpdateWeight>::GradientStack,(C,BC)>;
 
     fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
         let (s,(g,bg)) = stack.pop();
@@ -1000,8 +1046,8 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> UpdateWeight<U> for
 impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> PartialForward for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: BackwardAll<U,LossInput=()> +
              ForwardAll<Input=I,Output=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U> +
-             PartialForward<DiffInput=DI>,
+             PreTrain<PreOutput=PI> + Loss<U> +
+             PartialForward<DiffInput=DI> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO,Output=<D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output> +
              DeviceDiffLinear<'a,U,DI,C,NI,NO>,
@@ -1010,7 +1056,7 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> PartialForward for 
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
           Self: ForwardAll<Input=I> +
-                PreTrain<U> {
+                PreTrain {
     type PartialInput = <D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output;
     type PartialOutput = <D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output;
     type DiffInput = DI;
@@ -1028,8 +1074,8 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> PartialForward for 
 impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> ForwardDiff for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: BackwardAll<U,LossInput=()> +
              ForwardAll<Input=I,Output=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U> +
-             PartialForward<DiffInput=DI>,
+             PreTrain<PreOutput=PI> + Loss<U> +
+             PartialForward<DiffInput=DI> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> +
           DeviceLinear<U,C,BC,PI,NI,NO,Output=<D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output>,
@@ -1038,7 +1084,7 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> ForwardDiff for Dif
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
           Self: ForwardAll<Input=I,Output=<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output> +
-                PreTrain<U> {
+                PreTrain {
     fn forward_diff(&self, input: Self::DiffInput, partial_input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         Ok(self.device.forward_diff_linear(&self.units,input,partial_input)?)
     }
@@ -1046,8 +1092,8 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> ForwardDiff for Dif
 impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> ContinueForward for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: BackwardAll<U,LossInput=()> +
              ForwardAll<Input=I,Output=PI> +
-             PreTrain<U,PreOutput=PI> + Loss<U> +
-             PartialForward<DiffInput=DI>,
+             PreTrain<PreOutput=PI> + Loss<U> +
+             PartialForward<DiffInput=DI> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> +
              DeviceLinear<U,C,BC,PI,NI,NO,Output=<D as DeviceDiffLinear<'a,U,DI,C,NI,NO>>::Output>,
@@ -1056,15 +1102,15 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> ContinueForward for
           PI: Debug + BatchDataType,
           OP: Optimizer<U,D>,
           Self: ForwardAll<Input=I,Output=Self::PartialInput> +
-                PreTrain<U> {
+                PreTrain {
     fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         Ok(self.device.clone_diff_linear_forward_output(input)?)
     }
 }
 impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Loss<U> for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
-    where P: PreTrain<U,PreOutput=PI> +
+    where P: PreTrain<PreOutput=PI> +
              ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=()> + Loss<U>,
+             BackwardAll<U,LossInput=()> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO> +
              DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
@@ -1079,7 +1125,7 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Loss<U> for DiffLin
 }
 // OnStep implementation for DiffLinearLayer
 impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> OnStep for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
-    where P: ForwardAll<Input=I,Output=PI> + PreTrain<U> + Loss<U> + OnStep,
+    where P: ForwardAll<Input=I,Output=PI> + PreTrain + Loss<U> + OutputTensorScalar<U> + OnStep,
           U: Default + Clone + Copy + UnitValue<U>,
           D: Device<U>,
           I: Debug + Send + Sync,
@@ -1101,7 +1147,7 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> OnStep for DiffLine
 impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<TextFilePersistence,Specialized>
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=()> + PreTrain<U> + Loss<U> +
+             BackwardAll<U,LossInput=()> + PreTrain + Loss<U> + OutputTensorScalar<U> +
              PersistProgress<TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + UnitValue<U> + FromStr,
           I: Debug + Send + Sync,
@@ -1141,7 +1187,7 @@ impl<'a,T,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<T
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=()> + PreTrain<U> + Loss<U> +
+             BackwardAll<U,LossInput=()> + PreTrain + Loss<U> + OutputTensorScalar<U> +
              PersistProgress<T,Linear>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
@@ -1170,7 +1216,7 @@ impl<'a,T,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<T
 /// Trait for DiffLinearLayer instance creation
 pub trait DiffLinearLayerInstantiation<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=()> +
-             PreTrain<U> + Loss<U>,
+             PreTrain + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           DI: Debug,
@@ -1195,7 +1241,7 @@ pub trait DiffLinearLayerInstantiation<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,c
 impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> DiffLinearLayerInstantiation<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=()> +
-             PreTrain<U> + Loss<U>,
+             PreTrain + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + UnitValue<U>,
           I: Debug + Send + Sync,
           DI: Debug,
@@ -1238,7 +1284,7 @@ impl<const NI:usize,const NO:usize> DiffLinearLayerBuilder<NI,NO> {
                  -> Result<DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> +
                  BackwardAll<U,LossInput=()> +
-                 PreTrain<U> + Loss<U>,
+                 PreTrain + Loss<U> + OutputTensorScalar<U>,
               U: Default + Clone + Copy + UnitValue<U>,
               I: Debug + Send + Sync,
               DI: Debug,

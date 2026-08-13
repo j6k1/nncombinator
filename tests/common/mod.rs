@@ -20,7 +20,7 @@ pub fn assert_device<U,I,D: DeviceInput<U,I>>(_:&D)
 pub fn assert_forward_all<T: ForwardAll>(_:&T) {
 
 }
-pub fn assert_pre_train<U: UnitValue<U>,T: PreTrain<U>>(_:&T) {
+pub fn assert_pre_train<T: PreTrain>(_:&T) {
 
 }
 pub fn assert_backward_all<U: UnitValue<U>,T: BackwardAll<U>>(_:&T) {
@@ -29,7 +29,7 @@ pub fn assert_backward_all<U: UnitValue<U>,T: BackwardAll<U>>(_:&T) {
 pub fn assert_loss<U: UnitValue<U>,T: Loss<U>>(_:&T) {
 
 }
-pub fn assert_update_weight<U: UnitValue<U>,T: UpdateWeight<U>>(_:&T) {
+pub fn assert_update_weight<T: UpdateWeight>(_:&T) {
 
 }
 pub fn assert_partial_forward<T: PartialForward>(_:&T) {}
@@ -38,7 +38,7 @@ pub fn assert_continue_forward<T: ContinueForward>(_:&T) {}
 pub fn assert_batch_forward<T: BatchForward>(_:&T) {
 
 }
-pub fn assert_batch_pre_train<U: UnitValue<U>,T: BatchPreTrain<U>>(_:&T) {
+pub fn assert_batch_pre_train<T: BatchPreTrain>(_:&T) {
 
 }
 pub fn assert_batch_backward<U: UnitValue<U>,T: BatchBackward<U>>(_:&T) {

@@ -6,7 +6,7 @@ use crate::{Cons, Never, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, Loss, OnStep, PartialForward, PersistProgress, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, Loss, OnStep, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::ope::UnitValue;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
@@ -17,6 +17,8 @@ pub struct InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
     l:PhantomData<LI>,
     device:D
 }
+impl<U,O,LI,D> InputTensorScalar<U> for InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {}
+impl<U,O,LI,D> OutputTensorScalar<U> for InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {}
 impl<U,O,LI,D> InputLayer<U,O,LI,D> where U: UnitValue<U>, D: Device<U> {
     /// Create an instance of InputLayer
     pub fn new(device:&D) -> InputLayer<U,O,LI,D> {
@@ -60,7 +62,7 @@ impl<U,O,LI,D> ForwardAll for InputLayer<U,O,LI,D>
         Ok(self.device.forward_input(input)?)
     }
 }
-impl<U,O,LI,D> PreTrain<U> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> PreTrain for InputLayer<U,O,LI,D>
     where U: UnitValue<U>,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug,
@@ -83,11 +85,11 @@ impl<U,O,LI,D> BackwardAll<U> for InputLayer<U,O,LI,D>
     type LossOutput = LI;
 
     fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, _:Self::OutStack, _:&L)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
 }
-impl<U,O,LI,D> UpdateWeight<U> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> UpdateWeight for InputLayer<U,O,LI,D>
     where U: UnitValue<U>,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug,
@@ -124,7 +126,7 @@ impl<U,O,LI,D> BatchForward for InputLayer<U,O,LI,D>
         Ok(self.device.batch_forward_input(input)?)
     }
 }
-impl<U,O,LI,D> BatchPreTrainBase<U> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> BatchPreTrainBase for InputLayer<U,O,LI,D>
     where U: UnitValue<U>,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug,
@@ -133,7 +135,7 @@ impl<U,O,LI,D> BatchPreTrainBase<U> for InputLayer<U,O,LI,D>
     type BatchPreOutput = <D as DeviceInput<U,O>>::BatchOutput;
     type BatchOutStack = Cons<Nil,Self::BatchPreOutput>;
 }
-impl<U,O,LI,D> BatchPreTrain<U> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> BatchPreTrain for InputLayer<U,O,LI,D>
     where U: UnitValue<U>,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug,
@@ -154,7 +156,7 @@ impl<U,O,LI,D> BatchBackward<U> for InputLayer<U,O,LI,D>
     type BatchLossOutput = <LI as BatchDataType>::Type;
 
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, _: Self::BatchOutStack, _: &L)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
 }
@@ -218,6 +220,8 @@ impl<U,O,DI,PO,LI,D> DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: De
         }
     }
 }
+impl<U,O,DI,PO,LI,D> InputTensorScalar<U> for DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: Device<U> {}
+impl<U,O,DI,PO,LI,D> OutputTensorScalar<U> for DiffInputLayer<U,O,DI,PO,LI,D> where U: UnitValue<U>, D: Device<U> {}
 impl<U,O,DI,PO,LI,D> Persistence<U,TextFilePersistence,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: UnitValue<U> + FromStr + Sized, D: Device<U> {
     fn load(&mut self, _: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
@@ -280,7 +284,7 @@ impl<U,O,DI,PO,LI,D> PartialForward for DiffInputLayer<U,O,DI,PO,LI,D>
         unreachable!()
     }
 }
-impl<U,O,DI,PO,LI,D> PreTrain<U> for DiffInputLayer<U,O,DI,PO,LI,D>
+impl<U,O,DI,PO,LI,D> PreTrain for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: UnitValue<U>,
           O: Debug + BatchDataType + Send + Sync + 'static,
           DI: Debug,
@@ -307,11 +311,11 @@ impl<U,O,DI,PO,LI,D> BackwardAll<U> for DiffInputLayer<U,O,DI,PO,LI,D>
     type LossOutput = LI;
 
     fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, _:Self::OutStack, _:&L)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight<U>>::GradientStack), TrainingError> {
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
 }
-impl<U,O,DI,PO,LI,D> UpdateWeight<U> for DiffInputLayer<U,O,DI,PO,LI,D>
+impl<U,O,DI,PO,LI,D> UpdateWeight for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: UnitValue<U>,
           O: Debug + BatchDataType + Send + Sync + 'static,
           DI: Debug,

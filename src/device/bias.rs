@@ -47,16 +47,6 @@ pub trait DeviceBias<U,T,IO,const N: usize>
     /// Forward propagation calculation
     /// # Arguments
     /// * `bias` - bias weights
-    /// * `units` - unit weights
-    /// * `input` - input
-    ///
-    /// # Errors
-    ///
-    /// This function may return the following errors
-    /// * [`EvaluateError`]
-    /// Forward propagation calculation
-    /// # Arguments
-    /// * `bias` - bias weights
     /// * `input` - input
     ///
     /// # Errors

@@ -3,13 +3,15 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use crate::arr::{IntoConverter, MakeView, MakeViewMut, SerializedVec, SerializedVecConverter, SliceSize};
+use crate::arr::{MakeView, MakeViewMut, SliceSize};
 use crate::device::Device;
-use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
+use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar};
 use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
+use crate::{Cons, Stack};
+use crate::device::bridge::DeviceBridge;
 
 /// Bridge layer Implementation
 pub struct BridgeLayer<U,SO,P,I,PI,CI,D>
@@ -23,7 +25,7 @@ pub struct BridgeLayer<U,SO,P,I,PI,CI,D>
           CI: Debug + 'static,
           I: Debug + Send + Sync {
     parent:P,
-    device:PhantomData<D>,
+    device:D,
     u:PhantomData<U>,
     so:PhantomData<SO>,
     i:PhantomData<I>,
@@ -99,15 +101,15 @@ impl<U,SO,P,I,PI,CI,D> ForwardAll for BridgeLayer<U,SO,P,I,PI,CI,D>
              PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + 'static,
-          CI: Debug + 'static,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + 'static + BatchDataType,
+          CI: Debug + 'static + BatchDataType,
           I: Debug + Send + Sync {
     type Input = I;
-    type Output = PI;
+    type Output = CI;
 
     fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
-        self.parent.forward_all(input)
+        Ok(self.device.bridge_forward(&self.parent.forward_all(input)?)?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> PreTrain for BridgeLayer<U,SO,P,I,PI,CI,D>
@@ -116,32 +118,38 @@ impl<U,SO,P,I,PI,CI,D> PreTrain for BridgeLayer<U,SO,P,I,PI,CI,D>
              PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI>,
-          CI: Debug + 'static,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + 'static + BatchDataType,
+          CI: Debug + 'static + BatchDataType,
           I: Debug + Send + Sync {
-    type PreOutput = PI;
-    type OutStack = <P as PreTrain>::OutStack;
+    type PreOutput = CI;
+    type OutStack = Cons<<P as PreTrain>::OutStack,CI>;
 
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
-        Ok(self.parent.pre_train(input)?)
+        let s = self.parent.pre_train(input)?;
+
+        let r = s.map(|o| self.device.bridge_forward(o))?;
+
+        Ok(s.push(r))
     }
 }
 impl<U,SO,P,I,PI,CI,D> BackwardAll<U> for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> + OutputTensorScalar<U>,
+             BackwardAll<U,LossInput=PI,LossOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Debug + Debug + Default + Clone + Copy + Send + Sync + 'static,
           SO : Debug + Debug + Default + Clone + Copy + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI>,
-          CI: Debug + 'static,
-          I: Debug + Send + Sync, {
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + 'static + BatchDataType,
+          CI: Debug + 'static + BatchDataType,
+          I: Debug + Send + Sync {
     type LossInput = CI;
-    type LossOutput = <P as BackwardAll<U>>::LossOutput;
+    type LossOutput = PI;
 
     fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
-        Ok(self.parent.backward_all(input.into(), stack, lossf)?.into())
+        let (s,_) = stack.pop();
+
+        Ok(self.parent.backward_all(self.device.bridge_backward(&input)?, s, lossf)?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> UpdateWeight for BridgeLayer<U,SO,P,I,PI,CI,D>
@@ -150,10 +158,10 @@ impl<U,SO,P,I,PI,CI,D> UpdateWeight for BridgeLayer<U,SO,P,I,PI,CI,D>
              Loss<U> + UpdateWeight + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI>,
-          CI: Debug + 'static,
-          I: Debug + Send + Sync, {
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
+          I: Debug + Send + Sync {
     type GradientStack = <P as UpdateWeight>::GradientStack;
 
     fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
@@ -166,9 +174,9 @@ impl<U,SO,P,I,PI,CI,D> PartialForward for BridgeLayer<U,SO,P,I,PI,CI,D>
              PartialForward + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI>,
-          CI: Debug + 'static,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync {
     type PartialInput = <P as PartialForward>::PartialInput;
     type PartialOutput = <P as PartialForward>::PartialOutput;
@@ -189,12 +197,12 @@ impl<U,SO,P,I,PI,CI,D> ForwardDiff for BridgeLayer<U,SO,P,I,PI,CI,D>
              BackwardAll<U,LossInput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI>,
-          CI: Debug + 'static,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync {
     fn forward_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::Output, EvaluateError> {
-        Ok(self.parent.forward_diff(input,partial_input)?)
+        Ok(self.device.bridge_forward(&self.parent.forward_diff(input,partial_input)?)?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> ContinueForward for BridgeLayer<U,SO,P,I,PI,CI,D>
@@ -203,23 +211,23 @@ impl<U,SO,P,I,PI,CI,D> ContinueForward for BridgeLayer<U,SO,P,I,PI,CI,D>
           BackwardAll<U,LossInput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI>,
-          CI: Debug + 'static,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync {
     fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
-        Ok(self.parent.continue_forward(input)?)
+        Ok(self.device.bridge_forward(&self.parent.continue_forward(input)?)?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> Loss<U> for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> + OutputTensorScalar<U>,
+             BackwardAll<U,LossInput=PI,LossOutput=PI> + Loss<U> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI>,
-          CI: Debug + 'static,
-          I: Debug + Send + Sync {}
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
+          I: Debug + Send + Sync + BatchDataType {}
 impl<U,SO,P,I,PI,CI,D> BatchForwardBase for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
@@ -227,14 +235,16 @@ impl<U,SO,P,I,PI,CI,D> BatchForwardBase for BridgeLayer<U,SO,P,I,PI,CI,D>
              BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI> + BatchDataType,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
+          <CI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
           for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
     type BatchInput = <I as BatchDataType>::Type;
-    type BatchOutput = <PI as BatchDataType>::Type;
+    type BatchOutput = <CI as BatchDataType>::Type;
 }
 impl<U,SO,P,I,PI,CI,D> BatchForward for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
@@ -243,87 +253,118 @@ impl<U,SO,P,I,PI,CI,D> BatchForward for BridgeLayer<U,SO,P,I,PI,CI,D>
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI> + BatchDataType,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
+          <CI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
           for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
-        self.parent.batch_forward(input)
+        Ok(self.device.batch_bridge_forward(&self.parent.batch_forward(input)?)?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> BatchPreTrainBase for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain +
              BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI> + BatchDataType,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync + BatchDataType,
-          <PI as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug + 'static,
+          <CI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
-    type BatchPreOutput = <PI as BatchDataType>::Type;
-    type BatchOutStack = <P as BatchPreTrainBase>::BatchOutStack;
+          for<'a> <CI as BatchDataType>::Type: Debug,
+          for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
+          for<'a> CI: Debug + 'static + BatchDataType {
+    type BatchPreOutput = <CI as BatchDataType>::Type;
+    type BatchOutStack = Cons<<P as BatchPreTrainBase>::BatchOutStack,<CI as BatchDataType>::Type>;
 }
 impl<U,SO,P,I,PI,CI,D> BatchPreTrain for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<U>,
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain +
+             BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI> + BatchDataType,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync + BatchDataType,
-          <PI as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug + 'static,
+          <CI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
           for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
-        self.parent.batch_pre_train(input)
+        let s = self.parent.batch_pre_train(input)?;
+
+        let r = s.map(|o| self.device.batch_bridge_forward(o))?;
+
+        Ok(s.push(r))
     }
 }
 impl<U,SO,P,I,PI,CI,D> BatchBackward<U> for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> + Loss<U> +
+    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> +
-             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<U>,
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain +
+             BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type,BatchLossOutput=<PI as BatchDataType>::Type> +
+             OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI> + BatchDataType,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
+          <PI as BatchDataType>::Type: Debug,
+          <CI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> <CI as BatchDataType>::Type: Debug,
           for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
-          SerializedVec<U,CI>: IntoConverter,
-          <PI as BatchDataType>::Type: Debug,
-          <PI as BatchDataType>::Type : TryFrom<<SerializedVec<U,CI> as IntoConverter>::Converter,Error=TypeConvertError> {
-    type BatchLossInput = SerializedVec<U,CI>;
-    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
+          for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
+    type BatchLossInput = <CI as BatchDataType>::Type;
+    type BatchLossOutput = <PI as BatchDataType>::Type;
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
-        self.parent.batch_backward(input.into_converter().try_into()?, stack, lossf)
+        let (s,_) = stack.pop();
+
+        Ok(self.parent.batch_backward(self.device.batch_bridge_backward(&input)?, s, lossf)?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> BatchLoss<U> for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> + Loss<U> +
+             BackwardAll<U,LossInput=PI,LossOutput=PI> + Loss<U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<U>,
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain +
+             BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type,BatchLossOutput=<PI as BatchDataType>::Type> +
+             OutputTensorScalar<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
-          PI: Debug + From<CI> + BatchDataType,
+          D: Device<U> + DeviceBridge<U,PI,CI>,
+          PI: Debug + BatchDataType + 'static,
+          CI: Debug + BatchDataType + 'static,
+          <PI as BatchDataType>::Type: Debug,
+          <CI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> <CI as BatchDataType>::Type: Debug,
           for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
-          <PI as BatchDataType>::Type: Debug,
-          <PI as BatchDataType>::Type : TryFrom<SerializedVecConverter<U,CI>,Error=TypeConvertError> {
-
+          for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
 }
 impl<U,SO,P,I,PI,CI,D> OnStep for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
@@ -419,10 +460,10 @@ impl<U,SO,P,I,PI,CI,D> BridgeLayerInstantiation<U,SO,P,I,PI,CI,D> for BridgeLaye
     /// # Arguments
     /// * `parent` - upper layer
     /// * `device` - Device object used for neural network computation
-    fn instantiation(parent:P,_:&D) -> Result<BridgeLayer<U,SO,P,I,PI,CI,D>,LayerInstantiationError> {
+    fn instantiation(parent:P,device:&D) -> Result<BridgeLayer<U,SO,P,I,PI,CI,D>,LayerInstantiationError> {
         Ok(BridgeLayer {
             parent:parent,
-            device:PhantomData::<D>,
+            device:device.clone(),
             u:PhantomData::<U>,
             so:PhantomData::<SO>,
             i:PhantomData::<I>,

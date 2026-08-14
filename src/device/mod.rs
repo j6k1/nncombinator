@@ -5,6 +5,7 @@ pub mod bias;
 pub mod activation;
 pub mod output;
 pub mod input;
+pub mod bridge;
 
 use std::marker::PhantomData;
 use std::fmt::Debug;

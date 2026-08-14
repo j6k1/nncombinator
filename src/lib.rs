@@ -13,6 +13,7 @@ extern crate rcudnn;
 #[cfg(feature = "cuda")]
 extern crate rcudnn_sys;
 
+use std::fmt::Debug;
 use crate::layer::BatchDataType;
 
 pub mod error;
@@ -41,7 +42,7 @@ impl BatchDataType for Never {
     type Type = Never;
 }
 /// Trait that defines a stack to store the results computed by forward propagation when training a neural network.
-pub trait Stack {
+pub trait Stack: Debug {
     /// Stack containing elements that do not include the top element of the stack
     type Remaining: Stack;
     /// Top element of the stack
@@ -52,7 +53,7 @@ pub trait Stack {
     /// Returns Cons with items pushed to the stack
     /// # Arguments
     /// * `head` - Items to be added
-    fn push<H>(self,head:H) -> Cons<Self,H> where Self: Sized;
+    fn push<H>(self,head:H) -> Cons<Self,H> where Self: Sized, H: Debug;
     /// Returns the result of applying the callback function to the top element of the stack
     /// # Arguments
     /// * `f` - Applicable callbacks
@@ -71,9 +72,9 @@ pub trait Stack {
 }
 /// Stack containing elements
 #[derive(Debug,Clone)]
-pub struct Cons<R,T>(pub R,pub T) where R: Stack;
+pub struct Cons<R,T>(pub R,pub T) where R: Stack + Debug, T: Debug;
 
-impl<R,T> Cons<R,T> where R: Stack {
+impl<R,T> Cons<R,T> where R: Stack + Debug, T: Debug {
     /// Returns a reference to the remaining items in the stack, not including the top item in the stack.
     #[inline]
     pub fn get_remaining(&self) -> &R {
@@ -94,7 +95,7 @@ impl<R,T> Cons<R,T> where R: Stack {
         }
     }
 }
-impl<R,T> Stack for Cons<R,T> where R: Stack {
+impl<R,T> Stack for Cons<R,T> where R: Stack + Debug, T: Debug {
     type Remaining = R;
     type Head = T;
 
@@ -108,7 +109,7 @@ impl<R,T> Stack for Cons<R,T> where R: Stack {
     }
 
     #[inline]
-    fn push<H>(self,head:H) -> Cons<Self, H> where Self: Sized {
+    fn push<H>(self,head:H) -> Cons<Self, H> where Self: Sized, H: Debug {
         Cons(self,head)
     }
 
@@ -144,7 +145,7 @@ impl Stack for Nil {
     }
 
     #[inline]
-    fn push<H>(self, head: H) -> Cons<Self, H> where Self: Sized {
+    fn push<H>(self, head: H) -> Cons<Self, H> where Self: Sized, H: Debug {
         Cons(Nil,head)
     }
 

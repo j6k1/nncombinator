@@ -149,7 +149,7 @@ pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
     /// * `loss` - loss
     fn batch_linear_reduce<'a>(&self, loss: &'a Self::BatchOutput) -> Result<B,TrainingError>;
 }
-impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,I,NI,NO> for DeviceCpu<U>
+impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,I,NI,NO> for DeviceCpu
     where U: Default + Clone + Copy + Debug +
              Add<Output=U> + Mul<Output=U> + AddAssign + Send + Sync + 'static,
           I: BatchDataType + From<Arr<U,NI>> + Debug + 'static,
@@ -251,7 +251,7 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
     }
 }
 #[cfg(feature = "cuda")]
-impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,I,NI,NO> for DeviceGpu<f32,A>
+impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,I,NI,NO> for DeviceGpu<A>
     where I: BatchDataType + MemorySize + AsConstKernelPtr + AsKernelPtr + From<CudaTensor1dPtr<f32,A,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
@@ -632,7 +632,7 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
     }
 }
 #[cfg(feature = "cuda")]
-impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,A,NI,NO>,CudaTensor1dPtr<f64,A,NO>,I,NI,NO> for DeviceGpu<f64,A>
+impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,A,NI,NO>,CudaTensor1dPtr<f64,A,NO>,I,NI,NO> for DeviceGpu<A>
     where I: BatchDataType + From<CudaTensor1dPtr<f64,A,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'static,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
@@ -1002,7 +1002,7 @@ pub trait DeviceDiffLinear<'a,U,I,T,const NI: usize,const NO: usize>
     fn forward_diff_linear(&self, units: &T, input: I, partial_input: &Self::Output) -> Result<Self::Output, EvaluateError>;
     fn clone_diff_linear_forward_output(&self, output: &Self::Output) -> Result<Self::Output, EvaluateError>;
 }
-impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,Arr2<U,NI,NO>,NI,NO> for DeviceCpu<U>
+impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,Arr2<U,NI,NO>,NI,NO> for DeviceCpu
     where U: Default + Clone + Copy + Add<Output=U> + Mul<Output=U> +
              AddAssign + Debug + Send + Sync + 'static, {
     type Output = Arr<U,NO>;
@@ -1025,7 +1025,7 @@ impl<'a,U,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,Arr
     }
 }
 #[cfg(feature = "cuda")]
-impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,CudaTensor2dPtr<U,A,NI,NO>,NI,NO> for DeviceGpu<U,A>
+impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,CudaTensor2dPtr<U,A,NI,NO>,NI,NO> for DeviceGpu<A>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U>,

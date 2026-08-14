@@ -42,7 +42,7 @@ extern "C" {
 /// Defines the list of passed to the cuda kernel function for the arguments of the activation function.
 pub struct ActivationForwardArgs<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
-          A: CudaAllocator +'a {
+          A: CudaAllocator +'static {
     input: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
     /// Output buffer
     pub output: CudaTensor1dPtr<T,A,N>,
@@ -52,7 +52,7 @@ pub struct ActivationForwardArgs<'a,T,A,const N:usize>
 /// Create an instance of an object representing the argument list at the time of activation function forward.
 impl<'a,T,A,const N:usize> ActivationForwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a,
-          A: CudaAllocator +'a {
+          A: CudaAllocator +'static {
     /// Create a ActivationForwardArgs instance
     /// # Arguments
     /// * `input` - Input buffer
@@ -81,7 +81,7 @@ impl<'a,T,A,const N:usize> KernelArgs for ActivationForwardArgs<'a,T,A,N>
 /// Create an instance of an object representing the argument list during error back propagation of the activation function.
 pub struct ActivationBackwardArgs<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
-          A: CudaAllocator +'a {
+          A: CudaAllocator +'static {
     o: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
     u: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
     loss: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
@@ -94,7 +94,7 @@ pub struct ActivationBackwardArgs<'a,T,A,const N:usize>
 /// back propagation of the activation function.
 impl<'a,T,A,const N:usize> ActivationBackwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a,
-          A: CudaAllocator +'a {
+          A: CudaAllocator +'static {
     /// Create a ActivationBackwardArgs instance
     /// # Arguments
     /// * `o` - Output values
@@ -133,7 +133,7 @@ impl<'a,T,A,const N:usize> KernelArgs for ActivationBackwardArgs<'a,T,A,N>
 /// to the activation function during batch execution.
 pub struct ActivationBatchForwardArgs<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
-          A: CudaAllocator +'a,
+          A: CudaAllocator +'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     input: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
@@ -146,7 +146,7 @@ pub struct ActivationBatchForwardArgs<'a,T,A,const N:usize>
 /// of the forward propagation of the activation function during batch execution.
 impl<'a,T,A,const N:usize> ActivationBatchForwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     /// Create a ActivationBatchForwardArgs instance
@@ -166,7 +166,7 @@ impl<'a,T,A,const N:usize> ActivationBatchForwardArgs<'a,T,A,N>
 }
 impl<'a,T,A,const N:usize> KernelArgs for ActivationBatchForwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
@@ -182,7 +182,7 @@ impl<'a,T,A,const N:usize> KernelArgs for ActivationBatchForwardArgs<'a,T,A,N>
 /// of the activation function during batch execution.
 pub struct ActivationBatchBackwardArgs<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     o: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
@@ -197,7 +197,7 @@ pub struct ActivationBatchBackwardArgs<'a,T,A,const N:usize>
 /// of the activation function during batch execution.
 impl<'a,T,A,const N:usize> ActivationBatchBackwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     /// Create a ActivationBatchBackwardArgs instance
@@ -223,7 +223,7 @@ impl<'a,T,A,const N:usize> ActivationBatchBackwardArgs<'a,T,A,N>
 }
 impl<'a,T,A,const N:usize> KernelArgs for ActivationBatchBackwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
@@ -241,7 +241,7 @@ impl<'a,T,A,const N:usize> KernelArgs for ActivationBatchBackwardArgs<'a,T,A,N>
 /// for the forward propagation of ClippedReLU.
 pub struct ClippedReLuForwardArgs<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + AsKernelPtr,
-          A: CudaAllocator +'a,
+          A: CudaAllocator +'static,
           CudaMutPtr<'a,T,A>: AsMutKernelPtr {
     input: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
     ceiling: T,
@@ -253,7 +253,7 @@ pub struct ClippedReLuForwardArgs<'a,T,A,const N:usize>
 /// Create an instance of an object representing the argument list at the time of activation function forward for ClippedReLU.
 impl<'a,T,A,const N:usize> ClippedReLuForwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + AsKernelPtr,
-          A: CudaAllocator +'a {
+          A: CudaAllocator +'static {
     /// Create a ClippedReLuForwardArgs instance
     /// # Arguments
     /// * `input` - Input buffer
@@ -285,7 +285,7 @@ impl<'a,T,A,const N:usize> KernelArgs for ClippedReLuForwardArgs<'a,T,A,N>
 /// Creates an instance of an object representing the list of arguments for backpropagation in ClippedReLU.
 pub struct ClippedReLuBackwardArgs<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + AsKernelPtr,
-          A: CudaAllocator +'a {
+          A: CudaAllocator +'static {
     o: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
     u: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
     loss: CudaConstPtr<'a,CudaTensor1dPtrView<'a,T,N>>,
@@ -297,7 +297,7 @@ pub struct ClippedReLuBackwardArgs<'a,T,A,const N:usize>
 }
 impl<'a,T,A,const N:usize> ClippedReLuBackwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + AsKernelPtr,
-          A: CudaAllocator +'a {
+          A: CudaAllocator +'static {
     /// Create a ClippedReLuBackwardArgs instance
     /// # Arguments
     /// * `o` - Output values
@@ -340,7 +340,7 @@ impl<'a,T,A,const N:usize> KernelArgs for ClippedReLuBackwardArgs<'a,T,A,N>
 /// which are passed as arguments for the forward propagation in ClippedReLu during batch execution.
 pub struct ClippedReLuBatchForwardArgs<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + AsKernelPtr,
-          A: CudaAllocator +'a,
+          A: CudaAllocator +'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     input: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
@@ -352,7 +352,7 @@ pub struct ClippedReLuBatchForwardArgs<'a,T,A,const N:usize>
 }
 impl<'a,T,A,const N:usize> ClippedReLuBatchForwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + AsKernelPtr,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     /// Create a ClippedReLuBatchForwardArgs instance
@@ -374,7 +374,7 @@ impl<'a,T,A,const N:usize> ClippedReLuBatchForwardArgs<'a,T,A,N>
 }
 impl<'a,T,A,const N:usize> KernelArgs for ClippedReLuBatchForwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + AsKernelPtr,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
@@ -391,7 +391,7 @@ impl<'a,T,A,const N:usize> KernelArgs for ClippedReLuBatchForwardArgs<'a,T,A,N>
 /// These are passed as arguments for the backward propagation in ClippedReLu during batch execution.
 pub struct ClippedReLuBatchBackwardArgs<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + AsKernelPtr,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     o: CudaConstPtr<'a,CudaVecView<'a,T,CudaTensor1dPtrView<'a,T,N>>>,
@@ -405,7 +405,7 @@ pub struct ClippedReLuBatchBackwardArgs<'a,T,A,const N:usize>
 }
 impl<'a,T,A,const N:usize> ClippedReLuBatchBackwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + AsKernelPtr,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     /// Create a ClippedReLuBatchBackwardArgs instance
@@ -435,7 +435,7 @@ impl<'a,T,A,const N:usize> ClippedReLuBatchBackwardArgs<'a,T,A,N>
 }
 impl<'a,T,A,const N:usize> KernelArgs for ClippedReLuBatchBackwardArgs<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a + AsKernelPtr,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaVec<T,CudaTensor1dPtr<T,A,N>,A>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: AsMutKernelPtr {
     fn as_vec(&mut self) -> Vec<&mut dyn AsKernelPtr> {
@@ -470,7 +470,7 @@ impl<'a,T,A,const N:usize> SigmoidForward<'a,T,A,N>
         }
     }
 }
-impl<'a,A,const N:usize> Kernel for SigmoidForward<'a,f32,A,N> where A: CudaAllocator + 'a {
+impl<'a,A,const N:usize> Kernel for SigmoidForward<'a,f32,A,N> where A: CudaAllocator + 'static {
     const FUNC_PTR: *const c_void = sigmoid_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
 
@@ -482,7 +482,7 @@ impl<'a,A,const N:usize> Kernel for SigmoidForward<'a,f32,A,N> where A: CudaAllo
         }
     }
 }
-impl<'a,A,const N:usize> Kernel for SigmoidForward<'a,f64,A,N> where A: CudaAllocator + 'a {
+impl<'a,A,const N:usize> Kernel for SigmoidForward<'a,f64,A,N> where A: CudaAllocator + 'static {
     const FUNC_PTR: *const c_void = sigmoid_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
 
@@ -514,7 +514,7 @@ impl<'a,T,A,const N:usize> SigmoidBackward<'a,T,A,N>
         }
     }
 }
-impl<'a,A,const N:usize> Kernel for SigmoidBackward<'a,f32,A,N> where A: CudaAllocator + 'a {
+impl<'a,A,const N:usize> Kernel for SigmoidBackward<'a,f32,A,N> where A: CudaAllocator + 'static {
     const FUNC_PTR: *const c_void = sigmoid_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
 
@@ -526,7 +526,7 @@ impl<'a,A,const N:usize> Kernel for SigmoidBackward<'a,f32,A,N> where A: CudaAll
         }
     }
 }
-impl<'a,A,const N:usize> Kernel for SigmoidBackward<'a,f64,A,N> where A: CudaAllocator + 'a {
+impl<'a,A,const N:usize> Kernel for SigmoidBackward<'a,f64,A,N> where A: CudaAllocator + 'static {
     const FUNC_PTR: *const c_void = sigmoid_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
 
@@ -559,7 +559,7 @@ impl<'a,T,A,const N:usize> SigmoidBatchForward<'a,T,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SigmoidBatchForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = sigmoid_forward_float as *const c_void;
@@ -574,7 +574,7 @@ impl<'a,A,const N:usize> Kernel for SigmoidBatchForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SigmoidBatchForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = sigmoid_forward_double as *const c_void;
@@ -609,7 +609,7 @@ impl<'a,T,A,const N:usize> SigmoidBatchBackward<'a,T,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SigmoidBatchBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = sigmoid_backward_float as *const c_void;
@@ -624,7 +624,7 @@ impl<'a,A,const N:usize> Kernel for SigmoidBatchBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SigmoidBatchBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = sigmoid_backward_double as *const c_void;
@@ -655,7 +655,7 @@ impl<'a,T,A,const N:usize> ReLuForward<'a,T,A,N> where T: Default + Clone + Copy
     }
 }
 impl<'a,A,const N:usize> Kernel for ReLuForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
@@ -669,7 +669,7 @@ impl<'a,A,const N:usize> Kernel for ReLuForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ReLuForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
@@ -685,7 +685,7 @@ impl<'a,A,const N:usize> Kernel for ReLuForward<'a,f64,A,N>
 /// Implementation of derivatives of the ReLu activation function
 pub struct ReLuBackward<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     t:PhantomData<T>,
     a:PhantomData<A>,
@@ -693,7 +693,7 @@ pub struct ReLuBackward<'a,T,A,const N:usize>
 }
 impl<'a,T,A,const N:usize> ReLuBackward<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     /// Create a ReLuBackward instance
     pub fn new() -> ReLuBackward<'a,T,A,N> {
@@ -705,7 +705,7 @@ impl<'a,T,A,const N:usize> ReLuBackward<'a,T,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ReLuBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
@@ -719,7 +719,7 @@ impl<'a,A,const N:usize> Kernel for ReLuBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ReLuBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
@@ -749,7 +749,7 @@ impl<'a,T,A,const N:usize> ReLuBatchForward<'a,T,A,N> where T: Default + Clone +
     }
 }
 impl<'a,A,const N:usize> Kernel for ReLuBatchForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_forward_float as *const c_void;
@@ -764,7 +764,7 @@ impl<'a,A,const N:usize> Kernel for ReLuBatchForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ReLuBatchForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_forward_double as *const c_void;
@@ -795,7 +795,7 @@ impl<'a,T,A,const N:usize> ReLuBatchBackward<'a,T,A,N> where T: Default + Clone 
     }
 }
 impl<'a,A,const N:usize> Kernel for ReLuBatchBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_float as *const c_void;
@@ -810,7 +810,7 @@ impl<'a,A,const N:usize> Kernel for ReLuBatchBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ReLuBatchBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = relu_backward_double as *const c_void;
@@ -845,7 +845,7 @@ impl<'a,T,A,const N:usize> ClippedReLuForward<'a,T,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ClippedReLuForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = clipped_relu_forward_float as *const c_void;
     type Args = ClippedReLuForwardArgs<'a,f32,A,N>;
@@ -859,7 +859,7 @@ impl<'a,A,const N:usize> Kernel for ClippedReLuForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ClippedReLuForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = clipped_relu_forward_double as *const c_void;
     type Args = ClippedReLuForwardArgs<'a,f64,A,N>;
@@ -875,7 +875,7 @@ impl<'a,A,const N:usize> Kernel for ClippedReLuForward<'a,f64,A,N>
 /// Implementation of derivatives of the ClippedReLU activation function
 pub struct ClippedReLuBackward<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo + AsKernelPtr,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     t:PhantomData<T>,
     a:PhantomData<A>,
@@ -883,7 +883,7 @@ pub struct ClippedReLuBackward<'a,T,A,const N:usize>
 }
 impl<'a,T,A,const N:usize> ClippedReLuBackward<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo + AsKernelPtr,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     /// Create a ClippedReLuBackward instance
     pub fn new() -> ClippedReLuBackward<'a,T,A,N> {
@@ -895,7 +895,7 @@ impl<'a,T,A,const N:usize> ClippedReLuBackward<'a,T,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ClippedReLuBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = clipped_relu_backward_float as *const c_void;
     type Args = ClippedReLuBackwardArgs<'a,f32,A,N>;
@@ -909,7 +909,7 @@ impl<'a,A,const N:usize> Kernel for ClippedReLuBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ClippedReLuBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = clipped_relu_backward_double as *const c_void;
     type Args = ClippedReLuBackwardArgs<'a,f64,A,N>;
@@ -941,7 +941,7 @@ impl<'a,T,A,const N:usize> ClippedReLuBatchForward<'a,T,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ClippedReLuBatchForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = clipped_relu_forward_float as *const c_void;
@@ -956,7 +956,7 @@ impl<'a,A,const N:usize> Kernel for ClippedReLuBatchForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ClippedReLuBatchForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = clipped_relu_forward_double as *const c_void;
@@ -987,7 +987,7 @@ impl<'a,T,A,const N:usize> ClippedReLuBatchBackward<'a,T,A,N> where T: Default +
     }
 }
 impl<'a,A,const N:usize> Kernel for ClippedReLuBatchBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = clipped_relu_backward_float as *const c_void;
@@ -1002,7 +1002,7 @@ impl<'a,A,const N:usize> Kernel for ClippedReLuBatchBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for ClippedReLuBatchBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = clipped_relu_backward_double as *const c_void;
@@ -1033,7 +1033,7 @@ impl<'a,T,A,const N:usize> SwishForward<'a,T,A,N> where T: Default + Clone + Cop
     }
 }
 impl<'a,A,const N:usize> Kernel for SwishForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
@@ -1047,7 +1047,7 @@ impl<'a,A,const N:usize> Kernel for SwishForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SwishForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
@@ -1077,7 +1077,7 @@ impl<'a,T,A,const N:usize> SwishBackward<'a,T,A,N> where T: Default + Clone + Co
     }
 }
 impl<'a,A,const N:usize> Kernel for SwishBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
@@ -1091,7 +1091,7 @@ impl<'a,A,const N:usize> Kernel for SwishBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SwishBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
@@ -1121,7 +1121,7 @@ impl<'a,T,A,const N:usize> SwishBatchForward<'a,T,A,N> where T: Default + Clone 
     }
 }
 impl<'a,A,const N:usize> Kernel for SwishBatchForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_forward_float as *const c_void;
@@ -1136,7 +1136,7 @@ impl<'a,A,const N:usize> Kernel for SwishBatchForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SwishBatchForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_forward_double as *const c_void;
@@ -1167,7 +1167,7 @@ impl<'a,T,A,const N:usize> SwishBatchBackward<'a,T,A,N> where T: Default + Clone
     }
 }
 impl<'a,A,const N:usize> Kernel for SwishBatchBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_backward_float as *const c_void;
@@ -1182,7 +1182,7 @@ impl<'a,A,const N:usize> Kernel for SwishBatchBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SwishBatchBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = swish_backward_double as *const c_void;
@@ -1213,7 +1213,7 @@ impl<'a,T,A,const N:usize> TanhForward<'a,T,A,N> where T: Default + Clone + Copy
     }
 }
 impl<'a,A,const N:usize> Kernel for TanhForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
@@ -1227,7 +1227,7 @@ impl<'a,A,const N:usize> Kernel for TanhForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for TanhForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
@@ -1257,7 +1257,7 @@ impl<'a,T,A,const N:usize> TanhBackward<'a,T,A,N> where T: Default + Clone + Cop
     }
 }
 impl<'a,A,const N:usize> Kernel for TanhBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
@@ -1271,7 +1271,7 @@ impl<'a,A,const N:usize> Kernel for TanhBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for TanhBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
@@ -1301,7 +1301,7 @@ impl<'a,T,A,const N:usize> TanhBatchForward<'a,T,A,N> where T: Default + Clone +
     }
 }
 impl<'a,A,const N:usize> Kernel for TanhBatchForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_forward_float as *const c_void;
@@ -1316,7 +1316,7 @@ impl<'a,A,const N:usize> Kernel for TanhBatchForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for TanhBatchForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_forward_double as *const c_void;
@@ -1347,7 +1347,7 @@ impl<'a,T,A,const N:usize> TanhBatchBackward<'a,T,A,N> where T: Default + Clone 
     }
 }
 impl<'a,A,const N:usize> Kernel for TanhBatchBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_backward_float as *const c_void;
@@ -1362,7 +1362,7 @@ impl<'a,A,const N:usize> Kernel for TanhBatchBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for TanhBatchBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = tanh_backward_double as *const c_void;
@@ -1393,7 +1393,7 @@ impl<'a,T,A,const N:usize> SoftMaxForward<'a,T,A,N> where T: Default + Clone + C
     }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
@@ -1407,7 +1407,7 @@ impl<'a,A,const N:usize> Kernel for SoftMaxForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
@@ -1437,7 +1437,7 @@ impl<'a,T,A,const N:usize> SoftMaxBackward<'a,T,A,N> where T: Default + Clone + 
     }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
@@ -1451,7 +1451,7 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
@@ -1481,7 +1481,7 @@ impl<'a,T,A,const N:usize> SoftMaxBatchForward<'a,T,A,N> where T: Default + Clon
     }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBatchForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_forward_float as *const c_void;
@@ -1496,7 +1496,7 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBatchForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBatchForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_forward_double as *const c_void;
@@ -1527,7 +1527,7 @@ impl<'a,T,A,const N:usize> SoftMaxBatchBackward<'a,T,A,N> where T: Default + Clo
     }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBatchBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_backward_float as *const c_void;
@@ -1542,7 +1542,7 @@ impl<'a,A,const N:usize> Kernel for SoftMaxBatchBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for SoftMaxBatchBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = softmax_backward_double as *const c_void;
@@ -1573,7 +1573,7 @@ impl<'a,T,A,const N:usize> LeakyReLuForward<'a,T,A,N> where T: Default + Clone +
     }
 }
 impl<'a,A,const N:usize> Kernel for LeakyReLuForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = leaky_relu_forward_float as *const c_void;
     type Args = ActivationForwardArgs<'a,f32,A,N>;
@@ -1587,7 +1587,7 @@ impl<'a,A,const N:usize> Kernel for LeakyReLuForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for LeakyReLuForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = leaky_relu_forward_double as *const c_void;
     type Args = ActivationForwardArgs<'a,f64,A,N>;
@@ -1603,7 +1603,7 @@ impl<'a,A,const N:usize> Kernel for LeakyReLuForward<'a,f64,A,N>
 /// Implementation of derivatives of the LeakyReLu activation function
 pub struct LeakyReLuBackward<'a,T,A,const N:usize>
     where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     t:PhantomData<T>,
     a:PhantomData<A>,
@@ -1611,7 +1611,7 @@ pub struct LeakyReLuBackward<'a,T,A,const N:usize>
 }
 impl<'a,T,A,const N:usize> LeakyReLuBackward<'a,T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     /// Create a LeakyReLuBackward instance
     pub fn new() -> LeakyReLuBackward<'a,T,A,N> {
@@ -1623,7 +1623,7 @@ impl<'a,T,A,const N:usize> LeakyReLuBackward<'a,T,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for LeakyReLuBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = leaky_relu_backward_float as *const c_void;
     type Args = ActivationBackwardArgs<'a,f32,A,N>;
@@ -1637,7 +1637,7 @@ impl<'a,A,const N:usize> Kernel for LeakyReLuBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for LeakyReLuBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaMutPtr<'a,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = leaky_relu_backward_double as *const c_void;
     type Args = ActivationBackwardArgs<'a,f64,A,N>;
@@ -1667,7 +1667,7 @@ impl<'a,T,A,const N:usize> LeakyReLuBatchForward<'a,T,A,N> where T: Default + Cl
     }
 }
 impl<'a,A,const N:usize> Kernel for LeakyReLuBatchForward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = leaky_relu_forward_float as *const c_void;
@@ -1682,7 +1682,7 @@ impl<'a,A,const N:usize> Kernel for LeakyReLuBatchForward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for LeakyReLuBatchForward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = leaky_relu_forward_double as *const c_void;
@@ -1713,7 +1713,7 @@ impl<'a,T,A,const N:usize> LeakyReLuBatchBackward<'a,T,A,N> where T: Default + C
     }
 }
 impl<'a,A,const N:usize> Kernel for LeakyReLuBatchBackward<'a,f32,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f32,CudaTensor1dPtr<f32,A,N>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
           for<'b> CudaMutPtr<'b,f32,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = leaky_relu_backward_float as *const c_void;
@@ -1728,7 +1728,7 @@ impl<'a,A,const N:usize> Kernel for LeakyReLuBatchBackward<'a,f32,A,N>
     }
 }
 impl<'a,A,const N:usize> Kernel for LeakyReLuBatchBackward<'a,f64,A,N>
-    where A: CudaAllocator + 'a,
+    where A: CudaAllocator + 'static,
           CudaVec<f64,CudaTensor1dPtr<f64,A,N>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
           for<'b> CudaMutPtr<'b,f64,A>: AsMutKernelPtr {
     const FUNC_PTR: *const c_void = leaky_relu_backward_double as *const c_void;

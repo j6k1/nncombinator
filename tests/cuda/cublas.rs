@@ -19,8 +19,8 @@ type A = MemoryPoolAllocator<DeviceAlloc>;
 
 #[test]
 fn test_device_gpu_forward_linear_batch_matches_cpu()
-    where DeviceGpu<f32,A>: DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,CudaTensor1dPtr<f32,A,NI>,NI,NO> {
-    let device = DeviceCpu::<f32>::new().unwrap();
+    where DeviceGpu<A>: DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,CudaTensor1dPtr<f32,A,NI>,NI,NO> {
+    let device = DeviceCpu::new().unwrap();
 
     let (bias,units,inputs) = gen_inputs();
 
@@ -30,14 +30,16 @@ fn test_device_gpu_forward_linear_batch_matches_cpu()
     // GPU kernel
     let alloc: &A = &SHARED_MEMORY_POOL;
 
-    let device_gpu = DeviceGpu::<f32,A>::new(alloc).unwrap();
+    let device_gpu = DeviceGpu::<A>::new(alloc).unwrap();
 
     let (d_bias,d_units,d_inputs) = upload_inputs_to_device::<A>(alloc,&bias,&units,&inputs);
 
     // Build args
-    let d_inputs = &d_inputs;
+    let d_inputs:&CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A> = &d_inputs;
+    let d_units:&CudaTensor2dPtr<f32,A,NI,NO> = &d_units;
+    let d_bias:&CudaTensor1dPtr<f32,A,NO> = &d_bias;
 
-    let d_output = device_gpu.batch_forward_linear(&d_bias,&d_units,&d_inputs).unwrap();
+    let d_output = device_gpu.batch_forward_linear(d_bias,d_units,d_inputs).unwrap();
 
     let gpu_out = d_output.read_to_vec().unwrap();
     // Flatten CPU output
@@ -54,8 +56,8 @@ fn test_device_gpu_forward_linear_batch_matches_cpu()
 
 #[test]
 fn test_device_gpu_backward_linear_batch_matches_cpu()
-    where DeviceGpu<f32,A>: DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,CudaTensor1dPtr<f32,A,NI>,NI,NO> {
-    let device = DeviceCpu::<f32>::new().unwrap();
+    where DeviceGpu<A>: DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,CudaTensor1dPtr<f32,A,NI>,NI,NO> {
+    let device = DeviceCpu::new().unwrap();
 
     let mut rng = rand::thread_rng();
 
@@ -77,7 +79,7 @@ fn test_device_gpu_backward_linear_batch_matches_cpu()
     // GPU kernel setup
     let alloc: &A = &SHARED_MEMORY_POOL;
 
-    let device_gpu = DeviceGpu::<f32,A>::new(alloc).unwrap();
+    let device_gpu = DeviceGpu::<A>::new(alloc).unwrap();
 
     // Upload units
     let mut flat_units: Vec<f32> = Vec::with_capacity(NI * NO);
@@ -112,8 +114,8 @@ fn test_device_gpu_backward_linear_batch_matches_cpu()
 
 #[test]
 fn test_device_gpu_linear_gradient_batch_matches_cpu()
-    where DeviceGpu<f32,A>: DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,CudaTensor1dPtr<f32,A,NI>,NI,NO> {
-    let device = DeviceCpu::<f32>::new().unwrap();
+    where DeviceGpu<A>: DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,CudaTensor1dPtr<f32,A,NI>,NI,NO> {
+    let device = DeviceCpu::new().unwrap();
 
     let mut rng = rand::thread_rng();
 
@@ -140,7 +142,7 @@ fn test_device_gpu_linear_gradient_batch_matches_cpu()
     // GPU kernel setup
     let alloc: &A = &SHARED_MEMORY_POOL;
 
-    let device_gpu = DeviceGpu::<f32,A>::new(alloc).unwrap();
+    let device_gpu = DeviceGpu::<A>::new(alloc).unwrap();
 
     // Upload inputs batch
     let mut flat_inputs: Vec<f32> = Vec::with_capacity(BATCH * NI);

@@ -101,7 +101,7 @@ pub trait DeviceBias<U,T,IO,const N: usize>
     /// * [`TrainingError`]
     fn batch_backward_bias_weight_gradient<'a>(&self, loss: &'a <IO as BatchDataType>::Type) -> Result<T, TrainingError>;
 }
-impl<U,IO,const N:usize> DeviceBias<U,Arr<U,N>,IO,N> for DeviceCpu<U>
+impl<U,IO,const N:usize> DeviceBias<U,Arr<U,N>,IO,N> for DeviceCpu
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           IO: BatchDataType + Debug + Clone,
           <IO as BatchDataType>::Type: BatchSize + Debug,
@@ -152,7 +152,7 @@ impl<U,IO,const N:usize> DeviceBias<U,Arr<U,N>,IO,N> for DeviceCpu<U>
     }
 }
 #[cfg(feature = "cuda")]
-impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for DeviceGpu<f32,A>
+impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for DeviceGpu<A>
     where IO: BatchDataType + Debug,
           <IO as BatchDataType>::Type: BatchSize + Debug,
           IO: From<CudaTensor1dPtr<f32,A,N>> + AsCudaMutPtr<Pointee=f32,Allocator=A>,
@@ -272,7 +272,7 @@ impl<IO,A,const N:usize> DeviceBias<f32,CudaTensor1dPtr<f32,A,N>,IO,N> for Devic
     }
 }
 #[cfg(feature = "cuda")]
-impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for DeviceGpu<f64,A>
+impl<IO,A,const N:usize> DeviceBias<f64,CudaTensor1dPtr<f64,A,N>,IO,N> for DeviceGpu<A>
     where IO: BatchDataType + Debug,
           <IO as BatchDataType>::Type: BatchSize + Debug,
           IO: From<CudaTensor1dPtr<f64,A,N>> + AsCudaMutPtr<Pointee=f64,Allocator=A>,

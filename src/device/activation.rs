@@ -70,8 +70,8 @@ pub trait DeviceActivation<U,I,A,const N:usize>: Device<U>
     /// * `l` - loss function
     fn is_canonical_link<L: LossFunction<U>>(&self,f:&A,l:&L) -> bool;
 }
-impl<'a,U,I,A,const N:usize> DeviceActivation<U,I,A,N> for DeviceCpu<U>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a,
+impl<'a,U,I,A,const N:usize> DeviceActivation<U,I,A,N> for DeviceCpu
+    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           I: BatchDataType,
           I: From<Arr<U,N>>,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
@@ -106,12 +106,12 @@ impl<'a,U,I,A,const N:usize> DeviceActivation<U,I,A,N> for DeviceCpu<U>
     }
 }
 #[cfg(feature = "cuda")]
-impl<'a,U,I,A,AC,const N:usize> DeviceActivation<U,I,A,N> for DeviceGpu<U,AC>
+impl<'a,U,I,A,AC,const N:usize> DeviceActivation<U,I,A,N> for DeviceGpu<AC>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           AC: CudaAllocator,
           I: BatchDataType,
           I: From<CudaTensor1dPtr<U,AC,N>>,
-          DeviceGpu<U,AC>: Device<U>,
+          DeviceGpu<AC>: Device<U>,
           CudaTensor1dPtr<U,AC,N>: From<I>,
           CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>: IntoConverter,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC> as IntoConverter>::Converter,Error=TypeConvertError>,

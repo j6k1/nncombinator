@@ -70,10 +70,10 @@ impl<'a,T,O,U,A> ToCuda<U,A> for DiffInput<'a,T,O>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           T: Debug,
           O: Debug + 'a,
-          A: CudaAllocator {
+          A: CudaAllocator + 'static {
     type Output = Self;
 
-    fn to_cuda(self, _: &DeviceGpu<U,A>) -> Result<Self::Output, TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<A>) -> Result<Self::Output, TypeConvertError> {
         Ok(self)
     }
 }
@@ -82,10 +82,10 @@ impl<'a,T,O,U,A> ToCuda<U,A> for Vec<DiffInput<'a,T,O>>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           T: Debug,
           O: Debug + 'a,
-          A: CudaAllocator {
+          A: CudaAllocator + 'static {
     type Output = Self;
 
-    fn to_cuda(self, _: &DeviceGpu<U,A>) -> Result<Self::Output, TypeConvertError> {
+    fn to_cuda(self, _: &DeviceGpu<A>) -> Result<Self::Output, TypeConvertError> {
         Ok(self)
     }
 }

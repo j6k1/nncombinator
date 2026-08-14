@@ -13,6 +13,7 @@ use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::{Product, Sum};
 #[cfg(feature = "cuda")]
 use crate::bridge::{ToHost};
+use crate::cast::Assume;
 #[cfg(feature = "cuda")]
 use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, AsMutPtr, AsCudaMutPtr, CudaMutPtr, CudaPtr};
 #[cfg(feature = "cuda")]
@@ -136,6 +137,19 @@ impl<'a,T,const N:usize> AsViewMut<'a> for Arr<T,N> where T: Default + Clone + C
         }
     }
 }
+impl<'a,S,D,const N:usize> From<&'a Arr<S,N>> for Arr<D,N>
+    where S: Default + Clone + Copy + Send + Sync + Assume<D> + 'static,
+          D: Default + Clone + Copy + Send + Sync + 'static {
+    fn from(s: &'a Arr<S,N>) -> Self {
+        let mut r = Arr::default();
+
+        for (s,d) in s.iter().zip(r.iter_mut()) {
+            *d = s.assume();
+        }
+
+        r
+    }
+}
 impl<'a,'b,U,const N:usize> From<&'b &'a Arr<U,N>> for &'b Arr<U,N>
     where U: Default + Clone + Copy + Send {
     fn from(s: &'b &'a Arr<U,N>) -> Self {
@@ -204,13 +218,13 @@ impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: D
 #[cfg(feature = "cuda")]
 impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
     where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<T,A>: WriteMemory<T>,
           CudaTensor1dPtr<T,A,N>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'a> CudaMutPtr<'a,T,A>: WriteMemory<T> {
     type Output = CudaTensor1dPtr<T,A,N>;
 
-    fn to_cuda(self, device: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, device: &DeviceGpu<A>) -> Result<Self::Output,TypeConvertError> {
         let mut ptr = CudaTensor1dPtr::new(device.get_allocator())?;
 
         ptr.memcpy(self.as_ptr(),N)?;
@@ -221,13 +235,13 @@ impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
 #[cfg(feature = "cuda")]
 impl<'a,T,A,const N:usize> ToCuda<T,A> for &'a Arr<T,N>
     where T: Debug + Default + Clone + Copy + Send + Sync + 'static + DataTypeInfo,
-          A: CudaAllocator + 'a,
+          A: CudaAllocator + 'static,
           CudaPtr<T,A>: WriteMemory<T>,
           CudaTensor1dPtr::<T,A,N>: AsCudaMutPtr<Pointee=T,Allocator=A>,
           for<'b> CudaMutPtr<'b,T,A>: WriteMemory<T> {
     type Output = CudaTensor1dPtr<T,A,N>;
 
-    fn to_cuda(self, device: &DeviceGpu<T,A>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, device: &DeviceGpu<A>) -> Result<Self::Output,TypeConvertError> {
         let mut ptr = CudaTensor1dPtr::new(device.get_allocator())?;
 
         ptr.memcpy(self.as_ptr(),N)?;
@@ -1508,6 +1522,20 @@ impl<'a,'b,U,T> From<&'b &'a SerializedVec<U,T>> for &'b SerializedVec<U,T> {
         *s
     }
 }
+impl<'a,S,D,CS,CD> From<&'a SerializedVec<S,CS>> for SerializedVec<D,CD>
+    where S: Default + Clone + Copy + Send + Sync + Assume<D> + 'static,
+          D: Default + Clone + Copy + Send + Sync + 'static,
+          SerializedVec<D,CD>: From<Vec<CD>>,
+          for<'b> CD: SliceSize + MakeView<'b,D> + MakeViewMut<'b,D> +
+                      AsRawSlice<D> + TryFrom<Vec<D>,Error=TypeConvertError>,
+          for<'b> CS: SliceSize + MakeView<'b,S>,
+          for<'b> <CS as AsView<'b>>::ViewType: Deref<Target=[S]> {
+    fn from(s: &'a SerializedVec<S,CS>) -> Self {
+        s.iter().map(|arr| {
+            arr.iter().map(|v| v.assume()).collect::<Vec<D>>().try_into().unwrap()
+        }).collect::<Vec<CD>>().into()
+    }
+}
 impl<U,T> From<Vec<T>> for SerializedVec<U,T>
     where U: Default + Clone + Copy + Send,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> {
@@ -1568,14 +1596,14 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
 impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           T: Debug,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'a> CudaVec<U,<T as ToCuda<U,A>>::Output,A>: AsCudaMutPtr + WriteMemory<U>,
           for<'a> <T as ToCuda<U,A>>::Output: Debug + MemorySize + AsConstKernelPtr + AsKernelPtr,
           for<'a> T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + ToCuda<U,A> {
     type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;
 
-    fn to_cuda(self, device: &DeviceGpu<U,A>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, device: &DeviceGpu<A>) -> Result<Self::Output,TypeConvertError> {
         if T::slice_size() != <T as ToCuda<U,A>>::Output::size() {
             Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U,A>>::Output::size())))
         } else {
@@ -1590,13 +1618,13 @@ impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
 #[cfg(feature = "cuda")]
 impl<'a,U,T,A> ToCuda<U,A> for &'a SerializedVec<U,T>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + AsMutPtr<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'b> T: Debug + Default + SliceSize + AsRawSlice<U> + MakeView<'b,U> + MakeViewMut<'b,U> + ToCuda<U,A>,
           for<'b> <T as ToCuda<U,A>>::Output: Debug + MemorySize + AsConstKernelPtr + AsKernelPtr,
           for<'b> CudaVec<U,<T as ToCuda<U,A>>::Output,A>: AsCudaMutPtr + WriteMemory<U> {
     type Output = CudaVec<U,<T as ToCuda<U,A>>::Output,A>;
-    fn to_cuda(self, device: &DeviceGpu<U,A>) -> Result<Self::Output,TypeConvertError> {
+    fn to_cuda(self, device: &DeviceGpu<A>) -> Result<Self::Output,TypeConvertError> {
         if T::slice_size() != <T as ToCuda<U,A>>::Output::size() {
             Err(TypeConvertError::SizeMismatchError(SizeMismatchError(T::slice_size(),<T as ToCuda<U,A>>::Output::size())))
         } else {

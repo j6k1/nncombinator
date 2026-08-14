@@ -33,6 +33,7 @@ pub mod layer;
 pub mod persistence;
 pub mod scheduler;
 pub mod bridge;
+pub mod cast;
 #[macro_use]
 mod macros;
 

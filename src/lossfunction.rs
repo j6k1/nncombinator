@@ -57,12 +57,12 @@ pub trait BatchLossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Sen
     fn batch_linear_derive(&self,_: &D,expected: &'a I, actual: &'a I)
         -> Result<Self::Output, TrainingError>;
 }
-impl<'a,T,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for T
+impl<'a,T,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceCpu,N> for T
     where T: LossFunction<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           for<'b> ArrView<'b,U,N>: From<&'b I> {
     type Output = Arr<U,N>;
-    fn linear_derive(&self,_:&DeviceCpu<U>,actual: &'a I, expected: &'a I)
+    fn linear_derive(&self,_:&DeviceCpu,actual: &'a I, expected: &'a I)
         -> Result<Arr<U,N>,TrainingError> {
         let actual = ArrView::<'a,U,N>::from(actual);
         let expected = ArrView::<'a,U,N>::from(expected);
@@ -76,13 +76,13 @@ impl<'a,T,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for T
         Ok(loss)
     }
 }
-impl<'a,T,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceCpu<U>,N> for T
+impl<'a,T,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceCpu,N> for T
     where T: LossFunction<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           I: BatchSize,
           for<'b> SerializedVecView<'b,U,Arr<U,N>>: TryFrom<&'b I,Error=TypeConvertError> {
     type Output = SerializedVec<U,Arr<U,N>>;
-    fn batch_linear_derive(&self,_: &DeviceCpu<U>,expected: &'a I, actual: &'a I)
+    fn batch_linear_derive(&self,_: &DeviceCpu,expected: &'a I, actual: &'a I)
         -> Result<SerializedVec<U,Arr<U, N>>, TrainingError> {
         let actual = SerializedVecView::<'a,U,Arr<U,N>>::try_from(actual)?;
         let expected = SerializedVecView::<'a,U,Arr<U,N>>::try_from(expected)?;
@@ -128,19 +128,19 @@ impl<U> LossFunction<U> for Mse<U>
     }
 }
 #[cfg(feature = "cuda")]
-impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse<U>
+impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<A>,N> for Mse<U>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
              Send + Sync + 'static + DataTypeInfo,
           I: 'a,
-          DeviceGpu<U,A>: Device<U>,
+          DeviceGpu<A>: Device<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'b> A: CudaAllocator + 'b,
           for<'b> CudaTensor1dPtrView<'a,U,N>: From<&'b I>,
           for<'b> LinearMse<'b,U,A,N>: Kernel<Args=LinearMseArgs<'b,U,A,N>> {
     type Output = CudaTensor1dPtr<U,A,N>;
 
-    fn linear_derive(&self,device:&DeviceGpu<U,A>,actual: &'a I, expected: &'a I)
+    fn linear_derive(&self,device:&DeviceGpu<A>,actual: &'a I, expected: &'a I)
         -> Result<Self::Output,TrainingError> {
         let actual = CudaTensor1dPtrView::<'a,U,N>::from(actual);
         let expected = CudaTensor1dPtrView::<'a,U,N>::from(expected);
@@ -157,13 +157,13 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse
     }
 }
 #[cfg(feature = "cuda")]
-impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Mse<U>
+impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<A>,N> for Mse<U>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
              Send + Sync + 'static + DataTypeInfo,
           I: 'a,
           A: CudaAllocator + 'a,
-          DeviceGpu<U,A>:  Device<U>,
+          DeviceGpu<A>:  Device<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'b> CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
@@ -171,7 +171,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           for<'b> CudaMutPtr<'b,U,A>: AsMutKernelPtr,
           for<'b> LinearBatchMse<'b,U,A,N>: Kernel<Args=LinearBatchMseArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
-    fn batch_linear_derive(&self, device: &DeviceGpu<U,A>, expected: &'a I, actual: &'a I)
+    fn batch_linear_derive(&self, device: &DeviceGpu<A>, expected: &'a I, actual: &'a I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,A,N>,A>, TrainingError> {
         let actual = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(actual)?;
         let expected = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(expected)?;
@@ -219,14 +219,14 @@ impl<U> LossFunction<U> for CrossEntropy<U>
     }
 }
 #[cfg(feature = "cuda")]
-impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropy<U>
+impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<A>,N> for CrossEntropy<U>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              One + Max + Ln +
              Send + Sync + 'static + DataTypeInfo,
           I: 'a,
           A: CudaAllocator + 'a,
-          DeviceGpu<U,A>: Device<U>,
+          DeviceGpu<A>: Device<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'b> CudaTensor1dPtrView<'b,U,N>: From<&'b I>,
           for<'b> CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
@@ -234,7 +234,7 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
           for<'b> LinearCrossEntropy<'b,U,A,N>: Kernel<Args=LinearCrossEntropyArgs<'b,U,A,N>> {
     type Output = CudaTensor1dPtr<U,A,N>;
 
-    fn linear_derive(&self,device:&DeviceGpu<U,A>,actual: &'a I, expected: &'a I) -> Result<Self::Output,TrainingError> {
+    fn linear_derive(&self,device:&DeviceGpu<A>,actual: &'a I, expected: &'a I) -> Result<Self::Output,TrainingError> {
         let actual = CudaTensor1dPtrView::<'a,U,N>::from(actual);
         let expected = CudaTensor1dPtrView::<'a,U,N>::from(expected);
 
@@ -250,14 +250,14 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
     }
 }
 #[cfg(feature = "cuda")]
-impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropy<U>
+impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<A>,N> for CrossEntropy<U>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              One + Max + Ln +
              Send + Sync + 'static + DataTypeInfo,
           I: 'a,
           A: CudaAllocator + 'a,
-          DeviceGpu<U,A>:  Device<U>,
+          DeviceGpu<A>:  Device<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'b> CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
@@ -266,7 +266,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
           for<'b> LinearBatchCrossEntropy<'b,U,A,N>: Kernel<Args=LinearBatchCrossEntropyArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
-    fn batch_linear_derive(&self, device: &DeviceGpu<U,A>, expected: &'a I, actual: &'a I)
+    fn batch_linear_derive(&self, device: &DeviceGpu<A>, expected: &'a I, actual: &'a I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,A,N>,A>, TrainingError> {
         let actual = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(actual)?;
         let expected = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(expected)?;
@@ -314,19 +314,19 @@ impl<U> LossFunction<U> for CrossEntropyMulticlass<U>
     }
 }
 #[cfg(feature = "cuda")]
-impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropyMulticlass<U>
+impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<A>,N> for CrossEntropyMulticlass<U>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              One + Max + Ln +Send + Sync + 'static + DataTypeInfo,
           I: 'a,
-          DeviceGpu<U,A>: Device<U>,
+          DeviceGpu<A>: Device<U>,
           for<'b> A: CudaAllocator + 'b,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'b> CudaTensor1dPtrView<'b,U,N>: From<&'b I>,
           for<'b> LinearCrossEntropyMulticlass<'b,U,A,N>: Kernel<Args=LinearCrossEntropyMulticlassArgs<'b,U,A,N>> {
     type Output = CudaTensor1dPtr<U,A,N>;
 
-    fn linear_derive(&self,device:&DeviceGpu<U,A>,actual: &'a I,expected: &'a I) -> Result<Self::Output,TrainingError> {
+    fn linear_derive(&self,device:&DeviceGpu<A>,actual: &'a I,expected: &'a I) -> Result<Self::Output,TrainingError> {
         let actual = CudaTensor1dPtrView::<'a,U,N>::from(actual);
         let expected = CudaTensor1dPtrView::<'a,U,N>::from(expected);
 
@@ -342,13 +342,13 @@ impl<'a,U,I,A,const N:usize> LossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for Cro
     }
 }
 #[cfg(feature = "cuda")]
-impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> for CrossEntropyMulticlass<U>
+impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<A>,N> for CrossEntropyMulticlass<U>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              One + Max + Ln + Send + Sync + 'static + DataTypeInfo,
           I: 'a,
           A: CudaAllocator + 'a,
-          DeviceGpu<U,A>:  Device<U>,
+          DeviceGpu<A>:  Device<U>,
           CudaPtr<U,A>: WriteMemory<U>,
           for<'b> CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsMutKernelPtr,
           for<'b> CudaVecView<'b,U,CudaTensor1dPtrView<'b,U,N>>: TryFrom<&'b I,Error=TypeConvertError>,
@@ -356,7 +356,7 @@ impl<'a,U,I,A,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceGpu<U,A>,N> fo
           for<'b> CudaMutPtr<'b,U,A>: AsMutKernelPtr,
           for<'b> LinearBatchCrossEntropyMulticlass<'b,U,A,N>: Kernel<Args=LinearBatchCrossEntropyMulticlassArgs<'b,U,A,N>> {
     type Output = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
-    fn batch_linear_derive(&self, device: &DeviceGpu<U,A>, expected: &'a I, actual: &'a I)
+    fn batch_linear_derive(&self, device: &DeviceGpu<A>, expected: &'a I, actual: &'a I)
         -> Result<CudaVec<U,CudaTensor1dPtr<U,A,N>,A>, TrainingError> {
         let actual = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(actual)?;
         let expected = CudaVecView::<'a,U,CudaTensor1dPtrView<'a,U,N>>::try_from(expected)?;

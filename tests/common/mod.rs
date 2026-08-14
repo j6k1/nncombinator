@@ -89,7 +89,7 @@ pub fn approx_eq_slice(a: &[f32],b: &[f32],eps: f32) {
     }
 }
 
-pub fn upload_inputs_to_device<A: MemoryPoolAllocatorInstantiation<DeviceAlloc> + CudaAllocator>(
+pub fn upload_inputs_to_device<A: MemoryPoolAllocatorInstantiation<DeviceAlloc> + CudaAllocator + 'static>(
     alloc: &A,
     bias: &Arr<f32,NO>,units: &Arr2<f32,NI,NO>,
     batch_inputs: &SerializedVec<f32,Arr<f32,NI>>)

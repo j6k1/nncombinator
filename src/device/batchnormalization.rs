@@ -133,7 +133,7 @@ pub trait DeviceBatchNorm<U,C,I,const N:usize>
                                      scale: &C, saved_mean: &C, saved_inv_variance: &C)
         -> Result<(<I as BatchDataType>::Type,C,C), TrainingError>;
 }
-impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu<U>
+impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Add<Output=U> + Mul<Output=U> + Div<Output=U> + Sub<Output=U> + AddAssign + Neg<Output=U> +
              One + Sqrt +
@@ -345,7 +345,7 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu<U>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for DeviceGpu<U,A>
+impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for DeviceGpu<A>
     where U: Default + Clone + Copy + Debug +
              Add<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              One + Sqrt + FromPrimitive +

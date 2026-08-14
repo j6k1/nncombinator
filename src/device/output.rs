@@ -78,12 +78,12 @@ pub trait DeviceLinearOutput<'a,U,const N:usize>: Device<U>
                                                       actual:&'a Self::BatchIO, lossf:&L)
         -> Result<U,TrainingError> where f64: From<U> + FromPrimitive, f64: FromPrimitive;
 }
-impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
+impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu
     where U: Default + Clone + Copy + Debug + Send + Sync + Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo {
     type IO = Arr<U,N>;
     type BatchIO = SerializedVec<U,Arr<U,N>>;
     fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a Arr<U,N>, lossf: &L) -> Result<Arr<U,N>,TrainingError>
-        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,Arr<U,N>,DeviceCpu<U>,N,Output=Arr<U,N>> {
+        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,Arr<U,N>,DeviceCpu,N,Output=Arr<U,N>> {
         Ok(lossf.linear_derive(self,actual,expected)?)
     }
 
@@ -122,7 +122,7 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
     fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U,Arr<U,N>>,
                                actual: &'a SerializedVec<U,Arr<U,N>>, lossf: &L)
         -> Result<SerializedVec<U,Arr<U,N>>, TrainingError>
-        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self::BatchIO,DeviceCpu<U>,N,Output=Self::BatchIO> {
+        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self::BatchIO,DeviceCpu,N,Output=Self::BatchIO> {
         lossf.batch_linear_derive(self,expected,actual)
     }
 
@@ -148,12 +148,12 @@ impl<'a,U,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceCpu<U>
     }
 }
 #[cfg(feature = "cuda")]
-impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
+impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<A>
     where U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static +
              DataTypeInfo + AsMutPtr<U>,
           A: CudaAllocator + 'static,
-          DeviceGpu<U,A>: Device<U>,
+          DeviceGpu<A>: Device<U>,
           Arr<U,N>: ToCuda<U,A,Output=CudaTensor1dPtr<U,A,N>>,
           CudaPtr<U,A>: WriteMemory<U>,
           CudaTensor1dPtr<U,A,N>: Debug + ReadMemory<U> + WriteMemory<U>,
@@ -169,7 +169,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
     type BatchIO = CudaVec<U,CudaTensor1dPtr<U,A,N>,A>;
     fn loss_linear<L>(&self, expected: &'a Arr<U,N>, actual: &'a CudaTensor1dPtr<U,A,N>, lossf: &L)
                          -> Result<Self::IO, TrainingError>
-        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,CudaTensor1dPtr<U,A,N>,DeviceGpu<U,A>,N,Output=CudaTensor1dPtr<U,A,N>> {
+        where for<'b> L: LossFunction<U> + LossFunctionLinear<'b,U,CudaTensor1dPtr<U,A,N>,DeviceGpu<A>,N,Output=CudaTensor1dPtr<U,A,N>> {
         Ok(lossf.linear_derive(self,&actual, &expected.to_cuda(self)?)?)
     }
 
@@ -230,7 +230,7 @@ impl<'a,U,A,const N:usize> DeviceLinearOutput<'a,U,N> for DeviceGpu<U,A>
     fn batch_loss_linear<L>(&self, expected: &'a SerializedVec<U, Arr<U,N>>,
                                actual: &'a CudaVec<U,CudaTensor1dPtr<U,A,N>,A>, lossf: &L)
                                -> Result<Self::BatchIO, TrainingError>
-        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self::BatchIO,DeviceGpu<U,A>,N,Output=Self::BatchIO> {
+        where for<'b> L: LossFunction<U> + BatchLossFunctionLinear<'b,U,Self::BatchIO,DeviceGpu<A>,N,Output=Self::BatchIO> {
         let expected = expected.to_cuda(self)?;
 
         Ok(lossf.batch_linear_derive(self, &expected, actual)?)

@@ -1514,12 +1514,12 @@ fn test_cpu_with_persist_progress_all_layears() {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
-        LinearLayerBuilder::<32, 1>::new().build(l, &device,
+        LinearLayerBuilder::<32,1>::new().build(l, &device,
                                                  move || n3.sample(&mut rnd.borrow_mut().deref_mut()), || 0.,
                                                  &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        BridgeLayerBuilder::<Arr<f32,1>>::new().build(l,&device).unwrap()
+        BridgeLayerBuilder::<f64,Arr<f64,1>>::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
@@ -1572,7 +1572,7 @@ fn test_cpu_with_persist_progress_all_layears() {
                                                  &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        BridgeLayerBuilder::<Arr<f32,1>>::new().build(l,&device).unwrap()
+        BridgeLayerBuilder::<f64,Arr<f64,1>>::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {
@@ -1649,7 +1649,7 @@ fn test_cpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
-        BridgeLayerBuilder::<Arr<f32,1>>::new().build(l,&device).unwrap()
+        BridgeLayerBuilder::<f64,Arr<f64,1>>::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
@@ -1710,7 +1710,7 @@ fn test_cpu_with_persist_to_text_progress_all_layears() {
                                                  &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        BridgeLayerBuilder::<Arr<f32,1>>::new().build(l,&device).unwrap()
+        BridgeLayerBuilder::<f64,Arr<f64,1>>::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,Sigmoid::new(&device),&device)
     }).add_layer(|l| {

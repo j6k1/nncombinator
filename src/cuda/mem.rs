@@ -331,7 +331,7 @@ impl Drop for MemoryPool {
 pub struct ScopedMut<'a,U,T,A>
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U> {
     value: &'a mut T,
     ptr:&'a mut CudaPtr<U,A>
@@ -339,7 +339,7 @@ pub struct ScopedMut<'a,U,T,A>
 impl<'a,U,T,A> ScopedMut<'a,U,T,A>
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U> {
     /// Creation of ScopedMut instance
     /// # Arguments
@@ -355,7 +355,7 @@ impl<'a,U,T,A> ScopedMut<'a,U,T,A>
 impl<'a,U,T,A> Deref for ScopedMut<'a,U,T,A>
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U> {
     type Target = T;
 
@@ -366,7 +366,7 @@ impl<'a,U,T,A> Deref for ScopedMut<'a,U,T,A>
 impl<'a,U,T,A> DerefMut for ScopedMut<'a,U,T,A>
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
@@ -375,7 +375,7 @@ impl<'a,U,T,A> DerefMut for ScopedMut<'a,U,T,A>
 impl<'a,U,T,A> Drop for ScopedMut<'a,U,T,A>
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U> {
     fn drop(&mut self) {
         let len = self.value.as_raw_slice().len();
@@ -388,7 +388,7 @@ impl<'a,U,T,A> Drop for ScopedMut<'a,U,T,A>
 pub struct CachedTensor<U,T,A>
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U> {
     value:T,
     ptr:CudaPtr<U,A>
@@ -396,7 +396,7 @@ pub struct CachedTensor<U,T,A>
 impl<U,T,A> CachedTensor<U,T,A>
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U> {
     /// Creation of CachedTensor instance
     /// # Arguments
@@ -431,7 +431,7 @@ impl<U,T,A> CachedTensor<U,T,A>
 impl<U,T,A> Deref for CachedTensor<U,T,A>
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U> {
     type Target = T;
 
@@ -442,7 +442,7 @@ impl<U,T,A> Deref for CachedTensor<U,T,A>
 impl<U,T,A> Index<(usize,usize)> for CachedTensor<U,T,A>
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: Index<(usize,usize),Output=U> + AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U> {
     type Output = U;
 
@@ -453,7 +453,7 @@ impl<U,T,A> Index<(usize,usize)> for CachedTensor<U,T,A>
 impl<U,T,A> AsCudaPtr<'_> for CachedTensor<U,T,A>
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           CudaPtr<U,A>: WriteMemory<U> {
     type Pointer = CudaPtr<U,A>;
     fn as_cuda_ptr(&self) -> &CudaPtr<U,A> {
@@ -475,7 +475,7 @@ impl<'a,U,T,A> AsCudaMutPtr for CachedTensor<U,T,A>
 impl<'a,U,T,A> From<&'a mut CachedTensor<U,T,A>> for &'a mut [U]
     where U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           T: AsRawSlice<U>,
-          A: CudaAllocator,
+          A: CudaAllocator + 'static,
           &'a mut [U]: From<&'a mut T> ,
           CudaPtr<U,A>: WriteMemory<U>{
     fn from(t: &'a mut CachedTensor<U,T,A>) -> Self {

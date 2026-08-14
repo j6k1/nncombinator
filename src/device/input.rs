@@ -43,7 +43,7 @@ pub trait DeviceInput<U,I>: Device<U>
     fn batch_forward_input(&self,input: <I as BatchDataType>::Type) -> Result<Self::BatchOutput,TypeConvertError>;
 }
 
-impl<U,I> DeviceInput<U,I> for DeviceCpu<U>
+impl<U,I> DeviceInput<U,I> for DeviceCpu
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: BatchDataType + Debug + 'static,
           <I as BatchDataType>::Type: Debug + 'static {
@@ -60,14 +60,14 @@ impl<U,I> DeviceInput<U,I> for DeviceCpu<U>
 }
 #[cfg(feature = "cuda")]
 
-impl<U,I,A> DeviceInput<U,I> for DeviceGpu<U,A>
+impl<U,I,A> DeviceInput<U,I> for DeviceGpu<A>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: BatchDataType + ToCuda<U,A> + Debug + 'static,
           <I as BatchDataType>::Type: ToCuda<U,A> + Debug + 'static,
           <I as ToCuda<U,A>>::Output: Debug + 'static,
           <<I as BatchDataType>::Type as ToCuda<U,A>>::Output: Debug + 'static,
           A: CudaAllocator,
-          DeviceGpu<U,A>: Device<U> {
+          DeviceGpu<A>: Device<U> {
     type Output = <I as ToCuda<U,A>>::Output;
     type BatchOutput = <<I as BatchDataType>::Type as ToCuda<U,A>>::Output;
 

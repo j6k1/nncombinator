@@ -1,6 +1,7 @@
 //! Implementation of the calculation process for bridge layers
 
 use std::fmt::Debug;
+use crate::cast::Assume;
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::{AsCudaView, CudaView};
 use crate::device::{DeviceCpu, DeviceGpu};
@@ -8,7 +9,7 @@ use crate::error::{CudaError, EvaluateError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType};
 
 /// Trait that defines the implementation of various calculation processes in the bridge layer
-pub trait DeviceBridge<U,PI,CI>
+pub trait DeviceBridge<U,SO,PI,CI>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           PI: BatchDataType + Debug,
           CI: BatchDataType + Debug {
@@ -51,8 +52,9 @@ pub trait DeviceBridge<U,PI,CI>
     fn batch_bridge_backward<'a>(&self, input:&'a <CI as BatchDataType>::Type) ->
         Result<<PI as BatchDataType>::Type, TrainingError>;
 }
-impl<U,PI,CI> DeviceBridge<U,PI,CI> for DeviceCpu<U>
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+impl<U,SO,PI,CI> DeviceBridge<U,SO,PI,CI> for DeviceCpu
+    where U: Default + Clone + Copy + Debug + Send + Sync + Assume<SO> + 'static,
+          SO: Default + Clone + Copy + Debug + Send + Sync + Assume<U> + 'static,
           for<'a> PI: From<&'a CI> + BatchDataType + Debug,
           for<'a> CI: From<&'a PI> + BatchDataType + Debug,
           for<'a> <PI as BatchDataType>::Type: From<&'a <CI as BatchDataType>::Type>,
@@ -75,7 +77,7 @@ impl<U,PI,CI> DeviceBridge<U,PI,CI> for DeviceCpu<U>
         Ok(input.into())
     }
 }
-impl<U,A,PI,CI> DeviceBridge<U,PI,CI> for DeviceGpu<U,A>
+impl<U,SO,A,PI,CI> DeviceBridge<U,SO,PI,CI> for DeviceGpu<A>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator,
           for<'a> PI: AsCudaView<'a>,

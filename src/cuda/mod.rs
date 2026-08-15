@@ -1088,12 +1088,16 @@ impl<T,A,const N:usize> CudaTensor1dPtr<T,A,N>
         })
     }
 }
-impl<T,A,const N:usize> InputTensorScalar<T> for CudaTensor1dPtr<T,A,N>
+impl<T,A,const N:usize> InputTensorScalar for CudaTensor1dPtr<T,A,N>
     where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
-          A: CudaAllocator + 'static {}
-impl<T,A,const N:usize> OutputTensorScalar<T> for CudaTensor1dPtr<T,A,N>
+          A: CudaAllocator + 'static {
+    type Scalar = T;
+}
+impl<T,A,const N:usize> OutputTensorScalar for CudaTensor1dPtr<T,A,N>
     where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
-          A: CudaAllocator + 'static {}
+          A: CudaAllocator + 'static {
+    type Scalar = T;
+}
 impl<T,A,const N:usize> InputTensorSize<N> for CudaTensor1dPtr<T,A,N>
     where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
           A: CudaAllocator + 'static {

@@ -120,6 +120,8 @@ pub trait ForwardAll {
 /// Trait defining the implementation of error back propagation in neural networks
 pub trait BackwardAll<SO>: PreTrain + UpdateWeight
     where SO: Clone + Copy + Debug {
+    /// Loss input scalar type
+    type LossInputScalar: Clone + Copy + Debug;
     /// Losses during neural network training
     type LossInput: Debug;
     /// Losses in the top layer during neural network training
@@ -135,7 +137,7 @@ pub trait BackwardAll<SO>: PreTrain + UpdateWeight
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_all<SI,L: LossFunction<SI> + LossFunction<SO>>(&mut self, input:Self::LossInput, stack:Self::OutStack, lossf:&L)
+    fn backward_all<L: LossFunction<Self::LossInputScalar> + LossFunction<SO>>(&mut self, input:Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<SO>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
     fn is_canonical_link<L: LossFunction<SO>>(&self,_:&L) -> bool {
         false
@@ -154,7 +156,7 @@ pub trait Loss<SO>: BackwardAll<SO>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn loss<SI,L: LossFunction<SI> + LossFunction<SO>>(&mut self, loss:Self::LossInput, _lossf:&L, stack:Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
+    fn loss<L: LossFunction<Self::LossInputScalar> + LossFunction<SO>>(&mut self, loss:Self::LossInput, _lossf:&L, stack:Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         Ok((stack,loss))
     }
 }
@@ -282,7 +284,7 @@ pub trait BatchForward: BatchForwardBase {
     fn batch_forward(&self,input:Self::BatchInput) -> Result<Self::BatchOutput, TrainingError>;
 }
 /// Trait defining an implementation of error back propagation for neural networks with batch processing.
-pub trait BatchBackward<SO>: BatchPreTrainBase + UpdateWeight
+pub trait BatchBackward<SO>: BackwardAll<SO> + BatchPreTrainBase + UpdateWeight
     where SO: Clone + Copy + Debug {
     /// Losses during neural network training for batch execution
     type BatchLossInput: Debug;
@@ -298,7 +300,7 @@ pub trait BatchBackward<SO>: BatchPreTrainBase + UpdateWeight
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward<SI,L: LossFunction<SI> + LossFunction<SO>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, lossf:&L)
+    fn batch_backward<L: LossFunction<SO> + LossFunction<Self::LossInputScalar>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, lossf:&L)
         -> Result<(<Self as BatchBackward<SO>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
 }
 /// Trait that defines the implementation of the process of calculating the loss during error back propagation of neural networks by batch processing.
@@ -314,7 +316,7 @@ pub trait BatchLoss<SO>: BatchBackward<SO> + Loss<SO>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_loss<SI,L: LossFunction<SI> + LossFunction<SO>>(&self, loss:Self::BatchLossInput, _lossf:&L, stack:Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
+    fn batch_loss<L: LossFunction<SO> + LossFunction<Self::LossInputScalar>>(&self, loss:Self::BatchLossInput, _lossf:&L, stack:Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
         Ok((stack,loss))
     }
 }
@@ -343,10 +345,10 @@ pub trait BatchPreTrain: BatchPreTrainBase + BatchForwardBase + BatchForward {
     fn batch_pre_train(&self, input:Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError>;
 }
 /// Trait that defines the implementation of neural network training by batch processing.
-pub trait BatchTrain<SO,D,L>: BatchPreTrainBase + BatchPreTrain + BatchBackward<SI,SO> + PreTrain
+pub trait BatchTrain<SO,D,L>: BatchPreTrainBase + BatchPreTrain + BatchBackward<SO> + PreTrain
     where SO: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           D: Device<SO>,
-          L: LossFunction<SI> + LossFunction<SO> {
+          L: LossFunction<SO> {
     /// Train neural networks.
     /// # Arguments
     /// * `expected` - expected value

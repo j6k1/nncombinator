@@ -12,8 +12,8 @@ use crate::Stack;
 
 /// Logging layer Implementation
 pub struct LoggingLayer<U,P,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> + Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -33,8 +33,8 @@ pub struct LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> InputTensorScalar for LoggingLayer<U,P,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> + PreTrain<PreOutput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -43,8 +43,8 @@ impl<U,P,I,PI,D> InputTensorScalar for LoggingLayer<U,P,I,PI,D>
     type Scalar = U;
 }
 impl<U,P,I,PI,D> OutputTensorScalar for LoggingLayer<U,P,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> + Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -53,8 +53,8 @@ impl<U,P,I,PI,D> OutputTensorScalar for LoggingLayer<U,P,I,PI,D>
     type Scalar = U;
 }
 impl<U,P,I,PI,D> LoggingLayer<U,P,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> + Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -103,8 +103,8 @@ impl<U,P,I,PI,D> LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> Persistence<U,TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence,Specialized> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> + Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           D: Device<U>,
@@ -128,8 +128,8 @@ impl<U,P,I,PI,D> Persistence<U,TextFilePersistence,Specialized> for LoggingLayer
 impl<T,U,P,I,PI,D> Persistence<U,T,Linear> for LoggingLayer<U,P,I,PI,D>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + Persistence<U,T,Linear> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> + PreTrain<PreOutput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -145,8 +145,8 @@ impl<T,U,P,I,PI,D> Persistence<U,T,Linear> for LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> ForwardAll for LoggingLayer<U,P,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> + Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -167,8 +167,8 @@ impl<U,P,I,PI,D> ForwardAll for LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> PreTrain for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> + Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -188,20 +188,21 @@ impl<U,P,I,PI,D> PreTrain for LoggingLayer<U,P,I,PI,D>
         Ok(s)
     }
 }
-impl<U,P,I,PI,D> BackwardAll<U,U> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,D> BackwardAll<U> for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
           I: Debug + Send + Sync {
+    type LossInputScalar = U;
     type LossInput = PI;
-    type LossOutput = <P as BackwardAll<U,<P as InputTensorScalar>::Scalar>>::LossOutput;
+    type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<L: LossFunction<U> + LossFunction<<P as InputTensorScalar>::Scalar>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
-        -> Result<(<Self as BackwardAll<U,U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+    fn backward_all<L: LossFunction<U> + LossFunction<Self::LossInputScalar>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
+        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         for logger in self.backward_loggers.iter() {
             logger(&input)?;
         }
@@ -215,8 +216,8 @@ impl<U,P,I,PI,D> BackwardAll<U,U> for LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> UpdateWeight for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> + UpdateWeight +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> + UpdateWeight +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -236,8 +237,8 @@ impl<U,P,I,PI,D> UpdateWeight for LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> PartialForward for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar +
              PartialForward,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -260,8 +261,8 @@ impl<U,P,I,PI,D> PartialForward for LoggingLayer<U,P,I,PI,D>
 impl<U,P,I,PI,D> ForwardDiff for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              PartialForward + ForwardDiff +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U>,
@@ -280,8 +281,8 @@ impl<U,P,I,PI,D> ForwardDiff for LoggingLayer<U,P,I,PI,D>
 impl<U,P,I,PI,D> ContinueForward for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
           PartialForward + ContinueForward +
-          BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-          Loss<U,<P as InputTensorScalar>::Scalar> +
+          BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+          Loss<U> +
           InputTensorScalar + OutputTensorScalar,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U>,
@@ -297,10 +298,10 @@ impl<U,P,I,PI,D> ContinueForward for LoggingLayer<U,P,I,PI,D>
         Ok(r)
     }
 }
-impl<U,P,I,PI,D> Loss<U,U> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,D> Loss<U> for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> +
              InputTensorScalar<Scalar=U> + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -312,12 +313,12 @@ impl<U,P,I,PI,D> Loss<U,U> for LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> BatchForwardBase for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase + BatchBackward<U,<P as InputTensorScalar>::Scalar> +
-             BatchLoss<U,<P as InputTensorScalar>::Scalar,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchPreTrainBase + BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
@@ -329,13 +330,13 @@ impl<U,P,I,PI,D> BatchForwardBase for LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> BatchForward for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackward<U,<P as InputTensorScalar>::Scalar> +
-             BatchLoss<U,<P as InputTensorScalar>::Scalar,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
@@ -354,13 +355,13 @@ impl<U,P,I,PI,D> BatchForward for LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> BatchPreTrainBase for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackward<U,<P as InputTensorScalar>::Scalar> +
-             BatchLoss<U,<P as InputTensorScalar>::Scalar,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
@@ -372,13 +373,13 @@ impl<U,P,I,PI,D> BatchPreTrainBase for LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> BatchPreTrain for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackward<U,<P as InputTensorScalar>::Scalar> +
-             BatchLoss<U,<P as InputTensorScalar>::Scalar,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
@@ -397,15 +398,15 @@ impl<U,P,I,PI,D> BatchPreTrain for LoggingLayer<U,P,I,PI,D>
         Ok(s)
     }
 }
-impl<U,P,I,PI,D> BatchBackward<U,U> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,D> BatchBackward<U> for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackward<U,<P as InputTensorScalar>::Scalar> +
-             BatchLoss<U,<P as InputTensorScalar>::Scalar,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
@@ -413,9 +414,9 @@ impl<U,P,I,PI,D> BatchBackward<U,U> for LoggingLayer<U,P,I,PI,D>
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: Debug {
     type BatchLossInput = <PI as BatchDataType>::Type;
-    type BatchLossOutput = <P as BatchBackward<U,<P as InputTensorScalar>::Scalar>>::BatchLossOutput;
-    fn batch_backward<L: LossFunction<U> + LossFunction<<P as InputTensorScalar>::Scalar>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
-        -> Result<(<Self as BatchBackward<U,U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
+    fn batch_backward<L: LossFunction<U> + LossFunction<Self::LossInputScalar>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
+        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         for logger in self.batch_backward_loggers.iter() {
             logger(&input)?;
         }
@@ -425,15 +426,15 @@ impl<U,P,I,PI,D> BatchBackward<U,U> for LoggingLayer<U,P,I,PI,D>
         Ok(r)
     }
 }
-impl<U,P,I,PI,D> BatchLoss<U,U> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,D> BatchLoss<U> for LoggingLayer<U,P,I,PI,D>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             Loss<U> +
              InputTensorScalar<Scalar=U> + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackward<U,<P as InputTensorScalar>::Scalar> +
-             BatchLoss<U,<P as InputTensorScalar>::Scalar,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchBackward<U> +
+             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
@@ -446,8 +447,8 @@ impl<U,P,I,PI,D> BatchLoss<U,U> for LoggingLayer<U,P,I,PI,D>
 }
 impl<U,P,I,PI,D> OnStep for LoggingLayer<U,P,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> + Loss<U> +
              InputTensorScalar + OutputTensorScalar + OnStep,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -463,8 +464,8 @@ impl<U,P,I,PI,D> OnStep for LoggingLayer<U,P,I,PI,D>
 impl<U,P,I,PI,D> PersistProgress<TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> +
              PersistProgress<TextFilePersistence,Specialized> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> + PreTrain<PreOutput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           D: Device<U>,
@@ -489,8 +490,8 @@ impl<T,U,P,I,PI,D> PersistProgress<T,Linear> for LoggingLayer<U,P,I,PI,D>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> +
              PersistProgress<T,Linear> +
-             BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> + PreTrain<PreOutput=PI> +
-             Loss<U,<P as InputTensorScalar>::Scalar> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
+             Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,

@@ -215,10 +215,14 @@ impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: D
         ShieldSlice::new(&mut arr.arr)
     }
 }
-impl<T,const N:usize> InputTensorScalar<T> for Arr<T,N>
-where T: Default + Clone + Copy + Send + Sync + 'static {}
-impl<T,const N:usize> OutputTensorScalar<T> for Arr<T,N>
-    where T: Default + Clone + Copy + Send + Sync + 'static {}
+impl<T,const N:usize> InputTensorScalar for Arr<T,N>
+where T: Debug + Default + Clone + Copy + Send + Sync + 'static {
+    type Scalar = T;
+}
+impl<T,const N:usize> OutputTensorScalar for Arr<T,N>
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static {
+    type Scalar = T;
+}
 impl<T,const N:usize> InputTensorSize<N> for Arr<T,N>
     where T: Default + Clone + Copy + Send + Sync + 'static {
 }
@@ -565,11 +569,13 @@ impl<'a,T,const N1:usize,const N2:usize> From<&'a mut Arr2<T,N1,N2>> for ShieldS
 impl<T,const N1:usize,const N2:usize> SliceSize for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N1 * N2;
 }
-impl<T,const N1:usize,const N2:usize> InputTensorScalar<T> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
-
+impl<T,const N1:usize,const N2:usize> InputTensorScalar for Arr2<T,N1,N2>
+    where T: Debug + Default + Clone + Copy + Send {
+    type Scalar = T;
 }
-impl<T,const N1:usize,const N2:usize> OutputTensorScalar<T> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
-
+impl<T,const N1:usize,const N2:usize> OutputTensorScalar for Arr2<T,N1,N2>
+    where T: Debug + Default + Clone + Copy + Send {
+    type Scalar = T;
 }
 /// Fixed-length 3D array implementation
 #[derive(Debug,Eq,PartialEq)]

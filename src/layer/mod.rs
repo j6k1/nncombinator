@@ -1,6 +1,7 @@
 //! The various layers that make up a neural network and the traits they implement
 
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use crate::device::*;
 use crate::{Stack};
 use crate::error::{EvaluateError, PersistenceError, TrainingError};
@@ -117,7 +118,8 @@ pub trait ForwardAll {
     fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError>;
 }
 /// Trait defining the implementation of error back propagation in neural networks
-pub trait BackwardAll<U>: PreTrain + UpdateWeight where U: Clone + Copy + Debug {
+pub trait BackwardAll<SO>: PreTrain + UpdateWeight
+    where SO: Clone + Copy + Debug {
     /// Losses during neural network training
     type LossInput: Debug;
     /// Losses in the top layer during neural network training
@@ -133,14 +135,15 @@ pub trait BackwardAll<U>: PreTrain + UpdateWeight where U: Clone + Copy + Debug 
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_all<L: LossFunction<U>>(&mut self, input:Self::LossInput, stack:Self::OutStack, lossf:&L)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
-    fn is_canonical_link<L: LossFunction<U>>(&self,_:&L) -> bool {
+    fn backward_all<SI,L: LossFunction<SI> + LossFunction<SO>>(&mut self, input:Self::LossInput, stack:Self::OutStack, lossf:&L)
+        -> Result<(<Self as BackwardAll<SO>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
+    fn is_canonical_link<L: LossFunction<SO>>(&self,_:&L) -> bool {
         false
     }
 }
 /// Trait defining the calculation of the error during error back propagation.
-pub trait Loss<U>: BackwardAll<U> where U: Clone + Copy + Debug {
+pub trait Loss<SO>: BackwardAll<SO>
+    where SO: Clone + Copy + Debug {
     /// Error Calculation
     /// # Arguments
     /// * `loss` - Lower layer error
@@ -151,7 +154,7 @@ pub trait Loss<U>: BackwardAll<U> where U: Clone + Copy + Debug {
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn loss<L: LossFunction<U>>(&mut self, loss:Self::LossInput, _lossf:&L, stack:Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
+    fn loss<SI,L: LossFunction<SI> + LossFunction<SO>>(&mut self, loss:Self::LossInput, _lossf:&L, stack:Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         Ok((stack,loss))
     }
 }
@@ -279,7 +282,8 @@ pub trait BatchForward: BatchForwardBase {
     fn batch_forward(&self,input:Self::BatchInput) -> Result<Self::BatchOutput, TrainingError>;
 }
 /// Trait defining an implementation of error back propagation for neural networks with batch processing.
-pub trait BatchBackward<U>: BatchPreTrainBase + UpdateWeight where U: Clone + Copy + Debug {
+pub trait BatchBackward<SO>: BatchPreTrainBase + UpdateWeight
+    where SO: Clone + Copy + Debug {
     /// Losses during neural network training for batch execution
     type BatchLossInput: Debug;
     /// Losses in the top layer during neural network training
@@ -294,11 +298,12 @@ pub trait BatchBackward<U>: BatchPreTrainBase + UpdateWeight where U: Clone + Co
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward<L: LossFunction<U>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, lossf:&L)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
+    fn batch_backward<SI,L: LossFunction<SI> + LossFunction<SO>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, lossf:&L)
+        -> Result<(<Self as BatchBackward<SO>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
 }
 /// Trait that defines the implementation of the process of calculating the loss during error back propagation of neural networks by batch processing.
-pub trait BatchLoss<U>: BatchBackward<U> + Loss<U> where U: Clone + Copy + Debug {
+pub trait BatchLoss<SO>: BatchBackward<SO> + Loss<SO>
+    where SO: Clone + Copy + Debug {
     /// Error Calculation
     /// # Arguments
     /// * `loss` - Lower layer error
@@ -309,7 +314,7 @@ pub trait BatchLoss<U>: BatchBackward<U> + Loss<U> where U: Clone + Copy + Debug
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_loss<L: LossFunction<U>>(&self, loss:Self::BatchLossInput, _lossf:&L, stack:Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
+    fn batch_loss<SI,L: LossFunction<SI> + LossFunction<SO>>(&self, loss:Self::BatchLossInput, _lossf:&L, stack:Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
         Ok((stack,loss))
     }
 }
@@ -338,10 +343,10 @@ pub trait BatchPreTrain: BatchPreTrainBase + BatchForwardBase + BatchForward {
     fn batch_pre_train(&self, input:Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError>;
 }
 /// Trait that defines the implementation of neural network training by batch processing.
-pub trait BatchTrain<U,D,L>: BatchPreTrainBase + BatchPreTrain + BatchBackward<U> + PreTrain
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
-          D: Device<U>,
-          L: LossFunction<U> {
+pub trait BatchTrain<SO,D,L>: BatchPreTrainBase + BatchPreTrain + BatchBackward<SI,SO> + PreTrain
+    where SO: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
+          D: Device<SO>,
+          L: LossFunction<SI> + LossFunction<SO> {
     /// Train neural networks.
     /// # Arguments
     /// * `expected` - expected value
@@ -352,7 +357,7 @@ pub trait BatchTrain<U,D,L>: BatchPreTrainBase + BatchPreTrain + BatchBackward<U
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_train(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, lossf:&L) -> Result<U, TrainingError>;
+    fn batch_train(&mut self, expected:Self::BatchOutput, input:Self::BatchInput, lossf:&L) -> Result<SO, TrainingError>;
 }
 /// Definition of a trait that notifies of progress during learning
 pub trait Step {
@@ -415,9 +420,26 @@ pub trait PersistProgress<P,K> where K: PersistenceType {
     fn save_progress(&mut self, persistence:&mut P) -> Result<(), PersistenceError>;
 }
 /// A trait representing the weight type of inputs used in the implementation of various layers
-pub trait InputTensorScalar<U> {}
+pub trait InputTensorScalar {
+    type Scalar: Clone + Copy + Debug;
+}
 /// A trait representing the weight type of outputs used in the implementation of various layers
-pub trait OutputTensorScalar<U> {}
+pub trait OutputTensorScalar {
+    type Scalar: Clone + Copy + Debug;
+}
+/// A characteristic that represents the size of the input weights used in the implementation of each layer
+pub trait TensorSize {
+    const SIZE: usize;
+}
+impl<const N: usize> TensorSize for [();N] {
+    const SIZE: usize = N;
+}
+/// A feature representing the number of dimensions in the input from the upper layer
+pub trait InputTensorSize<const N: usize> {
+}
+/// A characteristic that represents the number of dimensions in the input output by the upper layers
+pub trait OutputTensorSize<const N: usize> {
+}
 /// Trait that defines the ability to add layers to a neural network.
 pub trait AddLayer: ForwardAll where Self: Sized {
     /// Adding Layers

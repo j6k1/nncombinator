@@ -8,7 +8,7 @@ use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, Seri
 use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::ope::Product;
-use crate::layer::{BatchDataType};
+use crate::layer::{BatchDataType, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, TensorSize};
 #[cfg(feature = "cuda")]
 use crate::mem::AsRawSlice;
 #[cfg(feature = "cuda")]
@@ -29,10 +29,12 @@ use crate::device::{DeviceGpu, DeviceAllocator};
 /// Trait that defines the implementation of various calculation processes in the linear layer
 pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          I: BatchDataType {
-    type Output: BatchDataType + Debug + 'static;
+          I: BatchDataType + InputTensorSize<NI>,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    type Output: BatchDataType + Debug + OutputTensorScalar + OutputTensorSize<NO> + 'static;
     type BatchOutput: Debug + 'static;
-    type LossOutput: BatchDataType + Debug + 'static;
+    type LossOutput: BatchDataType + InputTensorScalar + Debug + 'static;
     type BatchLossOutput: Debug + 'static;
     /// Perform generalization of the unit weight data
     /// # Arguments
@@ -152,10 +154,13 @@ pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
 impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,I,NI,NO> for DeviceCpu
     where U: Default + Clone + Copy + Debug +
              Add<Output=U> + Mul<Output=U> + AddAssign + Send + Sync + 'static,
-          I: BatchDataType + From<Arr<U,NI>> + Debug + 'static,
+          I: BatchDataType + InputTensorSize<NI> + InputTensorScalar + From<Arr<U,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
           SerializedVec<U,Arr<U,NI>>: IntoConverter,
+          Arr<U,NO>: InputTensorScalar + OutputTensorScalar + OutputTensorSize<NO>,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize,
           for<'a> ArrView<'a,U,NI>: From<&'a I>,
           for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
           Self: DeviceReduce<SerializedVec<U,Arr<U,NO>>,Arr<U,NO>,U,NO> {
@@ -252,7 +257,8 @@ impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>
 }
 #[cfg(feature = "cuda")]
 impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,A,NI,NO>,CudaTensor1dPtr<f32,A,NO>,I,NI,NO> for DeviceGpu<A>
-    where I: BatchDataType + MemorySize + AsConstKernelPtr + AsKernelPtr + From<CudaTensor1dPtr<f32,A,NI>> + Debug + 'static,
+    where I: BatchDataType + InputTensorSize<NI> + InputTensorScalar +
+             MemorySize + AsConstKernelPtr + AsKernelPtr + From<CudaTensor1dPtr<f32,A,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
           A: CudaAllocator + MemoryType + 'static,
@@ -260,8 +266,10 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
           CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: IntoConverter,
           CudaTensor1dPtr<f32,A,NO>: AsConstKernelPtr + AsKernelPtr +
                                      MemorySize + MemoryMoveTo<f32,CudaTensor1dPtr<f32,A,NO>> +
-                                     ReadMemory<f32> + WriteMemory<f32>,
+                                     ReadMemory<f32> + WriteMemory<f32> + OutputTensorSize<NO>,
           CudaTensor2dPtr<f32,A,NI,NO>: ReadMemory<f32> + WriteMemory<f32>,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize,
           Self: DeviceReduce<CudaVec<f32,CudaTensor1dPtr<f32,A,NO>,A>,CudaTensor1dPtr<f32,A,NO>,f32,NO>,
           for<'a> I: CudaView<'a>,
           for<'a> <I as BatchDataType>::Type: CudaView<'a>,
@@ -633,15 +641,18 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f32,CudaTensor2dPtr<f32,
 }
 #[cfg(feature = "cuda")]
 impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,A,NI,NO>,CudaTensor1dPtr<f64,A,NO>,I,NI,NO> for DeviceGpu<A>
-    where I: BatchDataType + From<CudaTensor1dPtr<f64,A,NI>> + Debug + 'static,
+    where I: BatchDataType + InputTensorSize<NI> + InputTensorScalar +
+             From<CudaTensor1dPtr<f64,A,NI>> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'static,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
           A: CudaAllocator + 'static,
           CudaPtr<f64,A>: ReadMemory<f64> + WriteMemory<f64>,
-          CudaTensor1dPtr<f64,A,NO>: MemoryMoveTo<f64,CudaTensor1dPtr<f64,A,NO>> + ReadMemory<f64> + WriteMemory<f64>,
+          CudaTensor1dPtr<f64,A,NO>: MemoryMoveTo<f64,CudaTensor1dPtr<f64,A,NO>> +
+                                     ReadMemory<f64> + WriteMemory<f64> + OutputTensorSize<NO>,
           CudaTensor2dPtr<f64,A,NI,NO>: ReadMemory<f64> + WriteMemory<f64>,
           CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>: IntoConverter,
-          CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>: IntoConverter,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize,
           Self: DeviceReduce<CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>,CudaTensor1dPtr<f64,A,NO>,f64,NO>,
           for<'a> CudaTensor1dPtrView<'a,f64,NI>: From<&'a I>,
           for<'a> CudaVecView<'a,f64,CudaTensor1dPtrView<'a,f64,NO>>: TryFrom<&'a CudaVec<f64,CudaTensor1dPtr<f64,A,NO>,A>,Error=TypeConvertError>,

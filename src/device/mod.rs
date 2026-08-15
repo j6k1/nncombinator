@@ -36,13 +36,15 @@ use crate::cuda::{AsCudaMutPtr, AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaT
 use crate::cuda::allocator::CudaAllocator;
 #[cfg(feature = "cuda")]
 use crate::cuda::kernel::device::{ReduceLinearBatch, ReduceLinearBatchArgs};
+use crate::layer::{OutputTensorScalar, TensorSize};
 
 /// Trait that defines devices responsible for various computational processes of neural networks
 pub trait Device<U>: Clone + 'static {
 }
 /// Characteristics defining devices responsible for various convolutional computations of neural networks
 pub trait DeviceReduce<T,R,U,const N:usize>
-    where U: Default + Clone + Debug + Send + Sync + 'static {
+    where U: Default + Clone + Debug + Send + Sync + 'static,
+          [();N]: TensorSize {
     /// Convolutional computation of input
     /// # Arguments
     /// * `input` - convolutional input
@@ -84,6 +86,7 @@ impl<U> Device<U> for DeviceCpu {
 impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu
     where U: Default + Clone + Copy + Debug + Send + Sync + Add<Output=U> + 'static,
           T: BatchSize,
+          [();N]: TensorSize,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a T,Error=TypeConvertError> {
     #[inline]
     fn reduce<'a>(&self, input: &'a T) -> Result<Arr<U,N>,  TrainingError> {
@@ -100,7 +103,7 @@ impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceCpu
 }
 impl<T,U> DeviceBatchAveraging<T,U> for DeviceCpu
     where U: Default + Clone + Copy + Debug + Send + Sync + Div<Output=U> + 'static + FromPrimitive,
-          T: AsRawSlice<U> + TryFrom<Vec<U>,Error=TypeConvertError> {
+          T: OutputTensorScalar + AsRawSlice<U> + TryFrom<Vec<U>,Error=TypeConvertError> {
     #[inline]
     fn batch_averaging<'a>(&self, input: T,batch_size:usize) -> Result<T,TrainingError> {
         let batch_size = U::from_usize(batch_size).ok_or(TypeCastError(
@@ -258,6 +261,7 @@ impl<U,T,A,const N:usize> DeviceReduce<T,CudaTensor1dPtr<U,A,N>,U,N> for DeviceG
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
           T: BatchSize,
           A: CudaAllocator + 'static,
+          [();N]: TensorSize,
           for<'a> CudaVecView<'a,U,CudaTensor1dPtrView<'a,U,N>>: TryFrom<&'a T,Error=TypeConvertError>,
           for<'a> ReduceLinearBatch::<'a,U,A,N>: Kernel<Args=ReduceLinearBatchArgs<'a,U,A,N>> {
     #[inline]

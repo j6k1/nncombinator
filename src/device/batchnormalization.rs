@@ -14,7 +14,7 @@ use crate::ope::{One, Sqrt, Sum};
 use crate::collection::Broadcast;
 use crate::computational_graph::{BroadcastNode, GraphNode, SqrtNode, SquareNode, SumNode};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
-use crate::layer::{BatchDataType};
+use crate::layer::{BatchDataType, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, TensorSize};
 use crate::device::{DeviceCpu};
 #[cfg(feature = "cuda")]
 use crate::mem::AsRawSlice;
@@ -32,8 +32,10 @@ use crate::device::{DeviceGpu, DeviceAllocator};
 /// Features defining the implementation of the various computational processes in the batch normalization layer
 pub trait DeviceBatchNorm<U,C,I,const N:usize>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          I: BatchDataType + Debug + 'static,
-          <I as BatchDataType>::Type: Debug + 'static {
+          I: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+             InputTensorScalar + OutputTensorScalar + 'static,
+          <I as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize {
     /// Perform generalization of scale, bias, etc., used in batch normalization calculations.
     /// # Arguments
     /// * `vars` - Variables used in batch normalization calculations
@@ -138,9 +140,11 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu
              Add<Output=U> + Mul<Output=U> + Div<Output=U> + Sub<Output=U> + AddAssign + Neg<Output=U> +
              One + Sqrt +
              Send + Sync + DataTypeInfo + 'static,
-          I: BatchDataType + Debug + From<Arr<U,N>> + 'static,
+          I: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+             InputTensorScalar + OutputTensorScalar + From<Arr<U,N>> + 'static,
           <I as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          [();N]: TensorSize,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
           for<'a> ArrView<'a,U,N>: From<&'a I>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError> {
@@ -351,9 +355,11 @@ impl<U,I,A,const N:usize> DeviceBatchNorm<U,CudaTensor1dPtr<U,A,N>,I,N> for Devi
              One + Sqrt + FromPrimitive +
              Send + Sync + 'static + DataTypeInfo + AsVoidPtr,
           A: CudaAllocator,
-          I: BatchDataType + Debug + From<CudaTensor1dPtr<U,A,N>> + 'static,
+          I: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+             InputTensorScalar + OutputTensorScalar + From<CudaTensor1dPtr<U,A,N>> + 'static,
           <I as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: TryFrom<<CudaVec<U,CudaTensor1dPtr<U,A,N>,A> as IntoConverter>::Converter,Error=TypeConvertError>,
+          [();N]: TensorSize,
           CudaTensor1dPtr<U,A,N>: AsMutVoidPtr + ReadMemory<U> + MemoryMoveTo<U,CudaTensor1dPtr<U,A,N>>,
           CudaVec<U,CudaTensor1dPtr<U,A,N>,A>: IntoConverter,
           CudaTensor1dPtr<U,A,N>: AsConstKernelPtr + AsKernelPtr + MemorySize +

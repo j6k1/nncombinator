@@ -8,7 +8,7 @@ use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
-use crate::layer::{BatchDataType, BatchSize};
+use crate::layer::{BatchDataType, BatchSize, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::{Product, Sum};
 #[cfg(feature = "cuda")]
@@ -214,6 +214,16 @@ impl<'a,T,const N:usize> From<&'a mut Arr<T,N>> for ShieldSlice<'a,T> where T: D
     fn from(arr: &'a mut Arr<T, N>) -> Self {
         ShieldSlice::new(&mut arr.arr)
     }
+}
+impl<T,const N:usize> InputTensorScalar<T> for Arr<T,N>
+where T: Default + Clone + Copy + Send + Sync + 'static {}
+impl<T,const N:usize> OutputTensorScalar<T> for Arr<T,N>
+    where T: Default + Clone + Copy + Send + Sync + 'static {}
+impl<T,const N:usize> InputTensorSize<N> for Arr<T,N>
+    where T: Default + Clone + Copy + Send + Sync + 'static {
+}
+impl<T,const N:usize> OutputTensorSize<N> for Arr<T,N>
+    where T: Default + Clone + Copy + Send + Sync + 'static {
 }
 #[cfg(feature = "cuda")]
 impl<T,A,const N:usize> ToCuda<T,A> for Arr<T,N>
@@ -554,6 +564,12 @@ impl<'a,T,const N1:usize,const N2:usize> From<&'a mut Arr2<T,N1,N2>> for ShieldS
 }
 impl<T,const N1:usize,const N2:usize> SliceSize for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N1 * N2;
+}
+impl<T,const N1:usize,const N2:usize> InputTensorScalar<T> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
+
+}
+impl<T,const N1:usize,const N2:usize> OutputTensorScalar<T> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
+
 }
 /// Fixed-length 3D array implementation
 #[derive(Debug,Eq,PartialEq)]

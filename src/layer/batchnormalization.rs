@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize};
 use crate::lossfunction::LossFunction;
 use crate::ope::One;
 use crate::optimizer::{Optimizer, OptimizerBuilder};
@@ -28,12 +28,15 @@ pub struct MeanAndVariance<T> {
 }
 /// Trait for BatchNormalizationLayer instance creation
 pub trait BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,const N:usize>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain + Loss<U> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
+          PI: InputTensorSize<N> + OutputTensorSize<N>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,D> {
+          OP: Optimizer<U,D>,
+          [();N]: TensorSize {
     /// Create and return an instance with the specified scale, bias, and momentum.
     /// # Arguments
     /// * `parent` - upper layer
@@ -72,12 +75,15 @@ pub trait BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,const N:usize>
 }
 ///  BatchNormalization Layer Implementation
 pub struct BatchNormalizationLayer<U,C,P,OP,D,I,PI,const N:usize>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain + Loss<U> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
+          PI: InputTensorSize<N> + OutputTensorSize<N>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,D> {
+          OP: Optimizer<U,D>,
+          [();N]: TensorSize {
     parent:P,
     device:D,
     scale: C,
@@ -86,34 +92,48 @@ pub struct BatchNormalizationLayer<U,C,P,OP,D,I,PI,const N:usize>
     running_mean: C,
     running_variance: C,
     pi:PhantomData<PI>,
+    n:PhantomData<[();N]>,
     scale_optimizer:OP,
     bias_optimizer:OP
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> InputTensorScalar<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain + Loss<U> + OutputTensorScalar<U>,
+impl<U,C,P,OP,D,I,PI,const N:usize> InputTensorScalar for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
+          PI: InputTensorSize<N> + OutputTensorSize<N>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,D> {}
-impl<U,C,P,OP,D,I,PI,const N:usize> OutputTensorScalar<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain + Loss<U> + OutputTensorScalar<U>,
+          OP: Optimizer<U,D>,
+          [();N]: TensorSize {
+    type Scalar = U;
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> OutputTensorScalar for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
+          PI: InputTensorSize<N> + OutputTensorSize<N>,
           I: Debug + Send + Sync,
-          OP: Optimizer<U,D> {}
+          OP: Optimizer<U,D>,
+          [();N]: TensorSize {
+    type Scalar = U;
+}
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,C,P,OP,D,I,PI,N>
     for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain + Loss<U> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + One + FromPrimitive +
              Send + Sync + 'static,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
-          <PI as BatchDataType>::Type: Debug + 'static {
+          <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize {
     fn with_params<B: OptimizerBuilder<U,D,Output=OP>>(parent:P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
         -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError> {
 
@@ -138,6 +158,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,C,P,O
             running_mean:running_mean,
             running_variance:running_variance,
             pi:PhantomData::<PI>,
+            n:PhantomData::<[();N]>,
             scale_optimizer:b.build(N)?,
             bias_optimizer:b.build(N)?
         })
@@ -161,16 +182,19 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,C,P,O
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialized>
     for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain + Loss<U> + Persistence<U,TextFilePersistence,Specialized> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> + Persistence<U,TextFilePersistence,Specialized> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> +
+              Debug + InputTensorScalar + OutputTensorScalar + 'static,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err>,
-          <PI as BatchDataType>::Type: Debug + 'static {
+          <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize {
     fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
@@ -247,14 +271,17 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialize
 }
 impl<T,U,C,P,OP,D,I,PI,const N:usize> Persistence<U,T,Linear> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where T: LinearPersistence<U>,
-          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain + Loss<U> + Persistence<U,T,Linear> + OutputTensorScalar<U>,
+          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> + Persistence<U,T,Linear> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
-          <PI as BatchDataType>::Type: Debug + 'static {
+          <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize {
     fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
@@ -318,27 +345,33 @@ impl<T,U,C,P,OP,D,I,PI,const N:usize> Persistence<U,T,Linear> for BatchNormaliza
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> Forward<PI,Result<PI,EvaluateError>> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           OP: Optimizer<U,D>,
-          <PI as BatchDataType>::Type: Debug + 'static {
+          <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize {
     fn forward(&self,input:&PI) -> Result<PI,EvaluateError> {
         self.device.forward_batch_norm(input,&self.scale,&self.bias,&self.running_mean,&self.running_variance)
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> ForwardAll for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           OP: Optimizer<U,D>,
-          <PI as BatchDataType>::Type: Debug + 'static {
+          <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize {
     type Input = I;
     type Output = PI;
     fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
@@ -346,15 +379,18 @@ impl<U,C,P,OP,D,I,PI,const N:usize> ForwardAll for BatchNormalizationLayer<U,C,P
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> PreTrain for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          <PI as BatchDataType>::Type: Debug + 'static {
+          <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize {
     type PreOutput = PI;
     type OutStack = Cons<Cons<<P as PreTrain>::OutStack,(C,C)>,Self::PreOutput>;
 
@@ -375,15 +411,18 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PreTrain for BatchNormalizationLayer<U,C,P,O
 impl<U,C,P,OP,D,I,PI,const N:usize> Backward<U,(&PI,&PI,&C,&C),Result<(PI,C,C),TrainingError>>
     for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
 
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> +
+              Debug + InputTensorScalar + OutputTensorScalar + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
-          <PI as BatchDataType>::Type: Debug + 'static {
+          <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize {
     fn backward(&mut self, (loss,input,saved_mean,saved_inv_variance): (&PI,&PI,&C,&C))
         -> Result<(PI,C,C),TrainingError> {
         self.device.backward_batch_norm(loss,
@@ -393,23 +432,26 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Backward<U,(&PI,&PI,&C,&C),Result<(PI,C,C),T
                                         saved_inv_variance)
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
+impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U,U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          [();N]: TensorSize {
     type LossInput = PI;
-    type LossOutput = <P as BackwardAll<U>>::LossOutput;
+    type LossOutput = <P as BackwardAll<U,<P as InputTensorScalar>::Scalar>>::LossOutput;
 
-    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+    fn backward_all<L: LossFunction<U> + LossFunction<<P as InputTensorScalar>::Scalar>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
+        -> Result<(<Self as BackwardAll<U,U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
 
         let (s,_) = stack.pop();
         let (s,(m,iv)) = s.pop();
@@ -428,17 +470,20 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> UpdateWeight for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + UpdateWeight + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> + UpdateWeight +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceBatchAveraging<C,U>,
           <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          [();N]: TensorSize {
     type GradientStack = Cons<<P as UpdateWeight>::GradientStack,(C,C,Option<(C,C)>)>;
 
     fn update_weight(&mut self, stack: Self::GradientStack, batch_size: usize) -> Result<(), TrainingError> {
@@ -459,14 +504,17 @@ impl<U,C,P,OP,D,I,PI,const N:usize> UpdateWeight for BatchNormalizationLayer<U,C
     }
 }
 impl<U,P,OP,D,C,I,PI,const N:usize> PartialForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PartialForward + PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PartialForward + PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           OP: Optimizer<U,D>,
           <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize,
           Self: ForwardAll<Input=I,Output=PI> + PreTrain {
     type PartialInput = <P as PartialForward>::PartialInput;
     type PartialOutput = <P as PartialForward>::PartialOutput;
@@ -482,14 +530,17 @@ impl<U,P,OP,D,C,I,PI,const N:usize> PartialForward for BatchNormalizationLayer<U
     }
 }
 impl<U,P,OP,D,C,I,PI,const N:usize> ForwardDiff for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-          PartialForward + ForwardDiff + PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+          PartialForward + ForwardDiff + PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+          InputTensorScalar + OutputTensorScalar,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
       I: Debug + Send + Sync,
-      PI: BatchDataType + Debug + 'static,
+      PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+          InputTensorScalar + OutputTensorScalar + 'static,
       OP: Optimizer<U,D>,
       <PI as BatchDataType>::Type: Debug + 'static,
+      [();N]: TensorSize,
       Self: ForwardAll<Input=I,Output=PI> + PreTrain {
     fn forward_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.forward_diff(input, partial_input)?;
@@ -498,14 +549,17 @@ impl<U,P,OP,D,C,I,PI,const N:usize> ForwardDiff for BatchNormalizationLayer<U,C,
     }
 }
 impl<U,P,OP,D,C,I,PI,const N:usize> ContinueForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-          PartialForward + ContinueForward + PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+          PartialForward + ContinueForward + PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+          InputTensorScalar + OutputTensorScalar,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
       I: Debug + Send + Sync,
-      PI: BatchDataType + Debug + 'static,
+      PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+          InputTensorScalar + OutputTensorScalar + 'static,
       OP: Optimizer<U,D>,
       <PI as BatchDataType>::Type: Debug + 'static,
+      [();N]: TensorSize,
       Self: ForwardAll<Input=I,Output=PI> + PreTrain {
     fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.continue_forward(input)?;
@@ -513,47 +567,56 @@ impl<U,P,OP,D,C,I,PI,const N:usize> ContinueForward for BatchNormalizationLayer<
         Ok(self.forward(&input)?)
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> Loss<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U>,
+impl<U,C,P,OP,D,I,PI,const N:usize> Loss<U,U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           <PI as BatchDataType>::Type: Debug + 'static,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          [();N]: TensorSize {
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchForwardBase for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U> +
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize,
           Self: ForwardAll {
     type BatchInput = <I as BatchDataType>::Type;
     type BatchOutput = <PI as BatchDataType>::Type;
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchForward for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U> +
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           I: Debug + Send + Sync + BatchDataType,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           C: Debug,
           OP: Optimizer<U,D>,
           <I as BatchDataType>::Type: Debug,
-          <PI as BatchDataType>::Type: Debug + 'static {
+          <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
@@ -561,8 +624,9 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchForward for BatchNormalizationLayer<U,C
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrainBase for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U> +
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -570,16 +634,19 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrainBase for BatchNormalizationLaye
           I: Debug + Send + Sync + BatchDataType,
           C: Debug,
           OP: Optimizer<U,D>,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
+          [();N]: TensorSize,
           Self: PreTrain<PreOutput=PI> {
     type BatchPreOutput = <PI as BatchDataType>::Type;
     type BatchOutStack = Cons<Cons<<P as BatchPreTrainBase>::BatchOutStack,MeanAndVariance<C>>,Self::BatchPreOutput>;
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U> +
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -587,9 +654,11 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain for BatchNormalizationLayer<U,
           I: Debug + Send + Sync + BatchDataType,
           C: Debug,
           OP: Optimizer<U,D>,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
+          [();N]: TensorSize,
           Self: PreTrain<PreOutput=PI> {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let s = self.parent.batch_pre_train(input)?;
@@ -607,27 +676,30 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain for BatchNormalizationLayer<U,
         }).push(u))
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U> +
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchBackward<U,U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchBackward<U,U> + BatchLoss<U,U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,D>,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           C: Debug,
           <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          [();N]: TensorSize {
     type BatchLossInput = <PI as BatchDataType>::Type;
-    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
+    type BatchLossOutput = <P as BatchBackward<U,U>>::BatchLossOutput;
 
     fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BatchBackward<U,U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let loss = input;
 
         let (s, _) = stack.pop();
@@ -652,32 +724,37 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchBackward<U> for BatchNormalizationLayer
         Ok((l,Cons(s,(scale,bias,Some((running_mean,running_variance))))))
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> BatchLoss<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<U> +
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchLoss<U,U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain<PreOutput=PI> + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchBackward<U,U> + BatchLoss<U,U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync + BatchDataType,
           OP: Optimizer<U,D>,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           C: Debug,
           <PI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          [();N]: TensorSize {
 }
 // OnStep implementation
 impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain + Loss<U> + OutputTensorScalar<U> + OnStep,
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar + OnStep,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           I: Debug + Send + Sync,
-          PI: Debug,
-          OP: Optimizer<U,D> {
+          PI: InputTensorSize<N> + OutputTensorSize<N>,
+          OP: Optimizer<U,D>,
+          [();N]: TensorSize {
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
         self.scale_optimizer.on_step(step)?;
         self.bias_optimizer.on_step(step)?;
@@ -691,10 +768,12 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BatchNormalizationLayer<U,C,P,OP,
     }
 }
 /// Builder for BatchNormalizationLayer instance creation
-pub struct BatchNormalizationLayerBuilder<const N:usize> {
+pub struct BatchNormalizationLayerBuilder<const N:usize>
+    where [();N]: TensorSize {
     n:PhantomData<[();N]>
 }
-impl<const N:usize> BatchNormalizationLayerBuilder<N> {
+impl<const N:usize> BatchNormalizationLayerBuilder<N>
+    where [();N]: TensorSize {
     /// Create an instance of BatchNormalizationLayerBuilder
     pub fn new() -> BatchNormalizationLayerBuilder<N> {
         BatchNormalizationLayerBuilder {
@@ -702,7 +781,8 @@ impl<const N:usize> BatchNormalizationLayerBuilder<N> {
         }
     }
 }
-impl<const N:usize> BatchNormalizationLayerBuilder<N> {
+impl<const N:usize> BatchNormalizationLayerBuilder<N>
+    where [();N]: TensorSize {
     /// Create an instance of BatchNormalizationLayer
     /// # Arguments
     /// * `parent` - upper layer
@@ -719,10 +799,12 @@ impl<const N:usize> BatchNormalizationLayerBuilder<N> {
     /// * [`LayerInstantiationError`]
     pub fn build_with_params<U,C,P,OP,D,I,PI,B>(&self,parent: P,device:&D,scale:Arr<U,N>,bias:Arr<U,N>,momentum:U,b:&B)
         -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError>
-        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-                 PreTrain + Loss<U> + OutputTensorScalar<U>,
+        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+                 PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+                 InputTensorScalar + OutputTensorScalar,
               U: Default + Clone + Copy + Debug + Send + Sync + 'static,
               D: Device<U>,
+              PI: InputTensorSize<N> + OutputTensorSize<N> + InputTensorScalar + OutputTensorScalar,
               I: Debug + Send + Sync,
               OP: Optimizer<U,D>,
               B: OptimizerBuilder<U,D,Output=OP>,
@@ -743,10 +825,12 @@ impl<const N:usize> BatchNormalizationLayerBuilder<N> {
     /// * [`LayerInstantiationError`]
     pub fn build_with_momentum<U,C,P,OP,D,I,PI,B: OptimizerBuilder<U,D>>(&self,parent:P,device:&D,momentum:U,b:&B)
         -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError>
-        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-                 PreTrain + Loss<U> + OutputTensorScalar<U>,
+        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+                 PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+                 InputTensorScalar + OutputTensorScalar,
               U: Default + Clone + Copy + Debug + Send + Sync + 'static,
               D: Device<U>,
+              PI: InputTensorSize<N> + OutputTensorSize<N> + InputTensorScalar + OutputTensorScalar,
               I: Debug + Send + Sync,
               OP: Optimizer<U,D>,
               B: OptimizerBuilder<U,D,Output=OP>,
@@ -766,10 +850,13 @@ impl<const N:usize> BatchNormalizationLayerBuilder<N> {
     /// * [`LayerInstantiationError`]
     pub fn build<U,C,P,OP,D,I,PI,B>(&self,parent: P,device:&D,b:&B)
         -> Result<BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError>
-        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-                 PreTrain + Loss<U> + OutputTensorScalar<U>,
+        where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+                 PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+                 InputTensorScalar + OutputTensorScalar,
               U: Default + Clone + Copy + Debug + Send + Sync + 'static,
               D: Device<U>,
+              PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+                  InputTensorScalar + OutputTensorScalar,
               I: Debug + Send + Sync,
               OP: Optimizer<U,D>,
               B: OptimizerBuilder<U,D,Output=OP>,
@@ -779,17 +866,20 @@ impl<const N:usize> BatchNormalizationLayerBuilder<N> {
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized>
     for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain + Loss<U> + OutputTensorScalar<U> +
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar +
              PersistProgress<TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar + OutputTensorScalar + 'static,
           OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           <PI as BatchDataType>::Type: Debug + 'static,
           TextRecord: From<U>,
-          ModelLoadError: From<<U as FromStr>::Err> {
+          ModelLoadError: From<<U as FromStr>::Err>,
+          [();N]: TensorSize {
     fn load_progress(&mut self, persistence: &mut TextFilePersistence) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 
@@ -814,15 +904,18 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Speciali
 }
 impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where T: LinearPersistence<U>,
-          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrain + Loss<U> + OutputTensorScalar<U> +
+          P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,<P as InputTensorScalar>::Scalar,LossInput=PI> +
+             PreTrain + Loss<U,<P as InputTensorScalar>::Scalar> +
+             InputTensorScalar + OutputTensorScalar +
              PersistProgress<T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
-          PI: BatchDataType + Debug + 'static,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> +
+              Debug + InputTensorScalar + OutputTensorScalar + 'static,
           OP: Optimizer<U,D> + Persistence<U,T,Linear>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
-          <PI as BatchDataType>::Type: Debug + 'static {
+          <PI as BatchDataType>::Type: Debug + 'static,
+          [();N]: TensorSize {
     fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;
 

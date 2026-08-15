@@ -60,28 +60,28 @@ const NI: usize = 500;
 const NO: usize = 600;
 const BATCH: usize = 400;
 
-pub fn gen_inputs() -> (Arr<f32,NO>,Arr2<f32,NI,NO>,SerializedVec<f32,Arr<f32,NI>>) {
+pub fn gen_inputs() -> (Arr<f64,NO>,Arr2<f64,NI,NO>,SerializedVec<f64,Arr<f64,NI>>) {
     let mut rng = rand::thread_rng();
 
-    let mut bias = Arr::<f32,NO>::new();
-    for b in bias.iter_mut() { *b = rng.gen::<f32>() * 1e-3; }
+    let mut bias = Arr::<f64,NO>::new();
+    for b in bias.iter_mut() { *b = rng.gen::<f64>() * 1e-3; }
 
-    let mut units = Arr2::<f32,NI,NO>::new();
+    let mut units = Arr2::<f64,NI,NO>::new();
     for i in 0..NI {
-        for j in 0..NO { units[(i,j)] = rng.gen::<f32>(); }
+        for j in 0..NO { units[(i,j)] = rng.gen::<f64>(); }
     }
 
-    let mut inputs_host: Vec<Arr<f32,NI>> = Vec::with_capacity(BATCH);
+    let mut inputs_host: Vec<Arr<f64,NI>> = Vec::with_capacity(BATCH);
     for _ in 0..BATCH {
-        let mut v = Arr::<f32,NI>::new();
-        for x in v.iter_mut() { *x = rng.gen::<f32>(); }
+        let mut v = Arr::<f64,NI>::new();
+        for x in v.iter_mut() { *x = rng.gen::<f64>(); }
         inputs_host.push(v);
     }
 
     (bias,units,inputs_host.into())
 }
 
-pub fn approx_eq_slice(a: &[f32],b: &[f32],eps: f32) {
+pub fn approx_eq_slice(a: &[f64],b: &[f64],eps: f64) {
     assert_eq!(a.len(),b.len());
     for (i,(x,y)) in a.iter().zip(b.iter()).enumerate() {
         let d = (*x - *y).abs();
@@ -91,31 +91,31 @@ pub fn approx_eq_slice(a: &[f32],b: &[f32],eps: f32) {
 
 pub fn upload_inputs_to_device<A: MemoryPoolAllocatorInstantiation<DeviceAlloc> + CudaAllocator + 'static>(
     alloc: &A,
-    bias: &Arr<f32,NO>,units: &Arr2<f32,NI,NO>,
-    batch_inputs: &SerializedVec<f32,Arr<f32,NI>>)
-    -> (CudaTensor1dPtr<f32,A,NO>,CudaTensor2dPtr<f32,A,NI,NO>,CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>)
-    where CudaTensor1dPtr<f32,A,NO>: WriteMemory<f32>,
-          CudaTensor2dPtr<f32,A,NI,NO>: WriteMemory<f32>,
-          CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: AsCudaMutPtr<Pointee=f32,Allocator=A>,
-          for<'a> CudaMutPtr<'a,f32,A>: WriteMemory<f32>,
-          for<'a> &'a CudaVec<f32,CudaTensor1dPtr<f32,A,NI>,A>: AsCudaView<'a> {
+    bias: &Arr<f64,NO>,units: &Arr2<f64,NI,NO>,
+    batch_inputs: &SerializedVec<f64,Arr<f64,NI>>)
+    -> (CudaTensor1dPtr<f64,A,NO>,CudaTensor2dPtr<f64,A,NI,NO>,CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>)
+    where CudaTensor1dPtr<f64,A,NO>: WriteMemory<f64>,
+          CudaTensor2dPtr<f64,A,NI,NO>: WriteMemory<f64>,
+          CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>: AsCudaMutPtr<Pointee=f64,Allocator=A>,
+          for<'a> CudaMutPtr<'a,f64,A>: WriteMemory<f64>,
+          for<'a> &'a CudaVec<f64,CudaTensor1dPtr<f64,A,NI>,A>: AsCudaView<'a> {
     // Bias
-    let mut d_bias = CudaTensor1dPtr::<f32,A,NO>::new(alloc).unwrap();
+    let mut d_bias = CudaTensor1dPtr::<f64,A,NO>::new(alloc).unwrap();
     d_bias.memcpy(bias.as_ptr(),NO).unwrap();
 
     // Units: flatten in (i,j) with leading dimension NO (calc_index(out=j,in=i,ld=NO) == i*NO+j)
-    let mut flat_units: Vec<f32> = Vec::with_capacity(NI * NO);
+    let mut flat_units: Vec<f64> = Vec::with_capacity(NI * NO);
     for i in 0..NI { for j in 0..NO { flat_units.push(units[(i,j)]); } }
-    let mut d_units = CudaTensor2dPtr::<f32,A,NI,NO>::new(alloc).unwrap();
+    let mut d_units = CudaTensor2dPtr::<f64,A,NI,NO>::new(alloc).unwrap();
     d_units.memcpy(flat_units.as_ptr(),flat_units.len()).unwrap();
 
     // Inputs: layout is batch-major with leading dimension NI:
     // calc_index(x=i,y=batch_index,ld=NI) == batch_index*NI + i
-    let mut flat_inputs: Vec<f32> = Vec::with_capacity(BATCH * NI);
+    let mut flat_inputs: Vec<f64> = Vec::with_capacity(BATCH * NI);
     for b in batch_inputs.iter() {
         for &v in b.iter() { flat_inputs.push(v); }
     }
-    let mut d_inputs = CudaVec::<f32,CudaTensor1dPtr<f32,A,NI>,A>::new(BATCH,alloc).unwrap();
+    let mut d_inputs = CudaVec::<f64,CudaTensor1dPtr<f64,A,NI>,A>::new(BATCH,alloc).unwrap();
     {
         let mut ptr = d_inputs.as_cuda_mut_ptr();
         ptr.memcpy(flat_inputs.as_ptr(),flat_inputs.len()).unwrap();

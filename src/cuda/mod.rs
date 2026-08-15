@@ -13,7 +13,7 @@ use crate::cuda::allocator::{CudaAllocator, DeviceAlloc, DeviceAllocator, HostAl
 use crate::cuda::private::{AsConstKernelPtrBase, AsKernelPtrBase, AsMutKernelPtrBase};
 use crate::device::{DeviceGpu};
 use crate::error::{CudaError, CudaRuntimeError, SizeMismatchError, TypeConvertError};
-use crate::layer::{BatchDataType, BatchSize};
+use crate::layer::{BatchDataType, BatchSize, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, TensorSize};
 use crate::mem::AsRawSlice;
 use crate::bridge::ToHost;
 
@@ -1087,6 +1087,20 @@ impl<T,A,const N:usize> CudaTensor1dPtr<T,A,N>
             ptr: ptr
         })
     }
+}
+impl<T,A,const N:usize> InputTensorScalar<T> for CudaTensor1dPtr<T,A,N>
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
+          A: CudaAllocator + 'static {}
+impl<T,A,const N:usize> OutputTensorScalar<T> for CudaTensor1dPtr<T,A,N>
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
+          A: CudaAllocator + 'static {}
+impl<T,A,const N:usize> InputTensorSize<N> for CudaTensor1dPtr<T,A,N>
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
+          A: CudaAllocator + 'static {
+}
+impl<T,A,const N:usize> OutputTensorSize<N> for CudaTensor1dPtr<T,A,N>
+    where T: Debug + Default + Clone + Copy + Send + Sync + 'static,
+          A: CudaAllocator + 'static {
 }
 impl<T,A,const N:usize> BatchDataType for CudaTensor1dPtr<T,A,N>
     where T: Default + Clone + Copy + Debug + Send + Sync + 'static,

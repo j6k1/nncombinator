@@ -45,7 +45,7 @@ fn test_mnist_batch_norm() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
+        BatchNormalizationLayerBuilder::<100>::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {

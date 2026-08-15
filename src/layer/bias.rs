@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::bias::DeviceBias;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar};
 use crate::lossfunction::LossFunction;
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
@@ -17,7 +17,6 @@ use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, Te
 pub trait BiasLayerInstantiation<U,C,P,OP,D,I,PI,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain +
-             Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -36,7 +35,7 @@ pub trait BiasLayerInstantiation<U,C,P,OP,D,I,PI,const N:usize>
 /// Bias Layer Implementation
 pub struct BiasLayer<U,C,P,OP,D,I,PI,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Loss<U> +
+             PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -51,7 +50,7 @@ pub struct BiasLayer<U,C,P,OP,D,I,PI,const N:usize>
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> InputTensorScalar for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Loss<U> +
+             PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -62,7 +61,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> InputTensorScalar for BiasLayer<U,C,P,OP,D,I
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> OutputTensorScalar for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Loss<U> +
+             PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -73,7 +72,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OutputTensorScalar for BiasLayer<U,C,P,OP,D,
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Loss<U> +
+             PreTrain +
              InputTensorScalar + OutputTensorScalar +
              Persistence<U,TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
@@ -119,7 +118,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialize
 impl<T,U,C,P,OP,D,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Loss<U> +
+             PreTrain +
              InputTensorScalar + OutputTensorScalar + Persistence<U,T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -155,7 +154,7 @@ impl<T,U,C,P,OP,D,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,C,
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> Forward<PI,Result<PI,EvaluateError>> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBias<U,C,PI,N>,
@@ -171,7 +170,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Forward<PI,Result<PI,EvaluateError>> for Bia
 impl<U,C,P,OP,D,I,PI,const N:usize> ForwardAll for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -188,7 +187,6 @@ impl<U,C,P,OP,D,I,PI,const N:usize> ForwardAll for BiasLayer<U,C,P,OP,D,I,PI,N>
 impl<U,C,P,OP,D,I,PI,const N:usize> PreTrain for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -209,7 +207,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PreTrain for BiasLayer<U,C,P,OP,D,I,PI,N>
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> Backward<U,PI,Result<PI,TrainingError>> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBias<U,C,PI,N>,
@@ -223,7 +221,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Backward<U,PI,Result<PI,TrainingError>> for 
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: BackwardAll<U,LossInput=PI,LossInputScalar=U> + ForwardAll<Input=I,Output=PI> +
-             PreTrain<PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
@@ -248,16 +246,14 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,C,P,OP,D,I,PI
 
         let next_loss= self.backward(loss)?;
 
-        let (s,next_loss) = self.parent.loss(next_loss.into(),lossf,s)?;
-
-        let (l,s) = self.parent.backward_all(next_loss, s, lossf)?;
+        let (l,s) = self.parent.backward_all(next_loss.into(), s, lossf)?;
 
         Ok((l,Cons(s,g)))
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> UpdateWeight for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar + UpdateWeight,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -284,7 +280,6 @@ impl<U,C,P,OP,D,I,PI,const N:usize> UpdateWeight for BiasLayer<U,C,P,OP,D,I,PI,N
 impl<U,C,P,OP,D,I,PI,const N:usize> PartialForward for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
-             Loss<U> +
              InputTensorScalar + OutputTensorScalar,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -310,7 +305,6 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PartialForward for BiasLayer<U,C,P,OP,D,I,PI
 impl<U,C,P,OP,D,I,PI,const N:usize> ForwardDiff for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward + ForwardDiff +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
-             Loss<U> +
              InputTensorScalar + OutputTensorScalar,
       D: Device<U> + DeviceBias<U,C,PI,N>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -329,7 +323,6 @@ impl<U,C,P,OP,D,I,PI,const N:usize> ForwardDiff for BiasLayer<U,C,P,OP,D,I,PI,N>
 impl<U,C,P,OP,D,I,PI,const N:usize> ContinueForward for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward + ContinueForward +
           BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
-          Loss<U> +
           InputTensorScalar + OutputTensorScalar,
       D: Device<U> + DeviceBias<U,C,PI,N>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -345,24 +338,9 @@ impl<U,C,P,OP,D,I,PI,const N:usize> ContinueForward for BiasLayer<U,C,P,OP,D,I,P
         Ok(self.forward(&input)?)
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> Loss<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
-    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             Loss<U> +
-             InputTensorScalar + OutputTensorScalar,
-          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          I: Debug + Send + Sync,
-          PI: Debug + BatchDataType + 'static,
-          C: Debug,
-          OP: Optimizer<U,D>,
-          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
-          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
-}
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchForwardBase for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -378,7 +356,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchForwardBase for BiasLayer<U,C,P,OP,D,I,
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchForward for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           D: Device<U> + DeviceBias<U,C,PI,N>,
@@ -396,7 +374,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchForward for BiasLayer<U,C,P,OP,D,I,PI,N
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrainBase for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type>,
@@ -414,7 +392,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrainBase for BiasLayer<U,C,P,OP,D,I
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain,
@@ -436,12 +414,11 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchPreTrain for BiasLayer<U,C,P,OP,D,I,PI,
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> + Loss<U> +
+             PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
-             BatchBackward<U> +
-             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync + BatchDataType,
           PI: Debug + BatchDataType + 'static,
@@ -465,38 +442,15 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchBackward<U> for BiasLayer<U,C,P,OP,D,I,
 
         let next_loss = self.device.batch_backward_bias(loss)?;
 
-        let (
-            s,next_loss
-        ) = self.parent.batch_loss(next_loss,lossf,s)?;
-
         let (l,s) = self.parent.batch_backward(next_loss, s, lossf)?;
 
         Ok((l,Cons(s,g)))
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> BatchLoss<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> + Loss<U> +
-             InputTensorScalar + OutputTensorScalar +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
-             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
-             BatchBackward<U> +
-             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
-          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          I: Debug + Send + Sync + BatchDataType,
-          PI: Debug + BatchDataType + 'static,
-          <PI as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
-          <I as BatchDataType>::Type: Debug,
-          C: Debug,
-          OP: Optimizer<U,D>,
-          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
-          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
-          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
-}
 // OnStep implementation
 impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Loss<U> +
+             PreTrain +
              InputTensorScalar + OutputTensorScalar + OnStep,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -514,7 +468,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OnStep for BiasLayer<U,C,P,OP,D,I,PI,N>
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Loss<U> +
+             PreTrain +
              InputTensorScalar + OutputTensorScalar +
              PersistProgress<TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
@@ -550,7 +504,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Speciali
 impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Loss<U> +
+             PreTrain +
              InputTensorScalar + OutputTensorScalar +
              PersistProgress<T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -577,7 +531,7 @@ impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BiasLayer<U,
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BiasLayerInstantiation<U,C,P,OP,D,I,PI,N> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Loss<U> +
+             PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -630,7 +584,6 @@ impl<const N:usize> BiasLayerBuilder<N> {
         -> Result<BiasLayer<U,C,P,OP,D,I,PI,N>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> +
                  BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain +
-                 Loss<U> +
                  InputTensorScalar + OutputTensorScalar,
               U: Default + Clone + Copy + Debug + Send + Sync + 'static,
               D: Device<U>,

@@ -287,7 +287,7 @@ impl<U,P,D,I,PI,L,const N:usize> Train<U,L> for LinearOutputLayer<U,P,D,I,PI,N>
                 self.device.loss_linear(&expected,&actual,lossf)
             })?;
 
-            self.parent.loss(loss,lossf,stack)?
+            (stack,loss)
         };
 
         let (_,s) = self.backward_all(loss,stack,lossf)?;
@@ -434,7 +434,7 @@ impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I
                 self.device.batch_loss_linear(&expected,actual,lossf)
             })?;
 
-            self.parent.batch_loss(loss,lossf,stack)?
+            (stack,loss)
         };
 
         let (_,s) = self.parent.batch_backward(loss,stack,lossf)?;

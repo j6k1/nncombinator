@@ -16,7 +16,7 @@ use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, Te
 pub struct ActivationLayer<U,P,A,I,PI,D,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
-             PreTrain + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             PreTrain + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + 'static,
@@ -31,7 +31,7 @@ pub struct ActivationLayer<U,P,A,I,PI,D,const N:usize>
 impl<U,P,A,I,PI,D,const N:usize> ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
-             PreTrain + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             PreTrain + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
@@ -54,7 +54,7 @@ impl<U,P,A,I,PI,D,const N:usize> ActivationLayer<U,P,A,I,PI,D,N>
 }
 impl<U,P,A,I,PI,D,const N:usize> InputTensorScalar for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
-          PreTrain + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+          PreTrain + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
@@ -63,7 +63,7 @@ impl<U,P,A,I,PI,D,const N:usize> InputTensorScalar for ActivationLayer<U,P,A,I,P
 }
 impl<U,P,A,I,PI,D,const N:usize> OutputTensorScalar for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
-             PreTrain + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             PreTrain + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
@@ -72,7 +72,7 @@ impl<U,P,A,I,PI,D,const N:usize> OutputTensorScalar for ActivationLayer<U,P,A,I,
 }
 impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence,Specialized> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence,Specialized> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + PreTrain + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + PreTrain + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + std::str::FromStr,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
@@ -95,7 +95,7 @@ impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence,Specialized> 
 impl<T,U,P,A,I,PI,D,const N:usize> Persistence<U,T,Linear> for ActivationLayer<U,P,A,I,PI,D,N>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + Persistence<U,T,Linear> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + PreTrain + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + PreTrain + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
@@ -110,7 +110,7 @@ impl<T,U,P,A,I,PI,D,const N:usize> Persistence<U,T,Linear> for ActivationLayer<U
 }
 impl<U,P,A,I,PI,D,const N:usize> ForwardAll for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             PreTrain<PreOutput=PI> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
@@ -124,7 +124,7 @@ impl<U,P,A,I,PI,D,const N:usize> ForwardAll for ActivationLayer<U,P,A,I,PI,D,N>
 }
 impl<U,P,A,I,PI,D,const N:usize> Forward<PI,Result<PI,EvaluateError>> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             PreTrain<PreOutput=PI> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
@@ -136,7 +136,7 @@ impl<U,P,A,I,PI,D,const N:usize> Forward<PI,Result<PI,EvaluateError>> for Activa
 impl<U,P,A,I,PI,D,const N:usize> PreTrain for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
-             PreTrain<PreOutput=PI> + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             PreTrain<PreOutput=PI> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
@@ -155,7 +155,6 @@ impl<U,P,A,I,PI,D,const N:usize> PreTrain for ActivationLayer<U,P,A,I,PI,D,N>
 impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
-             Loss<U> +
              OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
@@ -167,7 +166,12 @@ impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D
 
     fn backward_all<L: LossFunction<U> + LossFunction<Self::LossInputScalar>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
-        let (s,_) = stack.pop();
+        let (s,o) = stack.pop();
+        let input = if self.is_canonical_link(lossf) {
+            input
+        } else {
+            s.map(|u| self.device.derive(&self.f, &o, &input, u))?.into()
+        };
 
         self.parent.backward_all(input.into(), s, lossf)
     }
@@ -178,7 +182,7 @@ impl<U,P,A,I,PI,D,const N:usize> BackwardAll<U> for ActivationLayer<U,P,A,I,PI,D
 }
 impl<U,P,A,I,PI,D,const N:usize> UpdateWeight for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> + UpdateWeight + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + UpdateWeight + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType,
@@ -191,7 +195,7 @@ impl<U,P,A,I,PI,D,const N:usize> UpdateWeight for ActivationLayer<U,P,A,I,PI,D,N
 }
 impl<U,P,A,I,PI,D,const N:usize> PartialForward for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> + PartialForward + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + PartialForward + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
@@ -209,7 +213,7 @@ impl<U,P,A,I,PI,D,const N:usize> PartialForward for ActivationLayer<U,P,A,I,PI,D
 }
 impl<U,P,A,I,PI,D,const N:usize> ForwardDiff for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
              PartialForward + ForwardDiff + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
@@ -223,7 +227,7 @@ impl<U,P,A,I,PI,D,const N:usize> ForwardDiff for ActivationLayer<U,P,A,I,PI,D,N>
 }
 impl<U,P,A,I,PI,D,const N:usize> ContinueForward for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
              PartialForward + ContinueForward + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
       U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
       D: Device<U> + DeviceActivation<U,PI,A,N>,
@@ -237,7 +241,7 @@ impl<U,P,A,I,PI,D,const N:usize> ContinueForward for ActivationLayer<U,P,A,I,PI,
 }
 impl<U,P,A,I,PI,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
@@ -251,10 +255,9 @@ impl<U,P,A,I,PI,D,const N:usize> Loss<U> for ActivationLayer<U,P,A,I,PI,D,N>
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> +
+    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U> +
-             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
@@ -265,10 +268,10 @@ impl<U,P,A,I,PI,D,const N:usize> BatchForwardBase for ActivationLayer<U,P,A,I,PI
     type BatchOutput = <PI as BatchDataType>::Type;
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchForward for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> +
+    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
@@ -282,10 +285,9 @@ impl<U,P,A,I,PI,D,const N:usize> BatchForward for ActivationLayer<U,P,A,I,PI,D,N
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchPreTrainBase for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> +
+    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain + BatchBackward<U> +
-             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain + BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
@@ -296,10 +298,9 @@ impl<U,P,A,I,PI,D,const N:usize> BatchPreTrainBase for ActivationLayer<U,P,A,I,P
     type BatchOutStack = Cons<<P as BatchPreTrainBase>::BatchOutStack, Self::BatchPreOutput>;
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchPreTrain for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> +
+    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain + BatchBackward<U> +
-             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain + BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
@@ -317,10 +318,9 @@ impl<U,P,A,I,PI,D,const N:usize> BatchPreTrain for ActivationLayer<U,P,A,I,PI,D,
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> +
+    where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain + BatchBackward<U> +
-             BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain + BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
@@ -332,17 +332,24 @@ impl<U,P,A,I,PI,D,const N:usize> BatchBackward<U> for ActivationLayer<U,P,A,I,PI
 
     fn batch_backward<L: LossFunction<U> + LossFunction<Self::LossInputScalar>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
-        let (s,_) = stack.pop();
+        let (s,o) = stack.pop();
+        let input = if self.is_canonical_link(lossf) {
+            input
+        } else {
+            s.map(|u| {
+                self.device.batch_derive(&self.f, &o, &input, u)
+            })?
+        };
 
         self.parent.batch_backward(input, s, lossf)
     }
 }
 impl<U,P,A,I,PI,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + Loss<U> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
-             BatchBackward<U> + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
@@ -362,7 +369,7 @@ impl<U,P,A,I,PI,D,const N:usize> BatchLoss<U> for ActivationLayer<U,P,A,I,PI,D,N
 
 impl<U,P,A,I,PI,D,const N:usize> OnStep for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> +
-             PreTrain + Loss<U> + OnStep + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             PreTrain + OnStep + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + 'static,
@@ -378,7 +385,7 @@ impl<U,P,A,I,PI,D,const N:usize> OnStep for ActivationLayer<U,P,A,I,PI,D,N>
 impl<U,P,A,I,PI,D,const N:usize> PersistProgress<TextFilePersistence,Specialized> for ActivationLayer<U,P,A,I,PI,D,N>
     where P: ForwardAll<Input=I,Output=PI> +
              PersistProgress<TextFilePersistence,Specialized> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + PreTrain + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + PreTrain + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + std::str::FromStr,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + 'static,
@@ -401,7 +408,7 @@ impl<T,U,P,A,I,PI,D,const N:usize> PersistProgress<T,Linear> for ActivationLayer
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> +
              PersistProgress<T,Linear> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + PreTrain + Loss<U> + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+             BackwardAll<U,LossInput=PI,LossInputScalar=<P as OutputTensorScalar>::Scalar> + PreTrain + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + 'static,

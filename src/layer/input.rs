@@ -6,7 +6,7 @@ use crate::{Cons, Never, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, Loss, OnStep, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight};
 use crate::lossfunction::LossFunction;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
@@ -115,12 +115,7 @@ impl<U,O,LI,D> UpdateWeight for InputLayer<U,O,LI,D>
         Ok(())
     }
 }
-impl<U,O,LI,D> Loss<U> for InputLayer<U,O,LI,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          O: Debug + BatchDataType + Send + Sync + 'static,
-          LI: Debug,
-          D: Device<U> + DeviceInput<U,O>,
-          <O as BatchDataType>::Type: Debug + 'static {}
+
 impl<U,O,LI,D> BatchForwardBase for InputLayer<U,O,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
@@ -173,14 +168,6 @@ impl<U,O,LI,D> BatchBackward<U> for InputLayer<U,O,LI,D>
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
-}
-impl<U,O,LI,D> BatchLoss<U> for InputLayer<U,O,LI,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          O: Debug + BatchDataType + Send + Sync + 'static,
-          LI: Debug + BatchDataType,
-          D: Device<U> + DeviceInput<U,O>,
-          <LI as BatchDataType>::Type: Debug,
-          <O as BatchDataType>::Type: Debug + 'static {
 }
 impl<U,O,LI,D> OnStep for InputLayer<U,O,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static, D: Device<U> {
@@ -359,14 +346,6 @@ impl<U,O,DI,PO,LI,D> UpdateWeight for DiffInputLayer<U,O,DI,PO,LI,D>
         Ok(())
     }
 }
-impl<U,O,DI,PO,LI,D> Loss<U> for DiffInputLayer<U,O,DI,PO,LI,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          O: Debug + BatchDataType + Send + Sync + 'static,
-          DI: Debug,
-          PO: Debug,
-          LI: Debug,
-          D: Device<U> + DeviceInput<U,O>,
-          <O as BatchDataType>::Type: Debug + 'static {}
 impl<U,O,DI,PO,LI,D> OnStep for DiffInputLayer<U,O,DI,PO,LI,D> where U: Default + Clone + Copy + Debug + Send + Sync + 'static, D: Device<U> {
     fn on_step(&mut self, _: usize) -> Result<(), TrainingError> {
         Ok(())

@@ -7,7 +7,6 @@ use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight};
-use crate::lossfunction::LossFunction;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 pub struct InputLayer<U,O,LI,D>
@@ -98,7 +97,7 @@ impl<U,O,LI,D> BackwardAll<U> for InputLayer<U,O,LI,D>
     type LossInput = LI;
     type LossOutput = LI;
 
-    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, _:Self::OutStack, _:&L)
+    fn backward_all(&mut self, input: Self::LossInput, _:Self::OutStack)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
@@ -164,7 +163,7 @@ impl<U,O,LI,D> BatchBackward<U> for InputLayer<U,O,LI,D>
     type BatchLossInput = <LI as BatchDataType>::Type;
     type BatchLossOutput = <LI as BatchDataType>::Type;
 
-    fn batch_backward<L: LossFunction<U>>(&mut self, input: Self::BatchLossInput, _: Self::BatchOutStack, _: &L)
+    fn batch_backward(&mut self, input: Self::BatchLossInput, _: Self::BatchOutStack)
         -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
@@ -327,7 +326,7 @@ impl<U,O,DI,PO,LI,D> BackwardAll<U> for DiffInputLayer<U,O,DI,PO,LI,D>
     type LossInput = LI;
     type LossOutput = LI;
 
-    fn backward_all<L: LossFunction<U>>(&mut self, input: Self::LossInput, _:Self::OutStack, _:&L)
+    fn backward_all(&mut self, input: Self::LossInput, _:Self::OutStack)
         -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }

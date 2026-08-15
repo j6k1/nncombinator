@@ -7,7 +7,7 @@ use nncombinator::cuda::allocator::{ DeviceAlloc, MemoryPoolAllocator};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
 use rand::Rng;
 use nncombinator::device::linear::DeviceLinear;
-use nncombinator::layer::{OutputTensorSize, TensorSize};
+use nncombinator::layer::{OutputTensorSize};
 use crate::common::SHARED_MEMORY_POOL;
 use crate::common::gen_inputs;
 use crate::common::approx_eq_slice;

@@ -708,12 +708,10 @@ fn test_mnist_batch_norm_for_gpu() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
 
         let rnd = rnd.clone();
         LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
@@ -724,36 +722,30 @@ fn test_mnist_batch_norm_for_gpu() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
 
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
 
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
 
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -764,36 +756,30 @@ fn test_mnist_batch_norm_for_gpu() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
 
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
 
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
 
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,10>::new().build(l,&device,
@@ -804,12 +790,10 @@ fn test_mnist_batch_norm_for_gpu() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
 
         ActivationLayer::new(l,SoftMax::new(&device),&device)
     }).add_layer(|l| {

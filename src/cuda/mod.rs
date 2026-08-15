@@ -13,7 +13,7 @@ use crate::cuda::allocator::{CudaAllocator, DeviceAlloc, DeviceAllocator, HostAl
 use crate::cuda::private::{AsConstKernelPtrBase, AsKernelPtrBase, AsMutKernelPtrBase};
 use crate::device::{DeviceGpu};
 use crate::error::{CudaError, CudaRuntimeError, SizeMismatchError, TypeConvertError};
-use crate::layer::{BatchDataType, BatchSize, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, TensorSize};
+use crate::layer::{BatchDataType, BatchSize, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize};
 use crate::mem::AsRawSlice;
 use crate::bridge::ToHost;
 

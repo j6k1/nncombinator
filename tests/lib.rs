@@ -1538,7 +1538,6 @@ fn test_weather_by_forward_diff() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
 
@@ -1551,7 +1550,6 @@ fn test_weather_by_forward_diff() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
         assert_forward_diff(&l);
@@ -1561,7 +1559,6 @@ fn test_weather_by_forward_diff() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
         assert_forward_diff(&l);
@@ -1575,7 +1572,6 @@ fn test_weather_by_forward_diff() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
         assert_forward_diff(&l);
@@ -3145,7 +3141,6 @@ fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
         assert_continue_forward(&l);
@@ -3155,7 +3150,6 @@ fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
         assert_continue_forward(&l);
@@ -3169,7 +3163,6 @@ fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
         assert_continue_forward(&l);
@@ -5060,7 +5053,6 @@ fn test_weather_by_forward_diff_in_thread() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
 
@@ -5073,7 +5065,6 @@ fn test_weather_by_forward_diff_in_thread() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
 
@@ -5082,7 +5073,6 @@ fn test_weather_by_forward_diff_in_thread() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
 
@@ -5095,7 +5085,6 @@ fn test_weather_by_forward_diff_in_thread() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
 
@@ -5310,7 +5299,6 @@ fn test_weather_by_forward_diff_for_continue_forward() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
 
@@ -5323,7 +5311,6 @@ fn test_weather_by_forward_diff_for_continue_forward() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
         assert_continue_forward(&l);
@@ -5333,7 +5320,6 @@ fn test_weather_by_forward_diff_for_continue_forward() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
         assert_continue_forward(&l);
@@ -5347,7 +5333,6 @@ fn test_weather_by_forward_diff_for_continue_forward() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_partial_forward(&l);
         assert_continue_forward(&l);

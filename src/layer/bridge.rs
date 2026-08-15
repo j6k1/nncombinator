@@ -7,7 +7,6 @@ use crate::arr::{MakeView, MakeViewMut, SliceSize};
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar};
-use crate::lossfunction::LossFunction;
 use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
@@ -156,11 +155,11 @@ impl<U,SO,P,I,PI,CI,D> BackwardAll<SO> for BridgeLayer<U,SO,P,I,PI,CI,D>
     type LossInput = CI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
-    fn backward_all<L: LossFunction<SO> + LossFunction<Self::LossInputScalar>>(&mut self, input: Self::LossInput, stack:Self::OutStack, lossf:&L)
+    fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)
         -> Result<(<Self as BackwardAll<SO>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
-        Ok(self.parent.backward_all(self.device.bridge_backward(&input)?, s, lossf)?)
+        Ok(self.parent.backward_all(self.device.bridge_backward(&input)?, s)?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> UpdateWeight for BridgeLayer<U,SO,P,I,PI,CI,D>
@@ -345,11 +344,11 @@ impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for BridgeLayer<U,SO,P,I,PI,CI,D>
           for<'a> CI: Debug + SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'static {
     type BatchLossInput = <CI as BatchDataType>::Type;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
-    fn batch_backward<L: LossFunction<U> + LossFunction<Self::LossInputScalar>>(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack, lossf: &L)
+    fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
         -> Result<(<Self as BatchBackward<SO>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
-        Ok(self.parent.batch_backward(self.device.batch_bridge_backward(&input)?, s, lossf)?)
+        Ok(self.parent.batch_backward(self.device.batch_bridge_backward(&input)?, s)?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> OnStep for BridgeLayer<U,SO,P,I,PI,CI,D>

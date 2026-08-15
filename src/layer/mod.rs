@@ -1,7 +1,6 @@
 //! The various layers that make up a neural network and the traits they implement
 
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use crate::device::*;
 use crate::{Stack};
 use crate::error::{EvaluateError, PersistenceError, TrainingError};
@@ -137,11 +136,8 @@ pub trait BackwardAll<SO>: PreTrain + UpdateWeight
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_all<L: LossFunction<Self::LossInputScalar> + LossFunction<SO>>(&mut self, input:Self::LossInput, stack:Self::OutStack, lossf:&L)
+    fn backward_all(&mut self, input:Self::LossInput, stack:Self::OutStack)
         -> Result<(<Self as BackwardAll<SO>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
-    fn is_canonical_link<L: LossFunction<SO>>(&self,_:&L) -> bool {
-        false
-    }
 }
 /// Trait defining the calculation of the error during error back propagation.
 pub trait Loss<SO>: BackwardAll<SO>
@@ -156,8 +152,12 @@ pub trait Loss<SO>: BackwardAll<SO>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn loss<L: LossFunction<Self::LossInputScalar> + LossFunction<SO>>(&mut self, loss:Self::LossInput, _lossf:&L, stack:Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
+    fn loss(&mut self, loss:Self::LossInput, stack:Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         Ok((stack,loss))
+    }
+
+    fn is_canonical_link<L: LossFunction<SO>>(&self,_:&L) -> bool {
+        false
     }
 }
 /// Characteristics defining the internal implementation of the error back propagation method in neural networks
@@ -300,7 +300,7 @@ pub trait BatchBackward<SO>: BackwardAll<SO> + BatchPreTrainBase + UpdateWeight
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward<L: LossFunction<SO> + LossFunction<Self::LossInputScalar>>(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack, lossf:&L)
+    fn batch_backward(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack)
         -> Result<(<Self as BatchBackward<SO>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
 }
 /// Trait that defines the implementation of the process of calculating the loss during error back propagation of neural networks by batch processing.
@@ -316,7 +316,7 @@ pub trait BatchLoss<SO>: BatchBackward<SO> + Loss<SO>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_loss<L: LossFunction<SO> + LossFunction<Self::LossInputScalar>>(&self, loss:Self::BatchLossInput, _lossf:&L, stack:Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
+    fn batch_loss(&self, loss:Self::BatchLossInput, stack:Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
         Ok((stack,loss))
     }
 }

@@ -67,12 +67,10 @@ fn test_scheduler() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
         assert_on_step(&l);
 
         let rnd = rnd.clone();
@@ -84,12 +82,10 @@ fn test_scheduler() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
         assert_on_step(&l);
 
         ActivationLayer::new(l,ReLu::new(&device),&device)
@@ -97,12 +93,10 @@ fn test_scheduler() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
         assert_on_step(&l);
 
         let rnd = rnd.clone();
@@ -114,12 +108,10 @@ fn test_scheduler() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
         assert_on_step(&l);
 
         ActivationLayer::new(l,ReLu::new(&device),&device)
@@ -127,12 +119,10 @@ fn test_scheduler() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
         assert_on_step(&l);
 
         let rnd = rnd.clone();
@@ -144,12 +134,10 @@ fn test_scheduler() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
         assert_on_step(&l);
 
         let l = LoggingLayer::new(l,&device);
@@ -158,12 +146,10 @@ fn test_scheduler() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_loss(&l);
         assert_update_weight(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
-        assert_batch_loss(&l);
         assert_on_step(&l);
 
         ActivationLayer::new(l,Sigmoid::new(&device),&device)

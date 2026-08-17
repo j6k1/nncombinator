@@ -409,7 +409,7 @@ pub trait PersistProgress<P,K> where K: PersistenceType {
     /// # Errors
     ///
     /// This function may return the following errors
-    /// * [`ModelLoadError`]
+    /// * [`TrainingError`]
     fn load_progress(&mut self, persistence:&mut P) -> Result<(),TrainingError>;
     /// Save train progress data
     /// # Arguments
@@ -420,6 +420,23 @@ pub trait PersistProgress<P,K> where K: PersistenceType {
     /// This function may return the following errors
     /// * [`PersistenceError`]
     fn save_progress(&mut self, persistence:&mut P) -> Result<(), PersistenceError>;
+}
+/// A trait that converts the weights of a trained model into quantized weights
+pub trait Quantization<P,K> where K: PersistenceType {
+    /// Load train progress data
+    /// # Arguments
+    /// * `persistence` - model persistent object
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn quantization(&mut self, persistence:&mut P) -> Result<(),TrainingError>;
+}
+/// A trait that represents the output scale
+pub trait OutputScale {
+    /// output scale.
+    fn output_scale(&self) -> f32;
 }
 /// A trait representing the weight type of inputs used in the implementation of various layers
 pub trait InputTensorScalar {

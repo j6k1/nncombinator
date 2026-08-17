@@ -1,7 +1,7 @@
 //! Implementation of the calculation process for full connected layers
 
 use std::fmt::Debug;
-use std::ops::{Add, AddAssign, Mul};
+use std::ops::{Add, AddAssign, Mul, Shr};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator};
 use rayon::prelude::ParallelIterator;
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
@@ -146,6 +146,131 @@ pub trait DeviceLinear<U,T,B,I,const NI: usize,const NO: usize>
     /// * [`TrainingError`]
     fn batch_backward_weight_gradient<'a>(&self, o: &'a <I as BatchDataType>::Type, loss: &'a Self::BatchOutput)
         -> Result<T, TrainingError>;
+    /// convolutional calculation
+    /// # Arguments
+    /// * `loss` - loss
+    fn batch_linear_reduce<'a>(&self, loss: &'a Self::BatchOutput) -> Result<B,TrainingError>;
+}
+pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          W: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: BatchDataType + InputTensorSize<NI>,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    type Output: BatchDataType + Debug + OutputTensorScalar + OutputTensorSize<NO> + 'static;
+    type BatchOutput: Debug + 'static;
+    type LossOutput: BatchDataType + InputTensorScalar + Debug + 'static;
+    type BatchLossOutput: Debug + 'static;
+    /// Perform generalization of the unit weight data
+    /// # Arguments
+    /// * `units` - Set of weights applied to the inputs of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`GeneralizationError`]
+    fn generalization_units(&self,units:&T) -> Result<Arr2<W,NI,NO>, GeneralizationError>;
+    /// Perform generalization of bias data
+    /// # Arguments
+    /// * `bias` - Set of biases applied to the output of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`GeneralizationError`]
+    fn generalization_bias(&self,bias:&B) -> Result<Arr<W,NO>, GeneralizationError>;
+    /// Perform specialization of the unit weight data
+    /// # Arguments
+    /// * `units` - Set of weights applied to the inputs of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`SpecializationError`]
+    fn specialization_units(&self,units:Arr2<W,NI,NO>) -> Result<T, SpecializationError>;
+    /// Perform specialization of bias data
+    /// # Arguments
+    /// * `bias` - Set of biases applied to the output of the linear layer
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`SpecializationError`]
+    fn specialization_bias(&self,bias:Arr<W,NO>) -> Result<B, SpecializationError>;
+    /// Forward propagation calculation
+    /// # Arguments
+    /// * `bias` - bias weights
+    /// * `units` - unit weights
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`EvaluateError`]
+    fn forward_linear<'a>(&self, shitt: usize, bias:&B, units:&T, input:&'a I) -> Result<Self::Output, EvaluateError>;
+    /// Error back propagation calculation
+    /// # Arguments
+    /// * `units` - unit weights
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn backward_linear<'a>(&self, units:&T, input:&'a Self::Output) -> Result<Self::LossOutput, TrainingError>;
+    /// Calculate the gradient of the weights
+    /// # Arguments
+    /// * `o` - Input values from upper layers
+    /// * `loss` - loss
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn backward_weight_gradient<'a>(&self, o: &'a I, loss: &'a Self::Output) -> Result<T, TrainingError>;
+    /// Calculate the gradient of the bias weights
+    /// # Arguments
+    /// * `loss` - loss
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn backward_bias_weight_gradient<'a>(&self, loss: Self::Output) -> Result<B, TrainingError>;
+    /// Forward propagation calculation in batch
+    /// # Arguments
+    /// * `bias` - bias weights
+    /// * `units` - unit weights
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn batch_forward_linear<'a>(&self,shitt: usize,bias:&B,units:&T,input: &'a <I as BatchDataType>::Type)
+                                -> Result<Self::BatchOutput,TrainingError>;
+    /// Error back propagation in batch
+    /// # Arguments
+    /// * `units` - unit weights
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn batch_backward_linear<'a>(&self, units: &T, input: &'a Self::BatchOutput)
+                                 -> Result<Self::BatchLossOutput, TrainingError>;
+    /// Calculate the gradient of the weights in batch
+    /// # Arguments
+    /// * `o` - Input values from upper layers
+    /// * `loss` - loss
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn batch_backward_weight_gradient<'a>(&self, o: &'a <I as BatchDataType>::Type, loss: &'a Self::BatchOutput)
+                                          -> Result<T, TrainingError>;
     /// convolutional calculation
     /// # Arguments
     /// * `loss` - loss
@@ -1089,5 +1214,118 @@ impl<'a,U,A,const NI:usize,const NO:usize> DeviceDiffLinear<'a,U,DiffArr<U,NI>,C
         output.memcpy_to(&mut o, NO)?;
 
         Ok(o)
+    }
+}
+impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<W,NI,NO>,Arr<W,NO>,I,NI,NO> for DeviceCpu
+    where U: Default + Clone + Copy + Debug +
+             Add<W,Output=U> + Add<Output=U> + Mul<W,Output=U> + Mul<Output=U> +
+             AddAssign + Send + Sync + Shr<usize,Output=U> + 'static,
+          W: Default + Clone + Copy + Debug +
+             Add<Output=W> + Mul<Output=W> + AddAssign + Mul<U,Output=U> + From<U> + Send + Sync + 'static,
+      I: BatchDataType + InputTensorSize<NI> + InputTensorScalar + From<Arr<U,NI>> + Debug + 'static,
+      <I as BatchDataType>::Type: Debug + 'static,
+      <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
+      SerializedVec<U,Arr<U,NI>>: IntoConverter,
+      Arr<U,NO>: InputTensorScalar + OutputTensorScalar + OutputTensorSize<NO>,
+      Arr<W,NO>: From<Arr<U,NO>>,
+      [();NI]: TensorSize,
+      [();NO]: TensorSize,
+      for<'a> ArrView<'a,U,NI>: From<&'a I>,
+      for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+      for<'a> &'a SerializedVec<W,Arr<W,NO>>: From<&'a SerializedVec<U,Arr<U,NO>>>,
+      Self: DeviceReduce<SerializedVec<W,Arr<W,NO>>,Arr<W,NO>,W,NO> {
+    type Output = Arr<U,NO>;
+    type BatchOutput = <Arr<U,NO> as BatchDataType>::Type;
+    type LossOutput = I;
+    type BatchLossOutput = <I as BatchDataType>::Type;
+    #[inline]
+    fn generalization_units(&self, units: &Arr2<W,NI,NO>) -> Result<Arr2<W,NI,NO>, GeneralizationError> {
+        Ok(units.clone())
+    }
+    #[inline]
+    fn generalization_bias(&self, bias: &Arr<W,NO>) -> Result<Arr<W,NO>, GeneralizationError> {
+        Ok(bias.clone())
+    }
+    #[inline]
+    fn specialization_units(&self, units: Arr2<W,NI,NO>) -> Result<Arr2<W,NI,NO>, SpecializationError> {
+        Ok(units)
+    }
+    #[inline]
+    fn specialization_bias(&self, bias: Arr<W,NO>) -> Result<Arr<W,NO>, SpecializationError> {
+        Ok(bias)
+    }
+    #[inline]
+    fn forward_linear<'a>(&self, shift: usize, bias: &Arr<W,NO>, units: &Arr2<W,NI,NO>, input: &'a I) -> Result<Arr<U,NO>, EvaluateError> {
+        Ok(ArrView::<'a,U,NI>::from(input).product(units).iter().zip(bias.iter()).map(|(&o,&b)| {
+            (o + b) >> shift
+        }).collect::<Vec<U>>().try_into().map_err(|e| EvaluateError::from(e))?)
+    }
+
+    #[inline]
+    fn backward_linear<'a>(&self, units: &Arr2<W,NI,NO>, input: &'a Arr<U,NO>) -> Result<I, TrainingError> {
+        Ok(Arr::<U,NI>::try_from(units.iter().map(|u| {
+            u.iter().zip(input.iter())
+                .map(|(&w,&l)| w * l).fold(U::default(), |acc,g|{
+                acc + g
+            })
+        }).collect::<Vec<U>>()).map_err(|e| TrainingError::from(e))?.into())
+    }
+
+    #[inline]
+    fn backward_weight_gradient<'a>(&self, o: &'a I, loss: &'a Arr<U,NO>) -> Result<Arr2<W,NI,NO>, TrainingError> {
+        Ok(ArrView::<'a,U,NI>::from(o).iter().cloned().map(|o| {
+            loss.iter().cloned().map(|l| (o * l).into()).collect::<Vec<W>>().try_into()
+        }).collect::<Result<Vec<Arr<W,NO>>,_>>()?.try_into().map_err(|e| TrainingError::from(e))?)
+    }
+
+    fn backward_bias_weight_gradient<'a>(&self, loss: Self::Output) -> Result<Arr<W,NO>, TrainingError> {
+        Ok(loss.into())
+    }
+    #[inline]
+    fn batch_backward_linear<'a>(&self, units: &Arr2<W,NI,NO>, input: &'a SerializedVec<U,Arr<U,NO>>)
+                                 -> Result<<I as BatchDataType>::Type, TrainingError> {
+        Ok(SerializedVec::<U,Arr<U,NI>>::from(input.par_iter().map(|l| {
+            units.iter().map(|u| {
+                u.iter().zip(l.iter())
+                    .map(|(&w,&l)| w * l).fold(U::default(), |acc,g|{
+                    acc + g
+                })
+            }).collect::<Vec<U>>().try_into()
+        }).collect::<Result<Vec<Arr<U,NI>>,_>>()?).into_converter().try_into()?)
+    }
+
+    #[inline]
+    fn batch_forward_linear<'a>(&self,shift: usize,bias: &Arr<W,NO>, units: &Arr2<W,NI,NO>, input: &'a <I as BatchDataType>::Type)
+                                -> Result<SerializedVec<U,Arr<U,NO>>,TrainingError> {
+        Ok(SerializedVecView::<'a,U,Arr<U,NI>>::try_from(input)?.par_iter().map(|input| {
+            input.product(units).iter().zip(bias.iter()).map(|(&o,&b)| {
+                (o + b) >> shift
+            }).collect::<Vec<U>>().try_into().map_err(|e| EvaluateError::from(e))
+        }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.into())
+    }
+
+    #[inline]
+    fn batch_backward_weight_gradient<'a>(&self, o: &'a <I as BatchDataType>::Type, loss: &'a SerializedVec<U,Arr<U,NO>>)
+                                          -> Result<Arr2<W,NI,NO>, TrainingError> {
+        Ok(SerializedVecView::<'a,U,Arr<U,NI>>::try_from(o)?.par_iter().zip(loss.par_iter()).map(|(o,l)| {
+            o.iter().cloned().map(|o| {
+                l.iter().cloned().map(|l| (o * l).into()).collect::<Vec<W>>().try_into()
+            }).collect::<Result<Vec<Arr<W,NO>>,_>>()?.try_into()
+        }).reduce(|| Ok(Arr2::new()), | acc, g | {
+            acc.and_then(| mut acc | g.and_then(|g| {
+                for (mut acc,g) in acc.iter_mut().zip(g.iter()) {
+                    for (acc,&g) in acc.iter_mut().zip(g.iter()) {
+                        *acc += g.into();
+                    }
+                }
+
+                Ok(acc)
+            }))
+        })?)
+    }
+
+    #[inline]
+    fn batch_linear_reduce<'a>(&self, loss: &'a SerializedVec<U,Arr<U,NO>>) -> Result<Arr<W,NO>,TrainingError> {
+        self.reduce(loss.into())
     }
 }

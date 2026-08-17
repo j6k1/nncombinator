@@ -939,12 +939,13 @@ derive_arr_like_arithmetic! (ArrView<'a,T,N> > Arr<T,N> = Arr<T,N>);
 derive_arr_like_arithmetic! (&'a ArrView<'a,T,N> > Arr<T,N> = Arr<T,N>);
 derive_arr_like_arithmetic! (ArrView<'a,T,N> > &'a Arr<T,N> = Arr<T,N>);
 
-impl<'a,T,const N1:usize, const N2:usize> Product<&'a Arr2<T,N1,N2>> for ArrView<'a,T,N1>
-    where T: Add<Output=T> + AddAssign + Mul<Output=T> + Default + Clone + Copy + Send {
-    type Output = Arr<T,N2>;
+impl<'a,L,R,const N1:usize, const N2:usize> Product<&'a Arr2<R,N1,N2>> for ArrView<'a,L,N1>
+    where L: AddAssign<L> + Mul<R,Output=L> + Default + Clone + Copy + Send,
+          R: Default + Clone + Copy + Send  {
+    type Output = Arr<L,N2>;
 
     #[inline]
-    fn product(self, rhs: &'a Arr2<T, N1, N2>) -> Self::Output {
+    fn product(self, rhs: &'a Arr2<R,N1,N2>) -> Self::Output {
         let mut o = Arr::new();
 
         for (&l,r) in self.iter().zip(rhs.iter()) {

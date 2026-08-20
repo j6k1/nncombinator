@@ -433,10 +433,18 @@ pub trait Quantization<P,K> where K: PersistenceType {
     /// * [`TrainingError`]
     fn quantization(&mut self, persistence:&mut P) -> Result<(),TrainingError>;
 }
+/// A trait that represents the input scale
+pub trait InputScale {
+    /// output mean scale
+    fn scale_mean(&self) -> f32 {
+        1.
+    }
+}
 /// A trait that represents the output scale
 pub trait OutputScale {
+    type Scale: Debug + 'static;
     /// output scale.
-    fn output_scale(&self) -> f32;
+    fn scale(&self) -> &Self::Scale;
 }
 /// A trait representing the weight type of inputs used in the implementation of various layers
 pub trait InputTensorScalar {

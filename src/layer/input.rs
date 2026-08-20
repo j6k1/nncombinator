@@ -6,7 +6,7 @@ use crate::{Cons, Never, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 pub struct InputLayer<U,O,LI,D>
@@ -200,6 +200,14 @@ impl<T,U,O,LI,D> PersistProgress<T,Linear> for InputLayer<U,O,LI,D>
         Ok(())
     }
 }
+impl<U,O,LI,D> InputScale for InputLayer<U,O,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          D: Device<U> {
+    fn scale_mean(&self) -> f32 {
+        1.
+    }
+}
 pub struct DiffInputLayer<U,O,DI,PO,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> {
@@ -345,7 +353,8 @@ impl<U,O,DI,PO,LI,D> UpdateWeight for DiffInputLayer<U,O,DI,PO,LI,D>
         Ok(())
     }
 }
-impl<U,O,DI,PO,LI,D> OnStep for DiffInputLayer<U,O,DI,PO,LI,D> where U: Default + Clone + Copy + Debug + Send + Sync + 'static, D: Device<U> {
+impl<U,O,DI,PO,LI,D> OnStep for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static, D: Device<U> {
     fn on_step(&mut self, _: usize) -> Result<(), TrainingError> {
         Ok(())
     }
@@ -375,4 +384,8 @@ impl<T,U,O,DI,PO,LI,D> PersistProgress<T,Linear> for DiffInputLayer<U,O,DI,PO,LI
     fn save_progress(&mut self, _: &mut T) -> Result<(), PersistenceError> {
         Ok(())
     }
+}
+impl<U,O,DI,PO,LI,D> InputScale for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
 }

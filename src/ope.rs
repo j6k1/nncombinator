@@ -60,6 +60,18 @@ impl Min for f32 {
         (*self).min(*other)
     }
 }
+impl Min for i16 {
+    #[inline]
+    fn min(&self,other:&i16) -> i16 {
+        (*self).min(*other)
+    }
+}
+impl Max for i16 {
+    #[inline]
+    fn max(&self,other:&i16) -> i16 {
+        (*self).max(*other)
+    }   
+}
 /// Trait to calculate the maximum value defined for the type
 pub trait MaxValue {
     fn max_value() -> Self;

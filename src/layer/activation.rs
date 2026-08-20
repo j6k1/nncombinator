@@ -8,7 +8,7 @@ use crate::cuda::DataTypeInfo;
 use crate::device::activation::DeviceActivation;
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale};
 use crate::lossfunction::LossFunction;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
@@ -414,4 +414,28 @@ impl<T,U,P,A,I,PI,D,const N:usize> PersistProgress<T,Linear> for ActivationLayer
         self.parent.save_progress(persistence)
     }
 }
-
+impl<U,P,A,I,PI,D,const N:usize> InputScale for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> +
+             PreTrain + OutputTensorScalar<Scalar=U> + InputScale,
+      U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
+      D: Device<U> + DeviceActivation<U,PI,A,N>,
+      PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+      I: Debug + Send + Sync {
+    fn scale_mean(&self) -> f32 {
+        self.parent.scale_mean()
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> OutputScale for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> +
+             PreTrain + OutputTensorScalar<Scalar=U> + OutputScale<Scale=PI>,
+      U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
+      D: Device<U> + DeviceActivation<U,PI,A,N>,
+      PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+      I: Debug + Send + Sync {
+    type Scale = PI;
+    fn scale(&self) -> &PI {
+        self.parent.scale()
+    }
+}

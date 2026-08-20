@@ -9,7 +9,7 @@ use crate::cast::Assume;
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear, DeviceQuantizedLinear};
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale};
 use crate::ope::{MaxValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
@@ -696,7 +696,21 @@ impl<T,U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<T,Linea
         Ok(())
     }
 }
-/// Trait for LinearLayer instance creation
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> InputScale for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain + InputScale +
+             InputTensorScalar + OutputTensorScalar,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      I: Debug + Send + Sync,
+      PI: Debug + InputTensorSize<NI> + BatchDataType,
+      OP: Optimizer<U,D>,
+      D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+      [();NI]: TensorSize,
+      [();NO]: TensorSize {
+    fn scale_mean(&self) -> f32 {
+        self.parent.scale_mean()
+    }
+}
 pub trait LinearLayerInstantiation<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain<PreOutput=PI> +
@@ -857,7 +871,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputTensorScalar
 }
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain +
+             PreTrain + InputScale +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + Mul<Output=U> + MaxValue + Assume<f32> + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<U> + 'static,
@@ -902,7 +916,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer<U,
 
         let shift = 31 - s.leading_zeros();
 
-        let (scale,qunits,qbias) = Self::quantize_weight(&units,&bias,shift)?;
+        let (scale,qunits,qbias) = Self::quantize_weight(&units,&bias,shift,&parent)?;
 
         let scale_mean = scale.iter().sum::<f32>() / NO as f32;
 
@@ -929,7 +943,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer<U,
         })
     }
 
-    fn quantize_weight(units:&Arr2<f32,NI,NO>,bias:&Arr<f32,NO>,shift:u32)
+    fn quantize_weight(units:&Arr2<f32,NI,NO>,bias:&Arr<f32,NO>,shift:u32,parent:&P)
         -> Result<(Arr<f32,NO>,Arr2<W,NI,NO>,Arr<W,NO>),TypeConvertError> {
         let mut max_u:Arr<f32,NO> = Arr::new();
 
@@ -969,7 +983,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer<U,
         }
 
         let scale = scale.iter().map(|&s| {
-            s / (1 << shift) as f32
+            s * parent.scale_mean() / (1 << shift) as f32
         }).collect::<Vec<f32>>().try_into()?;
 
         Ok((scale,qunits,qbias))
@@ -977,7 +991,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer<U,
 }
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<TextFilePersistence,Specialized> for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Persistence<TextFilePersistence,Specialized> +
+             PreTrain + InputScale + Persistence<TextFilePersistence,Specialized> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Mul<Output=U> + Assume<f32> + 'static + FromStr,
           W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<U> + 'static + FromStr,
@@ -1014,7 +1028,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<TextFilePer
 
         let shift = 31 - s.leading_zeros();
 
-        let (scale,qunits,qbias) = Self::quantize_weight(&units,&bias,shift)?;
+        let (scale,qunits,qbias) = Self::quantize_weight(&units,&bias,shift,&self.parent)?;
 
         let scale_mean = scale.iter().sum::<f32>() / NO as f32;
 
@@ -1064,7 +1078,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<TextFilePer
 impl<T,U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<T,Linear> for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
     where T: LinearPersistence<f32>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain +
+             PreTrain + InputScale +
              InputTensorScalar + OutputTensorScalar + Persistence<T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync + Mul<Output=U> + MaxValue + Assume<f32> + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<U> + 'static,
@@ -1099,7 +1113,7 @@ impl<T,U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<T,Linear>
 
         let shift = 31 - s.leading_zeros();
 
-        let (scale,qunits,qbias) = Self::quantize_weight(&units,&bias,shift)?;
+        let (scale,qunits,qbias) = Self::quantize_weight(&units,&bias,shift,&self.parent)?;
 
         let scale_mean = scale.iter().sum::<f32>() / NO as f32;
 
@@ -1695,7 +1709,7 @@ pub trait QuantizedLinearLayerInstantiation<U,W,C,BC,P,D,I,PI,OP,const NI:usize,
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayerInstantiation<U,W,C,BC,P,D,I,PI,OP,NI,NO>
     for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain<PreOutput=PI> +
+             PreTrain<PreOutput=PI> + InputScale +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + Mul<Output=U> + MaxValue + Assume<f32> + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<U> + 'static,
@@ -2271,6 +2285,22 @@ impl<'a,T,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<T
         self.bias_optimizer.save(persistence)?;
 
         Ok(())
+    }
+}
+impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> InputScale
+    for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=()> +
+             PreTrain<PreOutput=PI> + InputScale +
+             InputTensorScalar + OutputTensorScalar,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      I: Debug + Send + Sync,
+      DI: Debug,
+      PI: Debug + InputTensorSize<NI> + BatchDataType,
+      OP: Optimizer<U,D>,
+      D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO> {
+    fn scale_mean(&self) -> f32 {
+        self.parent.scale_mean()
     }
 }
 /// Trait for DiffLinearLayer instance creation

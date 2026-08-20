@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::bias::DeviceBias;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
 
@@ -526,6 +526,22 @@ impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BiasLayer<U,
         self.optimizer.save(persistence)?;
 
         Ok(())
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> InputScale for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> + InputScale +
+             InputTensorScalar + OutputTensorScalar,
+      D: Device<U> + DeviceBias<U,C,PI,N>,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      I: Debug + Send + Sync,
+      PI: Debug + BatchDataType + 'static,
+      OP: Optimizer<U,D>,
+      <PI as BatchDataType>::Type: Debug + BatchSize + 'static
+{
+    fn scale_mean(&self) -> f32 {
+        self.parent.scale_mean()
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BiasLayerInstantiation<U,C,P,OP,D,I,PI,N> for BiasLayer<U,C,P,OP,D,I,PI,N>

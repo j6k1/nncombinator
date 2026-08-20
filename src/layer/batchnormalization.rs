@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale};
 use crate::ope::One;
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
@@ -890,5 +890,21 @@ impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BatchNormali
         self.bias_optimizer.save(persistence)?;
 
         Ok(())
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> InputScale for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> + InputScale +
+             InputTensorScalar + OutputTensorScalar,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+      I: Debug + Send + Sync,
+      PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+      InputTensorScalar + OutputTensorScalar + 'static,
+      OP: Optimizer<U,D>,
+      <PI as BatchDataType>::Type: Debug + 'static,
+      [();N]: TensorSize {
+    fn scale_mean(&self) -> f32 {
+        self.parent.scale_mean()
     }
 }

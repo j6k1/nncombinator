@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::Stack;
 
@@ -447,5 +447,33 @@ impl<T,U,P,I,PI,D> PersistProgress<T,Linear> for LoggingLayer<U,P,I,PI,D>
 
     fn save_progress(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         self.parent.save_progress(persistence)
+    }
+}
+impl<U,P,I,PI,D> InputScale for LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> +
+             PreTrain<PreOutput=PI> + InputScale +
+             InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      D: Device<U>,
+      PI: Debug + 'static + BatchDataType,
+      I: Debug + Send + Sync {
+    fn scale_mean(&self) -> f32 {
+        self.parent.scale_mean()
+    }
+}
+impl<U,P,I,PI,D> OutputScale for LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> +
+             PreTrain<PreOutput=PI> + OutputScale<Scale=PI> +
+             InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      D: Device<U>,
+      PI: Debug + 'static + BatchDataType,
+      I: Debug + Send + Sync {
+    type Scale = PI;
+
+    fn scale(&self) -> &PI {
+        self.parent.scale()
     }
 }

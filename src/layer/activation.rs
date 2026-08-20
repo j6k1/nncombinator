@@ -70,8 +70,8 @@ impl<U,P,A,I,PI,D,const N:usize> OutputTensorScalar for ActivationLayer<U,P,A,I,
           I: Debug + Send + Sync {
     type Scalar = U;
 }
-impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence,Specialized> for ActivationLayer<U,P,A,I,PI,D,N>
-    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence,Specialized> +
+impl<U,P,A,I,PI,D,const N:usize> Persistence<TextFilePersistence,Specialized> for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<TextFilePersistence,Specialized> +
              BackwardAll<U,LossInput=PI> + PreTrain + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static + std::str::FromStr,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
@@ -92,9 +92,9 @@ impl<U,P,A,I,PI,D,const N:usize> Persistence<U,TextFilePersistence,Specialized> 
         Ok(())
     }
 }
-impl<T,U,P,A,I,PI,D,const N:usize> Persistence<U,T,Linear> for ActivationLayer<U,P,A,I,PI,D,N>
+impl<T,U,P,A,I,PI,D,const N:usize> Persistence<T,Linear> for ActivationLayer<U,P,A,I,PI,D,N>
     where T: LinearPersistence<U>,
-          P: ForwardAll<Input=I,Output=PI> + Persistence<U,T,Linear> +
+          P: ForwardAll<Input=I,Output=PI> + Persistence<T,Linear> +
              BackwardAll<U,LossInput=PI> + PreTrain + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,

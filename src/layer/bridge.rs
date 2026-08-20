@@ -58,8 +58,8 @@ impl<U,SO,P,I,PI,CI,D> OutputTensorScalar for BridgeLayer<U,SO,P,I,PI,CI,D>
           I: Debug + Send + Sync {
     type Scalar = SO;
 }
-impl<U,SO,P,I,PI,CI,D> Persistence<U,TextFilePersistence,Specialized> for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence,Specialized> +
+impl<U,SO,P,I,PI,CI,D> Persistence<TextFilePersistence,Specialized> for BridgeLayer<U,SO,P,I,PI,CI,D>
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<TextFilePersistence,Specialized> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
@@ -83,9 +83,9 @@ impl<U,SO,P,I,PI,CI,D> Persistence<U,TextFilePersistence,Specialized> for Bridge
         Ok(())
     }
 }
-impl<T,U,SO,P,I,PI,CI,D> Persistence<U,T,Linear> for BridgeLayer<U,SO,P,I,PI,CI,D>
+impl<T,U,SO,P,I,PI,CI,D> Persistence<T,Linear> for BridgeLayer<U,SO,P,I,PI,CI,D>
     where T: LinearPersistence<U>,
-          P: ForwardAll<Input=I,Output=PI> + Persistence<U,T,Linear> +
+          P: ForwardAll<Input=I,Output=PI> + Persistence<T,Linear> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,

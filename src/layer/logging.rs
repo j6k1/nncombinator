@@ -99,8 +99,8 @@ impl<U,P,I,PI,D> LoggingLayer<U,P,I,PI,D>
         self.batch_backward_loggers.push(Box::new(logger));
     }
 }
-impl<U,P,I,PI,D> Persistence<U,TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> + Persistence<U,TextFilePersistence,Specialized> +
+impl<U,P,I,PI,D> Persistence<TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<TextFilePersistence,Specialized> +
              BackwardAll<U,LossInput=PI> +
              PreTrain<PreOutput=PI> +
              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
@@ -123,9 +123,9 @@ impl<U,P,I,PI,D> Persistence<U,TextFilePersistence,Specialized> for LoggingLayer
         Ok(())
     }
 }
-impl<T,U,P,I,PI,D> Persistence<U,T,Linear> for LoggingLayer<U,P,I,PI,D>
+impl<T,U,P,I,PI,D> Persistence<T,Linear> for LoggingLayer<U,P,I,PI,D>
     where T: LinearPersistence<U>,
-          P: ForwardAll<Input=I,Output=PI> + Persistence<U,T,Linear> +
+          P: ForwardAll<Input=I,Output=PI> + Persistence<T,Linear> +
              BackwardAll<U,LossInput=PI> + PreTrain<PreOutput=PI> +
              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,

@@ -21,6 +21,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::DataTypeInfo;
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
+use crate::quantization::Quantizable;
 
 /// Trait that returns the number of elements in the slice held by itself
 pub trait SliceSize {
@@ -136,6 +137,12 @@ impl<'a,T,const N:usize> AsViewMut<'a> for Arr<T,N> where T: Default + Clone + C
             arr: &mut self.arr
         }
     }
+}
+impl<const N:usize> Quantizable<i8> for Arr<f32,N> {
+    type Quantized = Arr<i8,N>;
+}
+impl<const N:usize> Quantizable<i16> for Arr<f32,N> {
+    type Quantized = Arr<i16,N>;
 }
 impl<'a,S,D,const N:usize> From<&'a Arr<S,N>> for Arr<D,N>
     where S: Default + Clone + Copy + Send + Sync + Assume<D> + 'static,
@@ -512,6 +519,12 @@ impl<T,const N1:usize, const N2:usize> IndexMut<usize> for Arr2<T,N1,N2> where T
 
         &mut self.arr[offset..(offset + N2)]
     }
+}
+impl<const N1:usize, const N2:usize> Quantizable<i8> for Arr2<f32,N1,N2> {
+    type Quantized = Arr2<i8,N1,N2>;
+}
+impl<const N1:usize, const N2:usize> Quantizable<i16> for Arr2<f32,N1,N2> {
+    type Quantized = Arr2<i16,N1,N2>;
 }
 impl<'a,T,const N1:usize, const N2: usize> AsRawSlice<T> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     fn as_raw_slice(&self) -> &[T] {

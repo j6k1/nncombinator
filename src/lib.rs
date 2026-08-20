@@ -34,6 +34,7 @@ pub mod persistence;
 pub mod scheduler;
 pub mod bridge;
 pub mod cast;
+pub mod quantization;
 #[macro_use]
 mod macros;
 

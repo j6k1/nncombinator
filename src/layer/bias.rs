@@ -69,11 +69,11 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OutputTensorScalar for BiasLayer<U,C,P,OP,D,
           OP: Optimizer<U,D> {
     type Scalar = U;
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<TextFilePersistence,Specialized> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain +
              InputTensorScalar + OutputTensorScalar +
-             Persistence<U,TextFilePersistence,Specialized>,
+             Persistence<TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
@@ -114,11 +114,11 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialize
         Ok(())
     }
 }
-impl<T,U,C,P,OP,D,I,PI,const N:usize> Persistence<U,T,Linear> for BiasLayer<U,C,P,OP,D,I,PI,N>
+impl<T,U,C,P,OP,D,I,PI,const N:usize> Persistence<T,Linear> for BiasLayer<U,C,P,OP,D,I,PI,N>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain +
-             InputTensorScalar + OutputTensorScalar + Persistence<U,T,Linear>,
+             InputTensorScalar + OutputTensorScalar + Persistence<T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
@@ -473,7 +473,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Speciali
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
-          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
+          OP: Optimizer<U,D> + Persistence<TextFilePersistence,Specialized>,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           <PI as BatchDataType>::Type: Debug + BatchSize,
           TextRecord: From<U>,
@@ -509,7 +509,7 @@ impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BiasLayer<U,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
-          OP: Optimizer<U,D> + Persistence<U,T,Linear>,
+          OP: Optimizer<U,D> + Persistence<T,Linear>,
           D: Device<U> + DeviceBias<U,C,PI,N>,
           <PI as BatchDataType>::Type: Debug + BatchSize {
     fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {

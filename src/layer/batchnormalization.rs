@@ -179,10 +179,10 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchNormalizationLayerInstantiation<U,C,P,O
         Self::with_momentum(parent,device,U::from_f64(0.9).expect("An error occurred in floating point type conversion."),b)
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialized>
+impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<TextFilePersistence,Specialized>
     for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Persistence<U,TextFilePersistence,Specialized> +
+             PreTrain + Persistence<TextFilePersistence,Specialized> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           I: Debug + Send + Sync,
@@ -268,10 +268,10 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialize
         Ok(())
     }
 }
-impl<T,U,C,P,OP,D,I,PI,const N:usize> Persistence<U,T,Linear> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+impl<T,U,C,P,OP,D,I,PI,const N:usize> Persistence<T,Linear> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain + Persistence<U,T,Linear> +
+             PreTrain + Persistence<T,Linear> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -832,7 +832,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Speciali
           I: Debug + Send + Sync,
           PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
               InputTensorScalar + OutputTensorScalar + 'static,
-          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
+          OP: Optimizer<U,D> + Persistence<TextFilePersistence,Specialized>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           <PI as BatchDataType>::Type: Debug + 'static,
           TextRecord: From<U>,
@@ -870,7 +870,7 @@ impl<T,U,C,P,OP,D,I,PI,const N:usize> PersistProgress<T,Linear> for BatchNormali
           I: Debug + Send + Sync,
           PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> +
               Debug + InputTensorScalar + OutputTensorScalar + 'static,
-          OP: Optimizer<U,D> + Persistence<U,T,Linear>,
+          OP: Optimizer<U,D> + Persistence<T,Linear>,
           D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
           <PI as BatchDataType>::Type: Debug + 'static,
           [();N]: TensorSize {

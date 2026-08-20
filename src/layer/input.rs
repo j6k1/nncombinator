@@ -39,7 +39,7 @@ impl<U,O,LI,D> InputLayer<U,O,LI,D> where U: Default + Clone + Copy + Debug + Se
         }
     }
 }
-impl<U,O,LI,D> Persistence<U,TextFilePersistence,Specialized> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> Persistence<TextFilePersistence,Specialized> for InputLayer<U,O,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr + Sized,
           D: Device<U> {
     fn load(&mut self, _: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
@@ -50,7 +50,7 @@ impl<U,O,LI,D> Persistence<U,TextFilePersistence,Specialized> for InputLayer<U,O
         Ok(())
     }
 }
-impl<T,U,O,LI,D> Persistence<U,T,Linear> for InputLayer<U,O,LI,D>
+impl<T,U,O,LI,D> Persistence<T,Linear> for InputLayer<U,O,LI,D>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> {
@@ -235,7 +235,7 @@ impl<U,O,DI,PO,LI,D> OutputTensorScalar for DiffInputLayer<U,O,DI,PO,LI,D>
           D: Device<U> {
     type Scalar = U;
 }
-impl<U,O,DI,PO,LI,D> Persistence<U,TextFilePersistence,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
+impl<U,O,DI,PO,LI,D> Persistence<TextFilePersistence,Specialized> for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr + Sized,
           D: Device<U> {
     fn load(&mut self, _: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
@@ -246,7 +246,7 @@ impl<U,O,DI,PO,LI,D> Persistence<U,TextFilePersistence,Specialized> for DiffInpu
         Ok(())
     }
 }
-impl<T,U,O,DI,PO,LI,D> Persistence<U,T,Linear> for DiffInputLayer<U,O,DI,PO,LI,D>
+impl<T,U,O,DI,PO,LI,D> Persistence<T,Linear> for DiffInputLayer<U,O,DI,PO,LI,D>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static, D: Device<U> {
     fn load(&mut self, _: &mut T) -> Result<(), ModelLoadError> {

@@ -1,16 +1,20 @@
 //! Implementation of all full connected layers
 use std::fmt::Debug;
 use std::marker::{PhantomData};
+use std::ops::{Div};
 use std::str::FromStr;
+use num_traits::real::Real;
 use crate::arr::{Arr, Arr2, IntoConverter};
 use crate::{Cons, Stack};
+use crate::cast::Assume;
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear, DeviceQuantizedLinear};
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize};
-use crate::ope::{MaxValue};
+use crate::ope::{Max, MaxValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
+use crate::quantization::Quantizable;
 
 /// Linear Layer Implementation
 pub struct LinearLayer<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
@@ -109,10 +113,10 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> LinearLayer<U,C,BC,P,D,I,
         })
     }
 }
-impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence,Specialized> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<TextFilePersistence,Specialized> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain +
-             InputTensorScalar + OutputTensorScalar + Persistence<U,TextFilePersistence,Specialized>,
+             InputTensorScalar + OutputTensorScalar + Persistence<TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType,
@@ -171,11 +175,11 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,TextFilePer
         Ok(())
     }
 }
-impl<T,U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,T,Linear> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+impl<T,U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<T,Linear> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain +
-             InputTensorScalar + OutputTensorScalar + Persistence<U,T,Linear>,
+             InputTensorScalar + OutputTensorScalar + Persistence<T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType,
@@ -630,7 +634,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFileP
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType,
-          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
+          OP: Optimizer<U,D> + Persistence<TextFilePersistence,Specialized>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err>,
@@ -671,7 +675,7 @@ impl<T,U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<T,Linea
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType,
-          OP: Optimizer<U,D> + Persistence<U,T,Linear>,
+          OP: Optimizer<U,D> + Persistence<T,Linear>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -796,10 +800,12 @@ pub struct QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usi
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
+          D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           I: Debug + Send + Sync,
-          PI: Debug,
+          PI: Debug + BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     u:PhantomData<U>,
@@ -808,6 +814,10 @@ pub struct QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usi
     device:D,
     units:C,
     bias:BC,
+    qunits:<C as Quantizable<W>>::Quantized,
+    qbias:<BC as Quantizable<W>>::Quantized,
+    scale:<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,
+    scale_mean:f32,
     shift:usize,
     unit_optimizer:OP,
     bias_optimizer:OP,
@@ -819,10 +829,12 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> InputTensorScalar
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
+          D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           I: Debug + Send + Sync,
-          PI: Debug,
+          PI: Debug + BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     type Scalar = U;
@@ -834,10 +846,12 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputTensorScalar
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
+          D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           I: Debug + Send + Sync,
-          PI: Debug,
+          PI: Debug + BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     type Scalar = U;
@@ -846,13 +860,18 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer<U,
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain +
              InputTensorScalar + OutputTensorScalar,
-          U: Default + Clone + Copy + Debug + Send + Sync + MaxValue + 'static,
-          W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + 'static,
-          I: Debug + Send + Sync,
-          PI: Debug + InputTensorSize<NI> + BatchDataType,
-          OP: Optimizer<U,D>,
+          U: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<f32> + 'static,
+          W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<f32> + 'static,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
+          OP: Optimizer<U,D>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           u32: From<U> + From<W>,
+          f32: Assume<W>,
+          <C as Quantizable<W>>::Quantized: InputTensorScalar<Scalar=W>,
+          <BC as Quantizable<W>>::Quantized: InputTensorScalar<Scalar=W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     /// Create and return an instance of QuantizedLinearLayer
@@ -864,10 +883,11 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer<U,
     /// * `b` - optimizer builder
     pub fn new<UI,BI,B>(parent:P,device:&D,mut ui:UI,mut bi:BI, b:&B)
         -> Result<QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>,LayerInstantiationError>
-        where UI: FnMut() -> W, BI: FnMut() -> W, B: OptimizerBuilder<U,D,Output=OP> {
+        where UI: FnMut() -> f32, BI: FnMut() -> f32,
+              B: OptimizerBuilder<U,D,Output=OP> {
 
-        let mut units:Arr2<W,NI,NO> = Arr2::new();
-        let mut bias:Arr<W,NO> = Arr::new();
+        let mut units:Arr2<f32,NI,NO> = Arr2::new();
+        let mut bias:Arr<f32,NO> = Arr::new();
 
         for mut it in units.iter_mut() {
             for it in it.iter_mut() {
@@ -879,12 +899,19 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer<U,
             *it = bi();
         }
 
-        let units = device.specialization_units(units)?;
-        let bias = device.specialization_bias(bias)?;
-
         let s:u32 = NI as u32 * u32::from(U::max_value()) * u32::from(W::max_value());
 
         let shift = 31 - s.leading_zeros();
+
+        let (scale,qunits,qbias) = Self::quantize_weight(&units,&bias,shift)?;
+
+        let scale_mean = scale.iter().sum::<f32>() / NO as f32;
+
+        let units = device.specialization_units(units)?;
+        let bias = device.specialization_bias(bias)?;
+        let qunits = device.specialization_units(qunits)?;
+        let qbias = device.specialization_bias(qbias)?;
+        let scale = device.specialization_scale(scale)?;
 
         Ok(QuantizedLinearLayer {
             u:PhantomData::<U>,
@@ -893,37 +920,91 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer<U,
             device:device.clone(),
             units: units,
             bias:bias,
+            qunits:qunits,
+            qbias:qbias,
+            scale:scale,
+            scale_mean: scale_mean,
             shift:shift as usize,
             unit_optimizer:b.build(NI*NO)?,
             bias_optimizer:b.build(NO)?
         })
     }
+
+    fn quantize_weight(units:&Arr2<f32,NI,NO>,bias:&Arr<f32,NO>,shift:u32)
+        -> Result<(Arr<f32,NO>,Arr2<W,NI,NO>,Arr<W,NO>),TypeConvertError> {
+        let mut max_u:Arr<f32,NO> = Arr::new();
+
+        for mut it in units.iter() {
+            for (w,m) in it.iter().zip(max_u.iter_mut()) {
+                *m = m.max(w.abs());
+            }
+        }
+
+        let mut scale:Arr<f32,NO> = Arr::new();
+        let mut scale_mean:f32 = 0.0;
+
+        let mut qunits:Arr2<W,NI,NO> = Arr2::new();
+        let mut qbias:Arr<W,NO> = Arr::new();
+
+        for (&m,s) in max_u.iter().zip(scale.iter_mut()) {
+            if m == 0.0 {
+                *s = 1.0;
+            } else {
+                *s = m / W::max_value().assume()
+            }
+        }
+
+        scale_mean = scale.iter().sum::<f32>() / NO as f32;
+
+        for (w,mut q) in units.iter().zip(qunits.iter_mut()) {
+            for ((&w,q),&s) in w.iter().zip(q.iter_mut()).zip(scale.iter()) {
+                *q = (w / s).round().clamp(-W::max_value().assume(),W::max_value().assume()).assume();
+            }
+        }
+
+        for (&w,q) in bias.iter().zip(qbias.iter_mut()) {
+            *q = (w / scale_mean).round().clamp(
+                -W::max_value().assume(),
+                W::max_value().assume()
+            ).assume();
+        }
+
+        let scale = scale.iter().map(|&s| {
+            s / (1 << shift) as f32
+        }).collect::<Vec<f32>>().try_into()?;
+
+        Ok((scale,qunits,qbias))
+    }
 }
-impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<W,TextFilePersistence,Specialized> for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
+impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<TextFilePersistence,Specialized> for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain +
-             InputTensorScalar + OutputTensorScalar + Persistence<U,TextFilePersistence,Specialized>,
-          U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
-          W: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
+             PreTrain + Persistence<TextFilePersistence,Specialized> +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<f32> + 'static + FromStr,
+          W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<f32> + 'static + FromStr,
           I: Debug + Send + Sync,
-          PI: Debug + InputTensorSize<NI> + BatchDataType,
+          PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
-          TextFilePersistence: Persistence<W,TextFilePersistence,Specialized>,
+          TextFilePersistence: Persistence<TextFilePersistence,Specialized>,
           TextRecord: From<W> + From<U>,
-          ModelLoadError: From<<W as FromStr>::Err> + From<<U as FromStr>::Err>,
+          ModelLoadError: From<<f32 as FromStr>::Err>,
+          u32: From<U> + From<W>,
+          f32: Assume<W>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
-        let mut bias = Arr::<W,NO>::new();
+        let mut bias = Arr::<f32,NO>::new();
 
         for b in bias.iter_mut() {
             *b = persistence.read()?;
         }
 
-        let mut units = Arr2::<W,NI,NO>::new();
+        let mut units = Arr2::<f32,NI,NO>::new();
 
         for mut u in units.iter_mut() {
             for w in u.iter_mut() {
@@ -931,8 +1012,27 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<W,TextFileP
             }
         }
 
-        self.units = self.device.specialization_units(units)?;
-        self.bias = self.device.specialization_bias(bias)?;
+        let s:u32 = NI as u32 * u32::from(U::max_value()) * u32::from(W::max_value());
+
+        let shift = 31 - s.leading_zeros();
+
+        let (scale,qunits,qbias) = Self::quantize_weight(&units,&bias,shift)?;
+
+        let scale_mean = scale.iter().sum::<f32>() / NO as f32;
+
+        let units = self.device.specialization_units(units)?;
+        let bias = self.device.specialization_bias(bias)?;
+        let qunits = self.device.specialization_units(qunits)?;
+        let qbias = self.device.specialization_bias(qbias)?;
+        let scale = self.device.specialization_scale(scale)?;
+
+        self.units = units;
+        self.bias = bias;
+        self.qunits = qunits;
+        self.qbias = qbias;
+        self.scale = scale;
+        self.scale_mean = scale_mean;
+        self.shift = shift as usize;
 
         Ok(())
     }
@@ -963,29 +1063,33 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<W,TextFileP
         Ok(())
     }
 }
-impl<T,U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,T,Linear> for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
-    where T: LinearPersistence<W> + LinearPersistence<U>,
+impl<T,U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<T,Linear> for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
+    where T: LinearPersistence<f32>,
           P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain +
-             InputTensorScalar + OutputTensorScalar + Persistence<U,T,Linear>,
-          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          W: Default + Clone + Copy + Debug + Send + Sync + 'static,
+             InputTensorScalar + OutputTensorScalar + Persistence<T,Linear>,
+          U: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<f32> + 'static,
+          W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<f32> + 'static,
           I: Debug + Send + Sync,
-          PI: Debug + InputTensorSize<NI> + BatchDataType,
+          PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          u32: From<U> + From<W>,
+          f32: Assume<W>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
 
-        let mut bias = Arr::<W,NO>::new();
+        let mut bias = Arr::<f32,NO>::new();
 
         for b in bias.iter_mut() {
             *b = persistence.read()?;
         }
 
-        let mut units = Arr2::<W,NI,NO>::new();
+        let mut units = Arr2::<f32,NI,NO>::new();
 
         for mut u in units.iter_mut() {
             for w in u.iter_mut() {
@@ -993,8 +1097,27 @@ impl<T,U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<U,T,Linea
             }
         }
 
-        self.units = self.device.specialization_units(units)?;
-        self.bias = self.device.specialization_bias(bias)?;
+        let s:u32 = NI as u32 * u32::from(U::max_value()) * u32::from(W::max_value());
+
+        let shift = 31 - s.leading_zeros();
+
+        let (scale,qunits,qbias) = Self::quantize_weight(&units,&bias,shift)?;
+
+        let scale_mean = scale.iter().sum::<f32>() / NO as f32;
+
+        let units = self.device.specialization_units(units)?;
+        let bias = self.device.specialization_bias(bias)?;
+        let qunits = self.device.specialization_units(qunits)?;
+        let qbias = self.device.specialization_bias(qbias)?;
+        let scale = self.device.specialization_scale(scale)?;
+
+        self.units = units;
+        self.bias = bias;
+        self.qunits = qunits;
+        self.qbias = qbias;
+        self.scale = scale;
+        self.scale_mean = scale_mean;
+        self.shift = shift as usize;
 
         Ok(())
     }
@@ -1027,15 +1150,17 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Forward<PI,Result<<Self
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + InputTensorSize<NI> +
-              InputTensorScalar + OutputTensorScalar,
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
 
     fn forward(&self,input:&PI) -> Result<<Self as ForwardAll>::Output,EvaluateError> {
-        self.device.forward_linear(self.shift,&self.bias,&self.units,input.into())
+        self.device.forward_linear(self.shift,&self.qbias,&self.qunits,input.into())
     }
 }
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ForwardAll for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
@@ -1047,10 +1172,12 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ForwardAll for Quantize
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar,
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     type Input = I;
@@ -1068,9 +1195,11 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PreTrain for QuantizedL
           I: Debug + Send + Sync,
           OP: Optimizer<U,D>,
           PI: Debug + InputTensorSize<NI> +
-              BatchDataType + InputTensorScalar + OutputTensorScalar +
+              BatchDataType + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> +
               From<<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -1095,14 +1224,16 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
           I: Debug + Send + Sync,
           OP: Optimizer<U,D>,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar +
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> +
               From<<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     fn backward(&mut self, input: &<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output) -> Result<PI,TrainingError> {
-        Ok(self.device.backward_linear(&self.units,input)?.into())
+        Ok(self.device.backward_linear(&self.units,input,self.scale_mean,&self.scale)?.into())
     }
 }
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
@@ -1116,9 +1247,11 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for Quan
           BC: Debug,
           OP: Optimizer<U,D>,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar +
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> +
               From<<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO> + DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
@@ -1139,10 +1272,10 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for Quan
         let next_loss = self.backward(&loss)?;
 
         let g = s.map(|o| {
-            self.device.backward_weight_gradient(o.into(),&loss)
+            self.device.backward_weight_gradient(o.into(),&loss,self.scale_mean,&self.scale)
         })?;
 
-        let bg = self.device.backward_bias_weight_gradient(loss)?;
+        let bg = self.device.backward_bias_weight_gradient(loss,&self.scale)?;
 
         let (l,s) = self.parent.backward_all(next_loss.into(), s)?;
 
@@ -1158,10 +1291,12 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PartialForward for Quan
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar,
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
           Self: ForwardAll<Input=I>,
@@ -1188,17 +1323,19 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ForwardDiff for Quantiz
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar,
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
           Self: ForwardAll<Input=I,Output=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output> + PreTrain {
     fn forward_diff(&self, input: Self::DiffInput, partial_input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.forward_diff(input,partial_input)?;
 
-        Ok(self.device.forward_linear(self.shift,&self.bias,&self.units,&input.into())?)
+        Ok(self.device.forward_linear(self.shift,&self.qbias,&self.qunits,&input.into())?)
     }
 }
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ContinueForward for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
@@ -1210,9 +1347,11 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ContinueForward for Qua
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar,
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
@@ -1220,7 +1359,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> ContinueForward for Qua
     fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.continue_forward(input)?;
 
-        Ok(self.device.forward_linear(self.shift,&self.bias,&self.units,&input.into())?)
+        Ok(self.device.forward_linear(self.shift,&self.qbias,&self.qunits,&input.into())?)
     }
 }
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
@@ -1234,8 +1373,11 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> UpdateWeight for Quanti
           BC: Debug,
           OP: Optimizer<U,D>,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> +
               From<<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO> + DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
@@ -1266,9 +1408,11 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchForwardBase for Qu
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
           PI: Debug + InputTensorSize<NI> + BatchDataType + BatchDataType +
-              InputTensorScalar + OutputTensorScalar,
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
           [();NI]: TensorSize,
@@ -1288,8 +1432,10 @@ impl<U,W,C,BC,P,OP,D,I,PI,const NI:usize,const NO:usize> BatchForward for Quanti
           <I as BatchDataType>::Type: Debug,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar +
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> +
               From<<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput> + BatchDataType,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
           [();NI]: TensorSize,
@@ -1297,7 +1443,7 @@ impl<U,W,C,BC,P,OP,D,I,PI,const NI:usize,const NO:usize> BatchForward for Quanti
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        Ok(self.device.batch_forward_linear(self.shift,&self.bias,&self.units,&input)?)
+        Ok(self.device.batch_forward_linear(self.shift,&self.qbias,&self.qunits,&input)?)
     }
 }
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrainBase for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
@@ -1313,8 +1459,10 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrainBase for Q
           <PI as BatchDataType>::Type: BatchSize,
           <I as BatchDataType>::Type: Debug,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar +
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> +
               From<<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput> + BatchDataType,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
@@ -1339,8 +1487,10 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrain for Quant
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar +
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> +
               From<<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput> + BatchDataType,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
@@ -1350,7 +1500,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrain for Quant
         let r = self.parent.batch_pre_train(input)?;
 
         let u = r.map(|input| {
-            self.device.batch_forward_linear(self.shift,&self.bias,&self.units,input)
+            self.device.batch_forward_linear(self.shift,&self.qbias,&self.qunits,input)
         })?;
 
         Ok(Cons(r,u))
@@ -1367,7 +1517,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for Qu
           I: Debug + Send + Sync + BatchDataType,
           C: Debug,
           BC: Debug,
-          PI: BatchDataType + InputTensorSize<NI> + InputTensorScalar + OutputTensorScalar,
+          PI: BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize,
@@ -1376,6 +1526,8 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for Qu
           PI: Debug + From<<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput> + BatchDataType,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO> +
              DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchLossOutput: IntoConverter,
@@ -1395,13 +1547,13 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for Qu
 
         let loss = input;
 
-        let next_loss = self.device.batch_backward_linear(&self.units, &loss)?;
+        let next_loss = self.device.batch_backward_linear(&self.units, &loss, self.scale_mean,&self.scale)?;
 
         let g = s.map(|o| {
-            self.device.batch_backward_weight_gradient(o, &loss)
+            self.device.batch_backward_weight_gradient(o, &loss, self.scale_mean, &self.scale)
         })?;
 
-        let bg = self.device.batch_linear_reduce(&loss)?;
+        let bg = self.device.batch_backward_bias_gradient(&loss,&self.scale)?;
 
         let (l,s) = self.parent.batch_backward(next_loss.into_converter().try_into()?, s)?;
 
@@ -1415,10 +1567,12 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OnStep for QuantizedLin
              InputTensorScalar + OutputTensorScalar + OnStep,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U>,
+          D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           I: Debug + Send + Sync,
-          PI: Debug,
+          PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
           OP: Optimizer<U,D>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
@@ -1440,9 +1594,11 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<TextFil
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           I: Debug + Send + Sync,
-          PI: Debug + InputTensorSize<NI> + BatchDataType,
-          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
+          PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
+          OP: Optimizer<U,D> + Persistence<TextFilePersistence,Specialized>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err>,
           [();NI]: TensorSize,
@@ -1482,9 +1638,11 @@ impl<T,U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> PersistProgress<T,Lin
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
-          PI: Debug + InputTensorSize<NI> + BatchDataType,
-          OP: Optimizer<U,D> + Persistence<U,T,Linear>,
+          PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
+          OP: Optimizer<U,D> + Persistence<T,Linear>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
@@ -1513,9 +1671,12 @@ pub trait QuantizedLinearLayerInstantiation<U,W,C,BC,P,D,I,PI,OP,const NI:usize,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
-          PI: Debug + InputTensorSize<NI> + InputTensorScalar + OutputTensorScalar,
+          PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
           OP: Optimizer<U,D>,
-          D: Device<U>,
+          D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          u32: From<U> + From<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     /// Create an instance of QuantizedLinearLayers
@@ -1541,9 +1702,13 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayerIns
           U: Default + Clone + Copy + Debug + Send + Sync + MaxValue + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + 'static,
           I: Debug + Send + Sync,
-          PI: Debug + InputTensorSize<NI> + BatchDataType + InputTensorScalar + OutputTensorScalar,
+          PI: Debug + InputTensorSize<NI> + BatchDataType + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          <C as Quantizable<W>>::Quantized: InputTensorScalar<Scalar=W>,
+          <BC as Quantizable<W>>::Quantized: InputTensorScalar<Scalar=W>,
           u32: From<U> + From<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -1594,10 +1759,20 @@ impl<const NI:usize,const NO:usize> QuantizedLinearLayerBuilder<NI,NO>
               W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
               I: Debug + Send + Sync,
-              PI: Debug + InputTensorSize<NI> + InputTensorScalar + OutputTensorScalar,
+              PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
+              OP: Optimizer<U,D>,
+              D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+              C: Quantizable<W>,
+              BC: Quantizable<W>,
+              u32: From<U> + From<W>,
+              [();NI]: TensorSize,
+              [();NO]: TensorSize,
               OP: Optimizer<U,D>,
               B: OptimizerBuilder<U,D,Output=OP>,
               D: Device<U>,
+              C: Quantizable<W>,
+              BC: Quantizable<W>,
+              u32: From<U> + From<W>,
               QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>: QuantizedLinearLayerInstantiation<U,W,C,BC,P,D,I,PI,OP,NI,NO> {
 
         QuantizedLinearLayer::instantiation(parent,device,ui,bi,b)
@@ -1704,12 +1879,12 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> DiffLinearLayer<'a,
         })
     }
 }
-impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,TextFilePersistence,Specialized>
+impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<TextFilePersistence,Specialized>
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=()> + PreTrain +
              InputTensorScalar + OutputTensorScalar +
-             Persistence<U,TextFilePersistence,Specialized>,
+             Persistence<TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType,
@@ -1767,13 +1942,13 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,TextF
         Ok(())
     }
 }
-impl<'a,T,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<U,T,Linear>
+impl<'a,T,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> Persistence<T,Linear>
     for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=()> + PreTrain +
              InputTensorScalar + OutputTensorScalar +
-             Persistence<U,T,Linear>,
+             Persistence<T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType,
@@ -2038,7 +2213,7 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<Tex
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType,
           DI: Debug,
-          OP: Optimizer<U,D> + Persistence<U,TextFilePersistence,Specialized>,
+          OP: Optimizer<U,D> + Persistence<TextFilePersistence,Specialized>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
@@ -2079,7 +2254,7 @@ impl<'a,T,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PersistProgress<T
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType,
           DI: Debug,
-          OP: Optimizer<U,D> + Persistence<U,T,Linear>,
+          OP: Optimizer<U,D> + Persistence<T,Linear>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO> {
     fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;

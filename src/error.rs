@@ -152,6 +152,8 @@ pub enum ModelLoadError {
     CudnnError(rcudnn::Error),
     /// Error in specialization
     SpecializationError(SpecializationError),
+    /// Error in type conversion
+    TypeConvertError(TypeConvertError)
 }
 impl fmt::Display for ModelLoadError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -163,6 +165,7 @@ impl fmt::Display for ModelLoadError {
             #[cfg(feature = "cuda")]
             ModelLoadError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})", e),
             ModelLoadError::SpecializationError(e) => write!(f, "An error occurred during specialization. ({})", e),
+            ModelLoadError::TypeConvertError(e) => write!(f, "An error occurred during type conversion. ({})", e)
         }
     }
 }
@@ -175,7 +178,8 @@ impl error::Error for ModelLoadError {
             ModelLoadError::ParseIntError(_) => "An error occurred when converting a string to an integer value.",
             #[cfg(feature = "cuda")]
             ModelLoadError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
-            ModelLoadError::SpecializationError(_) => "An error occurred during specialization."
+            ModelLoadError::SpecializationError(_) => "An error occurred during specialization.",
+            ModelLoadError::TypeConvertError(_) => "An error occurred during type conversion."
         }
     }
 
@@ -187,7 +191,8 @@ impl error::Error for ModelLoadError {
             ModelLoadError::ParseIntError(ref e) => Some(e),
             #[cfg(feature = "cuda")]
             ModelLoadError::CudnnError(ref e) => Some(e),
-            ModelLoadError::SpecializationError(ref e) => Some(e)
+            ModelLoadError::SpecializationError(ref e) => Some(e),
+            ModelLoadError::TypeConvertError(ref e) => Some(e)
         }
     }
 }
@@ -269,6 +274,11 @@ impl From<rcudnn::Error> for ModelLoadError {
 impl From<SpecializationError> for ModelLoadError {
     fn from(err: SpecializationError) -> ModelLoadError {
         ModelLoadError::SpecializationError(err)
+    }
+}
+impl From<TypeConvertError> for ModelLoadError {
+    fn from(err: TypeConvertError) -> ModelLoadError {
+        ModelLoadError::TypeConvertError(err)
     }
 }
 impl From<TryFromSliceError> for TrainingError {

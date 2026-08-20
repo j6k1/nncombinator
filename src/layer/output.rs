@@ -92,12 +92,12 @@ impl<U,P,D,I,PI,const N:usize> OutputTensorScalar for LinearOutputLayer<U,P,D,I,
           TextFilePersistence: VerifyEof {
     type Scalar = U;
 }
-impl<U,P,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialized> for LinearOutputLayer<U,P,D,I,PI,N>
+impl<U,P,D,I,PI,const N:usize> Persistence<TextFilePersistence,Specialized> for LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> +
              PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar +
-             Persistence<U,TextFilePersistence,Specialized>,
+             Persistence<TextFilePersistence,Specialized>,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo + FromStr + Sized,
           D: Device<U>,
@@ -113,11 +113,11 @@ impl<U,P,D,I,PI,const N:usize> Persistence<U,TextFilePersistence,Specialized> fo
         self.parent.save(persistence)
     }
 }
-impl<T,U,P,D,I,PI,const N:usize> Persistence<U,T,Linear> for LinearOutputLayer<U,P,D,I,PI,N>
+impl<T,U,P,D,I,PI,const N:usize> Persistence<T,Linear> for LinearOutputLayer<U,P,D,I,PI,N>
     where T: LinearPersistence<U> + VerifyEof,
           P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> +
-             PreTrain<PreOutput=PI> + Persistence<U,T,Linear> +
+             PreTrain<PreOutput=PI> + Persistence<T,Linear> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,

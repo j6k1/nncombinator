@@ -7,7 +7,7 @@ use std::path::Path;
 use std::str::FromStr;
 use crate::error::*;
 
-pub trait Persistence<U,P,K> where K: PersistenceType {
+pub trait Persistence<P,K> where K: PersistenceType {
     /// Load Model
     /// # Arguments
     /// * `persistence` - model persistent object

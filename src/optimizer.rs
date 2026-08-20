@@ -169,7 +169,7 @@ impl<U,A,SD> Optimizer<U,DeviceGpu<A>> for SGD<U,DeviceGpu<A>,SD>
         Ok(())
     }
 }
-impl<U,D,S> Persistence<U,TextFilePersistence,Specialized> for SGD<U,D,S>
+impl<U,D,S> Persistence<TextFilePersistence,Specialized> for SGD<U,D,S>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           D: Device<U>,
           S: Scheduler<U>,
@@ -182,7 +182,7 @@ impl<U,D,S> Persistence<U,TextFilePersistence,Specialized> for SGD<U,D,S>
         Ok(())
     }
 }
-impl<T,U,D,S> Persistence<U,T,Linear> for SGD<U,D,S>
+impl<T,U,D,S> Persistence<T,Linear> for SGD<U,D,S>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           D: Device<U>,
@@ -477,7 +477,7 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<A>> for MomentumSGD<U,DeviceGpu<A>,SD>
           DeviceGpu<A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
-impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,DeviceCpu,SD>
+impl<U,SD> Persistence<TextFilePersistence,Specialized> for MomentumSGD<U,DeviceCpu,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
@@ -499,7 +499,7 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,Devi
         Ok(())
     }
 }
-impl<T,U,SD> Persistence<U,T,Linear> for MomentumSGD<U,DeviceCpu,SD>
+impl<T,U,SD> Persistence<T,Linear> for MomentumSGD<U,DeviceCpu,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
@@ -519,7 +519,7 @@ impl<T,U,SD> Persistence<U,T,Linear> for MomentumSGD<U,DeviceCpu,SD>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,DeviceGpu<A>,SD>
+impl<U,A,SD> Persistence<TextFilePersistence,Specialized> for MomentumSGD<U,DeviceGpu<A>,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           A: CudaAllocator + 'static,
@@ -550,7 +550,7 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for MomentumSGD<U,De
     }
 }
 #[cfg(feature = "cuda")]
-impl<T,U,A,SD> Persistence<U,T,Linear> for MomentumSGD<U,DeviceGpu<A>,SD>
+impl<T,U,A,SD> Persistence<T,Linear> for MomentumSGD<U,DeviceGpu<A>,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
@@ -864,7 +864,7 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<A>> for Adagrad<U,DeviceGpu<A>,SD>
           DeviceGpu<A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
-impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,DeviceCpu,SD>
+impl<U,SD> Persistence<TextFilePersistence,Specialized> for Adagrad<U,DeviceCpu,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
@@ -886,7 +886,7 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,DeviceCp
         Ok(())
     }
 }
-impl<T,U,SD> Persistence<U,T,Linear> for Adagrad<U,DeviceCpu,SD>
+impl<T,U,SD> Persistence<T,Linear> for Adagrad<U,DeviceCpu,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
@@ -906,7 +906,7 @@ impl<T,U,SD> Persistence<U,T,Linear> for Adagrad<U,DeviceCpu,SD>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,DeviceGpu<A>,SD>
+impl<U,A,SD> Persistence<TextFilePersistence,Specialized> for Adagrad<U,DeviceGpu<A>,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           A: CudaAllocator + 'static,
@@ -937,7 +937,7 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adagrad<U,Device
     }
 }
 #[cfg(feature = "cuda")]
-impl<T,U,A,SD> Persistence<U,T,Linear> for Adagrad<U,DeviceGpu<A>,SD>
+impl<T,U,A,SD> Persistence<T,Linear> for Adagrad<U,DeviceGpu<A>,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
@@ -1282,7 +1282,7 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<A>> for RMSprop<U,DeviceGpu<A>,SD>
           DeviceGpu<A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
-impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,DeviceCpu,SD>
+impl<U,SD> Persistence<TextFilePersistence,Specialized> for RMSprop<U,DeviceCpu,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
@@ -1314,7 +1314,7 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,DeviceCp
         Ok(())
     }
 }
-impl<T,U,SD> Persistence<U,T,Linear> for RMSprop<U,DeviceCpu,SD>
+impl<T,U,SD> Persistence<T,Linear> for RMSprop<U,DeviceCpu,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
@@ -1342,7 +1342,7 @@ impl<T,U,SD> Persistence<U,T,Linear> for RMSprop<U,DeviceCpu,SD>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,DeviceGpu<A>,SD>
+impl<U,A,SD> Persistence<TextFilePersistence,Specialized> for RMSprop<U,DeviceGpu<A>,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           A: CudaAllocator + 'static,
@@ -1387,7 +1387,7 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for RMSprop<U,Device
     }
 }
 #[cfg(feature = "cuda")]
-impl<T,U,A,SD> Persistence<U,T,Linear> for RMSprop<U,DeviceGpu<A>,SD>
+impl<T,U,A,SD> Persistence<T,Linear> for RMSprop<U,DeviceGpu<A>,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
@@ -1795,7 +1795,7 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<A>> for Adam<U,DeviceGpu<A>,SD>
           DeviceGpu<A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
-impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceCpu,SD>
+impl<U,SD> Persistence<TextFilePersistence,Specialized> for Adam<U,DeviceCpu,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
@@ -1840,7 +1840,7 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceCpu,S
         Ok(())
     }
 }
-impl<T,U,SD> Persistence<U,T,Linear> for Adam<U,DeviceCpu,SD>
+impl<T,U,SD> Persistence<T,Linear> for Adam<U,DeviceCpu,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
@@ -1876,7 +1876,7 @@ impl<T,U,SD> Persistence<U,T,Linear> for Adam<U,DeviceCpu,SD>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceGpu<A>,SD>
+impl<U,A,SD> Persistence<TextFilePersistence,Specialized> for Adam<U,DeviceGpu<A>,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           A: CudaAllocator + 'static,
@@ -1933,7 +1933,7 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for Adam<U,DeviceGpu
     }
 }
 #[cfg(feature = "cuda")]
-impl<T,U,A,SD> Persistence<U,T,Linear> for Adam<U,DeviceGpu<A>,SD>
+impl<T,U,A,SD> Persistence<T,Linear> for Adam<U,DeviceGpu<A>,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
@@ -2348,7 +2348,7 @@ impl<U,A,SD> OptimizerState<U,DeviceGpu<A>> for AdamW<U,DeviceGpu<A>,SD>
           DeviceGpu<A>: Device<U> {
     type Type = CudaPtr<U,A>;
 }
-impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceCpu,SD>
+impl<U,SD> Persistence<TextFilePersistence,Specialized> for AdamW<U,DeviceCpu,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
@@ -2393,7 +2393,7 @@ impl<U,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceCpu,
         Ok(())
     }
 }
-impl<T,U,SD> Persistence<U,T,Linear> for AdamW<U,DeviceCpu,SD>
+impl<T,U,SD> Persistence<T,Linear> for AdamW<U,DeviceCpu,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
@@ -2429,7 +2429,7 @@ impl<T,U,SD> Persistence<U,T,Linear> for AdamW<U,DeviceCpu,SD>
     }
 }
 #[cfg(feature = "cuda")]
-impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceGpu<A>,SD>
+impl<U,A,SD> Persistence<TextFilePersistence,Specialized> for AdamW<U,DeviceGpu<A>,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           A: CudaAllocator + 'static,
@@ -2486,7 +2486,7 @@ impl<U,A,SD> Persistence<U,TextFilePersistence,Specialized> for AdamW<U,DeviceGp
     }
 }
 #[cfg(feature = "cuda")]
-impl<T,U,A,SD> Persistence<U,T,Linear> for AdamW<U,DeviceGpu<A>,SD>
+impl<T,U,A,SD> Persistence<T,Linear> for AdamW<U,DeviceGpu<A>,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,

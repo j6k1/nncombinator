@@ -2,14 +2,13 @@
 
 use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Mul, Shr};
-use std::process::Output;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator};
 use rayon::prelude::ParallelIterator;
 use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
 use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::ope::Product;
-use crate::layer::{BatchDataType, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, Quantization, TensorSize};
+use crate::layer::{BatchDataType, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, TensorSize};
 #[cfg(feature = "cuda")]
 use crate::mem::AsRawSlice;
 #[cfg(feature = "cuda")]

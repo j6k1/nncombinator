@@ -2,6 +2,7 @@
 pub mod linear;
 pub mod batchnormalization;
 pub mod bias;
+pub mod scale;
 pub mod activation;
 pub mod output;
 pub mod input;

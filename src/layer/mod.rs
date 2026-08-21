@@ -22,6 +22,7 @@ pub mod bridge;
 pub mod logging;
 pub mod batchnormalization;
 pub mod bias;
+pub mod scale;
 
 /// Differential input
 #[derive(Debug)]

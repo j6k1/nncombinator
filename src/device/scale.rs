@@ -1,7 +1,11 @@
 //! Computational processes used in the implementation of scale layers
 
 use std::fmt::Debug;
-use crate::error::{EvaluateError, TrainingError};
+use std::ops::{Mul,Div};
+use crate::arr::{Arr, ArrView, IntoConverter, SerializedVec, SerializedVecView};
+use crate::collection::Broadcast;
+use crate::device::{DeviceCpu};
+use crate::error::{EvaluateError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 
 /// Trait that defines the implementation of inverse scaling processes in the scale layer.
@@ -19,7 +23,7 @@ pub trait DeviceScale<U,IO,const N: usize>
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn forward_inverse_scale<'a>(&self, scale: &'a IO, input: &'a IO) -> Result<IO, EvaluateError>;
+    fn inverse_scaling<'a>(&self, scale: &'a IO, input: &'a IO) -> Result<IO, EvaluateError>;
 
     /// Error back propagation calculation.
     ///
@@ -31,7 +35,7 @@ pub trait DeviceScale<U,IO,const N: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_inverse_scale<'a>(&self, scale: &'a IO, input: IO) -> Result<IO, TrainingError>;
+    fn scaling<'a>(&self, scale: &'a IO, input: &'a IO) -> Result<IO, TrainingError>;
 
     /// Forward propagation calculation in batch.
     ///
@@ -43,8 +47,8 @@ pub trait DeviceScale<U,IO,const N: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_forward_inverse_scale<'a>(&self, scale: &'a IO, input: &'a <IO as BatchDataType>::Type)
-        -> Result<<IO as BatchDataType>::Type, TrainingError>;
+    fn batch_inverse_scaling<'a>(&self, scale: &'a IO, input: &'a <IO as BatchDataType>::Type)
+                                 -> Result<<IO as BatchDataType>::Type, TrainingError>;
 
     /// Error back propagation calculation in batch.
     ///
@@ -56,6 +60,46 @@ pub trait DeviceScale<U,IO,const N: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward_inverse_scale<'a>(&self, scale: &'a IO, input: <IO as BatchDataType>::Type)
-        -> Result<<IO as BatchDataType>::Type, TrainingError>;
+    fn batch_scaling<'a>(&self, scale: &'a IO, input: &'a <IO as BatchDataType>::Type)
+                         -> Result<<IO as BatchDataType>::Type, TrainingError>;
+}
+impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          IO: BatchDataType + Debug + Clone,
+          <IO as BatchDataType>::Type: BatchSize + Debug,
+          IO: From<Arr<U,N>>,
+          Arr<U,N>: From<IO>,
+          SerializedVec<U,Arr<U,N>>: IntoConverter,
+          <IO as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          for<'a> ArrView<'a,U,N>: From<&'a IO> + Mul<Output=Arr<U,N>> + Div<Output=Arr<U,N>>,
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: Mul<Broadcast<ArrView<'a,U,N>>,Output=SerializedVec<U,Arr<U,N>>> +
+                                                    Div<Broadcast<ArrView<'a,U,N>>,Output=SerializedVec<U,Arr<U,N>>> {
+    fn inverse_scaling<'a>(&self, scale: &'a IO, input: &'a IO) -> Result<IO, EvaluateError> {
+        let view  = ArrView::<'a,U,N>::from(input);
+        let scale = ArrView::<'a,U,N>::from(scale);
+
+        Ok((view / scale).into())
+    }
+
+    fn scaling<'a>(&self, scale: &'a IO, input: &'a IO) -> Result<IO, TrainingError> {
+        let view = ArrView::<'a,U,N>::from(input);
+        let scale = ArrView::<'a,U,N>::from(scale);
+
+        Ok((view * scale).into())
+    }
+
+    fn batch_inverse_scaling<'a>(&self, scale: &'a IO, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError> {
+        let view  = SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?;
+        let scale = ArrView::<'a,U,N>::from(scale);
+
+        Ok((view / Broadcast(scale)).into_converter().try_into()?)
+    }
+
+    fn batch_scaling<'a>(&self, scale: &'a IO, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError> {
+        let view  = SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?;
+        let scale = ArrView::<'a,U,N>::from(scale);
+
+        Ok((view * Broadcast(scale)).into_converter().try_into()?)
+    }
 }

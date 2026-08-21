@@ -72,7 +72,7 @@ impl<U,P,D,I,PI,const N:usize> Persistence<TextFilePersistence,Specialized> for 
           PI: Debug + BatchDataType,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err>,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           <PI as BatchDataType>::Type: Debug + BatchSize {
     fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
@@ -94,7 +94,7 @@ impl<T,U,P,D,I,PI,const N:usize> Persistence<T,Linear> for InverseScalingLayer<U
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           <PI as BatchDataType>::Type: Debug + BatchSize {
     fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)
@@ -109,7 +109,7 @@ impl<U,P,D,I,PI,const N:usize> Forward<PI,Result<PI,EvaluateError>> for InverseS
              PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           <PI as BatchDataType>::Type: Debug + BatchSize {
@@ -122,7 +122,7 @@ impl<U,P,D,I,PI,const N:usize> ForwardAll for InverseScalingLayer<U,P,D,I,PI,N>
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
@@ -137,7 +137,7 @@ impl<U,P,D,I,PI,const N:usize> PreTrain for InverseScalingLayer<U,P,D,I,PI,N>
     where P: PreTrain<PreOutput=PI> + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
@@ -157,7 +157,7 @@ impl<U,P,D,I,PI,const N:usize> Backward<U,PI,Result<PI,TrainingError>> for Inver
              PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
@@ -170,7 +170,7 @@ impl<U,P,D,I,PI,const N:usize> BackwardAll<U> for InverseScalingLayer<U,P,D,I,PI
              PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
@@ -205,7 +205,7 @@ impl<U,P,D,I,PI,const N:usize> PartialForward for InverseScalingLayer<U,P,D,I,PI
     where P: ForwardAll<Input=I,Output=PI> + PartialForward +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
@@ -229,7 +229,7 @@ impl<U,P,D,I,PI,const N:usize> ForwardDiff for InverseScalingLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward + ForwardDiff +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
-      D: Device<U> + DeviceScale<U,PI,N>,
+      D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       I: Debug + Send + Sync,
       PI: Debug + BatchDataType + 'static,
@@ -246,7 +246,7 @@ impl<U,P,D,I,PI,const N:usize> ContinueForward for InverseScalingLayer<U,P,D,I,P
     where P: ForwardAll<Input=I,Output=PI> + PartialForward + ContinueForward +
           BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain<PreOutput=PI> +
           InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
-      D: Device<U> + DeviceScale<U,PI,N>,
+      D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       I: Debug + Send + Sync,
       PI: Debug + BatchDataType + 'static,
@@ -265,7 +265,7 @@ impl<U,P,D,I,PI,const N:usize> BatchForwardBase for InverseScalingLayer<U,P,D,I,
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           I: Debug + Send + Sync + BatchDataType,
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
@@ -279,7 +279,7 @@ impl<U,P,D,I,PI,const N:usize> BatchForward for InverseScalingLayer<U,P,D,I,PI,N
              PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync + BatchDataType,
           PI: Debug + BatchDataType + 'static,
@@ -298,7 +298,7 @@ impl<U,P,D,I,PI,const N:usize> BatchPreTrainBase for InverseScalingLayer<U,P,D,I
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           I: Debug + Send + Sync + BatchDataType,
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
@@ -314,7 +314,7 @@ impl<U,P,D,I,PI,const N:usize> BatchPreTrain for InverseScalingLayer<U,P,D,I,PI,
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           I: Debug + Send + Sync + BatchDataType,
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
@@ -338,7 +338,7 @@ impl<U,P,D,I,PI,const N:usize> BatchBackward<U> for InverseScalingLayer<U,P,D,I,
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug,
-          D: Device<U> + DeviceScale<U,PI,N> {
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI> {
     type BatchLossInput = <PI as BatchDataType>::Type;
     type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
 
@@ -373,7 +373,7 @@ impl<U,P,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> 
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           <PI as BatchDataType>::Type: Debug + BatchSize,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
@@ -398,7 +398,7 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for InverseScalingLay
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           <PI as BatchDataType>::Type: Debug + BatchSize {
     fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)
@@ -413,7 +413,7 @@ impl<U,P,D,I,PI,const N:usize> InputScale for InverseScalingLayer<U,P,D,I,PI,N>
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain<PreOutput=PI> + InputScale + OutputScale<Scale=PI> +
              InputTensorScalar + OutputTensorScalar,
-      D: Device<U> + DeviceScale<U,PI,N>,
+      D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       I: Debug + Send + Sync,
       PI: Debug + BatchDataType + 'static,
@@ -429,7 +429,7 @@ impl<U,P,D,I,PI,const N:usize> InverseScalingLayerInstantiation<U,P,D,I,PI,N> fo
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
-          D: Device<U> + DeviceScale<U,PI,N>,
+          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
     fn instantiation(parent: P, device: &D)
         -> Result<InverseScalingLayer<U,P,D,I,PI,N>, LayerInstantiationError> {
@@ -464,7 +464,7 @@ impl<const N:usize> InverseScalingLayerBuilder<N> {
         -> Result<InverseScalingLayer<U,P,D,I,PI,N>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> +
                  BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain +
-                 InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
+                 InputTensorScalar + OutputTensorScalar<Scalar=U> + OutputScale<Scale=PI>,
               U: Default + Clone + Copy + Debug + Send + Sync + 'static,
               D: Device<U>,
               I: Debug + Send + Sync + BatchDataType,

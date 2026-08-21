@@ -14,6 +14,7 @@ pub mod scheduler;
 pub mod persistence;
 
 pub mod cuda;
+pub mod quantization;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -155,7 +156,7 @@ fn test_mnist_for_cpu() {
         }
 
         println!("total_loss = {}", total_loss);
-        println!("loss_average = {}", total_loss as f32 / count as f32);    
+        println!("loss_average = {}", total_loss as f32 / count as f32);
     }
 
     let elapsed = start_time.elapsed();

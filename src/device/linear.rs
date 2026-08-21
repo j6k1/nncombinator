@@ -1292,7 +1292,6 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
       SerializedVec<U,Arr<U,NI>>: IntoConverter,
       SerializedVec<f32,Arr<f32,NO>>: From<Vec<Arr<f32,NO>>>,
       Arr<U,NO>: InputTensorScalar + OutputTensorScalar<Scalar=U> + OutputTensorSize<NO>,
-      Arr<W,NO>: From<Arr<U,NO>>,
       Arr2<f32,NI,NO>: Quantizable<W,Quantized=Arr2<W,NI,NO>>,
       Arr<f32,NO>: Quantizable<W,Quantized=Arr<W,NO>> + TryFrom<Vec<f32>,Error=TypeConvertError>,
       [();NI]: TensorSize,
@@ -1300,8 +1299,7 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
       f32: From<U> + Assume<U>,
       for<'a> ArrView<'a,U,NI>: From<&'a I>,
       for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
-      for<'a> &'a SerializedVec<W,Arr<W,NO>>: From<&'a SerializedVec<U,Arr<U,NO>>>,
-      Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,W,NO> {
+      Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO> {
     type Scale = Arr<f32,NO>;
     type Output = Arr<U,NO>;
     type BatchOutput = <Arr<U,NO> as BatchDataType>::Type;

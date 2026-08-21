@@ -70,7 +70,7 @@ impl Max for i16 {
     #[inline]
     fn max(&self,other:&i16) -> i16 {
         (*self).max(*other)
-    }   
+    }
 }
 /// Trait to calculate the maximum value defined for the type
 pub trait MaxValue {
@@ -87,6 +87,18 @@ impl MaxValue for f32 {
     #[inline]
     fn max_value() -> f32 {
         f32::MAX
+    }
+}
+impl MaxValue for i16 {
+    #[inline]
+    fn max_value() -> i16 {
+        i16::MAX
+    }
+}
+impl MaxValue for i8 {
+    #[inline]
+    fn max_value() -> i8 {
+        i8::MAX
     }
 }
 /// Trait to calculate the initial value defined for the type

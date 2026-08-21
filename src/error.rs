@@ -648,6 +648,8 @@ pub enum CudaError {
     LogicError(String),
     /// Error that occurs when a specified argument or other setting value is invalid.
     InvalidConfigurationError(String),
+    /// Error: Unsupported Operation
+    UnsupportedOperationError(String),
 }
 #[cfg(feature = "cuda")]
 impl fmt::Display for CudaError {
@@ -659,6 +661,7 @@ impl fmt::Display for CudaError {
             CudaError::InvalidState(s) => write!(f, "{}", s),
             CudaError::LogicError(s) => write!(f,"{}",s),
             CudaError::InvalidConfigurationError(s) => write!(f,"{}",s),
+            CudaError::UnsupportedOperationError(s) => write!(f,"{}",s),
         }
     }
 }
@@ -672,6 +675,7 @@ impl error::Error for CudaError {
             CudaError::InvalidState(_) => "Invalid state.s",
             CudaError::LogicError(_) => "Logic error.",
             CudaError::InvalidConfigurationError(_) => "Invalid configuration.",
+            CudaError::UnsupportedOperationError(_) => "Unsupported operation.",
         }
     }
 
@@ -683,6 +687,7 @@ impl error::Error for CudaError {
             CudaError::InvalidState(_) => None,
             CudaError::LogicError(_) => None,
             CudaError::InvalidConfigurationError(_) => None,
+            CudaError::UnsupportedOperationError(_) => None,
         }
     }
 }

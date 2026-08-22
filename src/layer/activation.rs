@@ -7,7 +7,7 @@ use crate::{Cons, Stack};
 use crate::device::activation::DeviceActivation;
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, MaxInputValue};
 use crate::lossfunction::LossFunction;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
@@ -436,5 +436,18 @@ impl<U,P,A,I,PI,D,const N:usize> OutputScale for ActivationLayer<U,P,A,I,PI,D,N>
     type Scale = PI;
     fn scale(&self) -> &PI {
         self.parent.scale()
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> MaxInputValue for ActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> +
+             PreTrain + OutputTensorScalar<Scalar=U> + InputScale + MaxInputValue<Scalar=usize>,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      D: Device<U> + DeviceActivation<U,PI,A,N>,
+      PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+      I: Debug + Send + Sync {
+    type Scalar = usize;
+    fn max_input_value(&self) -> Self::Scalar {
+        self.parent.max_input_value()
     }
 }

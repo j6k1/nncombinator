@@ -54,7 +54,9 @@ pub enum TrainingError {
     /// Error raised when the value is not a valid primitive type.
     FromPrimitiveError(FromPrimitiveError),
     /// Error when reading model
-    ModelLoadError(ModelLoadError)
+    ModelLoadError(ModelLoadError),
+    /// Error in specialization
+    SpecializationError(SpecializationError)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -80,6 +82,7 @@ impl fmt::Display for TrainingError {
             TrainingError::TryFromSliceError(e) => write!(f,"{}",e),
             TrainingError::FromPrimitiveError(e) => write!(f,"{}",e),
             TrainingError::ModelLoadError(e) => write!(f,"{}",e),
+            TrainingError::SpecializationError(e) => write!(f,"{}",e),
         }
     }
 }
@@ -107,6 +110,7 @@ impl error::Error for TrainingError {
             TrainingError::TryFromSliceError(_) => "Conversion to fixed-length array failed.",
             TrainingError::FromPrimitiveError(_) => "Conversion from primitive type failed.",
             TrainingError::ModelLoadError(_) => "An error occurred when loading the model.",
+            TrainingError::SpecializationError(_) => "Specialization failed.",
         }
     }
 
@@ -133,6 +137,7 @@ impl error::Error for TrainingError {
             TrainingError::TryFromSliceError(e) => Some(e),
             TrainingError::FromPrimitiveError(e) => Some(e),
             TrainingError::ModelLoadError(e) => Some(e),
+            TrainingError::SpecializationError(e) => Some(e),
         }
     }
 }
@@ -248,6 +253,11 @@ impl From<UnsupportedOperationError> for TrainingError {
 impl From<ModelLoadError> for TrainingError {
     fn from(err: ModelLoadError) -> TrainingError {
         TrainingError::ModelLoadError(err)
+    }
+}
+impl From<SpecializationError> for TrainingError {
+    fn from(err: SpecializationError) -> TrainingError {
+        TrainingError::SpecializationError(err)
     }
 }
 impl From<io::Error> for ModelLoadError {
@@ -883,7 +893,6 @@ pub enum LayerInstantiationError {
     TypeConvertError(TypeConvertError),
     /// Error during data specialization
     SpecializationError(SpecializationError)
-
 }
 impl fmt::Display for LayerInstantiationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

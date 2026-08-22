@@ -10,8 +10,9 @@ use nncombinator::device::DeviceCpu;
 use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll};
 use nncombinator::layer::bridge::BridgeLayerBuilder;
-use nncombinator::layer::input::InputLayer;
+use nncombinator::layer::input::{QuantizedInputLayer};
 use nncombinator::layer::linear::{QuantizedLinearLayerBuilder};
+use nncombinator::layer::logging::LoggingLayer;
 use nncombinator::layer::scale::InverseScalingLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
@@ -28,7 +29,7 @@ fn test_mnist_for_quntization_cpu() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:InputLayer<i16,Arr<i16,{ 28*28 }>,_,_> = InputLayer::new(&device);
+    let net:QuantizedInputLayer<i16,Arr<i16,{ 28*28 }>,_,_,3200> = QuantizedInputLayer::new(&device);
 
     let optimizer_builder = AdamWBuilder::new(&device).lr(0.001).weight_decay(0.0001);
 
@@ -79,6 +80,22 @@ fn test_mnist_for_quntization_cpu() {
 
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
+        let mut l = LoggingLayer::new(l,&device);
+
+        /*
+        l.add_gradient_logger(move |g| {
+            dbg!(&g);
+
+            Ok(())
+        });
+        l.add_batch_backward_logger(move |l| {
+            dbg!(&l);
+
+            Ok(())
+        });
+        */
+        l
+    }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
@@ -102,6 +119,17 @@ fn test_mnist_for_quntization_cpu() {
 
         BridgeLayerBuilder::<f32,Arr<f32,10>>::new().build(l, &device).unwrap()
     }).add_layer(|l| {
+        let mut l = LoggingLayer::new(l,&device);
+
+        /*
+        l.add_batch_backward_logger(move |l| {
+            dbg!(&l);
+
+            Ok(())
+        });
+        */
+        l
+    }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
@@ -111,6 +139,17 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_pre_train(&l);
 
         InverseScalingLayerBuilder::<10>::new().build(l, &device).unwrap()
+    }).add_layer(|l| {
+        let mut l = LoggingLayer::new(l,&device);
+
+        /*
+        l.add_batch_backward_logger(move |l| {
+            dbg!(&l);
+
+            Ok(())
+        });
+         */
+        l
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -184,7 +223,7 @@ fn test_mnist_for_quntization_cpu() {
                 let mut input = Arr::<i16, 784>::new();
 
                 for (it, &p) in input.iter_mut().zip(pixels) {
-                    *it = p as i16;
+                    *it = (p as i32 * 4096 / 255) as i16;
                 }
 
                 let mut expected = Arr::new();
@@ -243,7 +282,7 @@ fn test_mnist_for_quntization_cpu() {
         let mut input = Arr::<i16, 784>::new();
 
         for (it, &p) in input.iter_mut().zip(pixels) {
-            *it = p as i16;
+            *it = (p as i32 * 4096 / 255) as i16;
         }
 
         let r = net.forward_all(input).unwrap();

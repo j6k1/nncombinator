@@ -35,7 +35,7 @@ pub trait DeviceScale<U,IO,const N: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn scaling<'a>(&self, scale: &'a Self::Scale, input: &'a IO) -> Result<IO, TrainingError>;
+    fn scaling<'a>(&self, scale: &'a Self::Scale, input: &'a IO) -> Result<IO, EvaluateError>;
 
     /// Forward propagation calculation in batch.
     ///
@@ -83,7 +83,7 @@ impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
         Ok((view / scale.as_view()).into())
     }
 
-    fn scaling<'a>(&self, scale: &'a Arr<U,N>, input: &'a IO) -> Result<IO, TrainingError> {
+    fn scaling<'a>(&self, scale: &'a Arr<U,N>, input: &'a IO) -> Result<IO, EvaluateError> {
         let view = ArrView::<'a,U,N>::from(input);
 
         Ok((view * scale.as_view()).into())

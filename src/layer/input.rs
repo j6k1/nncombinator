@@ -6,7 +6,7 @@ use crate::{Cons, Never, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight, MaxInputValue};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 pub struct InputLayer<U,O,LI,D>
@@ -388,4 +388,216 @@ impl<T,U,O,DI,PO,LI,D> PersistProgress<T,Linear> for DiffInputLayer<U,O,DI,PO,LI
 impl<U,O,DI,PO,LI,D> InputScale for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> {
+}
+pub struct QuantizedInputLayer<U,O,LI,D,const M:usize>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
+    u:PhantomData<U>,
+    o:PhantomData<O>,
+    l:PhantomData<LI>,
+    device:D
+}
+impl<U,O,LI,D,const M: usize> InputTensorScalar for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
+    type Scalar = U;
+}
+impl<U,O,LI,D,const M: usize> OutputTensorScalar for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
+    type Scalar = U;
+}
+impl<U,O,LI,D,const M: usize> QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
+    /// Create an instance of QuantizedInputLayer
+    pub fn new(device:&D) -> QuantizedInputLayer<U,O,LI,D,M> {
+        QuantizedInputLayer {
+            u:PhantomData::<U>,
+            o:PhantomData::<O>,
+            l:PhantomData::<LI>,
+            device:device.clone()
+        }
+    }
+}
+impl<U,O,LI,D,const M: usize> Persistence<TextFilePersistence,Specialized> for QuantizedInputLayer<U,O,LI,D,M>
+where U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr + Sized,
+      D: Device<U> {
+    fn load(&mut self, _: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
+        Ok(())
+    }
+
+    fn save(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+impl<T,U,O,LI,D,const M: usize> Persistence<T,Linear> for QuantizedInputLayer<U,O,LI,D,M>
+    where T: LinearPersistence<U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
+    fn load(&mut self, _: &mut T) -> Result<(), ModelLoadError> {
+        Ok(())
+    }
+
+    fn save(&mut self, _: &mut T) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+impl<U,O,LI,D,const M: usize> ForwardAll for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type Input = O;
+    type Output = <D as DeviceInput<U,O>>::Output;
+    fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError> {
+        Ok(self.device.forward_input(input)?)
+    }
+}
+impl<U,O,LI,D,const M: usize> PreTrain for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type PreOutput = <D as DeviceInput<U,O>>::Output;
+    type OutStack = Cons<Nil,Self::PreOutput>;
+
+    fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError> {
+        Ok(Cons(Nil,self.device.forward_input(input)?))
+    }
+}
+impl<U,O,LI,D,const M: usize> BackwardAll<U> for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type LossInputScalar = U;
+    type LossInput = LI;
+    type LossOutput = LI;
+
+    fn backward_all(&mut self, input: Self::LossInput, _:Self::OutStack)
+                    -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        Ok((input,Nil))
+    }
+}
+impl<U,O,LI,D,const M: usize> UpdateWeight for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type GradientStack = Nil;
+
+    fn update_weight(&mut self, _: Self::GradientStack, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+}
+
+impl<U,O,LI,D,const M: usize> BatchForwardBase for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type BatchInput = <O as BatchDataType>::Type;
+    type BatchOutput = <D as DeviceInput<U,O>>::BatchOutput;
+}
+impl<U,O,LI,D,const M: usize> BatchForward for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput,TrainingError> {
+        Ok(self.device.batch_forward_input(input)?)
+    }
+}
+impl<U,O,LI,D,const M: usize> BatchPreTrainBase for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type BatchPreOutput = <D as DeviceInput<U,O>>::BatchOutput;
+    type BatchOutStack = Cons<Nil,Self::BatchPreOutput>;
+}
+impl<U,O,LI,D,const M: usize> BatchPreTrain for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
+        Ok(Cons(Nil,self.device.batch_forward_input(input)?))
+    }
+}
+impl<U,O,LI,D,const M: usize> BatchBackward<U> for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug + BatchDataType,
+          D: Device<U> + DeviceInput<U,O>,
+          <LI as BatchDataType>::Type: Debug,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type BatchLossInput = <LI as BatchDataType>::Type;
+    type BatchLossOutput = <LI as BatchDataType>::Type;
+
+    fn batch_backward(&mut self, input: Self::BatchLossInput, _: Self::BatchOutStack)
+                      -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        Ok((input,Nil))
+    }
+}
+impl<U,O,LI,D,const M: usize> OnStep for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
+    fn on_step(&mut self, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+    fn on_frequently_step(&mut self, _: usize, _: usize) -> Result<(), TrainingError> {
+        Ok(())
+    }
+}
+impl<U,O,LI,D,const M: usize> PersistProgress<TextFilePersistence,Specialized> for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr + Sized,
+          D: Device<U>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
+    fn load_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), TrainingError> {
+        Ok(())
+    }
+
+    fn save_progress(&mut self, _: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+impl<T,U,O,LI,D,const M: usize> PersistProgress<T,Linear> for QuantizedInputLayer<U,O,LI,D,M>
+    where T: LinearPersistence<U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> {
+    fn load_progress(&mut self, _: &mut T) -> Result<(), TrainingError> {
+        Ok(())
+    }
+
+    fn save_progress(&mut self, _: &mut T) -> Result<(), PersistenceError> {
+        Ok(())
+    }
+}
+impl<U,O,LI,D,const M: usize> InputScale for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          D: Device<U> {
+    fn scale_mean(&self) -> f32 {
+        1.
+    }
+}
+impl<U,O,LI,D,const M: usize> MaxInputValue for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          D: Device<U> {
+    type Scalar = usize;
+    fn max_input_value(&self) -> usize {
+        M
+    }
 }

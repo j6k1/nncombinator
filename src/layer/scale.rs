@@ -114,7 +114,7 @@ impl<U,P,D,I,PI,const N:usize> Forward<PI,Result<PI,EvaluateError>> for InverseS
           PI: Debug + BatchDataType,
           <PI as BatchDataType>::Type: Debug + BatchSize {
     fn forward(&self,input:&PI) -> Result<PI,EvaluateError> {
-        self.device.inverse_scaling(self.parent.scale(),input)
+        self.device.scaling(self.parent.scale(),input)
     }
 }
 impl<U,P,D,I,PI,const N:usize> ForwardAll for InverseScalingLayer<U,P,D,I,PI,N>
@@ -162,7 +162,7 @@ impl<U,P,D,I,PI,const N:usize> Backward<U,PI,Result<PI,TrainingError>> for Inver
           PI: Debug + BatchDataType + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
     fn backward(&mut self, input: PI) -> Result<PI,TrainingError> {
-        self.device.scaling(self.parent.scale(),&input)
+        Ok(self.device.scaling(self.parent.scale(),&input)?)
     }
 }
 impl<U,P,D,I,PI,const N:usize> BackwardAll<U> for InverseScalingLayer<U,P,D,I,PI,N>
@@ -288,7 +288,7 @@ impl<U,P,D,I,PI,const N:usize> BatchForward for InverseScalingLayer<U,P,D,I,PI,N
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         let input = self.parent.batch_forward(input)?;
 
-        self.device.batch_inverse_scaling(self.parent.scale(),&input)
+        self.device.batch_scaling(self.parent.scale(),&input)
     }
 }
 impl<U,P,D,I,PI,const N:usize> BatchPreTrainBase for InverseScalingLayer<U,P,D,I,PI,N>

@@ -447,6 +447,12 @@ pub trait OutputScale {
     /// output scale.
     fn scale(&self) -> &Self::Scale;
 }
+/// A trait that represents the maximum value of the input passed from this layer to the next layer
+pub trait MaxInputValue {
+    type Scalar: Clone + Copy + Debug;
+    /// maximum value of the input passed from this layer to the next layer.
+    fn max_input_value(&self) -> Self::Scalar;
+}
 /// A trait representing the weight type of inputs used in the implementation of various layers
 pub trait InputTensorScalar {
     type Scalar: Clone + Copy + Debug;

@@ -23,6 +23,7 @@ pub mod logging;
 pub mod batchnormalization;
 pub mod bias;
 pub mod scale;
+pub mod quantization;
 
 /// Differential input
 #[derive(Debug)]

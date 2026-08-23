@@ -6,7 +6,7 @@ use crate::{Cons, Never, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight, MaxInputValue};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight, MaxInputValue, PreTrainBase};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 pub struct InputLayer<U,O,LI,D>
@@ -74,14 +74,21 @@ impl<U,O,LI,D> ForwardAll for InputLayer<U,O,LI,D>
         Ok(self.device.forward_input(input)?)
     }
 }
+impl<U,O,LI,D> PreTrainBase for InputLayer<U,O,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type PreOutput = <D as DeviceInput<U, O>>::Output;
+    type OutStack = Cons<Nil, Self::PreOutput>;
+}
 impl<U,O,LI,D> PreTrain for InputLayer<U,O,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug,
           D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {
-    type PreOutput = <D as DeviceInput<U,O>>::Output;
-    type OutStack = Cons<Nil,Self::PreOutput>;
 
     fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError> {
         Ok(Cons(Nil,self.device.forward_input(input)?))
@@ -307,6 +314,17 @@ impl<U,O,DI,PO,LI,D> PartialForward for DiffInputLayer<U,O,DI,PO,LI,D>
         unreachable!()
     }
 }
+impl<U,O,DI,PO,LI,D> PreTrainBase for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type PreOutput = <D as DeviceInput<U, O>>::Output;
+    type OutStack = Cons<Nil, Self::PreOutput>;
+}
 impl<U,O,DI,PO,LI,D> PreTrain for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
@@ -315,8 +333,6 @@ impl<U,O,DI,PO,LI,D> PreTrain for DiffInputLayer<U,O,DI,PO,LI,D>
           LI: Debug,
           D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {
-    type PreOutput = <D as DeviceInput<U,O>>::Output;
-    type OutStack = Cons<Nil,Self::PreOutput>;
 
     fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError> {
         Ok(Cons(Nil,self.device.forward_input(input)?))
@@ -455,31 +471,37 @@ impl<U,O,LI,D,const M: usize> ForwardAll for QuantizedInputLayer<U,O,LI,D,M>
         Ok(self.device.forward_input(input)?)
     }
 }
+impl<U,O,LI,D,const M: usize> PreTrainBase for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type PreOutput = <D as DeviceInput<U, O>>::Output;
+    type OutStack = Cons<Nil, Self::PreOutput>;
+}
 impl<U,O,LI,D,const M: usize> PreTrain for QuantizedInputLayer<U,O,LI,D,M>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug,
           D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {
-    type PreOutput = <D as DeviceInput<U,O>>::Output;
-    type OutStack = Cons<Nil,Self::PreOutput>;
-
     fn pre_train(&self, input:Self::Input) -> Result<Self::OutStack, EvaluateError> {
         Ok(Cons(Nil,self.device.forward_input(input)?))
     }
 }
-impl<U,O,LI,D,const M: usize> BackwardAll<U> for QuantizedInputLayer<U,O,LI,D,M>
+impl<U,O,LI,D,const M: usize> BackwardAll<f32> for QuantizedInputLayer<U,O,LI,D,M>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug,
-          D: Device<U> + DeviceInput<U,O>,
+          D: Device<U> + DeviceInput<U,O> + DeviceInput<f32,O>,
           <O as BatchDataType>::Type: Debug + 'static {
-    type LossInputScalar = U;
+    type LossInputScalar = f32;
     type LossInput = LI;
     type LossOutput = LI;
 
     fn backward_all(&mut self, input: Self::LossInput, _:Self::OutStack)
-                    -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+                    -> Result<(<Self as BackwardAll<f32>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
 }
@@ -534,18 +556,18 @@ impl<U,O,LI,D,const M: usize> BatchPreTrain for QuantizedInputLayer<U,O,LI,D,M>
         Ok(Cons(Nil,self.device.batch_forward_input(input)?))
     }
 }
-impl<U,O,LI,D,const M: usize> BatchBackward<U> for QuantizedInputLayer<U,O,LI,D,M>
+impl<U,O,LI,D,const M: usize> BatchBackward<f32> for QuantizedInputLayer<U,O,LI,D,M>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug + BatchDataType,
-          D: Device<U> + DeviceInput<U,O>,
+          D: Device<U> + DeviceInput<U,O> + DeviceInput<f32,O>,
           <LI as BatchDataType>::Type: Debug,
           <O as BatchDataType>::Type: Debug + 'static {
     type BatchLossInput = <LI as BatchDataType>::Type;
     type BatchLossOutput = <LI as BatchDataType>::Type;
 
     fn batch_backward(&mut self, input: Self::BatchLossInput, _: Self::BatchOutStack)
-                      -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+                      -> Result<(<Self as BatchBackward<f32>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
 }

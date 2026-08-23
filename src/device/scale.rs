@@ -13,7 +13,7 @@ pub trait DeviceScale<U,IO,const N: usize>
           IO: BatchDataType + Debug,
           <IO as BatchDataType>::Type: BatchSize + Debug {
     type Scale;
-    /// Forward propagation calculation.
+    /// inverse scaling calculation.
     ///
     /// # Arguments
     /// * `scale` - input scale
@@ -24,8 +24,7 @@ pub trait DeviceScale<U,IO,const N: usize>
     /// This function may return the following errors
     /// * [`EvaluateError`]
     fn inverse_scaling<'a>(&self, scale: &'a Self::Scale, input: &'a IO) -> Result<IO, EvaluateError>;
-
-    /// Error back propagation calculation.
+    /// scaling calculation.
     ///
     /// # Arguments
     /// * `scale` - input scale
@@ -36,8 +35,17 @@ pub trait DeviceScale<U,IO,const N: usize>
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn scaling<'a>(&self, scale: &'a Self::Scale, input: &'a IO) -> Result<IO, EvaluateError>;
-
-    /// Forward propagation calculation in batch.
+    /// Duplicate the input exactly as it is and return it
+    ///
+    /// # Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn identity<'a>(&self, input: &'a IO) -> Result<IO, EvaluateError>;
+    /// batch inverse scaling calculation in batch.
     ///
     /// # Arguments
     /// * `scale` - input scale
@@ -49,8 +57,7 @@ pub trait DeviceScale<U,IO,const N: usize>
     /// * [`TrainingError`]
     fn batch_inverse_scaling<'a>(&self, scale: &'a Self::Scale, input: &'a <IO as BatchDataType>::Type)
                                  -> Result<<IO as BatchDataType>::Type, TrainingError>;
-
-    /// Error back propagation calculation in batch.
+    /// batch scaling calculation in batch.
     ///
     /// # Arguments
     /// * `scale` - input scale
@@ -62,6 +69,16 @@ pub trait DeviceScale<U,IO,const N: usize>
     /// * [`TrainingError`]
     fn batch_scaling<'a>(&self, scale: &'a Self::Scale, input: &'a <IO as BatchDataType>::Type)
                          -> Result<<IO as BatchDataType>::Type, TrainingError>;
+    /// Duplicate the input exactly as it is and return it
+    ///
+    /// # Arguments
+    /// * `input` - input
+    ///
+    /// # Errors
+    ///
+    /// This function may return the following errors
+    /// * [`TrainingError`]
+    fn batch_identity<'a>(&self, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError>;
 }
 impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -70,7 +87,7 @@ impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
           IO: From<Arr<U,N>>,
           Arr<U,N>: From<IO>,
           SerializedVec<U,Arr<U,N>>: IntoConverter,
-          <IO as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          <IO as BatchDataType>::Type: Clone + TryFrom<<SerializedVec<U,Arr<U,N>> as IntoConverter>::Converter,Error=TypeConvertError>,
           for<'a> Arr<U,N>: SliceSize + AsView<'a,ViewType=ArrView<'a,U,N>> + MakeView<'a,U> + Clone + Send + Sync,
           for<'a> Arr<U,N>: Mul<<Arr<U,N> as AsView<'a>>::ViewType,Output=Arr<U,N>> + Send + Sync,
           for<'a> Arr<U,N>: Div<<Arr<U,N> as AsView<'a>>::ViewType,Output=Arr<U,N>> + Send + Sync,
@@ -89,6 +106,10 @@ impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
         Ok((view * scale.as_view()).into())
     }
 
+    fn identity<'a>(&self, input: &'a IO) -> Result<IO, EvaluateError> {
+        Ok(input.clone())
+    }
+
     fn batch_inverse_scaling<'a>(&self, scale: &'a Arr<U,N>, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError> {
         let view  = SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?;
 
@@ -104,5 +125,9 @@ impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
         Ok(SerializedVec::from(view.iter().map(|i| {
             i * scale.as_view()
         }).collect::<Vec<Arr<U,N>>>()).into_converter().try_into()?)
+    }
+
+    fn batch_identity<'a>(&self, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError> {
+        Ok(input.clone())
     }
 }

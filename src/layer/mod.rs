@@ -1,5 +1,6 @@
 //! The various layers that make up a neural network and the traits they implement
 
+use std::error::Error;
 use std::fmt::Debug;
 use crate::device::*;
 use crate::{Stack};
@@ -12,6 +13,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::DataTypeInfo;
 #[cfg(feature = "cuda")]
 use crate::cuda::ToCuda;
+use crate::mapper::{DataMapper, MapperBuilder};
 use crate::persistence::PersistenceType;
 
 pub mod input;
@@ -119,7 +121,7 @@ pub trait ForwardAll {
     fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError>;
 }
 /// Trait defining the implementation of error back propagation in neural networks
-pub trait BackwardAll<SO>: PreTrain + UpdateWeight
+pub trait BackwardAll<SO>: PreTrainBase + UpdateWeight
     where SO: Clone + Copy + Debug {
     /// Loss input scalar type
     type LossInputScalar: Clone + Copy + Debug;
@@ -169,12 +171,16 @@ pub trait Backward<U,I,O> {
     /// * `input` - loss
     fn backward(&mut self, input:I) -> O;
 }
+/// A trait that defines the relevant implementation types for calculating the results of forward propagation
+/// before processing error backpropagation in a neural network.
 /// Trait that defines the process of forward propagation performed prior to the process of error back propagation.
-pub trait PreTrain: ForwardAll {
+pub trait PreTrainBase {
     /// The type of output that is piled on the stack during the error back propagation process.
     type PreOutput: Debug + 'static;
     /// Type of object to keep the results of forward propagation needed to perform error back propagation.
     type OutStack: Stack<Head=Self::PreOutput> + Debug + Sized;
+}
+pub trait PreTrain: PreTrainBase + ForwardAll {
     /// Perform forward propagation required to perform error back propagation
     /// # Arguments
     /// * `input` - input
@@ -325,7 +331,7 @@ pub trait BatchLoss<SO>: BatchBackward<SO> + Loss<SO>
 /// Trait that defines the relevant type of implementation that
 /// calculates the results of forward propagation prior to processing
 /// the error back propagation of the neural network by batch processing.
-pub trait BatchPreTrainBase: BatchForwardBase + PreTrain {
+pub trait BatchPreTrainBase: PreTrainBase {
     /// The type of output that is piled on the stack during the back-propagation process for errors in a batch run.
     type BatchPreOutput: Debug + 'static;
     /// Type of object to keep the results of forward propagation
@@ -443,10 +449,18 @@ pub trait InputScale {
     }
 }
 /// A trait that represents the output scale
-pub trait OutputScale {
+pub trait OutputScale<D>: ForwardAll {
     type Scale: Debug + 'static;
+    type MapperBuilder<'a>: Debug + MapperBuilder<'a,Self::Output,Self::Scale,D,Error=Self::MappedScaleError> + 'static where Self: 'a;
+    type MappedScaleError: Error + Debug + 'static;
     /// output scale.
-    fn scale(&self) -> &Self::Scale;
+    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> where Self: 'a;
+}
+/// A trait that represents the output scale
+pub trait BatchOutputScale<D>: OutputScale<D> + BatchForwardBase {
+    type BatchMapperBuilder<'a>: Debug + MapperBuilder<'a,Self::BatchOutput,Self::Scale,D,Error=Self::MappedScaleError> + 'static where Self: 'a;
+    /// output scale.
+    fn get_batch_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> where Self: 'a;
 }
 /// A trait that represents the maximum value of the input passed from this layer to the next layer
 pub trait MaxInputValue {

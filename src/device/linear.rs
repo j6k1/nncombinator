@@ -206,9 +206,11 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
           [();NO]: TensorSize {
     type Scale: Debug + OutputTensorScalar<Scalar=f32> + OutputTensorSize<NO> + 'static;
     type Output: BatchDataType + Debug + OutputTensorScalar<Scalar=U> + OutputTensorSize<NO> + 'static;
+    type LossInput: BatchDataType + Debug + OutputTensorScalar<Scalar=f32> + OutputTensorSize<NO> + 'static;
     type BatchOutput: Debug + 'static;
-    type LossOutput: BatchDataType + InputTensorScalar<Scalar=U> + Debug + 'static;
-    type BatchLossOutput: Debug + 'static;
+    type BatchLossInput: Debug + OutputTensorScalar<Scalar=f32> + 'static;
+    type LossOutput: BatchDataType + OutputTensorScalar<Scalar=f32> + Debug + 'static;
+    type BatchLossOutput: Debug + OutputTensorScalar<Scalar=f32> + 'static;
     /// Perform generalization of scale data
     /// # Arguments
     /// * `bias` - Set of biases applied to the output of the linear layer
@@ -261,7 +263,8 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_linear<'a>(&self, units:&T, input:&'a Self::Output, scale: f32, output_scale: &'a Self::Scale) -> Result<Self::LossOutput, TrainingError>;
+    fn backward_linear<'a>(&self, units:&T, input:&'a Self::LossInput,
+                           output_scale: &'a Self::Scale) -> Result<Self::LossOutput, TrainingError>;
     /// Calculate the gradient of the weights
     /// # Arguments
     /// * `o` - Input values from upper layers
@@ -272,7 +275,7 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn backward_weight_gradient<'a>(&self, o: &'a I,
-                                    loss: &'a Self::Output,
+                                    loss: &'a Self::LossInput,
                                     scale: f32,
                                     output_scale: &'a Self::Scale) -> Result<T, TrainingError>;
     /// Calculate the gradient of the bias weights
@@ -283,8 +286,8 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_bias_weight_gradient<'a>(&self, loss: Self::Output, output_scale: &'a Self::Scale)
-        -> Result<B, TrainingError>;
+    fn backward_bias_weight_gradient<'a>(&self, loss: Self::LossInput, output_scale: &'a Self::Scale)
+                                         -> Result<B, TrainingError>;
     /// Forward propagation calculation in batch
     /// # Arguments
     /// * `bias` - bias weights
@@ -308,8 +311,7 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward_linear<'a>(&self, units: &T, input: &'a Self::BatchOutput,
-                                 scale: f32,
+    fn batch_backward_linear<'a>(&self, units: &T, input: &'a Self::BatchLossInput,
                                  output_scale: &'a Self::Scale)
                                  -> Result<Self::BatchLossOutput, TrainingError>;
     /// Calculate the gradient of the weights in batch
@@ -322,15 +324,16 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn batch_backward_weight_gradient<'a>(&self, o: &'a <I as BatchDataType>::Type,
-                                          loss: &'a Self::BatchOutput,
+                                          loss: &'a Self::BatchLossInput,
                                           scale: f32,
                                           output_scale: &'a Self::Scale)
                                           -> Result<T, TrainingError>;
     /// convolutional calculation
     /// # Arguments
     /// * `loss` - loss
-    fn batch_backward_bias_gradient<'a>(&self, loss: &'a Self::BatchOutput, output_scale: &'a Self::Scale)
-        -> Result<B,TrainingError>;
+    fn batch_backward_bias_gradient<'a>(&self,
+                                        loss: &'a Self::BatchLossInput, output_scale: &'a Self::Scale)
+                                        -> Result<B,TrainingError>;
 }
 impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,I,NI,NO> for DeviceCpu
     where U: Default + Clone + Copy + Debug +
@@ -1300,27 +1303,33 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
           W: Default + Clone + Copy + Debug +
              Add<Output=W> + Mul<Output=W> + AddAssign + MaxValue + Assume<U> + Send + Sync + 'static,
           i32: From<U>,
-          f32: Assume<W>,
+          f32: Assume<W> + Debug + Default + Clone + Copy + Send + Sync,
       I: BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + From<Arr<U,NI>> + Debug + 'static,
       <I as BatchDataType>::Type: Debug + 'static,
       <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
       SerializedVec<U,Arr<U,NI>>: IntoConverter,
       SerializedVec<f32,Arr<f32,NO>>: From<Vec<Arr<f32,NO>>>,
+      <Arr<f32,NI> as BatchDataType>::Type: From<Vec<Arr<f32,NI>>>,
       Arr<U,NO>: InputTensorScalar + OutputTensorScalar<Scalar=U> + OutputTensorSize<NO>,
       Arr2<f32,NI,NO>: Quantizable<W,Quantized=Arr2<W,NI,NO>>,
       Arr<f32,NO>: Quantizable<W,Quantized=Arr<W,NO>> + TryFrom<Vec<f32>,Error=TypeConvertError>,
+      Arr<f32,NI>: OutputTensorScalar<Scalar=f32> + BatchDataType<Type=SerializedVec<f32,Arr<f32,NI>>>,
+      <Arr<f32,NI> as BatchDataType>::Type: Debug + OutputTensorScalar<Scalar=f32> + 'static,
       [();NI]: TensorSize,
       [();NO]: TensorSize,
       f32: From<U> + Assume<U>,
       i32: From<U> + Assume<U>,
       for<'a> ArrView<'a,U,NI>: From<&'a I>,
       for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+      for<'a> SerializedVecView<'a,f32,Arr<f32,NI>>: TryFrom<&'a <Arr<f32,NI> as BatchDataType>::Type,Error=TypeConvertError>,
       Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO> {
     type Scale = Arr<f32,NO>;
     type Output = Arr<U,NO>;
     type BatchOutput = <Arr<U,NO> as BatchDataType>::Type;
-    type LossOutput = I;
-    type BatchLossOutput = <I as BatchDataType>::Type;
+    type LossInput = Arr<f32,NO>;
+    type BatchLossInput = <Arr<f32,NO> as BatchDataType>::Type;
+    type LossOutput = Arr<f32,NI>;
+    type BatchLossOutput = <Arr<f32,NI> as BatchDataType>::Type;
     #[inline]
     fn generalization_scale(&self, scale: &Arr<f32,NO>) -> Result<Arr<f32,NO>, GeneralizationError> {
         Ok(scale.clone())
@@ -1393,44 +1402,42 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
     }
 
     #[inline]
-    fn backward_linear<'a>(&self, units: &Arr2<f32,NI,NO>, input: &'a Arr<U,NO>,
-                           scale: f32,
-                           output_scale: &'a Arr<f32,NO>) -> Result<I, TrainingError> {
-        Ok(Arr::<U,NI>::try_from(units.iter().map(|u| {
-            (u.iter().zip(input.iter()).zip(output_scale.iter())
-                .map(|((&w,&l),&s)| w * l.assume() as f32 * s).fold(0.0, |acc,g|{
+    fn backward_linear<'a>(&self, units: &Arr2<f32,NI,NO>, input: &'a Arr<f32,NO>,
+                           output_scale: &'a Arr<f32,NO>) -> Result<Arr<f32,NI>, TrainingError> {
+        Ok(Arr::<f32,NI>::try_from(units.iter().map(|u| {
+            u.iter().zip(input.iter()).zip(output_scale.iter())
+                .map(|((&w,&l),&s)| w * l * s).fold(0.0, |acc,g|{
                 acc + g
-            }) * scale).assume()
-        }).collect::<Vec<U>>()).map_err(|e| TrainingError::from(e))?.into())
+            })
+        }).collect::<Vec<f32>>()).map_err(|e| TrainingError::from(e))?.into())
     }
 
     #[inline]
-    fn backward_weight_gradient<'a>(&self, o: &'a I, loss: &'a Arr<U,NO>,
+    fn backward_weight_gradient<'a>(&self, o: &'a I, loss: &'a Arr<f32,NO>,
                                     scale: f32, output_scale: &'a Arr<f32,NO>) -> Result<Arr2<f32,NI,NO>, TrainingError> {
         Ok(ArrView::<'a,U,NI>::from(o).iter().cloned().map(|o| {
             loss.iter().cloned().zip(output_scale.iter().cloned()).map(|(l,s)| {
-                ((o.assume() as f32 * scale) * (l.assume() as f32 * s)).into()
+                ((o.assume() as f32 * scale) * (l * s)).into()
             }).collect::<Vec<f32>>().try_into()
         }).collect::<Result<Vec<Arr<f32,NO>>,_>>()?.try_into().map_err(|e| TrainingError::from(e))?)
     }
 
-    fn backward_bias_weight_gradient<'a>(&self, loss: Self::Output, output_scale: &'a Arr<f32,NO>) -> Result<Arr<f32,NO>, TrainingError> {
-        Ok(loss.iter().cloned().zip(output_scale.iter().cloned()).map(|(l,s)| l.assume() as f32 * s).collect::<Vec<f32>>().try_into()?)
+    fn backward_bias_weight_gradient<'a>(&self, loss: Arr<f32,NO>, output_scale: &'a Arr<f32,NO>) -> Result<Arr<f32,NO>, TrainingError> {
+        Ok(loss.iter().cloned().zip(output_scale.iter().cloned()).map(|(l,s)| l * s).collect::<Vec<f32>>().try_into()?)
     }
     #[inline]
     fn batch_backward_linear<'a>(&self, units: &Arr2<f32,NI,NO>,
-                                 input: &'a SerializedVec<U,Arr<U,NO>>,
-                                 scale: f32,
+                                 input: &'a SerializedVec<f32,Arr<f32,NO>>,
                                  output_scale: &'a Arr<f32,NO>)
-                                 -> Result<<I as BatchDataType>::Type, TrainingError> {
-        Ok(SerializedVec::<U,Arr<U,NI>>::from(input.par_iter().map(|l| {
+                                 -> Result<<Arr<f32,NI> as BatchDataType>::Type, TrainingError> {
+        Ok(SerializedVec::<f32,Arr<f32,NI>>::from(input.par_iter().map(|l| {
             units.iter().map(|u| {
-                (u.iter().zip(l.iter()).zip(output_scale.iter())
-                    .map(|((&w,&l),&s)| w * l.assume() as f32 * s).fold(0., |acc,g|{
+                u.iter().zip(l.iter()).zip(output_scale.iter())
+                    .map(|((&w,&l),&s)| w * l * s).fold(0., |acc,g| {
                     acc + g
-                }) * scale).assume()
-            }).collect::<Vec<U>>().try_into()
-        }).collect::<Result<Vec<Arr<U,NI>>,_>>()?).into_converter().try_into()?)
+                })
+            }).collect::<Vec<f32>>().try_into()
+        }).collect::<Result<Vec<Arr<f32,NI>>,_>>()?).into())
     }
 
     #[inline]
@@ -1454,14 +1461,14 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
 
     #[inline]
     fn batch_backward_weight_gradient<'a>(&self, o: &'a <I as BatchDataType>::Type,
-                                          loss: &'a SerializedVec<U,Arr<U,NO>>,
+                                          loss: &'a SerializedVec<f32,Arr<f32,NO>>,
                                           scale: f32,
                                           output_scale: &'a Arr<f32,NO>)
                                           -> Result<Arr2<f32,NI,NO>, TrainingError> {
         Ok(SerializedVecView::<'a,U,Arr<U,NI>>::try_from(o)?.par_iter().zip(loss.par_iter()).map(|(o,l)| {
             o.iter().cloned().map(|o| {
                 l.iter().cloned().zip(output_scale.iter().cloned()).map(|(l,s)| {
-                    (o.assume() as f32 * scale) * (l.assume() as f32 * s)
+                    (o.assume() as f32 * scale) * (l * s)
                 }).collect::<Vec<f32>>().try_into()
             }).collect::<Result<Vec<Arr<f32,NO>>,_>>()?.try_into()
         }).reduce(|| Ok(Arr2::<f32,NI,NO>::new()), | acc, g | {
@@ -1479,11 +1486,11 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
 
     #[inline]
     fn batch_backward_bias_gradient<'a>(&self,
-                                        loss: &'a SerializedVec<U,Arr<U,NO>>,
+                                        loss: &'a SerializedVec<f32,Arr<f32,NO>>,
                                         output_scale: &'a Arr<f32,NO>) -> Result<Arr<f32,NO>,TrainingError> {
         Ok(self.reduce(&loss.iter().map(|l| {
             l.iter().cloned().zip(output_scale.iter().cloned()).map(|(l,s)| {
-                l.assume() as f32 * s
+                l * s
             }).collect::<Vec<f32>>().try_into()
         }).collect::<Result<Vec<Arr<f32,NO>>,_>>()?.into())?)
     }

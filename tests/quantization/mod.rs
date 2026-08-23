@@ -9,12 +9,12 @@ use nncombinator::arr::Arr;
 use nncombinator::device::DeviceCpu;
 use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll};
-use nncombinator::layer::bridge::BridgeLayerBuilder;
 use nncombinator::layer::input::{QuantizedInputLayer};
 use nncombinator::layer::linear::{QuantizedLinearLayerBuilder};
 use nncombinator::layer::logging::LoggingLayer;
 use nncombinator::layer::scale::InverseScalingLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
+use nncombinator::layer::quantization::DequantizeLayerBuilder;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::optimizer::AdamWBuilder;
 use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_pre_train, assert_update_weight};
@@ -117,7 +117,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);
 
-        BridgeLayerBuilder::<f32,Arr<f32,10>>::new().build(l, &device).unwrap()
+        DequantizeLayerBuilder::<f32,Arr<f32,10>>::new().build(l, &device).unwrap()
     }).add_layer(|l| {
         let mut l = LoggingLayer::new(l,&device);
 

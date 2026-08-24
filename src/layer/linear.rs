@@ -1,7 +1,7 @@
 //! Implementation of all full connected layers
 use std::fmt::Debug;
 use std::marker::{PhantomData};
-use std::ops::{Mul};
+use std::ops::{Deref, Mul};
 use std::str::FromStr;
 use crate::arr::{Arr, Arr2, IntoConverter};
 use crate::{Cons, Stack};
@@ -1696,7 +1696,7 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> InputScale for Quantize
         self.scale_mean
     }
 }
-impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputScale<D> for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
+impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputScale for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<f32,LossInput=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput,LossInputScalar=f32> +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + MaxInputValue<Scalar=usize>,
@@ -1710,15 +1710,13 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputScale<D> for Quan
       <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
       C: Quantizable<W>,
       BC: Quantizable<W>,
-      for<'a> <Self as ForwardAll>::Output: Scaling<'a,<Self as ForwardAll>::Output,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,D,Error=TypeConvertError>,
-      for<'a> <D as DeviceQuantizedLinear<U, W, C, BC, PI, NI, NO>>::Output: Scaling<'a, <D as DeviceQuantizedLinear<U, W, C, BC, PI, NI, NO>>::Scale, <D as DeviceQuantizedLinear<U, W, C, BC, PI, NI, NO>>::Scale, D>,
       [();NI]: TensorSize,
       [();NO]: TensorSize {
+    type Device = D;
     type Scale = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale;
     type ScaledOutput = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale;
-    type MapperBuilder<'a,'b> = ScalingMapperBuilder<'a,'b,<Self as ForwardAll>::Output,Self::Scale,Self::ScaledOutput,D>;
-    type MappedScaleError = <<Self as ForwardAll>::Output as Scaling<Self::Scale,Self::ScaledOutput,D>>::Error;
-    fn get_scale_mapper_builder<'a,'b>(&'a self) -> Self::MapperBuilder<'a,'b> {
+    type MapperBuilder<'a> = ScalingMapperBuilder<'a,<Self as ForwardAll>::Output,Self::Scale,Self::ScaledOutput>;
+    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> {
         ScalingMapperBuilder::new(&self.scale)
     }
 }

@@ -471,18 +471,18 @@ impl<U,P,I,PI,D> InputScale for LoggingLayer<U,P,I,PI,D>
         self.parent.scale_mean()
     }
 }
-impl<U,P,I,PI,D> OutputScale<D> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,D> OutputScale for LoggingLayer<U,P,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> +
-             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale<D> +
+             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U>,
       PI: Debug + 'static + BatchDataType,
       I: Debug + Send + Sync {
-    type Scale = <P as OutputScale<D>>::Scale;
-    type ScaledOutput = <P as OutputScale<D>>::ScaledOutput;
-    type MapperBuilder<'a> = <P as OutputScale<D>>::MapperBuilder<'a>;
+    type Scale = <P as OutputScale>::Scale;
+    type ScaledOutput = <P as OutputScale>::ScaledOutput;
+    type MapperBuilder<'a> = <P as OutputScale>::MapperBuilder<'a>;
     fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> {
         self.parent.get_scale_mapper_builder()
     }

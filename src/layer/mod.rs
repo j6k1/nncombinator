@@ -450,13 +450,14 @@ pub trait InputScale {
 }
 /// A trait that represents the output scale
 pub trait OutputScale: ForwardAll {
+    /// Device Used in This Layer    type Device;
     /// output scale.
     type Scale: Debug + 'static;
     /// scaled output.
     type ScaledOutput: Debug + 'static;
     /// Data Mapper Builder for Scaling.
-    type MapperBuilder<'a>: MapperBuilder<'a,<Self as ForwardAll>::Output,Self::ScaledOutput> where Self: 'a;
-    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a>;
+    type MapperBuilder<'a>: MapperBuilder<'a,<Self as ForwardAll>::Output,Self::ScaledOutput,Self::Device> where Self: 'a;
+    fn get_scale_mapper_builder<'a,D>(&'a self) -> Self::MapperBuilder<'a>;
 }
 /// A trait that represents the output scale
 pub trait BatchOutputScale: OutputScale + BatchForwardBase {

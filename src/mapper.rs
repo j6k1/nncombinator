@@ -10,39 +10,42 @@ use crate::arr::{Arr, ArrView, SerializedVec};
 use crate::cast::Assume;
 use crate::error::TrainingError;
 
-pub trait DataMapper<'a,'b,I,O,D>: Deref<Target=O> + Sized + 'a + 'b
+pub trait DataMapper<'b,I,O,D>: Deref<Target=O> + Sized + 'b
     where I: Debug + Sized + 'b,
           O: Debug + Sized + 'b,
           D: Sized + 'b {
 }
-pub struct IdentityMapper<'a,'b,I>
+pub struct IdentityMapper<'b,I,D>
     where I: Debug + Sized + 'b,
-          Self: Sized + 'a + 'b + Deref<Target=I> {
+          D: Sized + 'b,
+          Self: Sized + 'b {
     source: &'b I,
-    l: PhantomData<&'a ()>{
+    device: PhantomData<D>,
 }
-impl<'a,'b,I> IdentityMapper<'a,'b,I>
+impl<'b,I,D> IdentityMapper<'b,I,D>
     where I: Debug + Sized + 'b,
-          Self: Sized + 'a + 'b + Deref<Target=I> {
+          D: Sized + 'b,
+          Self: Sized + 'b {
     pub fn new(source: &'b I) -> Self {
         IdentityMapper {
             source:source,
-            l: PhantomData::<&'a ()>,
+            device:PhantomData::<D>,
         }
     }
 }
-impl<'a,'b,I> Deref for IdentityMapper<'a,'b,I>
+impl<'b,I,D> Deref for IdentityMapper<'b,I,D>
     where I: Debug + Sized + 'b,
-          Self: Sized + 'a + 'b {
+          D: Sized + 'b,
+          Self: Sized + 'b {
     type Target = I;
     fn deref(&self) -> &Self::Target {
         self.source
     }
 }
-impl<'a,'b,I,D> DataMapper<'a,'b,I,I,D> for IdentityMapper<'a,'b,I>
+impl<'b,I,D> DataMapper<'b,I,I,D> for IdentityMapper<'b,I,D>
     where I: Debug + Sized + 'b,
           D: Sized + 'b,
-          Self: Sized + 'a + 'b {}
+          Self: Sized + 'b {}
 pub struct ScalingMapper<'a,'b,I,S,O,D>
     where I: Debug + Sized + 'b,
           O: Debug + Sized + 'b,
@@ -57,7 +60,8 @@ impl<'a,'b,I,S,O,D> ScalingMapper<'a,'b,I,S,O,D>
     where I: Scaling<S,O,D> + Debug + Sized + 'b,
           O: Debug + Sized + 'b,
           S: Debug + Sized + 'a,
-          D: Sized + 'b {
+          D: Sized + 'b,
+          TrainingError: From<<I as Scaling<S,O,D>>::Error> {
     pub fn new(device:&'b D,source: &'b I,scale: &'a S) -> Result<ScalingMapper<'a,'b,I,S,O,D>,<I as Scaling<S,O,D>>::Error> {
         Ok(ScalingMapper {
             source:source,
@@ -68,7 +72,7 @@ impl<'a,'b,I,S,O,D> ScalingMapper<'a,'b,I,S,O,D>
     }
 }
 impl<'a,'b,I,S,O,D> Deref for ScalingMapper<'a,'b,I,S,O,D>
-    where I: Scaling<S,O,D> + Debug + Sized + 'b,
+    where I: Debug + Sized + 'b,
           O: Debug + Sized + 'b,
           S: Debug + Sized + 'a,
           D: Sized + 'b,
@@ -78,41 +82,42 @@ impl<'a,'b,I,S,O,D> Deref for ScalingMapper<'a,'b,I,S,O,D>
         &self.dst
     }
 }
-impl<'a,'b,I,S,O,D> DataMapper<'a,'b,I,O,D> for ScalingMapper<'a,'b,I,S,O,D>
+impl<'a,'b,I,S,O,D> DataMapper<'b,I,O,D> for ScalingMapper<'a,'b,I,S,O,D>
     where I: Scaling<S,O,D> + Debug + Sized + 'b,
           O: Debug + Sized + 'b,
           S: Debug + Sized + 'a,
           D: Sized + 'b,
-          Self: Sized + 'a + 'b + Deref<Target=O>{}
-pub trait MapperBuilder<'a,I,O>: Sized + 'a
-    where TrainingError: From<Self::Error> {
-    type Error: Error;
-    type Mapper<'b,D>: DataMapper<'a,'b,I,O,D> where I: Debug + Sized + 'b, O: Debug + Sized + 'b, D: Sized + 'b;
-    fn build<'b,D>(&self,device:&'b D,source: &'b I) -> Result<Self::Mapper<'b,D>,Self::Error>;
+          Self: Sized + 'a + 'b,
+          TrainingError: From<<I as Scaling<S,O,D>>::Error> {}
+pub trait MapperBuilder<'a,I,O,D>: Sized
+    where for<'b> I: Debug + Sized + 'b,
+          for<'b> O: Debug + Sized + 'b,
+          for<'b> D: Sized + 'b {
+    type Mapper<'b: 'a>: DataMapper<'b,I,O,D> where Self: 'b;
+    fn build<'b>(&self,device:&'b D,source: &'b I) -> Result<Self::Mapper<'b>,TrainingError>;
 }
 #[derive(Debug)]
-pub struct IdentityMapperBuilder<'a,I> {
-    i: PhantomData<I>,
-    lt: PhantomData<&'a ()>,
+pub struct IdentityMapperBuilder<I> {
+    i: PhantomData<I>
 }
-impl<'a,I> IdentityMapperBuilder<'a,I> {
-    pub fn new() -> IdentityMapperBuilder<'a,I> {
+impl<I> IdentityMapperBuilder<I> {
+    pub fn new() -> IdentityMapperBuilder<I> {
         IdentityMapperBuilder {
-            i: PhantomData::<I>,
-            lt: PhantomData::<&'a ()>,
+            i: PhantomData::<I>
         }
     }
 }
-impl<'a,I,O> MapperBuilder<'a,I,O> for IdentityMapperBuilder<'a,I>
-    where for<'b> IdentityMapper<'a,'b,I>: 'a + 'b + Sized,
-          for<'b> I: 'b + Debug + Sized {
-    type Error = Infallible;
-    type Mapper<'b,D> = IdentityMapper<'a,'b,I>;
-    fn build<'b,D>(&self, _: &'b D, source: &'b I) -> Result<IdentityMapper<'a,'b,I>, Self::Error> {
+impl<'a,I,D> MapperBuilder<'a,I,I,D> for IdentityMapperBuilder<I>
+    where for<'b> I: 'b + Debug + Sized,
+          for<'b> D: 'b + Sized,
+          TrainingError: From<Infallible> {
+    type Mapper<'b: 'a> = IdentityMapper<'b,I,D> where Self: 'b;
+    fn build<'b>(&self, _: &'b D, source: &'b I) -> Result<IdentityMapper<'b,I,D>,TrainingError> {
         Ok(IdentityMapper::new(source))
     }
 }
-pub trait Scaling<S,O,D> {
+pub trait Scaling<S,O,D>
+    where TrainingError: From<Self::Error> {
     type Error: Error;
     fn scaling(&self,device:&D,scale: &S) -> Result<O,Self::Error>;
 }
@@ -126,7 +131,7 @@ impl<SI,SO,const N:usize> Scaling<Arr<SO,N>,Arr<SO,N>,DeviceCpu> for Arr<SI,N>
     }
 }
 pub struct ScalingMapperBuilder<'a,I,S,O>
-    where I: Debug + Sized,
+    where for<'b> I: Debug + Sized + 'b,
           for<'b> O: Debug + Sized + 'b,
           for<'b> S: Debug + Sized + 'a,
           Self: Sized + 'a {
@@ -135,7 +140,7 @@ pub struct ScalingMapperBuilder<'a,I,S,O>
     source: PhantomData<I>
 }
 impl<'a,I,S,O> ScalingMapperBuilder<'a,I,S,O>
-    where I: Debug + Sized,
+    where for<'b> I: Debug + Sized + 'b,
           for<'b> O: Debug + Sized + 'b,
           S: Debug + Sized + 'a {
     pub fn new(scale:&'a S) -> ScalingMapperBuilder<'a,I,S,O> {
@@ -146,15 +151,16 @@ impl<'a,I,S,O> ScalingMapperBuilder<'a,I,S,O>
         }
     }
 }
-impl<'a,I,S,O> MapperBuilder<'a,I,O> for ScalingMapperBuilder<'a,I,S,O>
-    where for<'b> I: Debug + Sized + 'b,
+impl<'a,I,S,O,D> MapperBuilder<'a,I,O,D> for ScalingMapperBuilder<'a,I,S,O>
+    where for<'b> I: Debug + Sized + Scaling<S,O,D> + 'b,
+          for<'b> S: Debug + Sized + 'a,
           for<'b> O: Debug + Sized + 'b,
+          for<'b> D: Sized + 'b,
           S: Debug + Sized + 'a,
-          for<'b> Self: 'a + 'b + Sized,
-          Self: Sized + 'a + Deref<Target=O> {
-    type Error = TrainingError;
-    type Mapper<'b,D> = ScalingMapper<'a,'b,I,S,O,D>;
-    fn build<'b,D>(&self,device:&'b D,source: &'b I) -> Result<ScalingMapper<'a,'b,I,S,O,D>,Self::Error> {
+          Self: Sized + 'a,
+          TrainingError: From<<I as Scaling<S,O,D>>::Error> {
+    type Mapper<'b: 'a> = ScalingMapper<'a,'b,I,S,O,D> where Self: 'b;
+    fn build<'b>(&self,device:&'b D,source: &'b I) -> Result<ScalingMapper<'a,'b,I,S,O,D>,TrainingError> {
         Ok(ScalingMapper::new(device,source,self.scale)?)
     }
 }

@@ -10,7 +10,7 @@ use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear, DeviceQuantizedLinear};
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, OutputScale, MaxInputValue, PreTrainBase};
-use crate::mapper::{IdentityMapperBuilder, ScalingMapperBuilder};
+use crate::mapper::{IdentityMapperBuilder, MapperBuilder, Scaling, ScalingMapperBuilder};
 use crate::ope::{MaxValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
@@ -1710,11 +1710,15 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputScale<D> for Quan
       <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
       C: Quantizable<W>,
       BC: Quantizable<W>,
+      for<'a> <Self as ForwardAll>::Output: Scaling<'a,<Self as ForwardAll>::Output,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,D,Error=TypeConvertError>,
+      for<'a> <D as DeviceQuantizedLinear<U, W, C, BC, PI, NI, NO>>::Output: Scaling<'a, <D as DeviceQuantizedLinear<U, W, C, BC, PI, NI, NO>>::Scale, <D as DeviceQuantizedLinear<U, W, C, BC, PI, NI, NO>>::Scale, D>,
       [();NI]: TensorSize,
       [();NO]: TensorSize {
     type Scale = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale;
-    type MapperBuilder<'a> where Self: 'a = ScalingMapperBuilder<'a,<Self as ForwardAll>::Output,Self::Scale,D>;
-    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> {
+    type ScaledOutput = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale;
+    type MapperBuilder<'a,'b> = ScalingMapperBuilder<'a,'b,<Self as ForwardAll>::Output,Self::Scale,Self::ScaledOutput,D>;
+    type MappedScaleError = <<Self as ForwardAll>::Output as Scaling<Self::Scale,Self::ScaledOutput,D>>::Error;
+    fn get_scale_mapper_builder<'a,'b>(&'a self) -> Self::MapperBuilder<'a,'b> {
         ScalingMapperBuilder::new(&self.scale)
     }
 }

@@ -1,6 +1,7 @@
 //! Definition of various errors
 use std::{error, fmt, io};
 use std::array::TryFromSliceError;
+use std::convert::Infallible;
 #[cfg(feature = "cuda")]
 use std::ffi::CStr;
 #[cfg(feature = "cuda")]
@@ -56,7 +57,10 @@ pub enum TrainingError {
     /// Error when reading model
     ModelLoadError(ModelLoadError),
     /// Error in specialization
-    SpecializationError(SpecializationError)
+    SpecializationError(SpecializationError),
+    /// An error that will never be instantiated.
+    /// Used in implementations where the result of `TryFrom` and similar methods will never fail.
+    Infallible(Infallible)
 }
 impl fmt::Display for TrainingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -83,6 +87,7 @@ impl fmt::Display for TrainingError {
             TrainingError::FromPrimitiveError(e) => write!(f,"{}",e),
             TrainingError::ModelLoadError(e) => write!(f,"{}",e),
             TrainingError::SpecializationError(e) => write!(f,"{}",e),
+            TrainingError::Infallible(_) => unreachable!(),
         }
     }
 }
@@ -111,6 +116,7 @@ impl error::Error for TrainingError {
             TrainingError::FromPrimitiveError(_) => "Conversion from primitive type failed.",
             TrainingError::ModelLoadError(_) => "An error occurred when loading the model.",
             TrainingError::SpecializationError(_) => "Specialization failed.",
+            TrainingError::Infallible(_) => unreachable!(),
         }
     }
 
@@ -138,6 +144,7 @@ impl error::Error for TrainingError {
             TrainingError::FromPrimitiveError(e) => Some(e),
             TrainingError::ModelLoadError(e) => Some(e),
             TrainingError::SpecializationError(e) => Some(e),
+            TrainingError::Infallible(_) => None,
         }
     }
 }
@@ -258,6 +265,11 @@ impl From<ModelLoadError> for TrainingError {
 impl From<SpecializationError> for TrainingError {
     fn from(err: SpecializationError) -> TrainingError {
         TrainingError::SpecializationError(err)
+    }
+}
+impl From<Infallible> for TrainingError {
+    fn from(err: Infallible) -> TrainingError {
+        unreachable!()
     }
 }
 impl From<io::Error> for ModelLoadError {

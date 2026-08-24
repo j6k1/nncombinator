@@ -437,9 +437,9 @@ impl<U,SO,P,I,PI,CI,D> InputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
         self.parent.scale_mean()
     }
 }
-impl<U,SO,P,I,PI,CI,D> OutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
+impl<U,SO,P,I,PI,CI,D> OutputScale<D> for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale +
+             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale<D> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -447,9 +447,13 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
           I: Debug + Send + Sync {
-    type Scale = <P as OutputScale>::Scale;
-    fn scale(&self) -> Option<&Self::Scale> {
-        self.parent.scale()
+    type Scale = <P as OutputScale<D>>::Scale;
+    type ScaledOutput = <P as OutputScale<D>>::ScaledOutput;
+    type MapperBuilder<'a> = <P as OutputScale<D>>::MapperBuilder<'a>;
+    type MappedScaleError = <P as OutputScale<D>>::MappedScaleError;
+
+    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> {
+        self.parent.get_scale_mapper_builder()
     }
 }
 /// Trait for DequantizeLayer instance creation

@@ -277,7 +277,7 @@ pub trait BatchForwardBase: ForwardAll {
     /// Input to this layer of the neural network for batch execution
     type BatchInput: Debug;
     /// Output from this layer of the neural network for batch execution
-    type BatchOutput: Debug;
+    type BatchOutput: Debug + 'static;
 }
 /// Trait defining the implementation of forward propagation of neural networks by batch processing.
 pub trait BatchForward: BatchForwardBase {
@@ -449,18 +449,22 @@ pub trait InputScale {
     }
 }
 /// A trait that represents the output scale
-pub trait OutputScale<D>: ForwardAll {
-    type Scale: Debug + 'static;
-    type MapperBuilder<'a>: Debug + MapperBuilder<'a,Self::Output,Self::Scale,D,Error=Self::MappedScaleError> + 'static where Self: 'a;
-    type MappedScaleError: Error + Debug + 'static;
+pub trait OutputScale: ForwardAll {
     /// output scale.
-    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> where Self: 'a;
+    type Scale: Debug + 'static;
+    /// scaled output.
+    type ScaledOutput: Debug + 'static;
+    /// Data Mapper Builder for Scaling.
+    type MapperBuilder<'a>: MapperBuilder<'a,<Self as ForwardAll>::Output,Self::ScaledOutput> where Self: 'a;
+    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a>;
 }
 /// A trait that represents the output scale
-pub trait BatchOutputScale<D>: OutputScale<D> + BatchForwardBase {
-    type BatchMapperBuilder<'a>: Debug + MapperBuilder<'a,Self::BatchOutput,Self::Scale,D,Error=Self::MappedScaleError> + 'static where Self: 'a;
-    /// output scale.
-    fn get_batch_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> where Self: 'a;
+pub trait BatchOutputScale: OutputScale + BatchForwardBase {
+    /// Data Mapper Builder for Scaling
+    type BatchMapperBuilder<'a>: MapperBuilder<'a,Self::BatchOutput,Self::BatchScaledOutput> where Self: 'a;
+    /// batch scaled output.
+    type BatchScaledOutput: Debug + 'static;
+    fn get_batch_scale_mapper_builder<'a>(&'a self) -> Self::BatchMapperBuilder<'a> where Self: 'a;
 }
 /// A trait that represents the maximum value of the input passed from this layer to the next layer
 pub trait MaxInputValue {

@@ -6,11 +6,12 @@ use std::str::FromStr;
 use crate::arr::{MakeView, MakeViewMut, SliceSize};
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchSize};
 use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
 use crate::device::bridge::DeviceBridge;
+use crate::mapper::IdentityMapper;
 
 /// Bridge layer Implementation
 pub struct BridgeLayer<U,SO,P,I,PI,CI,D>
@@ -448,13 +449,14 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
           D: Device<U> + DeviceBridge<U,SO,PI,CI>,
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
-          I: Debug + Send + Sync {
-    type Scale = <P as OutputScale>::Scale;
-    type ScaledOutput = <P as OutputScale>::ScaledOutput;
-    type MapperBuilder<'a> = <P as OutputScale>::MapperBuilder<'a> where Self: 'a;
-
-    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> {
-        self.parent.get_scale_mapper_builder()
+          I: Debug + Send + Sync,
+          <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
+    type ScalingDevice = D;
+    type Scale = ();
+    type ScaledOutput = CI;
+    type Mapper<'a> = IdentityMapper<'a,CI,Self::ScalingDevice> where Self: 'a;
+    fn scaling_mapper<'a>(&self, input: &'a CI) -> Result<Self::Mapper<'a>,TrainingError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
     }
 }
 /// Trait for BridgeLayer instance creation

@@ -1,16 +1,18 @@
 //! Implementation of all full connected layers
 use std::fmt::Debug;
 use std::marker::{PhantomData};
-use std::ops::{Deref, Mul};
+use std::ops::{Mul};
 use std::str::FromStr;
 use crate::arr::{Arr, Arr2, IntoConverter};
 use crate::{Cons, Stack};
 use crate::cast::Assume;
 use crate::device::{Device, DeviceBatchAveraging};
+use crate::device::bridge::DeviceBridge;
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear, DeviceQuantizedLinear};
+use crate::device::scale::DeviceScale;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, OutputScale, MaxInputValue, PreTrainBase};
-use crate::mapper::{IdentityMapperBuilder, MapperBuilder, Scaling, ScalingMapperBuilder};
+use crate::mapper::{ScalingMapper};
 use crate::ope::{MaxValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
@@ -1706,18 +1708,24 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputScale for Quantiz
       PI: Debug + BatchDataType + InputTensorSize<NI> +
       InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
       OP: Optimizer<f32,D>,
-      D: Device<U> + Device<f32> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
-      <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+      D: Device<U> + Device<f32> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO> +
+         DeviceBridge<U,f32,<Self as ForwardAll>::Output,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale> +
+         DeviceScale<f32,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,NO,Scale=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale> +
+         Debug,
+      <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: Debug + OutputTensorSize<NO> + 'static,
+      <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale: Debug + 'static,
+      <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+      <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
       C: Quantizable<W>,
       BC: Quantizable<W>,
       [();NI]: TensorSize,
       [();NO]: TensorSize {
-    type Device = D;
+    type ScalingDevice = D;
     type Scale = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale;
     type ScaledOutput = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale;
-    type MapperBuilder<'a> = ScalingMapperBuilder<'a,<Self as ForwardAll>::Output,Self::Scale,Self::ScaledOutput>;
-    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> {
-        ScalingMapperBuilder::new(&self.scale)
+    type Mapper<'a> = ScalingMapper<'a,U,f32,Self::Scale,<Self as ForwardAll>::Output,Self::ScaledOutput,D,NO> where Self: 'a;
+    fn scaling_mapper<'a>(&self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,TrainingError> where Self: 'a {
+        ScalingMapper::new(&self.device,input,&self.scale)
     }
 }
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> MaxInputValue for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>

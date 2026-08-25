@@ -12,7 +12,7 @@ pub trait DeviceScale<U,IO,const N: usize>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           IO: BatchDataType + Debug,
           <IO as BatchDataType>::Type: BatchSize + Debug {
-    type Scale;
+    type Scale: Debug + BatchDataType + 'static;
     /// inverse scaling calculation.
     ///
     /// # Arguments
@@ -120,7 +120,6 @@ impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
 
     fn batch_scaling<'a>(&self, scale: &'a Arr<U,N>, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError> {
         let view  = SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?;
-
 
         Ok(SerializedVec::from(view.iter().map(|i| {
             i * scale.as_view()

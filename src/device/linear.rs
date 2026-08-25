@@ -202,9 +202,10 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
           I: BatchDataType + InputTensorSize<NI>,
           Self: DeviceQuantizedLinearBase<f32,T,B,NI,NO>,
           Self: DeviceQuantizedLinearBase<W,<T as Quantizable<W>>::Quantized,<B as Quantizable<W>>::Quantized,NI,NO>,
+          <Self::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
-    type Scale: Debug + OutputTensorScalar<Scalar=f32> + OutputTensorSize<NO> + 'static;
+    type Scale: Debug + BatchDataType + OutputTensorScalar<Scalar=f32> + OutputTensorSize<NO> + 'static;
     type Output: BatchDataType + Debug + OutputTensorScalar<Scalar=U> + OutputTensorSize<NO> + 'static;
     type LossInput: BatchDataType + Debug + OutputTensorScalar<Scalar=f32> + OutputTensorSize<NO> + 'static;
     type BatchOutput: Debug + 'static;

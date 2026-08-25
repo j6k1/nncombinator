@@ -11,6 +11,8 @@ use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
 use crate::device::bridge::DeviceBridge;
+use crate::error::EvaluateError::CudaRuntimeError;
+use crate::mapper::IdentityMapper;
 
 /// Dequantize layer Implementation
 pub struct DequantizeLayer<U,SO,P,I,PI,CI,D>
@@ -447,12 +449,13 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
           I: Debug + Send + Sync {
-    type Scale = <P as OutputScale>::Scale;
-    type ScaledOutput = <P as OutputScale>::ScaledOutput;
-    type MapperBuilder<'a> = <P as OutputScale>::MapperBuilder<'a>;
+    type ScalingDevice = D;
+    type Scale = ();
+    type ScaledOutput = CI;
+    type Mapper<'a> = IdentityMapper<'a,CI,Self::ScalingDevice> where Self: 'a;
 
-    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> {
-        self.parent.get_scale_mapper_builder()
+    fn scaling_mapper<'a>(&self, input: &'a CI) -> Result<Self::Mapper<'a>,TrainingError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
     }
 }
 /// Trait for DequantizeLayer instance creation

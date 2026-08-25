@@ -12,14 +12,15 @@ use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchFor
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 /// Trait for InverseScalingLayer instance creation.
-pub trait InverseScalingLayerInstantiation<U,P,D,I,PI,const N:usize>
+pub trait ScalingLayerInstantiation<U,P,D,I,PI,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           I: Debug + Send + Sync,
-          PI: Debug {
+          PI: Debug + BatchDataType + 'static,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
     /// Create and return an instance.
     ///
     /// # Arguments
@@ -36,7 +37,8 @@ pub struct InverseScalingLayer<U,P,D,I,PI,const N:usize>
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           I: Debug + Send + Sync,
-          PI: Debug {
+          PI: Debug + BatchDataType + 'static,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
     parent:P,
     device:D,
     u:PhantomData<U>,
@@ -454,7 +456,7 @@ impl<U,P,D,I,PI,const N:usize> InputScale for InverseScalingLayer<U,P,D,I,PI,N>
         self.parent.scale_mean()
     }
 }
-impl<U,P,D,I,PI,const N:usize> InverseScalingLayerInstantiation<U,P,D,I,PI,N> for InverseScalingLayer<U,P,D,I,PI,N>
+impl<U,P,D,I,PI,const N:usize> ScalingLayerInstantiation<U,P,D,I,PI,N> for InverseScalingLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI>,
@@ -502,7 +504,7 @@ impl<const N:usize> InverseScalingLayerBuilder<N> {
               I: Debug + Send + Sync + BatchDataType,
               PI: Debug + BatchDataType,
               <I as BatchDataType>::Type: Debug + Send + Sync + 'static,
-              InverseScalingLayer<U,P,D,I,PI,N>: InverseScalingLayerInstantiation<U,P,D,I,PI,N> {
+              InverseScalingLayer<U,P,D,I,PI,N>: ScalingLayerInstantiation<U,P,D,I,PI,N> {
         InverseScalingLayer::instantiation(parent,device)
     }
 }

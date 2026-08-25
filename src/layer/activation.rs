@@ -7,9 +7,8 @@ use crate::{Cons, Stack};
 use crate::device::activation::DeviceActivation;
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, MaxInputValue, PreTrainBase, BatchOutputScale};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, MaxInputValue, PreTrainBase, BatchOutputScale, BatchSize};
 use crate::lossfunction::LossFunction;
-use crate::mapper::{IdentityMapperBuilder, MapperBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 /// Activation layer Implementation
@@ -273,7 +272,7 @@ impl<U,P,A,I,PI,LI,D,const N:usize> Loss<<LI as OutputTensorScalar>::Scalar> for
     fn loss(&mut self, loss: Self::LossInput, stack: Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         let (s,o) = stack.pop();
 
-        let b = self.parent.get_scale_mapper_builder();
+        let b = self.parent.scaling_mapper();
 
         let r = {
             let o = b.build(&self.device,&o)?;
@@ -331,7 +330,7 @@ impl<U,P,A,I,PI,LI,D,const N:usize> BatchPreTrainBase for ActivationLayer<U,P,A,
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
              BatchBackward<<LI as OutputTensorScalar>::Scalar,BatchLossInput=<LI as BatchDataType>::Type> +
-             OutputTensorScalar<Scalar=U> + BatchOutputScale<BatchScaledOutput=<LI as BatchDataType>::Type>,
+             OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
@@ -407,22 +406,18 @@ impl<U,P,A,I,PI,LI,D,const N:usize> BatchLoss<<LI as OutputTensorScalar>::Scalar
           LI: Debug + BatchDataType + OutputTensorScalar + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
-          <LI as BatchDataType>::Type: Debug,
+          <LI as BatchDataType>::Type: BatchSize + Debug,
           <I as BatchDataType>::Type: Debug,
           <LI as OutputTensorScalar>::Scalar: Default + Clone + Copy + Debug + Send + Sync + 'static {
     fn batch_loss(&self, loss: Self::BatchLossInput, stack: Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
         let (s,o) = stack.pop();
 
-        let b = self.parent.get_batch_scale_mapper_builder();
-
         let r = {
-            let o = b.build(&self.device,&o)?;
-            let u = s.map(|u| b.build(&self.device,u))?;
-        };
+            let o = self.parent.batch_scaling_mapper(&o)?;
+            let u = s.map(|u| self.parent.batch_scaling_mapper(u))?;
 
-        let r = s.map(|u| {
-            self.device.batch_derive(&self.f, &o, &loss, u)
-        })?;
+            self.device.batch_derive(&self.f, &o, &loss, &u)
+        }?;
 
         Ok((Cons(s,o),r))
     }
@@ -502,17 +497,19 @@ impl<U,P,A,I,PI,LI,D,const N:usize> OutputScale for ActivationLayer<U,P,A,I,PI,L
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<<LI as OutputTensorScalar>::Scalar,LossInput=LI> +
              PreTrainBase<PreOutput=PI> + PreTrain +
-             OutputTensorScalar<Scalar=U> + OutputScale<Scale=LI,ScaledOutput=LI>,
+             OutputTensorScalar<Scalar=U> + OutputScale<Scale=LI,ScaledOutput=LI> + 'static,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U> + DeviceActivation<U,PI,A,N>,
       PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
       LI: Debug + BatchDataType + OutputTensorScalar + 'static,
-      I: Debug + Send + Sync {
+      I: Debug + Send + Sync,
+      <LI as BatchDataType>::Type: BatchSize + Debug {
+    type ScalingDevice = <P as OutputScale>::ScalingDevice;
     type Scale = <P as OutputScale>::Scale;
     type ScaledOutput = <P as OutputScale>::ScaledOutput;
-    type MapperBuilder<'a> = <P as OutputScale>::MapperBuilder<'a> where Self: 'a;
-    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> {
-        self.parent.get_scale_mapper_builder()
+    type Mapper<'a> = <P as OutputScale>::Mapper<'a> where Self: 'a;
+    fn scaling_mapper<'a>(&'a self, input: &'a PI) -> Result<Self::Mapper<'a>,TrainingError> where Self: 'a {
+        self.parent.scaling_mapper(input)
     }
 }
 impl<U,P,A,I,PI,LI,D,const N:usize> MaxInputValue for ActivationLayer<U,P,A,I,PI,LI,D,N>

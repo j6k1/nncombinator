@@ -480,11 +480,12 @@ impl<U,P,I,PI,D> OutputScale for LoggingLayer<U,P,I,PI,D>
       D: Device<U>,
       PI: Debug + 'static + BatchDataType,
       I: Debug + Send + Sync {
+    type ScalingDevice = <P as OutputScale>::ScalingDevice;
     type Scale = <P as OutputScale>::Scale;
     type ScaledOutput = <P as OutputScale>::ScaledOutput;
-    type MapperBuilder<'a> = <P as OutputScale>::MapperBuilder<'a>;
-    fn get_scale_mapper_builder<'a>(&'a self) -> Self::MapperBuilder<'a> {
-        self.parent.get_scale_mapper_builder()
+    type Mapper<'a> = <P as OutputScale>::Mapper<'a> where Self: 'a;
+    fn scaling_mapper<'a>(&self, input:&'a PI) -> Result<Self::Mapper<'a>,TrainingError> where Self: 'a {
+        self.parent.scaling_mapper(input)
     }
 
 }

@@ -1300,7 +1300,7 @@ impl<W,const NI: usize,const NO: usize> DeviceQuantizedLinearBase<W,Arr2<W,NI,NO
 impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,NI,NO>,Arr<f32,NO>,I,NI,NO> for DeviceCpu
     where U: Default + Clone + Copy + Debug +
              Add<Output=U> +  Mul<Output=U> +
-             AddAssign + Send + Sync + Shr<usize,Output=U> + MaxValue + Assume<i32> + 'static,
+             AddAssign + Send + Sync + Shr<usize,Output=U> + MaxValue + Assume<i32> + Assume<f32> + 'static,
           W: Default + Clone + Copy + Debug +
              Add<Output=W> + Mul<Output=W> + AddAssign + MaxValue + Assume<U> + Send + Sync + 'static,
           i32: From<U>,

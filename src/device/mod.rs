@@ -7,6 +7,7 @@ pub mod activation;
 pub mod output;
 pub mod input;
 pub mod bridge;
+pub mod clone;
 
 use std::fmt::Debug;
 use std::ops::{Add, Div};

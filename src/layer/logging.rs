@@ -484,7 +484,7 @@ impl<U,P,I,PI,D> OutputScale for LoggingLayer<U,P,I,PI,D>
     type Scale = <P as OutputScale>::Scale;
     type ScaledOutput = <P as OutputScale>::ScaledOutput;
     type Mapper<'a> = <P as OutputScale>::Mapper<'a> where Self: 'a;
-    fn scaling_mapper<'a>(&self, input:&'a PI) -> Result<Self::Mapper<'a>,TrainingError> where Self: 'a {
+    fn scaling_mapper<'a>(&'a self, input:&'a PI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
         self.parent.scaling_mapper(input)
     }
 

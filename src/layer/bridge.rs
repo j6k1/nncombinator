@@ -455,7 +455,7 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
     type Scale = ();
     type ScaledOutput = CI;
     type Mapper<'a> = IdentityMapper<'a,CI,Self::ScalingDevice> where Self: 'a;
-    fn scaling_mapper<'a>(&self, input: &'a CI) -> Result<Self::Mapper<'a>,TrainingError> where Self: 'a {
+    fn scaling_mapper<'a>(&self, input: &'a CI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
         Ok(IdentityMapper::new(input))
     }
 }

@@ -5,10 +5,10 @@ use std::marker::PhantomData;
 use std::ops::{Deref};
 use crate::device::bridge::DeviceBridge;
 use crate::device::scale::DeviceScale;
-use crate::error::TrainingError;
+use crate::error::{EvaluateError, TrainingError};
 use crate::layer::{BatchDataType, BatchSize};
 
-pub trait DataMapper<'a,I,O,D>: Deref<Target=O> + Sized + 'a
+pub trait DataMapper<'a,I,O,D>: Sized + 'a
     where I: Debug + Sized + 'a,
           O: Debug + Sized + 'a,
           D: 'static {
@@ -62,7 +62,7 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> ScalingMapper<'a,U,SO,SC,I,O,D,N>
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
           <O as BatchDataType>::Type: BatchSize + Debug + 'static {
-    pub fn new(device:&'a D,source: &'a I,scale: &'a SC) -> Result<ScalingMapper<'a,U,SO,SC,I,O,D,N>,TrainingError> {
+    pub fn new(device:&'a D,source: &'a I,scale: &'a SC) -> Result<ScalingMapper<'a,U,SO,SC,I,O,D,N>,EvaluateError> {
         Ok(ScalingMapper {
             i:PhantomData::<I>,
             u:PhantomData::<U>,
@@ -100,6 +100,7 @@ pub struct BatchScalingMapper<'a,U,SO,SC,I,O,D,const N:usize>
           D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'a {
+    i: PhantomData<I>,
     u: PhantomData<U>,
     so: PhantomData<SO>,
     scale: &'a SC,
@@ -116,6 +117,7 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> BatchScalingMapper<'a,U,SO,SC,I,O,D,N>
           <O as BatchDataType>::Type: BatchSize + Debug + 'a {
     pub fn new(device:&'a D,source: &'a <I as BatchDataType>::Type,scale: &'a SC) -> Result<BatchScalingMapper<'a,U,SO,SC,I,O,D,N>,TrainingError> {
         Ok(BatchScalingMapper {
+            i: PhantomData::<I>,
             u: PhantomData::<U>,
             so: PhantomData::<SO>,
             scale:scale,
@@ -137,7 +139,7 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> Deref for BatchScalingMapper<'a,U,SO,SC,I,O
         &self.dst
     }
 }
-impl<'a,U,SO,SC,I,O,D,const N:usize> DataMapper<'a,I,<O as BatchDataType>::Type,D> for BatchScalingMapper<'a,U,SO,SC,I,O,D,N>
+impl<'a,U,SO,SC,I,O,D,const N:usize> DataMapper<'a,I,O,D> for BatchScalingMapper<'a,U,SO,SC,I,O,D,N>
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'a,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,

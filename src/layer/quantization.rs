@@ -6,7 +6,7 @@ use std::str::FromStr;
 use crate::arr::{MakeView, MakeViewMut, SliceSize};
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchSize};
 use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
@@ -448,13 +448,15 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
           D: Device<U> + DeviceBridge<U,SO,PI,CI>,
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
     type ScalingDevice = D;
     type Scale = ();
     type ScaledOutput = CI;
     type Mapper<'a> = IdentityMapper<'a,CI,Self::ScalingDevice> where Self: 'a;
 
-    fn scaling_mapper<'a>(&self, input: &'a CI) -> Result<Self::Mapper<'a>,TrainingError> where Self: 'a {
+    fn scaling_mapper<'a>(&self, input: &'a CI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
         Ok(IdentityMapper::new(input))
     }
 }

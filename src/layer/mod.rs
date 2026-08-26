@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::fmt::Debug;
+use std::ops::Deref;
 use crate::device::*;
 use crate::{Stack};
 use crate::error::{EvaluateError, PersistenceError, TrainingError};
@@ -459,8 +460,9 @@ pub trait OutputScale: ForwardAll
     /// scaled output.
     type ScaledOutput: Debug + BatchDataType + 'static;
     /// Data Mapper for Scaling
-    type Mapper<'a>: DataMapper<'a,<Self as ForwardAll>::Output,Self::ScaledOutput,Self::ScalingDevice> where Self: 'a;
-    fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,TrainingError> where Self: 'a;
+    type Mapper<'a>: DataMapper<'a,<Self as ForwardAll>::Output,Self::ScaledOutput,Self::ScalingDevice> where Self: Deref<Target=Self::ScaledOutput> + 'a;
+    fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError>
+        where Self: Deref<Target=Self::ScaledOutput> + 'a;
 }
 /// A trait that represents the output scale
 pub trait BatchOutputScale: OutputScale + BatchForwardBase
@@ -469,8 +471,10 @@ pub trait BatchOutputScale: OutputScale + BatchForwardBase
     /// batch scaled output.
     type BatchScaledOutput: Debug + 'static;
     /// Data Mapper for Scaling for batch execution
-    type BatchMapper<'a>: DataMapper<'a,<Self as BatchForwardBase>::BatchOutput,Self::BatchScaledOutput,Self::ScalingDevice> where Self: 'a;
-    fn batch_scaling_mapper<'a>(&'a self, input: &'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchMapper<'a>,TrainingError> where Self: 'a;
+    type BatchMapper<'a>: DataMapper<'a,<Self as BatchForwardBase>::BatchOutput,Self::BatchScaledOutput,Self::ScalingDevice>
+        where Self: Deref<Target=Self::BatchScaledOutput> + 'a;
+    fn batch_scaling_mapper<'a>(&'a self, input: &'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchMapper<'a>,EvaluateError>
+        where Self: Deref<Target=Self::BatchScaledOutput> + 'a;
 }
 /// A trait that represents the maximum value of the input passed from this layer to the next layer
 pub trait MaxInputValue {

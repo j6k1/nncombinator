@@ -261,24 +261,26 @@ impl<U,P,A,I,PI,LI,D,const N:usize> ContinueForward for ActivationLayer<U,P,A,I,
 impl<U,P,A,I,PI,LI,D,const N:usize> Loss<<LI as OutputTensorScalar>::Scalar> for ActivationLayer<U,P,A,I,PI,LI,D,N>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<<LI as OutputTensorScalar>::Scalar,LossInput=LI> +
-             OutputTensorScalar<Scalar=U> + OutputScale<Scale=LI>,
+             OutputTensorScalar<Scalar=U> + OutputScale<Scale=LI,ScaledOutput=LI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceActivation<<LI as OutputTensorScalar>::Scalar,LI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> +
               InputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + OutputTensorScalar + 'static,
           I: Debug + Send + Sync,
+          <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <LI as OutputTensorScalar>::Scalar: Default + Clone + Copy + Debug + Send + Sync + 'static {
     fn loss(&mut self, loss: Self::LossInput, stack: Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         let (s,o) = stack.pop();
 
-        let b = self.parent.scaling_mapper();
-
         let r = {
-            let o = b.build(&self.device,&o)?;
-            let u = s.map(|u| b.build(&self.device,u))?;
+            let o = self.parent.scaling_mapper(&o)?;
 
-            self.device.derive(&self.f,&o,&loss,&u)?
+            s.map(|u| {
+                self.parent.scaling_mapper(u).map(|u| {
+                    self.device.derive(&self.f,&o,&loss,&u)
+                })
+            })??
         };
 
         Ok((Cons(s,o),r))
@@ -396,6 +398,7 @@ impl<U,P,A,I,PI,LI,D,const N:usize> BatchLoss<<LI as OutputTensorScalar>::Scalar
     where P: PreTrainBase<PreOutput=PI> + PreTrain  + ForwardAll<Input=I,Output=PI> +
              BackwardAll<<LI as OutputTensorScalar>::Scalar,LossInput=LI> +
              OutputScale<Scale=LI,ScaledOutput=LI> +
+             BatchOutputScale<BatchScaledOutput=<LI as BatchDataType>::Type> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
              BatchBackward<<LI as OutputTensorScalar>::Scalar,BatchLossInput=<LI as BatchDataType>::Type> +
@@ -414,10 +417,13 @@ impl<U,P,A,I,PI,LI,D,const N:usize> BatchLoss<<LI as OutputTensorScalar>::Scalar
 
         let r = {
             let o = self.parent.batch_scaling_mapper(&o)?;
-            let u = s.map(|u| self.parent.batch_scaling_mapper(u))?;
 
-            self.device.batch_derive(&self.f, &o, &loss, &u)
-        }?;
+            s.map(|u| {
+                self.parent.batch_scaling_mapper(u).map(|u| {
+                    self.device.batch_derive(&self.f, &o, &loss, &u)
+                })
+            })??
+       };
 
         Ok((Cons(s,o),r))
     }
@@ -508,7 +514,7 @@ impl<U,P,A,I,PI,LI,D,const N:usize> OutputScale for ActivationLayer<U,P,A,I,PI,L
     type Scale = <P as OutputScale>::Scale;
     type ScaledOutput = <P as OutputScale>::ScaledOutput;
     type Mapper<'a> = <P as OutputScale>::Mapper<'a> where Self: 'a;
-    fn scaling_mapper<'a>(&'a self, input: &'a PI) -> Result<Self::Mapper<'a>,TrainingError> where Self: 'a {
+    fn scaling_mapper<'a>(&'a self, input: &'a PI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
         self.parent.scaling_mapper(input)
     }
 }

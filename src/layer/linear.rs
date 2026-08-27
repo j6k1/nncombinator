@@ -12,7 +12,7 @@ use crate::device::linear::{DeviceDiffLinear, DeviceLinear, DeviceQuantizedLinea
 use crate::device::scale::DeviceScale;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, OutputScale, MaxInputValue, PreTrainBase};
-use crate::mapper::{ScalingMapper};
+use crate::mapper::{DataMapper, ScalingMapper};
 use crate::ope::{MaxValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
@@ -889,11 +889,12 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer<U,
           U: Default + Clone + Copy + Debug + Send + Sync + Mul<Output=U> + MaxValue +
              Assume<f32> + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<U> + 'static,
-          D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          D: Device<U> + Device<f32> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
+          OP: Optimizer<f32,D>,
           i32: From<U>,
           f32: Assume<W>,
           <C as Quantizable<W>>::Quantized: InputTensorScalar<Scalar=W>,
@@ -971,7 +972,8 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<TextFilePer
           W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<U> + 'static + FromStr,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
-          D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          D: Device<U> + Device<f32> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          OP: Optimizer<f32,D>,
           TextRecord: From<f32>,
           ModelLoadError: From<<f32 as FromStr>::Err>,
           i32: From<U> + From<W>,
@@ -1052,7 +1054,8 @@ impl<T,U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> Persistence<T,Linear>
           W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<U> + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
-          D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          D: Device<U> + Device<f32> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
+          OP: Optimizer<f32,D>,
           i32: From<U> + From<W>,
           f32: Assume<W>,
           C: Quantizable<W>,
@@ -1692,28 +1695,32 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputScale for Quantiz
          DeviceBridge<U,f32,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale> +
          DeviceScale<f32,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,NO,Scale=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale> +
          Debug,
-      <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: Debug + OutputTensorSize<NO> + 'static,
+      <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
       <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale: Debug + BatchDataType + OutputTensorScalar + 'static,
       <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
       <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
       C: Quantizable<W>,
       BC: Quantizable<W>,
       f32: Assume<U>,
-      Self: ForwardAll<Output=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output>,
       for<'a> <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale: From<&'a <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output>,
       for<'a> <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: From<&'a <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale>,
       for<'a> <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale as BatchDataType>::Type: From<&'a <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type>,
       for<'a> <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: From<&'a <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale as BatchDataType>::Type>,
+      Self: ForwardAll<Output=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output>,
+      for<'a> ScalingMapper<'a,U,f32,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,D,NO>: DataMapper<'a,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,D>,
+      for<'a> ScalingMapper<'a,U,f32,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,D,NO>: Deref<Target=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale>,
       [();NI]: TensorSize,
       [();NO]: TensorSize {
     type ScalingDevice = D;
     type Scale = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale;
     type ScaledOutput = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale;
-    type Mapper<'a> = ScalingMapper<'a,U,f32,Self::Scale,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,D,NO>
-        where Self: 'a + Deref<Target=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale>;
+    type Mapper<'a> = ScalingMapper<'a,U,f32,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale,D,NO>
+        where Self: 'a;
     fn scaling_mapper<'a>(&'a self, input: &'a <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output) -> Result<Self::Mapper<'a>,EvaluateError>
-        where Self: 'a + Deref<Target=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale> {
-        ScalingMapper::new(&self.device,input,&self.scale)
+        where Self: 'a {
+        let o = self.device.bridge_forward(input)?;
+
+        ScalingMapper::new(&self.device,input,o,&self.scale)
     }
 }
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> MaxInputValue for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>

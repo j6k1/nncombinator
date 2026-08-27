@@ -8,10 +8,15 @@ use crate::device::scale::DeviceScale;
 use crate::error::{EvaluateError, TrainingError};
 use crate::layer::{BatchDataType, BatchSize};
 
-pub trait DataMapper<'a,I,O,D>: Sized + 'a
+pub trait DataMapper<'a,I,O,D>: Sized + Deref<Target=O> + 'a
     where I: Debug + Sized + 'a,
           O: Debug + Sized + 'a,
           D: 'static {
+}
+pub trait BatchDataMapper<'a,I,O,D>: Sized + Deref<Target=O> + 'a
+    where I: Debug + Sized + 'a,
+      O: Debug + Sized + 'a,
+      D: 'static {
 }
 pub struct IdentityMapper<'a,I,D>
     where I: Debug + Sized + 'a,
@@ -43,43 +48,49 @@ impl<'a,I,D> DataMapper<'a,I,I,D> for IdentityMapper<'a,I,D>
           Self: Sized + 'a {}
 pub struct ScalingMapper<'a,U,SO,SC,I,O,D,const N:usize>
     where I: Debug + Sized + BatchDataType + 'a,
-          O: Debug + Sized + BatchDataType,
+          O: Debug + Sized + BatchDataType + 'a,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
-          <O as BatchDataType>::Type: BatchSize + Debug + 'static {
-    i: PhantomData<I>,
+          D: DeviceScale<SO,O,N,Scale=SC> + Debug + 'static,
+          <I as BatchDataType>::Type: BatchSize + Debug + 'a,
+          <O as BatchDataType>::Type: BatchSize + Debug + 'static,
+          Self: Sized + 'a {
     u: PhantomData<U>,
     so: PhantomData<SO>,
     scale: &'a SC,
+    i: PhantomData<I>,
     dst: O,
     device: PhantomData<D>,
 }
 impl<'a,U,SO,SC,I,O,D,const N:usize> ScalingMapper<'a,U,SO,SC,I,O,D,N>
     where I: Debug + Sized + BatchDataType + 'a,
-          O: Debug + Sized + BatchDataType,
+          O: Debug + Sized + BatchDataType + 'a,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
-          <O as BatchDataType>::Type: BatchSize + Debug + 'static {
-    pub fn new(device:&'a D,source: &'a I,scale: &'a SC) -> Result<ScalingMapper<'a,U,SO,SC,I,O,D,N>,EvaluateError> {
+          D: DeviceScale<SO,O,N,Scale=SC> + Debug + 'static,
+          <I as BatchDataType>::Type: BatchSize + Debug + 'a,
+          <O as BatchDataType>::Type: BatchSize + Debug + 'static,
+          Self: Sized + 'a {
+    pub fn new(device:&'a D,source: &'a I,bridged: O,scale: &'a SC) -> Result<ScalingMapper<'a,U,SO,SC,I,O,D,N>,EvaluateError> {
         Ok(ScalingMapper {
-            i:PhantomData::<I>,
             u:PhantomData::<U>,
             so:PhantomData::<SO>,
+            i:PhantomData::<I>,
             scale:scale,
-            dst:device.scaling(scale,&device.bridge_forward(source)?)?,
+            dst:device.scaling(scale,&bridged)?,
             device:PhantomData::<D>
         })
     }
 }
 impl<'a,U,SO,SC,I,O,D,const N:usize> Deref for ScalingMapper<'a,U,SO,SC,I,O,D,N>
     where I: Debug + Sized + BatchDataType + 'a,
-          O: Debug + Sized + BatchDataType,
+          O: Debug + Sized + BatchDataType + 'a,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
-          <O as BatchDataType>::Type: BatchSize + Debug + 'static {
+          D: DeviceScale<SO,O,N,Scale=SC> + Debug + 'static,
+          <I as BatchDataType>::Type: BatchSize + Debug + 'a,
+          <O as BatchDataType>::Type: BatchSize + Debug + 'static,
+          Self: Sized + 'a {
     type Target = O;
     fn deref(&self) -> &Self::Target {
         &self.dst
@@ -90,16 +101,24 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> DataMapper<'a,I,O,D> for ScalingMapper<'a,U
           O: Debug + Sized + BatchDataType + 'a,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
-          <O as BatchDataType>::Type: BatchSize + Debug + 'static {}
+          D: DeviceScale<SO,O,N,Scale=SC> + Debug + 'static,
+          <I as BatchDataType>::Type: BatchSize + Debug + 'a,
+          <O as BatchDataType>::Type: BatchSize + Debug + 'static,
+          Self: Sized + 'a {}
+impl<'a,I,D> BatchDataMapper<'a,I,I,D> for IdentityMapper<'a,I,D>
+    where I: Debug + Sized + 'a,
+          D: 'static,
+          Self: Sized + 'a {}
+
 pub struct BatchScalingMapper<'a,U,SO,SC,I,O,D,const N:usize>
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'a,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
+          D: DeviceScale<SO,O,N,Scale=SC> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
-          <O as BatchDataType>::Type: BatchSize + Debug + 'a {
+          <O as BatchDataType>::Type: BatchSize + Debug + 'a,
+          Self: Sized + 'a {
     i: PhantomData<I>,
     u: PhantomData<U>,
     so: PhantomData<SO>,
@@ -114,7 +133,8 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> BatchScalingMapper<'a,U,SO,SC,I,O,D,N>
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
-          <O as BatchDataType>::Type: BatchSize + Debug + 'a {
+          <O as BatchDataType>::Type: BatchSize + Debug + 'a,
+          Self: Sized + 'a {
     pub fn new(device:&'a D,source: &'a <I as BatchDataType>::Type,scale: &'a SC) -> Result<BatchScalingMapper<'a,U,SO,SC,I,O,D,N>,TrainingError> {
         Ok(BatchScalingMapper {
             i: PhantomData::<I>,
@@ -133,17 +153,19 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> Deref for BatchScalingMapper<'a,U,SO,SC,I,O
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
-          <O as BatchDataType>::Type: BatchSize + Debug + 'a {
+          <O as BatchDataType>::Type: BatchSize + Debug + 'a,
+          Self: Sized + 'a {
     type Target = <O as BatchDataType>::Type;
     fn deref(&self) -> &Self::Target {
         &self.dst
     }
 }
-impl<'a,U,SO,SC,I,O,D,const N:usize> DataMapper<'a,I,O,D> for BatchScalingMapper<'a,U,SO,SC,I,O,D,N>
+impl<'a,U,SO,SC,I,O,D,const N:usize> BatchDataMapper<'a,I,<O as BatchDataType>::Type,D> for BatchScalingMapper<'a,U,SO,SC,I,O,D,N>
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'a,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
-          <O as BatchDataType>::Type: BatchSize + Debug + 'a {}
+          <O as BatchDataType>::Type: BatchSize + Debug + 'a,
+          Self: Sized + 'a {}

@@ -3,7 +3,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::Deref;
-use std::panic::PanicHookInfo;
 use std::str::FromStr;
 use crate::{Cons, Stack};
 use crate::device::clone::DeviceClone;
@@ -286,7 +285,7 @@ impl<U,P,D,I,PI,const N:usize> BatchForwardBase for ScalingLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI> +
-             BatchOutputScale<BatchScaledOutput=<PI as BatchDataType>::Type> +
+             BatchOutputScale +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync + BatchDataType,
@@ -302,7 +301,7 @@ impl<U,P,D,I,PI,const N:usize> BatchForward for ScalingLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI> +
-             BatchOutputScale<BatchScaledOutput=<PI as BatchDataType>::Type> +
+             BatchOutputScale +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync + BatchDataType,
@@ -322,7 +321,7 @@ impl<U,P,D,I,PI,const N:usize> BatchPreTrainBase for ScalingLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI> +
-             BatchOutputScale<BatchScaledOutput=<PI as BatchDataType>::Type> +
+             BatchOutputScale +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -339,7 +338,7 @@ impl<U,P,D,I,PI,const N:usize> BatchPreTrain for ScalingLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI> +
-             BatchOutputScale<BatchScaledOutput=<PI as BatchDataType>::Type> +
+             BatchOutputScale +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -364,7 +363,7 @@ impl<U,P,D,I,PI,const N:usize> BatchBackward<U> for ScalingLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI> +
-             BatchOutputScale<BatchScaledOutput=<PI as BatchDataType>::Type> +
+             BatchOutputScale +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
              BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type>,

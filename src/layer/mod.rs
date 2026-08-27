@@ -14,7 +14,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::DataTypeInfo;
 #[cfg(feature = "cuda")]
 use crate::cuda::ToCuda;
-use crate::mapper::{DataMapper};
+use crate::mapper::{BatchDataMapper, DataMapper};
 use crate::persistence::PersistenceType;
 
 pub mod input;
@@ -452,6 +452,8 @@ pub trait InputScale {
 /// A trait that represents the output scale
 pub trait OutputScale: ForwardAll
     where <Self as ForwardAll>::Output: BatchDataType + 'static,
+          <Self as OutputScale>::ScaledOutput: BatchDataType + 'static,
+          <<Self as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
           <Self::ScaledOutput as BatchDataType>::Type: Debug + BatchSize + 'static {
     /// Device used for scaling calculations
     type ScalingDevice: 'static;
@@ -460,21 +462,22 @@ pub trait OutputScale: ForwardAll
     /// scaled output.
     type ScaledOutput: Debug + BatchDataType + 'static;
     /// Data Mapper for Scaling
-    type Mapper<'a>: DataMapper<'a,<Self as ForwardAll>::Output,Self::ScaledOutput,Self::ScalingDevice> where Self: Deref<Target=Self::ScaledOutput> + 'a;
+    type Mapper<'a>: DataMapper<'a,<Self as ForwardAll>::Output,Self::ScaledOutput,Self::ScalingDevice>
+        where Self: 'a;
     fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError>
-        where Self: Deref<Target=Self::ScaledOutput> + 'a;
+        where Self: 'a;
 }
 /// A trait that represents the output scale
 pub trait BatchOutputScale: OutputScale + BatchForwardBase
-    where <Self as ForwardAll>::Output: BatchDataType + 'static,
+    where <Self as ForwardAll>::Output: Debug + BatchDataType + 'static,
+          <Self as OutputScale>::ScaledOutput: Debug + BatchDataType + 'static,
+          <<Self as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
           <Self::ScaledOutput as BatchDataType>::Type: Debug + BatchSize + 'static {
-    /// batch scaled output.
-    type BatchScaledOutput: Debug + 'static;
     /// Data Mapper for Scaling for batch execution
-    type BatchMapper<'a>: DataMapper<'a,<Self as BatchForwardBase>::BatchOutput,Self::BatchScaledOutput,Self::ScalingDevice>
-        where Self: Deref<Target=Self::BatchScaledOutput> + 'a;
+    type BatchMapper<'a>: BatchDataMapper<'a,<Self as BatchForwardBase>::BatchOutput,<Self::ScaledOutput as BatchDataType>::Type,Self::ScalingDevice>
+        where Self: 'a;
     fn batch_scaling_mapper<'a>(&'a self, input: &'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchMapper<'a>,EvaluateError>
-        where Self: Deref<Target=Self::BatchScaledOutput> + 'a;
+        where Self: 'a;
 }
 /// A trait that represents the maximum value of the input passed from this layer to the next layer
 pub trait MaxInputValue {

@@ -3,7 +3,7 @@
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::TryClone;
 use crate::device::{DeviceCpu, DeviceGpu};
-use crate::error::{EvaluateError, TrainingError};
+use crate::error::{EvaluateError};
 
 pub trait DeviceClone<'a,T> where T: 'static {
     /// clone calculation.

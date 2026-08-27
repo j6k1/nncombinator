@@ -450,6 +450,7 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
           I: Debug + Send + Sync,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
     type ScalingDevice = D;
     type Scale = ();

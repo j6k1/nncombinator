@@ -9,7 +9,7 @@ use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, PreTrainBase, OutputScale, BatchSize, BatchOutputScale};
-use crate::mapper::IdentityMapper;
+use crate::mapper::{BatchDataMapper, IdentityMapper};
 use crate::ope::One;
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
@@ -956,11 +956,13 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchOutputScale for BatchNormalizationLayer
       InputTensorScalar + OutputTensorScalar + 'static,
       OP: Optimizer<U,D>,
       <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-      [();N]: TensorSize {
-    type BatchScaledOutput = <PI as BatchDataType>::Type;
-    type BatchMapper<'a> = IdentityMapper<'a,Self::BatchScaledOutput,Self::ScalingDevice> where Self: 'a;
+      [();N]: TensorSize,
+      Self: BatchForwardBase<BatchOutput=<PI as BatchDataType>::Type>,
+      <Self as ForwardAll>::Output: BatchDataType + Debug + 'static,
+      <<Self as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static {
+    type BatchMapper<'a> = IdentityMapper<'a,<PI as BatchDataType>::Type,Self::ScalingDevice> where Self: 'a;
 
-    fn batch_scaling_mapper<'a>(&'a self, input: &'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchMapper<'a>, EvaluateError> where Self: 'a {
+    fn batch_scaling_mapper<'a>(&'a self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>, EvaluateError> where Self: 'a {
         Ok(IdentityMapper::new(input))
     }
 }

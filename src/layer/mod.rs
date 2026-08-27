@@ -121,13 +121,16 @@ pub trait ForwardAll {
     /// * [`EvaluateError`]
     fn forward_all(&self, input:Self::Input) -> Result<Self::Output, EvaluateError>;
 }
-/// Trait defining the implementation of error back propagation in neural networks
-pub trait BackwardAll<SO>: PreTrainBase + UpdateWeight
-    where SO: Clone + Copy + Debug {
+/// Trait defining the relevant tye of the implementation of error back propagation in neural networks
+pub trait BackwardBase: PreTrainBase + UpdateWeight {
     /// Loss input scalar type
     type LossInputScalar: Clone + Copy + Debug;
     /// Losses during neural network training
     type LossInput: Debug;
+}
+/// Trait defining the implementation of error back propagation in neural networks
+pub trait BackwardAll<SO>: BackwardBase
+    where SO: Clone + Copy + Debug {
     /// Losses in the top layer during neural network training
     type LossOutput: Debug;
 

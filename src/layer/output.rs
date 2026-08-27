@@ -11,7 +11,7 @@ use crate::cuda::DataTypeInfo;
 use crate::device::{Device};
 use crate::device::output::DeviceLinearOutput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, InputTensorScalar, Loss, OnStep, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, PreTrainBase, Step, Train, UpdateWeight};
+use crate::layer::{BackwardAll, BackwardBase, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, InputTensorScalar, Loss, OnStep, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, PreTrainBase, Step, Train, UpdateWeight};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, VerifyEof};
 
@@ -177,6 +177,20 @@ impl<U,P,D,I,PI,const N:usize> PreTrain for LinearOutputLayer<U,P,D,I,PI,N>
         self.parent.pre_train(input)
     }
 }
+impl<U,P,D,I,PI,const N:usize> BackwardBase for LinearOutputLayer<U,P,D,I,PI,N>
+    where P: BackwardAll<U,LossInput=PI> +
+             ForwardAll<Input=I,Output=PI> +
+             PreTrainBase<PreOutput=PI> + PreTrain + Loss<U> +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync +
+          Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
+          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          I: Debug + Send + Sync,
+          <PI as ToHost<U>>::Output: Debug + 'static,
+          for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
+    type LossInputScalar = U;
+    type LossInput = PI;
+}
 impl<U,P,D,I,PI,const N:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,I,PI,N>
     where P: BackwardAll<U,LossInput=PI> +
              ForwardAll<Input=I,Output=PI> +
@@ -188,8 +202,6 @@ impl<U,P,D,I,PI,const N:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,I,PI,N
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
-    type LossInputScalar = U;
-    type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)

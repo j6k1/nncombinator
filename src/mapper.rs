@@ -57,7 +57,7 @@ pub struct ScalingMapper<'a,U,SO,SC,I,O,D,const N:usize>
           Self: Sized + 'a {
     u: PhantomData<U>,
     so: PhantomData<SO>,
-    scale: &'a SC,
+    _scale: &'a SC,
     i: PhantomData<I>,
     dst: O,
     device: PhantomData<D>,
@@ -71,12 +71,12 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> ScalingMapper<'a,U,SO,SC,I,O,D,N>
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'static,
           Self: Sized + 'a {
-    pub fn new(device:&'a D,source: &'a I,bridged: O,scale: &'a SC) -> Result<ScalingMapper<'a,U,SO,SC,I,O,D,N>,EvaluateError> {
+    pub fn new(device:&'a D ,_: &'a I, bridged: O, scale: &'a SC) -> Result<ScalingMapper<'a,U,SO,SC,I,O,D,N>,EvaluateError> {
         Ok(ScalingMapper {
             u:PhantomData::<U>,
             so:PhantomData::<SO>,
             i:PhantomData::<I>,
-            scale:scale,
+            _scale:scale,
             dst:device.scaling(scale,&bridged)?,
             device:PhantomData::<D>
         })
@@ -122,7 +122,7 @@ pub struct BatchScalingMapper<'a,U,SO,SC,I,O,D,const N:usize>
     i: PhantomData<I>,
     u: PhantomData<U>,
     so: PhantomData<SO>,
-    scale: &'a SC,
+    _scale: &'a SC,
     dst: <O as BatchDataType>::Type,
     device: PhantomData<D>,
 }
@@ -135,13 +135,13 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> BatchScalingMapper<'a,U,SO,SC,I,O,D,N>
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'a,
           Self: Sized + 'a {
-    pub fn new(device:&'a D,source: &'a <I as BatchDataType>::Type,scale: &'a SC) -> Result<BatchScalingMapper<'a,U,SO,SC,I,O,D,N>,TrainingError> {
+    pub fn new(device:&'a D,_: &'a <I as BatchDataType>::Type, bridged: <O as BatchDataType>::Type, scale: &'a SC) -> Result<BatchScalingMapper<'a,U,SO,SC,I,O,D,N>,TrainingError> {
         Ok(BatchScalingMapper {
             i: PhantomData::<I>,
             u: PhantomData::<U>,
             so: PhantomData::<SO>,
-            scale:scale,
-            dst:device.batch_scaling(scale,&device.batch_bridge_forward(source)?)?,
+            _scale:scale,
+            dst:device.batch_scaling(scale,&bridged)?,
             device:PhantomData::<D>
         })
     }

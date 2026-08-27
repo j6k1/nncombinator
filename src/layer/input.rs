@@ -6,7 +6,7 @@ use crate::{Cons, Never, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight, MaxInputValue, PreTrainBase};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight, MaxInputValue, PreTrainBase, BackwardBase};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 pub struct InputLayer<U,O,LI,D>
@@ -94,7 +94,7 @@ impl<U,O,LI,D> PreTrain for InputLayer<U,O,LI,D>
         Ok(Cons(Nil,self.device.forward_input(input)?))
     }
 }
-impl<U,O,LI,D> BackwardAll<U> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> BackwardBase for InputLayer<U,O,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug,
@@ -102,6 +102,13 @@ impl<U,O,LI,D> BackwardAll<U> for InputLayer<U,O,LI,D>
           <O as BatchDataType>::Type: Debug + 'static {
     type LossInputScalar = U;
     type LossInput = LI;
+}
+impl<U,O,LI,D> BackwardAll<U> for InputLayer<U,O,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
     type LossOutput = LI;
 
     fn backward_all(&mut self, input: Self::LossInput, _:Self::OutStack)
@@ -338,7 +345,7 @@ impl<U,O,DI,PO,LI,D> PreTrain for DiffInputLayer<U,O,DI,PO,LI,D>
         Ok(Cons(Nil,self.device.forward_input(input)?))
     }
 }
-impl<U,O,DI,PO,LI,D> BackwardAll<U> for DiffInputLayer<U,O,DI,PO,LI,D>
+impl<U,O,DI,PO,LI,D> BackwardBase for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           DI: Debug,
@@ -348,6 +355,15 @@ impl<U,O,DI,PO,LI,D> BackwardAll<U> for DiffInputLayer<U,O,DI,PO,LI,D>
           <O as BatchDataType>::Type: Debug + 'static {
     type LossInputScalar = U;
     type LossInput = LI;
+}
+impl<U,O,DI,PO,LI,D> BackwardAll<U> for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
     type LossOutput = LI;
 
     fn backward_all(&mut self, input: Self::LossInput, _:Self::OutStack)
@@ -490,7 +506,7 @@ impl<U,O,LI,D,const M: usize> PreTrain for QuantizedInputLayer<U,O,LI,D,M>
         Ok(Cons(Nil,self.device.forward_input(input)?))
     }
 }
-impl<U,O,LI,D,const M: usize> BackwardAll<f32> for QuantizedInputLayer<U,O,LI,D,M>
+impl<U,O,LI,D,const M: usize> BackwardBase for QuantizedInputLayer<U,O,LI,D,M>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug,
@@ -498,6 +514,13 @@ impl<U,O,LI,D,const M: usize> BackwardAll<f32> for QuantizedInputLayer<U,O,LI,D,
           <O as BatchDataType>::Type: Debug + 'static {
     type LossInputScalar = f32;
     type LossInput = LI;
+}
+impl<U,O,LI,D,const M: usize> BackwardAll<f32> for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O> + DeviceInput<f32,O>,
+          <O as BatchDataType>::Type: Debug + 'static {
     type LossOutput = LI;
 
     fn backward_all(&mut self, input: Self::LossInput, _:Self::OutStack)

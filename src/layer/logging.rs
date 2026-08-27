@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, MaxInputValue, PreTrainBase, BatchSize};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, MaxInputValue, PreTrainBase, BatchSize, BackwardBase};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::Stack;
 
@@ -194,7 +194,7 @@ impl<U,P,I,PI,D> PreTrain for LoggingLayer<U,P,I,PI,D>
         Ok(s)
     }
 }
-impl<U,P,I,PI,D> BackwardAll<U> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,D> BackwardBase for LoggingLayer<U,P,I,PI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
@@ -204,6 +204,15 @@ impl<U,P,I,PI,D> BackwardAll<U> for LoggingLayer<U,P,I,PI,D>
           I: Debug + Send + Sync {
     type LossInputScalar = U;
     type LossInput = PI;
+}
+impl<U,P,I,PI,D> BackwardAll<U> for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> +
+             InputTensorScalar + OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync {
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)

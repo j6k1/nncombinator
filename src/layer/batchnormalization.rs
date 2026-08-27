@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, PreTrainBase, OutputScale, BatchSize, BatchOutputScale};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, PreTrainBase, OutputScale, BatchSize, BatchOutputScale, BackwardBase};
 use crate::mapper::{BatchDataMapper, IdentityMapper};
 use crate::ope::One;
 use crate::optimizer::{Optimizer, OptimizerBuilder};
@@ -446,6 +446,24 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Backward<U,(&PI,&PI,&C,&C),Result<(PI,C,C),T
                                         saved_inv_variance)
     }
 }
+impl<U,C,P,OP,D,I,PI,const N:usize> BackwardBase for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync,
+          PI: BatchDataType + InputTensorSize<N> + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+          InputTensorScalar + OutputTensorScalar + 'static,
+          C: Debug,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N> + DeviceBatchAveraging<C,U>,
+          <PI as BatchDataType>::Type: Debug + 'static,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          [();N]: TensorSize {
+    type LossInputScalar = U;
+    type LossInput = PI;
+}
 impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrainBase<PreOutput=PI> + PreTrain +
@@ -461,8 +479,6 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BatchNormalizationLayer<U
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
           [();N]: TensorSize {
-    type LossInputScalar = U;
-    type LossInput = PI;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)
@@ -936,7 +952,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OutputScale for BatchNormalizationLayer<U,C,
       <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
       [();N]: TensorSize {
     type ScalingDevice = D;
-    type Scale = ();
+    type Scale = PI;
     type ScaledOutput = PI;
 
     type Mapper<'a> = IdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;

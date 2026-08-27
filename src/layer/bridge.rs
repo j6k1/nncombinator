@@ -6,7 +6,7 @@ use std::str::FromStr;
 use crate::arr::{MakeView, MakeViewMut, SliceSize};
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchSize};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchSize, BatchOutputScale, BackwardBase};
 use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
@@ -153,7 +153,7 @@ impl<U,SO,P,I,PI,CI,D> PreTrain for BridgeLayer<U,SO,P,I,PI,CI,D>
         Ok(s.push(r))
     }
 }
-impl<U,SO,P,I,PI,CI,D> BackwardAll<SO> for BridgeLayer<U,SO,P,I,PI,CI,D>
+impl<U,SO,P,I,PI,CI,D> BackwardBase for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              InputTensorScalar + OutputTensorScalar,
@@ -165,6 +165,17 @@ impl<U,SO,P,I,PI,CI,D> BackwardAll<SO> for BridgeLayer<U,SO,P,I,PI,CI,D>
           I: Debug + Send + Sync {
     type LossInputScalar = SO;
     type LossInput = CI;
+}
+impl<U,SO,P,I,PI,CI,D> BackwardAll<SO> for BridgeLayer<U,SO,P,I,PI,CI,D>
+    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             InputTensorScalar + OutputTensorScalar,
+          U: Debug + Debug + Default + Clone + Copy + Send + Sync + 'static,
+          SO : Debug + Debug + Default + Clone + Copy + Send + Sync + 'static,
+          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          PI: Debug + 'static + BatchDataType + InputTensorScalar,
+          CI: Debug + 'static + BatchDataType + OutputTensorScalar,
+          I: Debug + Send + Sync {
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)
@@ -450,13 +461,36 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
           I: Debug + Send + Sync,
+          Self: ForwardAll<Output=PI>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
     type ScalingDevice = D;
     type Scale = ();
-    type ScaledOutput = CI;
-    type Mapper<'a> = IdentityMapper<'a,CI,Self::ScalingDevice> where Self: 'a;
-    fn scaling_mapper<'a>(&self, input: &'a CI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+    type ScaledOutput = PI;
+    type Mapper<'a> = IdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
+    fn scaling_mapper<'a>(&self, input: &'a PI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
+    }
+}
+impl<U,SO,P,I,PI,CI,D> BatchOutputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale +
+             InputTensorScalar + OutputTensorScalar +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase + BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          PI: Debug + 'static + BatchDataType + InputTensorScalar,
+          CI: Debug + 'static + BatchDataType + OutputTensorScalar,
+          I: Debug + BatchDataType + Send + Sync + 'static,
+          Self: ForwardAll<Output=PI>,
+          Self: BatchForwardBase<BatchOutput=<PI as BatchDataType>::Type>,
+          <I as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
+    type BatchMapper<'a> = IdentityMapper<'a, <PI as BatchDataType>::Type,Self::ScalingDevice> where Self: 'a;
+    fn batch_scaling_mapper<'a>(&self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
         Ok(IdentityMapper::new(input))
     }
 }

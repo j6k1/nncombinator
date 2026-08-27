@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::bias::DeviceBias;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, PreTrainBase};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, PreTrainBase, BackwardBase};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
 
@@ -228,7 +228,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> Backward<U,PI,Result<PI,TrainingError>> for 
         self.device.backward_bias(input)
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BackwardBase for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: BackwardAll<U,LossInput=PI,LossInputScalar=U> + ForwardAll<Input=I,Output=PI> +
              PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar,
@@ -243,6 +243,20 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,C,P,OP,D,I,PI
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type LossInputScalar = U;
     type LossInput = PI;
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> BackwardAll<U> for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: BackwardAll<U,LossInput=PI,LossInputScalar=U> + ForwardAll<Input=I,Output=PI> +
+             PreTrain<PreOutput=PI> +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType + 'static,
+          C: Debug,
+          OP: Optimizer<U,D>,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)

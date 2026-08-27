@@ -9,7 +9,7 @@ use crate::device::clone::DeviceClone;
 use crate::device::Device;
 use crate::device::scale::DeviceScale;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, InvalidStateError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchOutputScale};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchOutputScale, BackwardBase};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 /// Trait for InverseScalingLayer instance creation.
@@ -184,7 +184,7 @@ impl<U,P,D,I,PI,const N:usize> Backward<U,PI,Result<PI,TrainingError>> for Scali
         Ok(self.device.cloned(self.parent.scaling_mapper(&input)?.deref())?)
     }
 }
-impl<U,P,D,I,PI,const N:usize> BackwardAll<U> for ScalingLayer<U,P,D,I,PI,N>
+impl<U,P,D,I,PI,const N:usize> BackwardBase for ScalingLayer<U,P,D,I,PI,N>
     where P: BackwardAll<U,LossInput=PI,LossInputScalar=U> + ForwardAll<Input=I,Output=PI> +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI>,
@@ -195,6 +195,16 @@ impl<U,P,D,I,PI,const N:usize> BackwardAll<U> for ScalingLayer<U,P,D,I,PI,N>
           for<'a> D: Device<U> + DeviceScale<U,PI,N,Scale=PI> + DeviceClone<'a,PI> {
     type LossInputScalar = U;
     type LossInput = PI;
+}
+impl<U,P,D,I,PI,const N:usize> BackwardAll<U> for ScalingLayer<U,P,D,I,PI,N>
+    where P: BackwardAll<U,LossInput=PI,LossInputScalar=U> + ForwardAll<Input=I,Output=PI> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType + 'static,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          for<'a> D: Device<U> + DeviceScale<U,PI,N,Scale=PI> + DeviceClone<'a,PI> {
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)

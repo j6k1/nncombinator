@@ -11,7 +11,7 @@ use crate::device::bridge::DeviceBridge;
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear, DeviceQuantizedLinear};
 use crate::device::scale::DeviceScale;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, OutputScale, MaxInputValue, PreTrainBase};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, OutputScale, MaxInputValue, PreTrainBase, BackwardBase};
 use crate::mapper::{DataMapper, ScalingMapper};
 use crate::ope::{MaxValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
@@ -329,6 +329,29 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
         Ok(self.device.backward_linear(&self.units,input)?.into())
     }
 }
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardBase for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: BackwardAll<U,LossInput=PI,LossInputScalar=U> + ForwardAll<Input=I,Output=PI> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync,
+          C: Debug,
+          BC: Debug,
+          OP: Optimizer<U,D>,
+          PI: Debug + InputTensorSize<NI> + BatchDataType +
+          InputTensorScalar + OutputTensorScalar +
+          From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO> + DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
+          <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> ,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    type LossInputScalar = U;
+    type LossInput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
+}
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: BackwardAll<U,LossInput=PI,LossInputScalar=U> + ForwardAll<Input=I,Output=PI> +
              PreTrainBase<PreOutput=PI> + PreTrain +
@@ -349,8 +372,6 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<U> for Linear
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> ,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
-    type LossInputScalar = U;
-    type LossInput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)
@@ -1226,6 +1247,34 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
         Ok(self.device.backward_linear(&self.units,input,&self.scale)?.into())
     }
 }
+impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardBase for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: BackwardAll<f32,LossInput=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput,LossInputScalar=f32> + ForwardAll<Input=I,Output=PI> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar + InputScale + MaxInputValue<Scalar=usize>,
+          U: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<f32> + Mul<Output=U> + 'static,
+          W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<U> + 'static,
+          I: Debug + Send + Sync,
+          C: Debug,
+          BC: Debug,
+          OP: Optimizer<f32,D>,
+          PI: Debug + InputTensorSize<NI> + BatchDataType +
+          InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
+          D: Device<U> + Device<f32> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO> +
+          DeviceBatchAveraging<C,f32> + DeviceBatchAveraging<BC,f32>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          f32: Assume<W>,
+          i32: From<U>,
+          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          for<'a> &'a <OP as Optimizer<f32,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<f32,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut BC> ,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    type LossInputScalar = f32;
+    type LossInput = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossInput;
+}
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<f32> for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
     where P: BackwardAll<f32,LossInput=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput,LossInputScalar=f32> + ForwardAll<Input=I,Output=PI> +
              PreTrainBase<PreOutput=PI> + PreTrain +
@@ -1251,8 +1300,6 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BackwardAll<f32> for Qu
           for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut BC> ,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
-    type LossInputScalar = f32;
-    type LossInput = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossInput;
     type LossOutput = <P as BackwardAll<f32>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)
@@ -2130,6 +2177,30 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> PreTrain for DiffLi
         Ok(Cons(s,u))
     }
 }
+impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> BackwardBase for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
+    where P: BackwardAll<U,LossInput=(),LossInputScalar=U> +
+             ForwardAll<Input=I,Output=PI> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync,
+          DI: Debug,
+          PI: Debug + InputTensorSize<NI> + BatchDataType,
+          C: Debug,
+          BC: Debug,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO> +
+          DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
+          <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO> + Debug + 'static,
+          BC: From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output>,
+          for<'b> &'b <OP as Optimizer<U,D>>::InternalType: From<&'b C>,
+          for<'b> &'b <OP as Optimizer<U,D>>::InternalType: From<&'b BC>,
+          for<'b> <OP as Optimizer<U,D>>::InternalUpdateType<'b>: From<&'b mut C>,
+          for<'b> <OP as Optimizer<U,D>>::InternalUpdateType<'b>: From<&'b mut BC>,
+          Self: ForwardAll + PreTrain<OutStack=Cons<<P as PreTrainBase>::OutStack,BC>> {
+    type LossInputScalar = U;
+    type LossInput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
+}
 impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> BackwardAll<U> for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
     where P: BackwardAll<U,LossInput=(),LossInputScalar=U> +
              ForwardAll<Input=I,Output=PI> +
@@ -2151,8 +2222,6 @@ impl<'a,U,C,BC,P,D,OP,I,DI,PI,const NI:usize,const NO:usize> BackwardAll<U> for 
           for<'b> <OP as Optimizer<U,D>>::InternalUpdateType<'b>: From<&'b mut C>,
           for<'b> <OP as Optimizer<U,D>>::InternalUpdateType<'b>: From<&'b mut BC>,
           Self: ForwardAll + PreTrain<OutStack=Cons<<P as PreTrainBase>::OutStack,BC>> {
-    type LossInputScalar = U;
-    type LossInput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
     type LossOutput = <P as BackwardAll<U>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)

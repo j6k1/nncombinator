@@ -278,12 +278,12 @@ impl<U,P,A,I,PI,LI,D,const N:usize> Loss<<LI as OutputTensorScalar>::Scalar> for
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceActivation<<LI as OutputTensorScalar>::Scalar,LI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
-          LI: Debug + Send + BatchDataType + OutputTensorScalar + 'static,
+          LI: Debug + BatchDataType + OutputTensorScalar + 'static,
           I: Debug + BatchDataType + Send + Sync,
-          <P as OutputScale>::Scale: Debug + BatchDataType + Send + Sync,
-          <PI as BatchDataType>::Type: Debug + BatchSize + Send + Sync + 'static,
-          <LI as BatchDataType>::Type: Debug + BatchSize + Send + Sync + 'static,
-          <LI as OutputTensorScalar>::Scalar: Default + Clone + Copy + Debug + Send + Sync + 'static {
+          <LI as OutputTensorScalar>::Scalar: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          <P as OutputScale>::Scale: Debug + BatchDataType + 'static,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <LI as BatchDataType>::Type: Debug + BatchSize + 'static {
     fn loss(&mut self, loss: Self::LossInput, stack: Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         let (s,o) = stack.pop();
 
@@ -407,9 +407,10 @@ impl<U,P,A,I,PI,LI,D,const N:usize> BatchBackwardBase for ActivationLayer<U,P,A,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug + BatchSize,
-          <LI as OutputTensorScalar>::Scalar: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          <LI as OutputTensorScalar>::Scalar: Default + Clone + Copy + Send + Sync + Debug + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-          <I as BatchDataType>::Type: Debug + BatchSize + 'static {
+          <I as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <LI as BatchDataType>::Type: Debug + BatchSize + 'static {
     type BatchLossInput = <LI as BatchDataType>::Type;
     type BatchLossOutput = <P as BatchBackwardBase>::BatchLossOutput;
 }
@@ -426,10 +427,10 @@ impl<U,P,A,I,PI,LI,D,const N:usize> BatchBackward<<LI as OutputTensorScalar>::Sc
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + OutputTensorScalar + 'static,
           I: Debug + Send + Sync + BatchDataType,
+          <LI as OutputTensorScalar>::Scalar: Default + Clone + Copy + Send + Sync + Debug + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug + BatchSize,
-          <LI as OutputTensorScalar>::Scalar: Default + Clone + Copy + Debug + Send + Sync + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug + BatchSize + 'static {
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
@@ -455,10 +456,10 @@ impl<U,P,A,I,PI,LI,D,const N:usize> BatchLoss<<LI as OutputTensorScalar>::Scalar
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug + BatchSize,
-          <LI as OutputTensorScalar>::Scalar: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          <LI as OutputTensorScalar>::Scalar: Default + Clone + Copy + Send + Sync + Debug + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <I as BatchDataType>::Type: Debug + BatchSize + 'static,
-          Self: ForwardAll<Output=LI>,
+          Self: ForwardAll<Output=PI>,
           for<'a> <P as BatchOutputScale>::BatchMapper<'a>: BatchDataMapper<'a,PI,LI,D> +
                                                             Deref<Target=<LI as BatchDataType>::Type> {
     fn batch_loss(&self, loss: Self::BatchLossInput, stack: Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {

@@ -785,7 +785,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputScale for LinearLay
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar,
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
           <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
@@ -810,7 +810,7 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchOutputScale for Line
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
           PI: Debug + InputTensorSize<NI> + BatchDataType +
-              InputTensorScalar + OutputTensorScalar,
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           OP: Optimizer<U,D>,
           D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO,BatchOutput=<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type>,
           <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,

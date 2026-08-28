@@ -1971,6 +1971,16 @@ impl<U,T,A> TryClone for CudaVec<U,T,A>
         Ok(dst)
     }
 }
+impl<U,T,A> InputTensorScalar for CudaVec<U,T,A>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          A: CudaAllocator + 'static {
+    type Scalar = U;
+}
+impl<U,T,A> OutputTensorScalar for CudaVec<U,T,A>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          A: CudaAllocator + 'static {
+    type Scalar = U;
+}
 impl<'a,U,T,A> ToCuda<U,A> for &'a CudaVec<U,T,A>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'a,
           T: AsConstKernelPtr + AsKernelPtr + MemorySize +

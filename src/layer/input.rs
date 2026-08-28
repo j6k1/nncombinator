@@ -6,7 +6,8 @@ use crate::{Cons, Never, Nil};
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight, MaxInputValue, PreTrainBase, BackwardBase};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight, MaxInputValue, PreTrainBase, OutputScale, BatchOutputScale, BackwardBase, BatchBackwardBase};
+use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 pub struct InputLayer<U,O,LI,D>
@@ -167,7 +168,7 @@ impl<U,O,LI,D> BatchPreTrain for InputLayer<U,O,LI,D>
         Ok(Cons(Nil,self.device.batch_forward_input(input)?))
     }
 }
-impl<U,O,LI,D> BatchBackward<U> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> BatchBackwardBase for InputLayer<U,O,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug + BatchDataType,
@@ -176,9 +177,16 @@ impl<U,O,LI,D> BatchBackward<U> for InputLayer<U,O,LI,D>
           <O as BatchDataType>::Type: Debug + 'static {
     type BatchLossInput = <LI as BatchDataType>::Type;
     type BatchLossOutput = <LI as BatchDataType>::Type;
-
+}
+impl<U,O,LI,D> BatchBackward<U> for InputLayer<U,O,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug + BatchDataType,
+          D: Device<U> + DeviceInput<U,O>,
+          <LI as BatchDataType>::Type: Debug,
+          <O as BatchDataType>::Type: Debug + 'static {
     fn batch_backward(&mut self, input: Self::BatchLossInput, _: Self::BatchOutStack)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
 }
@@ -220,6 +228,37 @@ impl<U,O,LI,D> InputScale for InputLayer<U,O,LI,D>
           D: Device<U> {
     fn scale_mean(&self) -> f32 {
         1.
+    }
+}
+impl<U,O,LI,D> OutputScale for InputLayer<U,O,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <D as DeviceInput<U,O>>::Output: Debug + BatchDataType + 'static,
+          <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type ScalingDevice = D;
+    type Scale = <D as DeviceInput<U,O>>::Output;
+    type ScaledOutput = <D as DeviceInput<U,O>>::Output;
+    type Mapper<'a> = IdentityMapper<'a,<D as DeviceInput<U,O>>::Output,Self::ScalingDevice> where Self: 'a;
+
+    fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
+    }
+}
+impl<U,O,LI,D> BatchOutputScale for InputLayer<U,O,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O,BatchOutput=<<D as DeviceInput<U,O>>::Output as BatchDataType>::Type>,
+          <D as DeviceInput<U,O>>::Output: Debug + BatchDataType + 'static,
+          <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type BatchMapper<'a> = BatchIdentityMapper<'a,<D as DeviceInput<U,O>>::Output,Self::ScalingDevice> where Self: 'a;
+
+    fn batch_scaling_mapper<'a>(&'a self, input: &'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
+        Ok(BatchIdentityMapper::new(input))
     }
 }
 pub struct DiffInputLayer<U,O,DI,PO,LI,D>
@@ -421,6 +460,25 @@ impl<U,O,DI,PO,LI,D> InputScale for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> {
 }
+impl<U,O,DI,PO,LI,D> OutputScale for DiffInputLayer<U,O,DI,PO,LI,D>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          DI: Debug,
+          PO: Debug,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <D as DeviceInput<U,O>>::Output: Debug + BatchDataType + 'static,
+          <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type ScalingDevice = D;
+    type Scale = <D as DeviceInput<U,O>>::Output;
+    type ScaledOutput = <D as DeviceInput<U,O>>::Output;
+    type Mapper<'a> = IdentityMapper<'a,<D as DeviceInput<U,O>>::Output,Self::ScalingDevice> where Self: 'a;
+
+    fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
+    }
+}
 pub struct QuantizedInputLayer<U,O,LI,D,const M:usize>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> {
@@ -579,7 +637,7 @@ impl<U,O,LI,D,const M: usize> BatchPreTrain for QuantizedInputLayer<U,O,LI,D,M>
         Ok(Cons(Nil,self.device.batch_forward_input(input)?))
     }
 }
-impl<U,O,LI,D,const M: usize> BatchBackward<f32> for QuantizedInputLayer<U,O,LI,D,M>
+impl<U,O,LI,D,const M: usize> BatchBackwardBase for QuantizedInputLayer<U,O,LI,D,M>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug + BatchDataType,
@@ -588,9 +646,16 @@ impl<U,O,LI,D,const M: usize> BatchBackward<f32> for QuantizedInputLayer<U,O,LI,
           <O as BatchDataType>::Type: Debug + 'static {
     type BatchLossInput = <LI as BatchDataType>::Type;
     type BatchLossOutput = <LI as BatchDataType>::Type;
-
+}
+impl<U,O,LI,D,const M: usize> BatchBackward<f32> for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug + BatchDataType,
+          D: Device<U> + DeviceInput<U,O> + DeviceInput<f32,O>,
+          <LI as BatchDataType>::Type: Debug,
+          <O as BatchDataType>::Type: Debug + 'static {
     fn batch_backward(&mut self, input: Self::BatchLossInput, _: Self::BatchOutStack)
-                      -> Result<(<Self as BatchBackward<f32>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+                      -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
 }
@@ -635,6 +700,37 @@ impl<U,O,LI,D,const M: usize> InputScale for QuantizedInputLayer<U,O,LI,D,M>
           D: Device<U> {
     fn scale_mean(&self) -> f32 {
         1.
+    }
+}
+impl<U,O,LI,D,const M: usize> OutputScale for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O>,
+          <D as DeviceInput<U,O>>::Output: Debug + BatchDataType + 'static,
+          <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type ScalingDevice = D;
+    type Scale = <D as DeviceInput<U,O>>::Output;
+    type ScaledOutput = <D as DeviceInput<U,O>>::Output;
+    type Mapper<'a> = IdentityMapper<'a,<D as DeviceInput<U,O>>::Output,Self::ScalingDevice> where Self: 'a;
+
+    fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
+    }
+}
+impl<U,O,LI,D,const M: usize> BatchOutputScale for QuantizedInputLayer<U,O,LI,D,M>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          O: Debug + BatchDataType + Send + Sync + 'static,
+          LI: Debug,
+          D: Device<U> + DeviceInput<U,O,BatchOutput=<<D as DeviceInput<U,O>>::Output as BatchDataType>::Type>,
+          <D as DeviceInput<U,O>>::Output: Debug + BatchDataType + 'static,
+          <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <O as BatchDataType>::Type: Debug + 'static {
+    type BatchMapper<'a> = BatchIdentityMapper<'a,<D as DeviceInput<U,O>>::Output,Self::ScalingDevice> where Self: 'a;
+
+    fn batch_scaling_mapper<'a>(&'a self, input: &'a <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
+        Ok(BatchIdentityMapper::new(input))
     }
 }
 impl<U,O,LI,D,const M: usize> MaxInputValue for QuantizedInputLayer<U,O,LI,D,M>

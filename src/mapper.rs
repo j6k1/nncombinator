@@ -13,10 +13,11 @@ pub trait DataMapper<'a,I,O,D>: Sized + Deref<Target=O> + 'a
           O: Debug + Sized + 'a,
           D: 'static {
 }
-pub trait BatchDataMapper<'a,I,O,D>: Sized + Deref<Target=O> + 'a
+pub trait BatchDataMapper<'a,I,O,D>: Sized
     where I: Debug + Sized + 'a,
-      O: Debug + Sized + 'a,
-      D: 'static {
+      O: Debug + BatchDataType + Sized + 'a,
+      D: 'static,
+      Self: Deref<Target=<O as BatchDataType>::Type> + 'a {
 }
 pub struct IdentityMapper<'a,I,D>
     where I: Debug + Sized + 'a,
@@ -105,11 +106,6 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> DataMapper<'a,I,O,D> for ScalingMapper<'a,U
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'static,
           Self: Sized + 'a {}
-impl<'a,I,D> BatchDataMapper<'a,I,I,D> for IdentityMapper<'a,I,D>
-    where I: Debug + Sized + 'a,
-          D: 'static,
-          Self: Sized + 'a {}
-
 pub struct BatchScalingMapper<'a,U,SO,SC,I,O,D,const N:usize>
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'a,
@@ -160,7 +156,7 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> Deref for BatchScalingMapper<'a,U,SO,SC,I,O
         &self.dst
     }
 }
-impl<'a,U,SO,SC,I,O,D,const N:usize> BatchDataMapper<'a,I,<O as BatchDataType>::Type,D> for BatchScalingMapper<'a,U,SO,SC,I,O,D,N>
+impl<'a,U,SO,SC,I,O,D,const N:usize> BatchDataMapper<'a,I,O,D> for BatchScalingMapper<'a,U,SO,SC,I,O,D,N>
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'a,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -168,4 +164,32 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> BatchDataMapper<'a,I,<O as BatchDataType>::
           D: DeviceScale<SO,O,N,Scale=SC> + DeviceBridge<U,SO,I,O> + Debug + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'a,
+          Self: Sized + 'a {}
+pub struct BatchIdentityMapper<'a,I,D>
+    where I: Debug + BatchDataType + Sized + 'a,
+          Self: Sized + 'a {
+    source: &'a <I as BatchDataType>::Type,
+    device: PhantomData<D>,
+}
+impl<'a,I,D> BatchIdentityMapper<'a,I,D>
+    where I: Debug + BatchDataType + Sized + 'a,
+          Self: Sized + 'a {
+    pub fn new(source: &'a <I as BatchDataType>::Type) -> Self {
+        BatchIdentityMapper {
+            source:source,
+            device:PhantomData::<D>,
+        }
+    }
+}
+impl<'a,I,D> Deref for BatchIdentityMapper<'a,I,D>
+    where I: Debug + BatchDataType + Sized + 'a,
+          Self: Sized + 'a {
+    type Target = <I as BatchDataType>::Type;
+    fn deref(&self) -> &Self::Target {
+        self.source
+    }
+}
+impl<'a,I,D> BatchDataMapper<'a,I,I,D> for BatchIdentityMapper<'a,I,D>
+    where I: Debug + BatchDataType + Sized + 'a,
+          D: 'static,
           Self: Sized + 'a {}

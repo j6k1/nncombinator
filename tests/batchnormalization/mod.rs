@@ -19,7 +19,7 @@ use nncombinator::layer::linear::LinearLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::optimizer::{MomentumSGDBuilder};
-use crate::common::{assert_device, assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL, assert_partial_forward};
+use crate::common::{assert_device, assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL, assert_partial_forward, assert_output_scale, assert_batch_output_scale};
 
 #[test]
 fn test_mnist_batch_norm() {
@@ -43,9 +43,11 @@ fn test_mnist_batch_norm() {
         assert_pre_train(&l);
         assert_backward_all(&l);
         assert_update_weight(&l);
+        assert_output_scale(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
+        assert_batch_output_scale(&l);
 
         let rnd = rnd.clone();
         LinearLayerBuilder::<{ 28*28 },100>::new().build(l,&device,
@@ -57,9 +59,11 @@ fn test_mnist_batch_norm() {
         assert_pre_train(&l);
         assert_backward_all(&l);
         assert_update_weight(&l);
+        assert_output_scale(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
+        assert_batch_output_scale(&l);
 
         BatchNormalizationLayerBuilder::<100>::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
@@ -67,9 +71,11 @@ fn test_mnist_batch_norm() {
         assert_pre_train(&l);
         assert_backward_all(&l);
         assert_update_weight(&l);
+        assert_output_scale(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
+        assert_batch_output_scale(&l);
 
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
@@ -77,9 +83,13 @@ fn test_mnist_batch_norm() {
         assert_pre_train(&l);
         assert_backward_all(&l);
         assert_update_weight(&l);
+        assert_loss(&l);
+        assert_output_scale(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
+        assert_batch_loss(&l);
+        assert_batch_output_scale(&l);
 
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -91,9 +101,11 @@ fn test_mnist_batch_norm() {
         assert_pre_train(&l);
         assert_backward_all(&l);
         assert_update_weight(&l);
+        assert_output_scale(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
+        assert_batch_output_scale(&l);
 
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
@@ -101,9 +113,11 @@ fn test_mnist_batch_norm() {
         assert_pre_train(&l);
         assert_backward_all(&l);
         assert_update_weight(&l);
+        assert_output_scale(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
+        assert_batch_output_scale(&l);
 
         ActivationLayer::new(l,ReLu::new(&device),&device)
     }).add_layer(|l| {
@@ -112,10 +126,12 @@ fn test_mnist_batch_norm() {
         assert_backward_all(&l);
         assert_update_weight(&l);
         assert_loss(&l);
+        assert_output_scale(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
         assert_batch_loss(&l);
+        assert_batch_output_scale(&l);
 
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,10>::new().build(l,&device,
@@ -138,18 +154,23 @@ fn test_mnist_batch_norm() {
         assert_backward_all(&l);
         assert_update_weight(&l);
         assert_loss(&l);
+        assert_output_scale(&l);
         assert_batch_forward(&l);
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
         assert_batch_loss(&l);
+        assert_batch_output_scale(&l);
 
         LinearOutputLayer::new(l,&device).unwrap()
     });
 
     assert_forward_all(&net);
     assert_pre_train(&net);
+    assert_batch_forward(&net);
+    assert_batch_pre_train(&net);
     assert_backward_all(&net);
-    assert_update_weight(&net);
+    assert_batch_forward(&net);
+    assert_batch_pre_train(&net);
 
     let mut teachers:Vec<(usize,PathBuf)> = Vec::new();
 

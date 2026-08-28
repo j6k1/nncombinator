@@ -11,8 +11,8 @@ use crate::device::bridge::DeviceBridge;
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear, DeviceQuantizedLinear};
 use crate::device::scale::DeviceScale;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, OutputScale, MaxInputValue, PreTrainBase, BackwardBase};
-use crate::mapper::{DataMapper, ScalingMapper};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, OutputScale, BatchOutputScale, MaxInputValue, PreTrainBase, BackwardBase, BatchBackwardBase};
+use crate::mapper::{BatchIdentityMapper, DataMapper, IdentityMapper, ScalingMapper};
 use crate::ope::{MaxValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
@@ -592,6 +592,36 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrain for LinearL
         Ok(Cons(r,u))
     }
 }
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackwardBase for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrainBase<PreOutput=PI> + PreTrain + InputTensorScalar + OutputTensorScalar + BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain +
+             BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync + BatchDataType,
+          C: Debug,
+          BC: Debug,
+          PI: BatchDataType + InputTensorSize<NI> + InputTensorScalar + OutputTensorScalar,
+          OP: Optimizer<U,D>,
+          <I as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: BatchSize,
+          <PI as BatchDataType>::Type: IntoConverter,
+          <PI as BatchDataType>::Type: TryFrom<<<PI as BatchDataType>::Type as IntoConverter>::Converter,Error=TypeConvertError> + Debug,
+          PI: Debug + From<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::LossOutput> + BatchDataType,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO,BatchLossOutput=<PI as BatchDataType>::Type> +
+          DeviceBatchAveraging<C,U> + DeviceBatchAveraging<BC,U>,
+          <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+       <D as DeviceLinear<U,C,BC,PI,NI,NO>>::BatchOutput: Debug,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
+    type BatchLossInput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::BatchOutput;
+    type BatchLossOutput = <P as BatchBackwardBase>::BatchLossOutput;
+}
 impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrainBase<PreOutput=PI> + PreTrain + InputTensorScalar + OutputTensorScalar + BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
@@ -619,11 +649,8 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<U> for Line
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a BC>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
-    type BatchLossInput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::BatchOutput;
-    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
-
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s, _) = stack.pop();
 
         let loss = input;
@@ -748,6 +775,52 @@ impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> InputScale for LinearLaye
       [();NO]: TensorSize {
     fn scale_mean(&self) -> f32 {
         self.parent.scale_mean()
+    }
+}
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> OutputScale for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync,
+          PI: Debug + InputTensorSize<NI> + BatchDataType +
+              InputTensorScalar + OutputTensorScalar,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
+          <<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    type ScalingDevice = D;
+    type Scale = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
+    type ScaledOutput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
+    type Mapper<'a> = IdentityMapper<'a,<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output,Self::ScalingDevice> where Self: 'a;
+
+    fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
+    }
+}
+impl<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchOutputScale for LinearLayer<U,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug,
+          PI: Debug + InputTensorSize<NI> + BatchDataType +
+              InputTensorScalar + OutputTensorScalar,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceLinear<U,C,BC,PI,NI,NO,BatchOutput=<<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type>,
+          <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
+          <<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    type BatchMapper<'a> = BatchIdentityMapper<'a,<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output,Self::ScalingDevice> where Self: 'a;
+
+    fn batch_scaling_mapper<'a>(&'a self, input: &'a <<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
+        Ok(BatchIdentityMapper::new(input))
     }
 }
 pub trait LinearLayerInstantiation<U,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize>
@@ -1552,6 +1625,42 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchPreTrain for Quant
         Ok(Cons(r,u))
     }
 }
+impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackwardBase for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<f32,LossInput=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput,LossInputScalar=f32> +
+             PreTrainBase<PreOutput=PI> + PreTrain + InputTensorScalar + OutputTensorScalar + InputScale + MaxInputValue<Scalar=usize> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchForward +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain +
+             BatchBackward<f32,BatchLossInput=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchLossOutput>,
+          U: Default + Clone + Copy + Debug + Mul<Output=U> + MaxValue + Assume<f32> + Send + Sync + 'static,
+          W: Default + Clone + Copy + Debug + Send + Sync + MaxValue + Assume<U> + 'static,
+          I: Debug + Send + Sync + BatchDataType,
+          C: Debug,
+          BC: Debug,
+          PI: BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
+          OP: Optimizer<f32,D>,
+          <I as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: BatchSize,
+          <PI as BatchDataType>::Type: IntoConverter,
+          PI: Debug + BatchDataType,
+          D: Device<U> + Device<f32> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO> +
+          DeviceBatchAveraging<C,f32> + DeviceBatchAveraging<BC,f32>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize,
+          f32: Assume<W>,
+          i32: From<U>,
+          for<'a> &'a <OP as Optimizer<f32,D>>::InternalType: From<&'a C>,
+          for<'a> &'a <OP as Optimizer<f32,D>>::InternalType: From<&'a BC>,
+          for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut C>,
+          for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
+    type BatchLossInput = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchLossInput;
+    type BatchLossOutput = <P as BatchBackwardBase>::BatchLossOutput;
+}
 impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<f32> for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,OP,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<f32,LossInput=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput,LossInputScalar=f32> +
              PreTrainBase<PreOutput=PI> + PreTrain + InputTensorScalar + OutputTensorScalar + InputScale + MaxInputValue<Scalar=usize> +
@@ -1585,11 +1694,8 @@ impl<U,W,C,BC,P,D,I,PI,OP,const NI:usize,const NO:usize> BatchBackward<f32> for 
           for<'a> &'a <OP as Optimizer<f32,D>>::InternalType: From<&'a BC>,
           for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut C>,
           for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut BC> {
-    type BatchLossInput = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchLossInput;
-    type BatchLossOutput = <P as BatchBackward<f32>>::BatchLossOutput;
-
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
-        -> Result<(<Self as BatchBackward<f32>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s, _) = stack.pop();
 
         let loss = input;
@@ -2445,6 +2551,31 @@ impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> InputScale
       D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO> {
     fn scale_mean(&self) -> f32 {
         self.parent.scale_mean()
+    }
+}
+impl<'a,U,C,BC,P,OP,D,I,DI,PI,const NI:usize,const NO:usize> OutputScale
+    for DiffLinearLayer<'a,U,C,BC,P,OP,D,I,DI,PI,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=()> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync,
+          DI: Debug,
+          PI: Debug + InputTensorSize<NI> + BatchDataType,
+          OP: Optimizer<U,D>,
+          D: Device<U> + DeviceDiffLinear<'a,U,DI,C,NI,NO> + DeviceLinear<U,C,BC,PI,NI,NO>,
+          <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
+          <<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    type ScalingDevice = D;
+    type Scale = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
+    type ScaledOutput = <D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output;
+    type Mapper<'b> = IdentityMapper<'b,<D as DeviceLinear<U,C,BC,PI,NI,NO>>::Output,Self::ScalingDevice> where Self: 'b;
+
+    fn scaling_mapper<'b>(&'b self, input: &'b <Self as ForwardAll>::Output) -> Result<Self::Mapper<'b>,EvaluateError> where Self: 'b {
+        Ok(IdentityMapper::new(input))
     }
 }
 /// Trait for DiffLinearLayer instance creation

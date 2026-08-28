@@ -6,12 +6,12 @@ use std::str::FromStr;
 use crate::arr::{MakeView, MakeViewMut, SliceSize};
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchSize, BatchOutputScale, BackwardBase};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchSize, BatchOutputScale, BackwardBase, BatchBackwardBase};
 use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
 use crate::device::bridge::DeviceBridge;
-use crate::mapper::IdentityMapper;
+use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 
 /// Bridge layer Implementation
 pub struct BridgeLayer<U,SO,P,I,PI,CI,D>
@@ -344,7 +344,7 @@ impl<U,SO,P,I,PI,CI,D> BatchPreTrain for BridgeLayer<U,SO,P,I,PI,CI,D>
         Ok(s.push(r))
     }
 }
-impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for BridgeLayer<U,SO,P,I,PI,CI,D>
+impl<U,SO,P,I,PI,CI,D> BatchBackwardBase for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
@@ -365,9 +365,30 @@ impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for BridgeLayer<U,SO,P,I,PI,CI,D>
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug {
     type BatchLossInput = <CI as BatchDataType>::Type;
-    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
+    type BatchLossOutput = <P as BatchBackwardBase>::BatchLossOutput;
+}
+impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for BridgeLayer<U,SO,P,I,PI,CI,D>
+    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain +
+             BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type> +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          PI: Debug + BatchDataType + InputTensorScalar + 'static,
+          CI: Debug + BatchDataType + OutputTensorScalar + 'static,
+          <PI as BatchDataType>::Type: Debug,
+          <CI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> <CI as BatchDataType>::Type: Debug,
+          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug {
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
-        -> Result<(<Self as BatchBackward<SO>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
         Ok(self.parent.batch_backward(self.device.batch_bridge_backward(&input)?, s)?)
@@ -489,9 +510,9 @@ impl<U,SO,P,I,PI,CI,D> BatchOutputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
           <I as BatchDataType>::Type: Debug + BatchSize + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
-    type BatchMapper<'a> = IdentityMapper<'a, <PI as BatchDataType>::Type,Self::ScalingDevice> where Self: 'a;
+    type BatchMapper<'a> = BatchIdentityMapper<'a, PI, Self::ScalingDevice> where Self: 'a;
     fn batch_scaling_mapper<'a>(&self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
-        Ok(IdentityMapper::new(input))
+        Ok(BatchIdentityMapper::new(input))
     }
 }
 /// Trait for BridgeLayer instance creation

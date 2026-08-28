@@ -9,7 +9,8 @@ use crate::device::clone::DeviceClone;
 use crate::device::Device;
 use crate::device::scale::DeviceScale;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, InvalidStateError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchOutputScale, BackwardBase};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchOutputScale, BackwardBase, BatchBackwardBase};
+use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 /// Trait for InverseScalingLayer instance creation.
@@ -369,7 +370,7 @@ impl<U,P,D,I,PI,const N:usize> BatchPreTrain for ScalingLayer<U,P,D,I,PI,N>
         Ok(Cons(s,u))
     }
 }
-impl<U,P,D,I,PI,const N:usize> BatchBackward<U> for ScalingLayer<U,P,D,I,PI,N>
+impl<U,P,D,I,PI,const N:usize> BatchBackwardBase for ScalingLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI> +
@@ -384,10 +385,24 @@ impl<U,P,D,I,PI,const N:usize> BatchBackward<U> for ScalingLayer<U,P,D,I,PI,N>
           <I as BatchDataType>::Type: Debug,
           for<'a> D: Device<U> + DeviceScale<U,PI,N,Scale=PI> + DeviceClone<'a,PI> + DeviceClone<'a,<PI as BatchDataType>::Type> {
     type BatchLossInput = <PI as BatchDataType>::Type;
-    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
-
+    type BatchLossOutput = <P as BatchBackwardBase>::BatchLossOutput;
+}
+impl<U,P,D,I,PI,const N:usize> BatchBackward<U> for ScalingLayer<U,P,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI> +
+             BatchOutputScale +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
+             BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync + BatchDataType,
+          PI: Debug + BatchDataType + 'static,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> D: Device<U> + DeviceScale<U,PI,N,Scale=PI> + DeviceClone<'a,PI> + DeviceClone<'a,<PI as BatchDataType>::Type> {
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s, _) = stack.pop();
 
         let next_loss = self.device.cloned(self.parent.batch_scaling_mapper(&input)?.deref())?;
@@ -463,9 +478,53 @@ impl<U,P,D,I,PI,const N:usize> InputScale for ScalingLayer<U,P,D,I,PI,N>
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       I: Debug + Send + Sync,
       PI: Debug + BatchDataType + 'static,
-      <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
+      <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+      Self: ForwardAll<Output=PI>,
+      for<'a> D: DeviceClone<'a,PI> {
     fn scale_mean(&self) -> f32 {
         self.parent.scale_mean()
+    }
+}
+impl<U,P,D,I,PI,const N:usize> OutputScale for ScalingLayer<U,P,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI>,
+      D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      I: Debug + Send + Sync,
+      PI: Debug + BatchDataType + 'static,
+      <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+      for<'a> D: DeviceClone<'a,PI> {
+    type ScalingDevice = D;
+    type Scale = PI;
+    type ScaledOutput = PI;
+    type Mapper<'a> = IdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
+
+    fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
+    }
+}
+impl<U,P,D,I,PI,const N:usize> BatchOutputScale for ScalingLayer<U,P,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar + OutputScale<Scale=PI,ScaledOutput=PI> +
+             BatchOutputScale +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
+      D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      I: Debug + Send + Sync + BatchDataType,
+      PI: Debug + BatchDataType + 'static,
+      <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+      <I as BatchDataType>::Type: Debug,
+      Self: ForwardAll<Output=PI>,
+      Self: BatchForwardBase<BatchOutput=<PI as BatchDataType>::Type>,
+      for<'a> D: DeviceClone<'a,PI> {
+    type BatchMapper<'a> = BatchIdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
+
+    fn batch_scaling_mapper<'a>(&'a self, input: &'a<PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
+        Ok(BatchIdentityMapper::new(input))
     }
 }
 impl<U,P,D,I,PI,const N:usize> ScalingLayerInstantiation<U,P,D,I,PI,N> for ScalingLayer<U,P,D,I,PI,N>

@@ -11,7 +11,7 @@ use crate::cuda::DataTypeInfo;
 use crate::device::{Device};
 use crate::device::output::DeviceLinearOutput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
-use crate::layer::{BackwardAll, BackwardBase, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, InputTensorScalar, Loss, OnStep, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, PreTrainBase, Step, Train, UpdateWeight};
+use crate::layer::{BackwardAll, BackwardBase, BatchBackward, BatchBackwardBase, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, InputTensorScalar, Loss, OnStep, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, PreTrainBase, Step, Train, UpdateWeight};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, VerifyEof};
 
@@ -388,6 +388,25 @@ impl<U,P,D,I,PI,const N:usize> BatchPreTrain for LinearOutputLayer<U,P,D,I,PI,N>
         self.parent.batch_pre_train(input)
     }
 }
+impl<U,P,D,I,PI,const N:usize> BatchBackwardBase for LinearOutputLayer<U,P,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+             PreTrainBase<PreOutput=PI> + PreTrain + Loss<U> +
+             InputTensorScalar + OutputTensorScalar +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
+             BatchBackward<U> + UpdateWeight + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + Debug + Send + Sync +
+          Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
+          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: Debug + ToHost<U,Output=SerializedVec<U,Arr<U,N>>>,
+          <PI as ToHost<U>>::Output: Debug + 'static,
+          <I as BatchDataType>::Type: Debug + BatchSize,
+          <<PI as BatchDataType>::Type as ToHost<U>>::Output: Debug + 'static,
+          for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
+    type BatchLossInput = <PI as BatchDataType>::Type;
+    type BatchLossOutput = <P as BatchBackwardBase>::BatchLossOutput;
+}
 impl<U,P,D,I,PI,const N:usize> BatchBackward<U> for LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
              PreTrainBase<PreOutput=PI> + PreTrain + Loss<U> +
@@ -404,16 +423,13 @@ impl<U,P,D,I,PI,const N:usize> BatchBackward<U> for LinearOutputLayer<U,P,D,I,PI
           <I as BatchDataType>::Type: Debug + BatchSize,
           <<PI as BatchDataType>::Type as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
-    type BatchLossInput = <PI as BatchDataType>::Type;
-    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
-
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         self.parent.batch_backward(input,stack)
     }
 }
 impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
+    where P: ForwardAll<Input=I,Output=PI> + BackwardBase<LossInput=PI> + BackwardAll<U> +
              PreTrainBase<PreOutput=PI> + PreTrain + Loss<U> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
@@ -423,10 +439,14 @@ impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
           PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync + BatchDataType,
-          <PI as BatchDataType>::Type: Debug + ToHost<U,Output=SerializedVec<U,Arr<U,N>>>,
+          <PI as BatchDataType>::Type: Debug + ToHost<U,Output=SerializedVec<U,Arr<U,N>>> +
+                                       InputTensorScalar<Scalar=U> +
+                                       OutputTensorScalar<Scalar=U>,
           <PI as ToHost<U>>::Output: Debug + 'static,
           <I as BatchDataType>::Type: Debug + BatchSize,
-          <<PI as BatchDataType>::Type as ToHost<U>>::Output: Debug + 'static,
+          <<PI as BatchDataType>::Type as ToHost<U>>::Output: Debug +
+                                                              InputTensorScalar<Scalar=U> +
+                                                              OutputTensorScalar<Scalar=U> + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI,BatchIO=<PI as BatchDataType>::Type>,
           f64: From<U>,
           Self: UpdateWeight<GradientStack = <P as UpdateWeight>::GradientStack>,

@@ -447,7 +447,7 @@ pub struct ReLu<U,D>
     d:PhantomData<D>
 }
 impl<U,D> ReLu<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+    where U: Default + Clone + Copy + Debug + PartialOrd + Max + Send + Sync + 'static,
           D: Device<U> {
     /// Create an instance of ReLu
     pub fn new(_:&D) -> ReLu<U,D> {

@@ -148,7 +148,7 @@ pub trait BackwardAll<SO>: BackwardBase
         -> Result<(<Self as BackwardAll<SO>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
 }
 /// Trait defining the calculation of the error during error back propagation.
-pub trait Loss<SO>: BackwardAll<SO>
+pub trait Loss<SO>: BackwardBase
     where SO: Clone + Copy + Debug {
     /// Error Calculation
     /// # Arguments
@@ -296,12 +296,15 @@ pub trait BatchForward: BatchForwardBase {
     fn batch_forward(&self,input:Self::BatchInput) -> Result<Self::BatchOutput, TrainingError>;
 }
 /// Trait defining an implementation of error back propagation for neural networks with batch processing.
-pub trait BatchBackward<SO>: BackwardAll<SO> + BatchPreTrainBase + UpdateWeight
-    where SO: Clone + Copy + Debug {
+pub trait BatchBackwardBase: BackwardBase + BatchPreTrainBase + UpdateWeight {
     /// Losses during neural network training for batch execution
     type BatchLossInput: Debug;
     /// Losses in the top layer during neural network training
     type BatchLossOutput: Debug;
+}
+/// Trait defining an implementation of error back propagation for neural networks with batch processing.
+pub trait BatchBackward<SO>: BatchBackwardBase
+    where SO: Clone + Copy + Debug {
     /// Back propagation of errors
     /// # Arguments
     /// * `input` - loss
@@ -313,11 +316,10 @@ pub trait BatchBackward<SO>: BackwardAll<SO> + BatchPreTrainBase + UpdateWeight
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn batch_backward(&mut self, input:Self::BatchLossInput, stack:Self::BatchOutStack)
-        -> Result<(<Self as BatchBackward<SO>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
+        -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError>;
 }
 /// Trait that defines the implementation of the process of calculating the loss during error back propagation of neural networks by batch processing.
-pub trait BatchLoss<SO>: BatchBackward<SO> + Loss<SO>
-    where SO: Clone + Copy + Debug {
+pub trait BatchLoss<SO>: BatchBackwardBase {
     /// Error Calculation
     /// # Arguments
     /// * `loss` - Lower layer error
@@ -477,7 +479,7 @@ pub trait BatchOutputScale: OutputScale + BatchForwardBase
           <<Self as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
           <Self::ScaledOutput as BatchDataType>::Type: Debug + BatchSize + 'static {
     /// Data Mapper for Scaling for batch execution
-    type BatchMapper<'a>: BatchDataMapper<'a,<Self as BatchForwardBase>::BatchOutput,<Self::ScaledOutput as BatchDataType>::Type,Self::ScalingDevice>
+    type BatchMapper<'a>: BatchDataMapper<'a,<Self as ForwardAll>::Output,Self::ScaledOutput,Self::ScalingDevice>
         where Self: 'a;
     fn batch_scaling_mapper<'a>(&'a self, input: &'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchMapper<'a>,EvaluateError>
         where Self: 'a;

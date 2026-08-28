@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -16,6 +17,7 @@ use nncombinator::layer::scale::InverseScalingLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::layer::quantization::DequantizeLayerBuilder;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
+use nncombinator::ope::{Max, Min};
 use nncombinator::optimizer::AdamWBuilder;
 use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_pre_train, assert_update_weight};
 

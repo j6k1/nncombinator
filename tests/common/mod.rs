@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use rand::Rng;
 use nncombinator::arr::{Arr, Arr2, SerializedVec};
 use nncombinator::device::input::DeviceInput;
-use nncombinator::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchPreTrain, ContinueForward, ForwardAll, ForwardDiff, Loss, OnStep, PartialForward, PersistProgress, PreTrain, Step, UpdateWeight};
+use nncombinator::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchOutputScale, BatchPreTrain, BatchSize, ContinueForward, ForwardAll, ForwardDiff, Loss, OnStep, OutputScale, PartialForward, PersistProgress, PreTrain, Step, UpdateWeight};
 use nncombinator::cuda::allocator::{CudaAllocator, DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
 use nncombinator::cuda::{AsCudaMutPtr, AsCudaView, CudaMutPtr, CudaTensor1dPtr, CudaTensor2dPtr, CudaVec, WriteMemory};
 use nncombinator::persistence::{Specialized, TextFilePersistence};
@@ -54,7 +54,16 @@ pub fn assert_step<T: Step>(_:&T) {
 pub fn assert_on_step<T: OnStep>(_:&T) {
 
 }
-
+pub fn assert_output_scale<T: OutputScale>(_:&T)
+    where T: ForwardAll,
+          <T as ForwardAll>::Output: BatchDataType,
+          <<T as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static {
+}
+pub fn assert_batch_output_scale<T: BatchOutputScale>(_:&T)
+    where T: ForwardAll,
+          <T as ForwardAll>::Output: BatchDataType,
+         <<T as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static {
+}
 pub fn assert_text_persist_progress<T: PersistProgress<TextFilePersistence,Specialized>>(_:&T) {}
 const NI: usize = 500;
 const NO: usize = 600;

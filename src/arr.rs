@@ -1459,6 +1459,9 @@ pub struct SerializedVec<U,T> {
     u:PhantomData<U>,
     t:PhantomData<T>
 }
+impl<U,T> InputTensorScalar for SerializedVec<U,T> where U: Clone + Copy + Debug {
+    type Scalar = U;
+}
 impl<U,T> OutputTensorScalar for SerializedVec<U,T> where U: Clone + Copy + Debug {
     type Scalar = U;
 }

@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, MaxInputValue, PreTrainBase, BatchSize, BackwardBase};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, BatchOutputScale, MaxInputValue, PreTrainBase, BatchSize, BackwardBase, BatchBackwardBase};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::Stack;
 
@@ -383,7 +383,7 @@ impl<U,P,I,PI,D> BatchPreTrain for LoggingLayer<U,P,I,PI,D>
         Ok(s)
     }
 }
-impl<U,P,I,PI,D> BatchBackward<U> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,D> BatchBackwardBase for LoggingLayer<U,P,I,PI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> +
              InputTensorScalar + OutputTensorScalar<Scalar=U> +
@@ -397,9 +397,23 @@ impl<U,P,I,PI,D> BatchBackward<U> for LoggingLayer<U,P,I,PI,D>
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: Debug {
     type BatchLossInput = <PI as BatchDataType>::Type;
-    type BatchLossOutput = <P as BatchBackward<U>>::BatchLossOutput;
+    type BatchLossOutput = <P as BatchBackwardBase>::BatchLossOutput;
+}
+impl<U,P,I,PI,D> BatchBackward<U> for LoggingLayer<U,P,I,PI,D>
+    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> +
+             InputTensorScalar + OutputTensorScalar<Scalar=U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug {
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
-        -> Result<(<Self as BatchBackward<U>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         for logger in self.batch_backward_loggers.iter() {
             logger(&input)?;
         }
@@ -498,6 +512,25 @@ impl<U,P,I,PI,D> OutputScale for LoggingLayer<U,P,I,PI,D>
         self.parent.scaling_mapper(input)
     }
 
+}
+impl<U,P,I,PI,D> BatchOutputScale for LoggingLayer<U,P,I,PI,D>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI> +
+             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale + BatchOutputScale +
+             InputTensorScalar + OutputTensorScalar<Scalar=U> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase + BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type>,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      D: Device<U>,
+      PI: Debug + 'static + BatchDataType,
+      I: Debug + Send + Sync + BatchDataType,
+      <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+      <I as BatchDataType>::Type: Debug {
+    type BatchMapper<'a> = <P as BatchOutputScale>::BatchMapper<'a> where Self: 'a;
+
+    fn batch_scaling_mapper<'a>(&'a self, input:&'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
+        self.parent.batch_scaling_mapper(input)
+    }
 }
 impl<U,P,I,PI,D> MaxInputValue for LoggingLayer<U,P,I,PI,D>
     where P: ForwardAll<Input=I,Output=PI> +

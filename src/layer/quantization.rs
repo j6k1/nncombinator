@@ -6,13 +6,13 @@ use std::str::FromStr;
 use crate::arr::{MakeView, MakeViewMut, SliceSize};
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchSize, BackwardBase};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, BatchOutputScale, PreTrainBase, BatchSize, BackwardBase, BatchBackwardBase};
 use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
 use crate::device::bridge::DeviceBridge;
 use crate::error::EvaluateError::CudaRuntimeError;
-use crate::mapper::IdentityMapper;
+use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 
 /// Dequantize layer Implementation
 pub struct DequantizeLayer<U,SO,P,I,PI,CI,D>
@@ -343,7 +343,7 @@ impl<U,SO,P,I,PI,CI,D> BatchPreTrain for DequantizeLayer<U, SO, P, I, PI, CI, D>
         Ok(s.push(r))
     }
 }
-impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for DequantizeLayer<U, SO, P, I, PI, CI, D>
+impl<U,SO,P,I,PI,CI,D> BatchBackwardBase for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
@@ -364,9 +364,30 @@ impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for DequantizeLayer<U, SO, P, I, PI, CI
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug {
     type BatchLossInput = <CI as BatchDataType>::Type;
-    type BatchLossOutput = <P as BatchBackward<SO>>::BatchLossOutput;
+    type BatchLossOutput = <P as BatchBackwardBase>::BatchLossOutput;
+}
+impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for DequantizeLayer<U, SO, P, I, PI, CI, D>
+    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
+             BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrain +
+             BatchBackward<SO,BatchLossInput=<CI as BatchDataType>::Type> +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          PI: Debug + BatchDataType + InputTensorScalar + 'static,
+          CI: Debug + BatchDataType + OutputTensorScalar + 'static,
+          <PI as BatchDataType>::Type: Debug,
+          <CI as BatchDataType>::Type: Debug,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> <CI as BatchDataType>::Type: Debug,
+          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug {
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
-                      -> Result<(<Self as BatchBackward<SO>>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+                      -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
         Ok(self.parent.batch_backward(input, s)?)
@@ -469,6 +490,28 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
 
     fn scaling_mapper<'a>(&self, input: &'a CI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
         Ok(IdentityMapper::new(input))
+    }
+}
+impl<U,SO,P,I,PI,CI,D> BatchOutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          PI: Debug + 'static + BatchDataType + InputTensorScalar,
+          CI: Debug + 'static + BatchDataType + OutputTensorScalar,
+          I: Debug + Send + Sync + BatchDataType,
+          <I as BatchDataType>::Type: Debug,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <CI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          Self: ForwardAll<Output=CI>,
+          Self: BatchForwardBase<BatchOutput=<CI as BatchDataType>::Type> {
+    type BatchMapper<'a> = BatchIdentityMapper<'a,CI,Self::ScalingDevice> where Self: 'a;
+
+    fn batch_scaling_mapper<'a>(&self, input: &'a <CI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
+        Ok(BatchIdentityMapper::new(input))
     }
 }
 /// Trait for DequantizeLayer instance creation

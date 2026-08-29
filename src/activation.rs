@@ -96,13 +96,7 @@ pub trait ActivationBuilder<S,DS,D>
     /// Type of the backward activation function
     type BackwardActivation;
     /// Building Pairs of Activation Functions
-    fn build<T,R,DT,DR>(self) -> Result<(Self::ForwardActivation,Self::BackwardActivation), TrainingError>
-        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
-              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
-              T: BatchDataType,
-              R: BatchDataType,
-              DT: BatchDataType,
-              DR: BatchDataType;
+    fn build(self) -> (Self::ForwardActivation,Self::BackwardActivation);
 }
 ///Identity Implementation
 pub struct Identity<U,D>
@@ -268,14 +262,8 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for IdentityBuilder<S,DS,D>
           D: Device<S> + Device<DS> {
     type ForwardActivation = Identity<S,D>;
     type BackwardActivation = Identity<DS,D>;
-    fn build<T,R,DT,DR>(self) -> Result<(Identity<S,D>, Identity<DS,D>), TrainingError>
-        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
-              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
-              T: BatchDataType,
-              R: BatchDataType,
-              DT: BatchDataType,
-              DR : BatchDataType {
-        Ok((Identity::new(&self.d), Identity::new(&self.d)))
+    fn build(self) -> (Identity<S,D>, Identity<DS,D>) {
+        (Identity::new(&self.d), Identity::new(&self.d))
     }
 }
 /// Sigmoid Implementation
@@ -507,14 +495,8 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for SigmoidBuilder<S,DS,D>
           D: Device<S> + Device<DS> {
     type ForwardActivation = Sigmoid<S,D>;
     type BackwardActivation = Sigmoid<DS,D>;
-    fn build<T,R,DT,DR>(self) -> Result<(Sigmoid<S,D>, Sigmoid<DS,D>), TrainingError>
-    where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
-          Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
-          T: BatchDataType,
-          R: BatchDataType,
-          DT: BatchDataType,
-          DR : BatchDataType {
-        Ok((Sigmoid::new(&self.d), Sigmoid::new(&self.d)))
+    fn build(self) -> (Sigmoid<S,D>, Sigmoid<DS,D>) {
+        (Sigmoid::new(&self.d), Sigmoid::new(&self.d))
     }
 }
 /// ReLu Implementation
@@ -741,14 +723,8 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for ReLuBuilder<S,DS,D>
           D: Device<S> + Device<DS> {
     type ForwardActivation = ReLu<S,D>;
     type BackwardActivation = ReLu<DS,D>;
-    fn build<T,R,DT,DR>(self) -> Result<(ReLu<S,D>, ReLu<DS,D>), TrainingError>
-    where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
-          Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
-          T: BatchDataType,
-          R: BatchDataType,
-          DT: BatchDataType,
-          DR : BatchDataType {
-        Ok((ReLu::new(&self.d), ReLu::new(&self.d)))
+    fn build(self) -> (ReLu<S,D>, ReLu<DS,D>) {
+        (ReLu::new(&self.d), ReLu::new(&self.d))
     }
 }
 /// ClippedReLu Implementation
@@ -991,14 +967,8 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for ClippedReLuBuilder<S,DS,D>
           D: Device<S> + Device<DS> {
     type ForwardActivation = ClippedReLu<S,D>;
     type BackwardActivation = ClippedReLu<DS,D>;
-    fn build<T,R,DT,DR>(self) -> Result<(ClippedReLu<S,D>, ClippedReLu<DS,D>), TrainingError>
-        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
-              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
-              T: BatchDataType,
-              R: BatchDataType,
-              DT: BatchDataType,
-              DR : BatchDataType {
-        Ok((ClippedReLu::new(&self.d,self.ceiling), ClippedReLu::new(&self.d,self.ceiling_derive)))
+    fn build(self) -> (ClippedReLu<S,D>, ClippedReLu<DS,D>) {
+        (ClippedReLu::new(&self.d,self.ceiling), ClippedReLu::new(&self.d,self.ceiling_derive))
     }
 }
 /// LeakyReLu Implementation
@@ -1234,14 +1204,8 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for LeakyReLuBuilder<S,DS,D>
           D: Device<S> + Device<DS> {
     type ForwardActivation = LeakyReLu<S,D>;
     type BackwardActivation = LeakyReLu<DS,D>;
-    fn build<T,R,DT,DR>(self) -> Result<(LeakyReLu<S,D>, LeakyReLu<DS,D>), TrainingError>
-    where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
-          Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
-          T: BatchDataType,
-          R: BatchDataType,
-          DT: BatchDataType,
-          DR : BatchDataType {
-        Ok((LeakyReLu::new(&self.d), LeakyReLu::new(&self.d)))
+    fn build(self) -> (LeakyReLu<S,D>, LeakyReLu<DS,D>) {
+        (LeakyReLu::new(&self.d), LeakyReLu::new(&self.d))
     }
 }
 /// Swish Implementation
@@ -1484,14 +1448,8 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for SwishBuilder<S,DS,D>
           D: Device<S> + Device<DS> {
     type ForwardActivation = Swish<S,D>;
     type BackwardActivation = Swish<DS,D>;
-    fn build<T,R,DT,DR>(self) -> Result<(Swish<S,D>, Swish<DS,D>), TrainingError>
-        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
-              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
-              T: BatchDataType,
-              R: BatchDataType,
-              DT: BatchDataType,
-              DR : BatchDataType {
-        Ok((Swish::new(&self.d), Swish::new(&self.d)))
+    fn build(self) -> (Swish<S,D>, Swish<DS,D>) {
+        (Swish::new(&self.d), Swish::new(&self.d))
     }
 }
 /// Tanh Implementation
@@ -1727,14 +1685,8 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for TanhBuilder<S,DS,D>
           D: Device<S> + Device<DS> {
     type ForwardActivation = Tanh<S,D>;
     type BackwardActivation = Tanh<DS,D>;
-    fn build<T,R,DT,DR>(self) -> Result<(Tanh<S,D>, Tanh<DS,D>), TrainingError>
-        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
-              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
-              T: BatchDataType,
-              R: BatchDataType,
-              DT: BatchDataType,
-              DR : BatchDataType {
-        Ok((Tanh::new(&self.d), Tanh::new(&self.d)))
+    fn build(self) -> (Tanh<S,D>, Tanh<DS,D>) {
+        (Tanh::new(&self.d), Tanh::new(&self.d))
     }
 }
 /// SoftMax Implementation
@@ -2012,13 +1964,7 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for SoftMaxBuilder<S,DS,D>
           D: Device<S> + Device<DS> {
     type ForwardActivation = SoftMax<S,D>;
     type BackwardActivation = SoftMax<DS,D>;
-    fn build<T,R,DT,DR>(self) -> Result<(SoftMax<S,D>, SoftMax<DS,D>), TrainingError>
-        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
-              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
-              T: BatchDataType,
-              R: BatchDataType,
-              DT: BatchDataType,
-              DR : BatchDataType {
-        Ok((SoftMax::new(&self.d), SoftMax::new(&self.d)))
+    fn build(self) -> (SoftMax<S,D>, SoftMax<DS,D>) {
+        (SoftMax::new(&self.d), SoftMax::new(&self.d))
     }
 }

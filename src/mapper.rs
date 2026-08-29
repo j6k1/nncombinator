@@ -131,7 +131,8 @@ impl<'a,U,SO,SC,I,O,D,const N:usize> BatchScalingMapper<'a,U,SO,SC,I,O,D,N>
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'a,
           Self: Sized + 'a {
-    pub fn new(device:&'a D,_: &'a <I as BatchDataType>::Type, bridged: <O as BatchDataType>::Type, scale: &'a SC) -> Result<BatchScalingMapper<'a,U,SO,SC,I,O,D,N>,TrainingError> {
+    pub fn new(device:&'a D,_: &'a <I as BatchDataType>::Type, bridged: <O as BatchDataType>::Type, scale: &'a SC)
+        -> Result<BatchScalingMapper<'a,U,SO,SC,I,O,D,N>,EvaluateError> {
         Ok(BatchScalingMapper {
             i: PhantomData::<I>,
             u: PhantomData::<U>,

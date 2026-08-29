@@ -56,7 +56,7 @@ pub trait DeviceScale<U,IO,const N: usize>
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn batch_inverse_scaling<'a>(&self, scale: &'a Self::Scale, input: &'a <IO as BatchDataType>::Type)
-                                 -> Result<<IO as BatchDataType>::Type, TrainingError>;
+                                 -> Result<<IO as BatchDataType>::Type, EvaluateError>;
     /// batch scaling calculation in batch.
     ///
     /// # Arguments
@@ -68,7 +68,7 @@ pub trait DeviceScale<U,IO,const N: usize>
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn batch_scaling<'a>(&self, scale: &'a Self::Scale, input: &'a <IO as BatchDataType>::Type)
-                         -> Result<<IO as BatchDataType>::Type, TrainingError>;
+                         -> Result<<IO as BatchDataType>::Type, EvaluateError>;
     /// Duplicate the input exactly as it is and return it
     ///
     /// # Arguments
@@ -78,7 +78,8 @@ pub trait DeviceScale<U,IO,const N: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_identity<'a>(&self, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError>;
+    fn batch_identity<'a>(&self, input: &'a <IO as BatchDataType>::Type)
+        -> Result<<IO as BatchDataType>::Type, EvaluateError>;
 }
 impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -110,7 +111,8 @@ impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
         Ok(input.clone())
     }
 
-    fn batch_inverse_scaling<'a>(&self, scale: &'a Arr<U,N>, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError> {
+    fn batch_inverse_scaling<'a>(&self, scale: &'a Arr<U,N>, input: &'a <IO as BatchDataType>::Type)
+        -> Result<<IO as BatchDataType>::Type, EvaluateError> {
         let view  = SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?;
 
         Ok(SerializedVec::from(view.iter().map(|i| {
@@ -118,7 +120,8 @@ impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
         }).collect::<Vec<Arr<U,N>>>()).into_converter().try_into()?)
     }
 
-    fn batch_scaling<'a>(&self, scale: &'a Arr<U,N>, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError> {
+    fn batch_scaling<'a>(&self, scale: &'a Arr<U,N>, input: &'a <IO as BatchDataType>::Type)
+        -> Result<<IO as BatchDataType>::Type, EvaluateError> {
         let view  = SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?;
 
         Ok(SerializedVec::from(view.iter().map(|i| {
@@ -126,7 +129,8 @@ impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
         }).collect::<Vec<Arr<U,N>>>()).into_converter().try_into()?)
     }
 
-    fn batch_identity<'a>(&self, input: &'a <IO as BatchDataType>::Type) -> Result<<IO as BatchDataType>::Type, TrainingError> {
+    fn batch_identity<'a>(&self, input: &'a <IO as BatchDataType>::Type)
+        -> Result<<IO as BatchDataType>::Type, EvaluateError> {
         Ok(input.clone())
     }
 }

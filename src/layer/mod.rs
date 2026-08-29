@@ -481,7 +481,7 @@ pub trait BatchOutputScale: OutputScale + BatchForwardBase
     /// Data Mapper for Scaling for batch execution
     type BatchMapper<'a>: BatchDataMapper<'a,<Self as ForwardAll>::Output,Self::ScaledOutput,Self::ScalingDevice>
         where Self: 'a;
-    fn batch_scaling_mapper<'a>(&'a self, input: &'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchMapper<'a>,EvaluateError>
+    fn batch_scaling_mapper<'a>(&'a self, input: &'a <<Self as ForwardAll>::Output as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError>
         where Self: 'a;
 }
 /// A trait that represents the maximum value of the input passed from this layer to the next layer

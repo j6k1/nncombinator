@@ -36,7 +36,7 @@ pub trait LossFunction<U>: Send + Sync + 'static where U: Clone + Copy {
 }
 /// A property that defines the implementation of the loss function used in the linear layer when training a neural network.
 pub trait LossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Send + Sync + 'static
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> {
     type Output;
     /// Differentiation of loss functions
@@ -47,7 +47,7 @@ pub trait LossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Send + S
 }
 /// Trait defining the implementation of a linear layer loss function with batch processing
 pub trait BatchLossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Send + Sync + 'static
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> {
     type Output: BatchSize;
     /// Differentiation of loss functions
@@ -59,7 +59,7 @@ pub trait BatchLossFunctionLinear<'a,U,I,D,const N:usize>: LossFunction<U> + Sen
 }
 impl<'a,T,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceCpu,N> for T
     where T: LossFunction<U>,
-          U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           for<'b> ArrView<'b,U,N>: From<&'b I> {
     type Output = Arr<U,N>;
     fn linear_derive(&self,_:&DeviceCpu,actual: &'a I, expected: &'a I)
@@ -78,7 +78,7 @@ impl<'a,T,U,I,const N:usize> LossFunctionLinear<'a,U,I,DeviceCpu,N> for T
 }
 impl<'a,T,U,I,const N:usize> BatchLossFunctionLinear<'a,U,I,DeviceCpu,N> for T
     where T: LossFunction<U>,
-          U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: BatchSize,
           for<'b> SerializedVecView<'b,U,Arr<U,N>>: TryFrom<&'b I,Error=TypeConvertError> {
     type Output = SerializedVec<U,Arr<U,N>>;

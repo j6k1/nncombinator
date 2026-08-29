@@ -269,8 +269,7 @@ impl<U,SO,P,I,PI,CI,D> BatchForwardBase for BridgeLayer<U,SO,P,I,PI,CI,D>
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
           <CI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static {
+          <I as BatchDataType>::Type: Debug {
     type BatchInput = <I as BatchDataType>::Type;
     type BatchOutput = <CI as BatchDataType>::Type;
 }

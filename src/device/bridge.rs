@@ -40,7 +40,7 @@ pub trait DeviceBridge<U,SO,PI,CI>
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn batch_bridge_forward<'a>(&self,input: &'a <PI as BatchDataType>::Type) ->
-        Result<<CI as BatchDataType>::Type,TrainingError>;
+        Result<<CI as BatchDataType>::Type,EvaluateError>;
     /// Error back propagation in batch
     /// # Arguments
     /// * `loss` - input
@@ -68,7 +68,7 @@ impl<U,SO,PI,CI> DeviceBridge<U,SO,PI,CI> for DeviceCpu
     }
 
     fn batch_bridge_forward<'a>(&self, input: &'a <PI as BatchDataType>::Type)
-        -> Result<<CI as BatchDataType>::Type, TrainingError> {
+        -> Result<<CI as BatchDataType>::Type, EvaluateError> {
         Ok(input.into())
     }
 
@@ -97,7 +97,7 @@ impl<U,SO,A,PI,CI> DeviceBridge<U,SO,PI,CI> for DeviceGpu<A>
     }
 
     fn batch_bridge_forward<'a>(&self, input: &'a <PI as BatchDataType>::Type)
-        -> Result<<CI as BatchDataType>::Type, TrainingError> {
+        -> Result<<CI as BatchDataType>::Type, EvaluateError> {
         Ok(input.as_cuda_view().try_into()?)
     }
 

@@ -86,7 +86,25 @@ pub trait BatchActivation<U,T,R,D>
     /// * [`TrainingError`]
     fn batch_derive<'a>(&self, device:&D, o:T, loss:T, u:T) -> Result<R, TrainingError>;
 }
-/// Identity Implementation
+/// A trait that defines a builder for generating pairs of activation functions
+pub trait ActivationBuilder<S,DS,D>
+    where S: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          DS: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<S> + Device<DS> {
+    /// Type of the forward activation function
+    type ForwardActivation;
+    /// Type of the backward activation function
+    type BackwardActivation;
+    /// Building Pairs of Activation Functions
+    fn build<T,R,DT,DR>(self) -> Result<(Self::ForwardActivation,Self::BackwardActivation), TrainingError>
+        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
+              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
+              T: BatchDataType,
+              R: BatchDataType,
+              DT: BatchDataType,
+              DR: BatchDataType;
+}
+///Identity Implementation
 pub struct Identity<U,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> {
@@ -228,6 +246,36 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
                     loss: &'a I,
                     _: &'a I) -> Result<CudaVec<U,CudaTensor1dPtr<U,AC,N>,AC>, TrainingError> {
         Ok((*loss).try_clone()?.into_converter().try_into()?)
+    }
+}
+pub struct IdentityBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    s:PhantomData<S>,
+    ds:PhantomData<DS>,
+    d:D
+}
+impl<S,DS,D> IdentityBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    pub fn new(d:&D) -> IdentityBuilder<S,DS,D> {
+        IdentityBuilder {
+            s: PhantomData::<S>,
+            ds: PhantomData::<DS>,
+            d:d.clone()
+        }
+    }
+}
+impl<S,DS,D> ActivationBuilder<S,DS,D> for IdentityBuilder<S,DS,D>
+    where S: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          DS: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<S> + Device<DS> {
+    type ForwardActivation = Identity<S,D>;
+    type BackwardActivation = Identity<DS,D>;
+    fn build<T,R,DT,DR>(self) -> Result<(Identity<S,D>, Identity<DS,D>), TrainingError>
+        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
+              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
+              T: BatchDataType,
+              R: BatchDataType,
+              DT: BatchDataType,
+              DR : BatchDataType {
+        Ok((Identity::new(&self.d), Identity::new(&self.d)))
     }
 }
 /// Sigmoid Implementation
@@ -439,6 +487,36 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         Ok(args.output)
     }
 }
+pub struct SigmoidBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    s:PhantomData<S>,
+    ds:PhantomData<DS>,
+    d:D
+}
+impl<S,DS,D> SigmoidBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    pub fn new(d:&D) -> SigmoidBuilder<S,DS,D> {
+        SigmoidBuilder {
+            s: PhantomData::<S>,
+            ds: PhantomData::<DS>,
+            d:d.clone()
+        }
+    }
+}
+impl<S,DS,D> ActivationBuilder<S,DS,D> for SigmoidBuilder<S,DS,D>
+    where S: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
+          DS: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
+          D: Device<S> + Device<DS> {
+    type ForwardActivation = Sigmoid<S,D>;
+    type BackwardActivation = Sigmoid<DS,D>;
+    fn build<T,R,DT,DR>(self) -> Result<(Sigmoid<S,D>, Sigmoid<DS,D>), TrainingError>
+    where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
+          Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
+          T: BatchDataType,
+          R: BatchDataType,
+          DT: BatchDataType,
+          DR : BatchDataType {
+        Ok((Sigmoid::new(&self.d), Sigmoid::new(&self.d)))
+    }
+}
 /// ReLu Implementation
 pub struct ReLu<U,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -641,6 +719,36 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         kernel.launch(&mut args)?;
 
         Ok(args.output)
+    }
+}
+pub struct ReLuBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    s:PhantomData<S>,
+    ds:PhantomData<DS>,
+    d:D
+}
+impl<S,DS,D> ReLuBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    pub fn new(device:&D) -> ReLuBuilder<S,DS,D> {
+        ReLuBuilder {
+            s:PhantomData::<S>,
+            ds:PhantomData::<DS>,
+            d:device.clone()
+        }
+    }
+}
+impl<S,DS,D> ActivationBuilder<S,DS,D> for ReLuBuilder<S,DS,D>
+    where S: Default + Clone + Copy + Debug + PartialOrd + Max + Send + Sync + 'static,
+          DS: Default + Clone + Copy + Debug + PartialOrd + Max + Send + Sync + 'static,
+          D: Device<S> + Device<DS> {
+    type ForwardActivation = ReLu<S,D>;
+    type BackwardActivation = ReLu<DS,D>;
+    fn build<T,R,DT,DR>(self) -> Result<(ReLu<S,D>, ReLu<DS,D>), TrainingError>
+    where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
+          Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
+          T: BatchDataType,
+          R: BatchDataType,
+          DT: BatchDataType,
+          DR : BatchDataType {
+        Ok((ReLu::new(&self.d), ReLu::new(&self.d)))
     }
 }
 /// ClippedReLu Implementation
@@ -859,7 +967,40 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         Ok(args.output)
     }
 }
-
+pub struct ClippedReLuBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    s:PhantomData<S>,
+    ds:PhantomData<DS>,
+    ceiling:S,
+    ceiling_derive:DS,
+    d:D
+}
+impl<S,DS,D> ClippedReLuBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    pub fn new(d:&D, ceiling: S, ceiling_derive: DS) -> ClippedReLuBuilder<S,DS,D> {
+        ClippedReLuBuilder {
+            s: PhantomData::<S>,
+            ds: PhantomData::<DS>,
+            ceiling:ceiling,
+            ceiling_derive:ceiling_derive,
+            d:d.clone()
+        }
+    }
+}
+impl<S,DS,D> ActivationBuilder<S,DS,D> for ClippedReLuBuilder<S,DS,D>
+    where S: Default + Clone + Copy + Debug + PartialOrd + Max + Min + Send + Sync + 'static,
+          DS: Default + Clone + Copy + Debug + PartialOrd + Max + Min + Send + Sync + 'static,
+          D: Device<S> + Device<DS> {
+    type ForwardActivation = ClippedReLu<S,D>;
+    type BackwardActivation = ClippedReLu<DS,D>;
+    fn build<T,R,DT,DR>(self) -> Result<(ClippedReLu<S,D>, ClippedReLu<DS,D>), TrainingError>
+        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
+              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
+              T: BatchDataType,
+              R: BatchDataType,
+              DT: BatchDataType,
+              DR : BatchDataType {
+        Ok((ClippedReLu::new(&self.d,self.ceiling), ClippedReLu::new(&self.d,self.ceiling_derive)))
+    }
+}
 /// LeakyReLu Implementation
 pub struct LeakyReLu<U,D>
     where U: Default + Clone + Copy + Debug + Max + Min + PartialOrd + Send + Sync + 'static +
@@ -1073,6 +1214,36 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         Ok(args.output)
     }
 }
+pub struct LeakyReLuBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    s:PhantomData<S>,
+    ds:PhantomData<DS>,
+    d:D
+}
+impl<S,DS,D> LeakyReLuBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    pub fn new(d:&D) -> LeakyReLuBuilder<S,DS,D> {
+        LeakyReLuBuilder {
+            s: PhantomData::<S>,
+            ds: PhantomData::<DS>,
+            d:d.clone()
+        }
+    }
+}
+impl<S,DS,D> ActivationBuilder<S,DS,D> for LeakyReLuBuilder<S,DS,D>
+    where S: Default + Clone + Copy + Debug + PartialOrd + Max + Min + Send + Sync + 'static,
+          DS: Default + Clone + Copy + Debug + PartialOrd + Max + Min + Send + Sync + 'static,
+          D: Device<S> + Device<DS> {
+    type ForwardActivation = LeakyReLu<S,D>;
+    type BackwardActivation = LeakyReLu<DS,D>;
+    fn build<T,R,DT,DR>(self) -> Result<(LeakyReLu<S,D>, LeakyReLu<DS,D>), TrainingError>
+    where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
+          Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
+          T: BatchDataType,
+          R: BatchDataType,
+          DT: BatchDataType,
+          DR : BatchDataType {
+        Ok((LeakyReLu::new(&self.d), LeakyReLu::new(&self.d)))
+    }
+}
 /// Swish Implementation
 pub struct Swish<U,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
@@ -1083,7 +1254,7 @@ pub struct Swish<U,D>
 }
 impl<U,D> Swish<U,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
-             One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
+             One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg<Output=U> +
              Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg<Output=U> + FromPrimitive,
           D: Device<U> {
     /// Create an instance of Swish
@@ -1096,7 +1267,8 @@ impl<U,D> Swish<U,D>
 }
 impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu> for Swish<U,DeviceCpu>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
-             Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> + FromPrimitive,
+             Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> +
+             Neg<Output=U> + FromPrimitive,
           Arr<U,N>: Deref<Target=Box<[U]>> {
     fn apply(&self, device: &DeviceCpu, input: &Arr<U,N>) -> Result<Arr<U,N>, EvaluateError> {
         self.apply(device,&input.iter().cloned())
@@ -1286,6 +1458,40 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         kernel.launch(&mut args)?;
 
         Ok(args.output)
+    }
+}
+pub struct SwishBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    s:PhantomData<S>,
+    ds:PhantomData<DS>,
+    d:D
+}
+impl<S,DS,D> SwishBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    pub fn new(d:&D) -> SwishBuilder<S,DS,D> {
+        SwishBuilder {
+            s: PhantomData::<S>,
+            ds: PhantomData::<DS>,
+            d:d.clone()
+        }
+    }
+}
+impl<S,DS,D> ActivationBuilder<S,DS,D> for SwishBuilder<S,DS,D>
+    where S: Default + Clone + Copy + Debug +
+             One + Mul<Output=S> + Div<Output=S> + Add<Output=S> + Neg<Output=S> +
+             FromPrimitive + Exp + Send + Sync + Send + Sync + DataTypeInfo + 'static,
+          DS: Default + Clone + Copy + Debug +
+              One + Mul<Output=DS> + Div<Output=DS> + Add<Output=DS> + Neg<Output=DS> +
+              FromPrimitive + Exp + Send + Sync + Send + Sync + DataTypeInfo + 'static,
+          D: Device<S> + Device<DS> {
+    type ForwardActivation = Swish<S,D>;
+    type BackwardActivation = Swish<DS,D>;
+    fn build<T,R,DT,DR>(self) -> Result<(Swish<S,D>, Swish<DS,D>), TrainingError>
+        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
+              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
+              T: BatchDataType,
+              R: BatchDataType,
+              DT: BatchDataType,
+              DR : BatchDataType {
+        Ok((Swish::new(&self.d), Swish::new(&self.d)))
     }
 }
 /// Tanh Implementation
@@ -1497,6 +1703,38 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         kernel.launch(&mut args)?;
 
         Ok(args.output)
+    }
+}
+pub struct TanhBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    s:PhantomData<S>,
+    ds:PhantomData<DS>,
+    d:D
+}
+impl<S,DS,D> TanhBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    pub fn new(device:&D) -> TanhBuilder<S,DS,D> {
+        TanhBuilder {
+            s: PhantomData,
+            ds: PhantomData,
+            d: device.clone()
+        }
+    }
+}
+impl<S,DS,D> ActivationBuilder<S,DS,D> for TanhBuilder<S,DS,D>
+    where S: Default + Clone + Copy + Debug + One + ope::Tanh +
+             Mul<Output=S> + Sub<Output=S> + Send + Sync + DataTypeInfo + 'static,
+          DS: Default + Clone + Copy + Debug + One + ope::Tanh + Mul<Output=DS> + Sub<Output=DS> +
+              Send + Sync + DataTypeInfo + 'static,
+          D: Device<S> + Device<DS> {
+    type ForwardActivation = Tanh<S,D>;
+    type BackwardActivation = Tanh<DS,D>;
+    fn build<T,R,DT,DR>(self) -> Result<(Tanh<S,D>, Tanh<DS,D>), TrainingError>
+        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
+              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
+              T: BatchDataType,
+              R: BatchDataType,
+              DT: BatchDataType,
+              DR : BatchDataType {
+        Ok((Tanh::new(&self.d), Tanh::new(&self.d)))
     }
 }
 /// SoftMax Implementation
@@ -1748,5 +1986,39 @@ impl<'a,U,I,AC,const N:usize> BatchActivation<U,&'a I,CudaVec<U,CudaTensor1dPtr<
         kernel.launch(&mut args)?;
 
         Ok(args.output)
+    }
+}
+pub struct SoftMaxBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    s:PhantomData<S>,
+    ds:PhantomData<DS>,
+    d:D
+}
+impl<S,DS,D> SoftMaxBuilder<S,DS,D> where D: Device<S> + Device<DS> {
+    pub fn new(d:&D) -> SoftMaxBuilder<S,DS,D> {
+        SoftMaxBuilder {
+            s: PhantomData::<S>,
+            ds: PhantomData::<DS>,
+            d:d.clone()
+        }
+    }
+}
+impl<S,DS,D> ActivationBuilder<S,DS,D> for SoftMaxBuilder<S,DS,D>
+    where S: Default + Clone + Copy + Debug + Max + InitialMaxValue + One + Exp +
+             Add<Output=S> + Sub<Output=S> + Mul<Output=S> + Div<Output=S> + Neg<Output=S> +
+             FromPrimitive + Send + Sync + DataTypeInfo + 'static,
+          DS: Default + Clone + Copy + Debug + Max + InitialMaxValue + One + Exp +
+              Add<Output=DS> + Sub<Output=DS> + Mul<Output=DS> + Div<Output=DS> + Neg<Output=DS> +
+              FromPrimitive + Send + Sync + DataTypeInfo + 'static,
+          D: Device<S> + Device<DS> {
+    type ForwardActivation = SoftMax<S,D>;
+    type BackwardActivation = SoftMax<DS,D>;
+    fn build<T,R,DT,DR>(self) -> Result<(SoftMax<S,D>, SoftMax<DS,D>), TrainingError>
+        where Self::ForwardActivation: Activation<S,T,R,D> + BatchActivation<S,<T as BatchDataType>::Type,<R as BatchDataType>::Type,D>,
+              Self::BackwardActivation: Activation<DS,DT,DR,D> + BatchActivation<DS,<DT as BatchDataType>::Type,<DR as BatchDataType>::Type,D>,
+              T: BatchDataType,
+              R: BatchDataType,
+              DT: BatchDataType,
+              DR : BatchDataType {
+        Ok((SoftMax::new(&self.d), SoftMax::new(&self.d)))
     }
 }

@@ -13,13 +13,13 @@ use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll};
 use nncombinator::layer::input::{QuantizedInputLayer};
 use nncombinator::layer::linear::{QuantizedLinearLayerBuilder};
 use nncombinator::layer::logging::LoggingLayer;
-use nncombinator::layer::scale::InverseScalingLayerBuilder;
+use nncombinator::layer::scale::ScalingLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::layer::quantization::DequantizeLayerBuilder;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::ope::{Max, Min};
 use nncombinator::optimizer::AdamWBuilder;
-use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_pre_train, assert_update_weight};
+use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight};
 
 #[test]
 fn test_mnist_for_quntization_cpu() {
@@ -44,7 +44,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);
 
-        QuantizedLinearLayerBuilder::<i8,{ 28*28 },512>::new().build(l,&device,
+        QuantizedLinearLayerBuilder::<i8,i16,{ 28*28 },512>::new().build(l,&device,
                                                          || n1.sample(&mut rnd), || 0.,
                                                          &optimizer_builder
         ).unwrap()
@@ -63,11 +63,13 @@ fn test_mnist_for_quntization_cpu() {
         assert_pre_train(&l);
         assert_backward_all(&l);
         assert_update_weight(&l);
+        assert_loss(&l);
         assert_batch_forward(&l);
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);
+        assert_batch_loss(&l);
 
-        QuantizedLinearLayerBuilder::<i8,512,256>::new().build(l,&device,
+        QuantizedLinearLayerBuilder::<i8,i16,512,256>::new().build(l,&device,
                                                    || n2.sample(&mut rnd), || 0.,
                                                    &optimizer_builder
         ).unwrap()
@@ -102,11 +104,13 @@ fn test_mnist_for_quntization_cpu() {
         assert_pre_train(&l);
         assert_backward_all(&l);
         assert_update_weight(&l);
+        assert_loss(&l);
         assert_batch_forward(&l);
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);
+        assert_batch_loss(&l);
 
-        QuantizedLinearLayerBuilder::<i8,256, 10>::new().build(l, &device,
+        QuantizedLinearLayerBuilder::<i8,i16,256, 10>::new().build(l, &device,
                                                             || n3.sample(&mut rnd), || 0.,
                                                             &optimizer_builder
         ).unwrap()
@@ -140,7 +144,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);
 
-        InverseScalingLayerBuilder::<10>::new().build(l, &device).unwrap()
+        ScalingLayerBuilder::<10>::new().build(l, &device).unwrap()
     }).add_layer(|l| {
         let mut l = LoggingLayer::new(l,&device);
 
@@ -166,7 +170,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
-        assert_update_weight(&l);
+        assert_loss(&l);
         assert_batch_forward(&l);
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);

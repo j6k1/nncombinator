@@ -548,11 +548,11 @@ impl<U,P,D,I,PI,const N:usize> ScalingLayerInstantiation<U,P,D,I,PI,N> for Scali
     }
 }
 /// Builder for InverseScalingLayer instance creation.
-pub struct InverseScalingLayerBuilder<const N:usize> {
+pub struct ScalingLayerBuilder<const N:usize> {
 }
-impl<const N:usize> InverseScalingLayerBuilder<N> {
-    pub fn new() -> InverseScalingLayerBuilder<N> {
-        InverseScalingLayerBuilder {}
+impl<const N:usize> ScalingLayerBuilder<N> {
+    pub fn new() -> ScalingLayerBuilder<N> {
+        ScalingLayerBuilder {}
     }
 
     /// Create an instance of InverseScalingLayer.

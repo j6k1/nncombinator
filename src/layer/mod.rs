@@ -1,8 +1,6 @@
 //! The various layers that make up a neural network and the traits they implement
 
-use std::error::Error;
 use std::fmt::Debug;
-use std::ops::Deref;
 use crate::device::*;
 use crate::{Stack};
 use crate::error::{EvaluateError, PersistenceError, TrainingError};

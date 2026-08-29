@@ -268,7 +268,7 @@ impl From<SpecializationError> for TrainingError {
     }
 }
 impl From<Infallible> for TrainingError {
-    fn from(err: Infallible) -> TrainingError {
+    fn from(_: Infallible) -> TrainingError {
         unreachable!()
     }
 }

@@ -9,7 +9,7 @@ use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, PreTrainBase, OutputScale, BatchSize, BatchOutputScale, BackwardBase, BatchBackwardBase};
-use crate::mapper::{BatchDataMapper, BatchIdentityMapper, IdentityMapper};
+use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 use crate::ope::One;
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};

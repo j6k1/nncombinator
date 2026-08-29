@@ -8,7 +8,7 @@ use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
-use nncombinator::activation::{ReLu, Sigmoid, SoftMax};
+use nncombinator::activation::{ReLuBuilder, SigmoidBuilder, SoftMaxBuilder};
 use nncombinator::arr::{Arr};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
 use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll, PersistProgress, Step};
@@ -52,7 +52,7 @@ fn test_mnist_for_gpu_with_persistence() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -60,7 +60,7 @@ fn test_mnist_for_gpu_with_persistence() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -68,7 +68,7 @@ fn test_mnist_for_gpu_with_persistence() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -160,7 +160,7 @@ fn test_mnist_for_gpu_with_persistence() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -168,7 +168,7 @@ fn test_mnist_for_gpu_with_persistence() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -176,7 +176,7 @@ fn test_mnist_for_gpu_with_persistence() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -262,7 +262,7 @@ fn test_mnist_for_gpu_with_text_persistence() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -270,7 +270,7 @@ fn test_mnist_for_gpu_with_text_persistence() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -278,7 +278,7 @@ fn test_mnist_for_gpu_with_text_persistence() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -370,7 +370,7 @@ fn test_mnist_for_gpu_with_text_persistence() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -378,7 +378,7 @@ fn test_mnist_for_gpu_with_text_persistence() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -386,7 +386,7 @@ fn test_mnist_for_gpu_with_text_persistence() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -471,7 +471,7 @@ fn test_mnist_for_cpu_with_persistence() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -479,7 +479,7 @@ fn test_mnist_for_cpu_with_persistence() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -487,7 +487,7 @@ fn test_mnist_for_cpu_with_persistence() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -579,7 +579,7 @@ fn test_mnist_for_cpu_with_persistence() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -587,7 +587,7 @@ fn test_mnist_for_cpu_with_persistence() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -595,7 +595,7 @@ fn test_mnist_for_cpu_with_persistence() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -679,7 +679,7 @@ fn test_mnist_for_cpu_with_text_persistence() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -687,7 +687,7 @@ fn test_mnist_for_cpu_with_text_persistence() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -695,7 +695,7 @@ fn test_mnist_for_cpu_with_text_persistence() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -787,7 +787,7 @@ fn test_mnist_for_cpu_with_text_persistence() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -795,7 +795,7 @@ fn test_mnist_for_cpu_with_text_persistence() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -803,7 +803,7 @@ fn test_mnist_for_cpu_with_text_persistence() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -892,7 +892,7 @@ fn test_gpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -902,7 +902,7 @@ fn test_gpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BiasLayerBuilder::new().build(l,&device,|| 0., &optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -912,7 +912,7 @@ fn test_gpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BridgeLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LoggingLayer::new(l,&device)
     }).add_layer(|l| {
@@ -945,7 +945,7 @@ fn test_gpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -955,7 +955,7 @@ fn test_gpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BiasLayerBuilder::new().build(l,&device,|| 0., &optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -965,7 +965,7 @@ fn test_gpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BridgeLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LoggingLayer::new(l,&device)
     }).add_layer(|l| {
@@ -1014,7 +1014,7 @@ fn test_gpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
@@ -1030,7 +1030,7 @@ fn test_gpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
@@ -1046,7 +1046,7 @@ fn test_gpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
@@ -1085,7 +1085,7 @@ fn test_gpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1095,7 +1095,7 @@ fn test_gpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         BiasLayerBuilder::new().build(l,&device,|| 0., &optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -1105,7 +1105,7 @@ fn test_gpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         BridgeLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LoggingLayer::new(l,&device)
     }).add_layer(|l| {
@@ -1144,7 +1144,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                  &SGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1152,7 +1152,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                   &MomentumSGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1160,7 +1160,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                  &AdagradBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1168,7 +1168,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1176,7 +1176,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                  &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l, ReLu::new(&device), &device)
+        ActivationLayer::new(l, ReLuBuilder::new(&device), &device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1184,7 +1184,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1192,7 +1192,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                  &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -1200,7 +1200,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                   &AdamWBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1227,7 +1227,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                  &SGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1235,7 +1235,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                   &MomentumSGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1243,7 +1243,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                   &AdagradBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1251,7 +1251,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1259,7 +1259,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l, ReLu::new(&device), &device)
+        ActivationLayer::new(l, ReLuBuilder::new(&device), &device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1267,7 +1267,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1275,7 +1275,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -1283,7 +1283,7 @@ fn test_gpu_with_persist_progress_all_optimizers() {
                                                  &AdamWBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1320,7 +1320,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                  &SGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1328,7 +1328,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &MomentumSGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1336,7 +1336,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdagradBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1344,7 +1344,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1352,7 +1352,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l, ReLu::new(&device), &device)
+        ActivationLayer::new(l, ReLuBuilder::new(&device), &device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1360,7 +1360,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1368,7 +1368,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -1376,7 +1376,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                  &AdamWBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1405,7 +1405,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                  &SGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1413,7 +1413,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &MomentumSGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1421,7 +1421,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdagradBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1429,7 +1429,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1437,7 +1437,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l, ReLu::new(&device), &device)
+        ActivationLayer::new(l, ReLuBuilder::new(&device), &device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1445,7 +1445,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1453,7 +1453,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -1461,7 +1461,7 @@ fn test_gpu_with_persist_to_text_progress_all_optimizers() {
                                                  &AdamWBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1501,7 +1501,7 @@ fn test_cpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1511,7 +1511,7 @@ fn test_cpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BiasLayerBuilder::new().build(l,&device,|| 0., &optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32,1>::new().build(l, &device,
@@ -1521,7 +1521,7 @@ fn test_cpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BridgeLayerBuilder::<f64,Arr<f64,1>>::new().build(l,&device).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LoggingLayer::new(l,&device)
     }).add_layer(|l| {
@@ -1554,7 +1554,7 @@ fn test_cpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1564,7 +1564,7 @@ fn test_cpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BiasLayerBuilder::new().build(l,&device,|| 0., &optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -1574,7 +1574,7 @@ fn test_cpu_with_persist_progress_all_layears() {
     }).add_layer(|l| {
         BridgeLayerBuilder::<f64,Arr<f64,1>>::new().build(l,&device).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LoggingLayer::new(l,&device)
     }).add_layer(|l| {
@@ -1621,7 +1621,7 @@ fn test_cpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
@@ -1637,7 +1637,7 @@ fn test_cpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
@@ -1653,7 +1653,7 @@ fn test_cpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_text_persist_progress(&l);
 
@@ -1692,7 +1692,7 @@ fn test_cpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1702,7 +1702,7 @@ fn test_cpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         BiasLayerBuilder::new().build(l,&device,|| 0., &optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -1712,7 +1712,7 @@ fn test_cpu_with_persist_to_text_progress_all_layears() {
     }).add_layer(|l| {
         BridgeLayerBuilder::<f64,Arr<f64,1>>::new().build(l,&device).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LoggingLayer::new(l,&device)
     }).add_layer(|l| {
@@ -1749,7 +1749,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                  &SGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1757,7 +1757,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &MomentumSGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1765,7 +1765,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &AdagradBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1773,7 +1773,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1781,7 +1781,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l, ReLu::new(&device), &device)
+        ActivationLayer::new(l, ReLuBuilder::new(&device), &device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1789,7 +1789,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1797,7 +1797,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -1805,7 +1805,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                  &AdamWBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1832,7 +1832,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                  &SGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1840,7 +1840,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &MomentumSGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1848,7 +1848,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &AdagradBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1856,7 +1856,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1864,7 +1864,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l, ReLu::new(&device), &device)
+        ActivationLayer::new(l, ReLuBuilder::new(&device), &device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1872,7 +1872,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1880,7 +1880,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -1888,7 +1888,7 @@ fn test_cpu_with_persist_progress_all_optimizers() {
                                                  &AdamWBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1923,7 +1923,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                  &SGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1931,7 +1931,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &MomentumSGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1939,7 +1939,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdagradBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1947,7 +1947,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1955,7 +1955,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l, ReLu::new(&device), &device)
+        ActivationLayer::new(l, ReLuBuilder::new(&device), &device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1963,7 +1963,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -1971,7 +1971,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -1979,7 +1979,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                  &AdamWBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -2008,7 +2008,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                  &SGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -2016,7 +2016,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &MomentumSGDBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -2024,7 +2024,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdagradBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -2032,7 +2032,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -2040,7 +2040,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l, ReLu::new(&device), &device)
+        ActivationLayer::new(l, ReLuBuilder::new(&device), &device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -2048,7 +2048,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &RMSpropBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 32>::new().build(l, &device,
@@ -2056,7 +2056,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                   &AdamBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<32, 1>::new().build(l, &device,
@@ -2064,7 +2064,7 @@ fn test_cpu_with_persist_to_text_progress_all_optimizers() {
                                                  &AdamWBuilder::new(&device)
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });

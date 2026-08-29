@@ -8,7 +8,7 @@ use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
-use nncombinator::activation::{ReLu, Sigmoid};
+use nncombinator::activation::{ReLuBuilder, SigmoidBuilder};
 use nncombinator::arr::Arr;
 use nncombinator::device::{DeviceGpu};
 use nncombinator::layer::activation::ActivationLayer;
@@ -49,7 +49,7 @@ fn test_logger() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -57,7 +57,7 @@ fn test_logger() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100, 1>::new().build(l, &device,
@@ -124,7 +124,7 @@ fn test_logger() {
 
         l
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });

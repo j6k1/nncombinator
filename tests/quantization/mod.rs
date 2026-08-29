@@ -1,11 +1,10 @@
-use std::fmt::Debug;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use rand::prelude;
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
-use nncombinator::activation::{ReLu, SoftMax};
+use nncombinator::activation::{ReLuBuilder, SoftMaxBuilder};
 use nncombinator::arr::Arr;
 use nncombinator::device::DeviceCpu;
 use nncombinator::layer::activation::ActivationLayer;
@@ -17,7 +16,6 @@ use nncombinator::layer::scale::ScalingLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::layer::quantization::DequantizeLayerBuilder;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
-use nncombinator::ope::{Max, Min};
 use nncombinator::optimizer::AdamWBuilder;
 use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight};
 
@@ -57,7 +55,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -82,7 +80,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let mut l = LoggingLayer::new(l,&device);
 
@@ -144,7 +142,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);
 
-        ScalingLayerBuilder::<10>::new().build(l, &device).unwrap()
+        ScalingLayerBuilder::new().build(l,&device).unwrap()
     }).add_layer(|l| {
         let mut l = LoggingLayer::new(l,&device);
 
@@ -165,7 +163,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);
 
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);

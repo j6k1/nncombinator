@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::ops::{Mul,Div};
 use crate::arr::{Arr, ArrView, AsView, IntoConverter, MakeView, SerializedVec, SerializedVecView, SliceSize};
 use crate::device::{DeviceCpu};
-use crate::error::{EvaluateError, TrainingError, TypeConvertError};
+use crate::error::{EvaluateError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
 
 /// Trait that defines the implementation of inverse scaling processes in the scale layer.

@@ -8,7 +8,7 @@ use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
-use nncombinator::activation::{ReLu, SoftMax};
+use nncombinator::activation::{ReLuBuilder, SoftMaxBuilder};
 use nncombinator::arr::Arr;
 use nncombinator::device::{DeviceCpu, DeviceGpu};
 use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll};
@@ -19,7 +19,7 @@ use nncombinator::layer::linear::LinearLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::optimizer::{MomentumSGDBuilder};
-use crate::common::{assert_device, assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL, assert_partial_forward, assert_output_scale, assert_batch_output_scale};
+use crate::common::{assert_device, assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL, assert_output_scale, assert_batch_output_scale};
 
 #[test]
 fn test_mnist_batch_norm() {
@@ -77,7 +77,7 @@ fn test_mnist_batch_norm() {
         assert_batch_backward(&l);
         assert_batch_output_scale(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -119,7 +119,7 @@ fn test_mnist_batch_norm() {
         assert_batch_backward(&l);
         assert_batch_output_scale(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -147,7 +147,7 @@ fn test_mnist_batch_norm() {
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
 
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -315,7 +315,7 @@ fn test_fashion_mnist_batch_norm() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<2000,2000>::new().build(l,&device,
@@ -325,7 +325,7 @@ fn test_fashion_mnist_batch_norm() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<2000,1800>::new().build(l,&device,
@@ -335,7 +335,7 @@ fn test_fashion_mnist_batch_norm() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<1800,10>::new().build(l,&device,
@@ -343,7 +343,7 @@ fn test_fashion_mnist_batch_norm() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -480,7 +480,7 @@ fn test_mnist_batch_norm_double() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -490,7 +490,7 @@ fn test_mnist_batch_norm_double() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,10>::new().build(l,&device,
@@ -498,7 +498,7 @@ fn test_mnist_batch_norm_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -646,7 +646,7 @@ fn test_fashion_mnist_batch_norm_double() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<2000,2000>::new().build(l,&device,
@@ -656,7 +656,7 @@ fn test_fashion_mnist_batch_norm_double() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<2000,1800>::new().build(l,&device,
@@ -666,7 +666,7 @@ fn test_fashion_mnist_batch_norm_double() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<1800,10>::new().build(l,&device,
@@ -674,7 +674,7 @@ fn test_fashion_mnist_batch_norm_double() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -839,7 +839,7 @@ fn test_mnist_batch_norm_for_gpu() {
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -873,7 +873,7 @@ fn test_mnist_batch_norm_for_gpu() {
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -897,7 +897,7 @@ fn test_mnist_batch_norm_for_gpu() {
         assert_batch_pre_train(&l);
         assert_batch_backward(&l);
 
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -1065,7 +1065,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<1000,1000>::new().build(l,&device,
@@ -1075,7 +1075,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<1000,1000>::new().build(l,&device,
@@ -1085,7 +1085,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<1000,10>::new().build(l,&device,
@@ -1093,7 +1093,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1232,7 +1232,7 @@ fn test_mnist_batch_norm_for_gpu_double() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -1242,7 +1242,7 @@ fn test_mnist_batch_norm_for_gpu_double() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,10>::new().build(l,&device,
@@ -1250,7 +1250,7 @@ fn test_mnist_batch_norm_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1400,7 +1400,7 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<2000,2000>::new().build(l,&device,
@@ -1410,7 +1410,7 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<2000,1800>::new().build(l,&device,
@@ -1420,7 +1420,7 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
     }).add_layer(|l| {
         BatchNormalizationLayerBuilder::new().build(l,&device,&optimizer_builder).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<1800,10>::new().build(l,&device,
@@ -1428,7 +1428,7 @@ fn test_fashion_mnist_batch_norm_for_gpu_double() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });

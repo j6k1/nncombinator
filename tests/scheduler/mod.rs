@@ -8,7 +8,7 @@ use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
-use nncombinator::activation::{ReLu, Sigmoid};
+use nncombinator::activation::{ReLuBuilder, SigmoidBuilder};
 use nncombinator::arr::Arr;
 use nncombinator::device::DeviceGpu;
 use nncombinator::layer::activation::ActivationLayer;
@@ -88,7 +88,7 @@ fn test_scheduler() {
         assert_batch_backward(&l);
         assert_on_step(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -114,7 +114,7 @@ fn test_scheduler() {
         assert_batch_backward(&l);
         assert_on_step(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -152,7 +152,7 @@ fn test_scheduler() {
         assert_batch_backward(&l);
         assert_on_step(&l);
 
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);

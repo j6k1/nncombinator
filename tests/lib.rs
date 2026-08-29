@@ -32,7 +32,7 @@ use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
-use nncombinator::activation::{ClippedReLu, LeakyReLu, ReLu, Sigmoid, SoftMax, Swish, Tanh};
+use nncombinator::activation::{ClippedReLuBuilder, LeakyReLuBuilder, ReLuBuilder, SigmoidBuilder, SoftMaxBuilder, SwishBuilder, TanhBuilder};
 use nncombinator::arr::{Arr, DiffArr};
 use nncombinator::device::{DeviceCpu, DeviceGpu};
 use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll, ForwardDiff, PartialForward, ContinueForward, Train};
@@ -70,7 +70,7 @@ fn test_mnist_for_cpu() {
              &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -78,7 +78,7 @@ fn test_mnist_for_cpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -86,7 +86,7 @@ fn test_mnist_for_cpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -238,7 +238,7 @@ fn test_fashion_mnist_for_cpu() {
                                                           &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<2000,2000>::new().build(l,&device,
@@ -246,7 +246,7 @@ fn test_fashion_mnist_for_cpu() {
                                                      &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<2000,1800>::new().build(l,&device,
@@ -254,7 +254,7 @@ fn test_fashion_mnist_for_cpu() {
                                                      &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<1800,10>::new().build(l,&device,
@@ -262,7 +262,7 @@ fn test_fashion_mnist_for_cpu() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -399,7 +399,7 @@ fn test_mnist_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -407,7 +407,7 @@ fn test_mnist_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -415,7 +415,7 @@ fn test_mnist_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -561,7 +561,7 @@ fn test_mnist_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -569,7 +569,7 @@ fn test_mnist_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -577,7 +577,7 @@ fn test_mnist_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -725,7 +725,7 @@ fn test_mnist_for_gpu_adam() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -733,7 +733,7 @@ fn test_mnist_for_gpu_adam() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -741,7 +741,7 @@ fn test_mnist_for_gpu_adam() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -889,7 +889,7 @@ fn test_mnist_for_gpu_adamw() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -897,7 +897,7 @@ fn test_mnist_for_gpu_adamw() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -905,7 +905,7 @@ fn test_mnist_for_gpu_adamw() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1051,7 +1051,7 @@ fn test_fashion_mnist_for_gpu() {
                                                           &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<5000,5000>::new().build(l,&device,
@@ -1059,7 +1059,7 @@ fn test_fashion_mnist_for_gpu() {
                                                      &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<5000,4700>::new().build(l,&device,
@@ -1067,7 +1067,7 @@ fn test_fashion_mnist_for_gpu() {
                                                      &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<4700,10>::new().build(l,&device,
@@ -1075,7 +1075,7 @@ fn test_fashion_mnist_for_gpu() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1220,7 +1220,7 @@ fn test_fashion_mnist_for_gpu_double() {
                                                           &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<5000,5000>::new().build(l,&device,
@@ -1228,7 +1228,7 @@ fn test_fashion_mnist_for_gpu_double() {
                                                      &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<5000,4700>::new().build(l,&device,
@@ -1236,7 +1236,7 @@ fn test_fashion_mnist_for_gpu_double() {
                                                      &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<4700,10>::new().build(l,&device,
@@ -1244,7 +1244,7 @@ fn test_fashion_mnist_for_gpu_double() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1378,7 +1378,7 @@ fn test_weather() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -1386,7 +1386,7 @@ fn test_weather() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1555,7 +1555,7 @@ fn test_weather_by_forward_diff() {
         assert_partial_forward(&l);
         assert_forward_diff(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -1577,7 +1577,7 @@ fn test_weather_by_forward_diff() {
         assert_partial_forward(&l);
         assert_forward_diff(&l);
 
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -1782,7 +1782,7 @@ fn test_weather_batch_train() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -1790,7 +1790,7 @@ fn test_weather_batch_train() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -1798,7 +1798,7 @@ fn test_weather_batch_train() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -1969,7 +1969,7 @@ fn test_weather_batch_train_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -1977,7 +1977,7 @@ fn test_weather_batch_train_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -1985,7 +1985,7 @@ fn test_weather_batch_train_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -2156,7 +2156,7 @@ fn test_weather_batch_train_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -2164,7 +2164,7 @@ fn test_weather_batch_train_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -2172,7 +2172,7 @@ fn test_weather_batch_train_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -2340,7 +2340,7 @@ fn test_penguins() {
          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<50,3>::new().build(l,&device,
@@ -2348,7 +2348,7 @@ fn test_penguins() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -2558,7 +2558,7 @@ fn test_penguins_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<50,3>::new().build(l,&device,
@@ -2566,7 +2566,7 @@ fn test_penguins_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -2775,7 +2775,7 @@ fn test_weather_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -2783,7 +2783,7 @@ fn test_weather_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -2941,7 +2941,7 @@ fn test_weather_by_forward_diff_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -2949,7 +2949,7 @@ fn test_weather_by_forward_diff_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -3146,7 +3146,7 @@ fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
         assert_partial_forward(&l);
         assert_continue_forward(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -3168,7 +3168,7 @@ fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
         assert_partial_forward(&l);
         assert_continue_forward(&l);
 
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -3363,7 +3363,7 @@ fn test_penguins_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<50,3>::new().build(l,&device,
@@ -3371,7 +3371,7 @@ fn test_penguins_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -3580,7 +3580,7 @@ fn test_weather_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -3588,7 +3588,7 @@ fn test_weather_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -3745,7 +3745,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -3753,7 +3753,7 @@ fn test_weather_by_forward_diff_for_gpu_double() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -3942,7 +3942,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -3950,7 +3950,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -3958,7 +3958,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -4101,7 +4101,7 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -4109,7 +4109,7 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -4117,7 +4117,7 @@ fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -4258,7 +4258,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -4266,7 +4266,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -4274,7 +4274,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Tanh::new(&device),&device)
+        ActivationLayer::new(l,TanhBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -4417,7 +4417,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -4425,7 +4425,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -4433,7 +4433,7 @@ fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Tanh::new(&device),&device)
+        ActivationLayer::new(l,TanhBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -4574,7 +4574,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Swish::new(&device),&device)
+        ActivationLayer::new(l,SwishBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -4582,7 +4582,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Swish::new(&device),&device)
+        ActivationLayer::new(l,SwishBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -4590,7 +4590,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Tanh::new(&device),&device)
+        ActivationLayer::new(l,TanhBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -4732,7 +4732,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Swish::new(&device),&device)
+        ActivationLayer::new(l,SwishBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,100>::new().build(l,&device,
@@ -4740,7 +4740,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Swish::new(&device),&device)
+        ActivationLayer::new(l,SwishBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<100,1>::new().build(l,&device,
@@ -4748,7 +4748,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,Tanh::new(&device),&device)
+        ActivationLayer::new(l,TanhBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -4891,7 +4891,7 @@ fn test_fashion_mnist_for_gpu_with_local_allocator() {
                                                           &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<5000,5000>::new().build(l,&device,
@@ -4899,7 +4899,7 @@ fn test_fashion_mnist_for_gpu_with_local_allocator() {
                                                      &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<5000,4700>::new().build(l,&device,
@@ -4907,7 +4907,7 @@ fn test_fashion_mnist_for_gpu_with_local_allocator() {
                                                      &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<4700,10>::new().build(l,&device,
@@ -4915,7 +4915,7 @@ fn test_fashion_mnist_for_gpu_with_local_allocator() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -5069,7 +5069,7 @@ fn test_weather_by_forward_diff_in_thread() {
         assert_update_weight(&l);
         assert_partial_forward(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -5089,7 +5089,7 @@ fn test_weather_by_forward_diff_in_thread() {
         assert_update_weight(&l);
         assert_partial_forward(&l);
 
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -5316,7 +5316,7 @@ fn test_weather_by_forward_diff_for_continue_forward() {
         assert_partial_forward(&l);
         assert_continue_forward(&l);
 
-        ActivationLayer::new(l,ReLu::new(&device),&device)
+        ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -5338,7 +5338,7 @@ fn test_weather_by_forward_diff_for_continue_forward() {
         assert_partial_forward(&l);
         assert_continue_forward(&l);
 
-        ActivationLayer::new(l,Sigmoid::new(&device),&device)
+        ActivationLayer::new(l,SigmoidBuilder::new(&device),&device)
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -5542,7 +5542,7 @@ fn test_fashion_mnist_for_gpu_with_leaky_relu() {
                                                           &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,LeakyReLu::new(&device),&device)
+        ActivationLayer::new(l,LeakyReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<5000,5000>::new().build(l,&device,
@@ -5550,7 +5550,7 @@ fn test_fashion_mnist_for_gpu_with_leaky_relu() {
                                                      &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,LeakyReLu::new(&device),&device)
+        ActivationLayer::new(l,LeakyReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<5000,4700>::new().build(l,&device,
@@ -5558,7 +5558,7 @@ fn test_fashion_mnist_for_gpu_with_leaky_relu() {
                                                      &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,LeakyReLu::new(&device),&device)
+        ActivationLayer::new(l,LeakyReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<4700,10>::new().build(l,&device,
@@ -5566,7 +5566,7 @@ fn test_fashion_mnist_for_gpu_with_leaky_relu() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -5709,7 +5709,7 @@ fn test_mnist_for_cpu_with_leaky_relu() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,LeakyReLu::new(&device),&device)
+        ActivationLayer::new(l,LeakyReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -5717,7 +5717,7 @@ fn test_mnist_for_cpu_with_leaky_relu() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,LeakyReLu::new(&device),&device)
+        ActivationLayer::new(l,LeakyReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -5725,7 +5725,7 @@ fn test_mnist_for_cpu_with_leaky_relu() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -5869,7 +5869,7 @@ fn test_mnist_for_cpu_with_clipped_relu() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ClippedReLu::new(&device,0.6),&device)
+        ActivationLayer::new(l,ClippedReLuBuilder::new(&device,0.6,0.6),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -5877,7 +5877,7 @@ fn test_mnist_for_cpu_with_clipped_relu() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ClippedReLu::new(&device,0.6),&device)
+        ActivationLayer::new(l,ClippedReLuBuilder::new(&device,0.6,0.6),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -5885,7 +5885,7 @@ fn test_mnist_for_cpu_with_clipped_relu() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });
@@ -6031,7 +6031,7 @@ fn test_mnist_for_gpu_with_clipped_relu() {
                                                          &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ClippedReLu::new(&device,0.6),&device)
+        ActivationLayer::new(l,ClippedReLuBuilder::new(&device,0.6,0.6),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<512,256>::new().build(l,&device,
@@ -6039,7 +6039,7 @@ fn test_mnist_for_gpu_with_clipped_relu() {
                                                    &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,ClippedReLu::new(&device,0.6),&device)
+        ActivationLayer::new(l,ClippedReLuBuilder::new(&device,0.6,0.6),&device)
     }).add_layer(|l| {
         let rnd = rnd.clone();
         LinearLayerBuilder::<256,10>::new().build(l,&device,
@@ -6047,7 +6047,7 @@ fn test_mnist_for_gpu_with_clipped_relu() {
                                                   &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        ActivationLayer::new(l,SoftMax::new(&device),&device)
+        ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
     }).add_layer(|l| {
         LinearOutputLayer::new(l,&device).unwrap()
     });

@@ -58,7 +58,6 @@ pub trait Activation<U,T,R,D>
     /// * `l` - loss function
     fn is_canonical_link<L: LossFunction<U>>(&self,l:&L) -> bool;
 }
-
 /// Trait that defines the activation function during batch processing
 pub trait BatchActivation<U,T,R,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -85,6 +84,10 @@ pub trait BatchActivation<U,T,R,D>
     /// This function may return the following errors
     /// * [`TrainingError`]
     fn batch_derive<'a>(&self, device:&D, o:T, loss:T, u:T) -> Result<R, TrainingError>;
+}
+/// Trait partial defining activation functions
+pub trait ActivationPartial<U,D> where D: Device<U> {
+
 }
 /// A trait that defines a builder for generating pairs of activation functions
 pub trait ActivationBuilder<S,DS,D>

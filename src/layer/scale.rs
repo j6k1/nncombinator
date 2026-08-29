@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::device::clone::DeviceClone;
 use crate::device::Device;
 use crate::device::scale::DeviceScale;
-use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, InvalidStateError};
+use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, PreTrainBase, BatchOutputScale, BackwardBase, BatchBackwardBase};
 use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
@@ -548,10 +548,10 @@ impl<U,P,D,I,PI,const N:usize> ScalingLayerInstantiation<U,P,D,I,PI,N> for Scali
     }
 }
 /// Builder for InverseScalingLayer instance creation.
-pub struct ScalingLayerBuilder<const N:usize> {
+pub struct ScalingLayerBuilder {
 }
-impl<const N:usize> ScalingLayerBuilder<N> {
-    pub fn new() -> ScalingLayerBuilder<N> {
+impl ScalingLayerBuilder {
+    pub fn new() -> ScalingLayerBuilder {
         ScalingLayerBuilder {}
     }
 
@@ -565,7 +565,7 @@ impl<const N:usize> ScalingLayerBuilder<N> {
     ///
     /// This function may return the following errors
     /// * [`LayerInstantiationError`]
-    pub fn build<U,P,D,I,PI>(&self,parent:P,device:&D)
+    pub fn build<U,P,D,I,PI,const N:usize>(&self,parent:P,device:&D)
         -> Result<ScalingLayer<U,P,D,I,PI,N>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> +
                  BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain +

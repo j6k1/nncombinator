@@ -11,7 +11,6 @@ use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
 use crate::device::bridge::DeviceBridge;
-use crate::error::EvaluateError::CudaRuntimeError;
 use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 
 /// Dequantize layer Implementation
@@ -484,7 +483,7 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
     type ScalingDevice = D;
-    type Scale = ();
+    type Scale = CI;
     type ScaledOutput = CI;
     type Mapper<'a> = IdentityMapper<'a,CI,Self::ScalingDevice> where Self: 'a;
 
@@ -590,13 +589,13 @@ impl<SO,CI> DequantizeLayerBuilder<SO, CI>
               U: Default + Clone + Copy + Debug + Send + Sync + 'static,
               SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
               D: Device<U>,
-              PI: Debug + InputTensorScalar + 'static,
+              PI: Debug + InputTensorScalar<Scalar=U> + 'static,
               CI: Debug + OutputTensorScalar<Scalar=SO> + 'static,
               I: Debug + Send + Sync + 'static + BatchDataType,
               <I as BatchDataType>::Type: Debug + Send + Sync + 'static,
-              DequantizeLayer<U, SO, P, I, PI, CI, D>: DequantizeLayerInstantiation<U, SO, P, I, PI, CI, D>
+              DequantizeLayer<U,SO,P,I,PI,CI,D>: DequantizeLayerInstantiation<U,SO,P,I,PI,CI,D>
     {
-        DequantizeLayer::<U, SO, P, I, PI, CI, D>::instantiation(parent, device)
+        DequantizeLayer::<U,SO,P,I,PI,CI,D>::instantiation(parent, device)
     }
 }
 

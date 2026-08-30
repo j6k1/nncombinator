@@ -150,7 +150,7 @@ impl<'a,S,D,const N:usize> From<&'a Arr<S,N>> for Arr<D,N>
     fn from(s: &'a Arr<S,N>) -> Self {
         let mut r = Arr::default();
 
-        for (s,d) in s.iter().zip(r.iter_mut()) {
+        for (&s,d) in s.iter().zip(r.iter_mut()) {
             *d = s.assume();
         }
 
@@ -1574,7 +1574,7 @@ impl<'a,S,D,CS,CD> From<&'a SerializedVec<S,CS>> for SerializedVec<D,CD>
           for<'b> <CS as AsView<'b>>::ViewType: Deref<Target=[S]> {
     fn from(s: &'a SerializedVec<S,CS>) -> Self {
         s.iter().map(|arr| {
-            arr.iter().map(|v| v.assume()).collect::<Vec<D>>().try_into().unwrap()
+            arr.iter().map(|&v| v.assume()).collect::<Vec<D>>().try_into().unwrap()
         }).collect::<Vec<CD>>().into()
     }
 }

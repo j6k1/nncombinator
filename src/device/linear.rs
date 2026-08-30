@@ -206,6 +206,7 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     type Scale: Debug + BatchDataType + OutputTensorScalar<Scalar=f32> + OutputTensorSize<NO> + 'static;
+    type Shift: Debug + BatchDataType + OutputTensorScalar<Scalar=usize> + OutputTensorSize<NO> + 'static;
     type Output: BatchDataType + Debug + OutputTensorScalar<Scalar=U> + OutputTensorSize<NO> + 'static;
     type LossInput: BatchDataType + Debug + OutputTensorScalar<Scalar=f32> + OutputTensorSize<NO> + 'static;
     type BatchOutput: Debug + 'static;
@@ -241,8 +242,8 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn quantization(&self, units:&T, bias:&B, shift:u32, max_input_value:usize)
-                    -> Result<(Self::Scale,f32,<T as Quantizable<W>>::Quantized,<B as Quantizable<W>>::Quantized,usize), SpecializationError>;
+    fn quantization(&self, units:&T, bias:&B, max_input_value:usize)
+                    -> Result<(Self::Scale,f32,Self::Shift,<T as Quantizable<W>>::Quantized,<B as Quantizable<W>>::Quantized,usize), SpecializationError>;
     /// Forward propagation calculation
     /// # Arguments
     /// * `bias` - bias weights
@@ -253,7 +254,7 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     ///
     /// This function may return the following errors
     /// * [`EvaluateError`]
-    fn forward_linear<'a>(&self, shitt: usize, bias:&<B as Quantizable<W>>::Quantized,
+    fn forward_linear<'a>(&self, shitt: &Self::Shift, bias:&<B as Quantizable<W>>::Quantized,
                           units:&<T as Quantizable<W>>::Quantized, input:&'a I) -> Result<Self::Output, EvaluateError>;
     /// Error back propagation calculation
     /// # Arguments
@@ -264,8 +265,7 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn backward_linear<'a>(&self, units:&T, input:&'a Self::LossInput,
-                           output_scale: &'a Self::Scale) -> Result<Self::LossOutput, TrainingError>;
+    fn backward_linear<'a>(&self, units:&T, input:&'a Self::LossInput) -> Result<Self::LossOutput, TrainingError>;
     /// Calculate the gradient of the weights
     /// # Arguments
     /// * `o` - Input values from upper layers
@@ -299,7 +299,7 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_forward_linear<'a>(&self,shitt: usize,bias:&<B as Quantizable<W>>::Quantized,
+    fn batch_forward_linear<'a>(&self,shift: &Self::Shift,bias:&<B as Quantizable<W>>::Quantized,
                                 units:&<T as Quantizable<W>>::Quantized,
                                 input: &'a <I as BatchDataType>::Type)
                                 -> Result<Self::BatchOutput,TrainingError>;
@@ -312,8 +312,7 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn batch_backward_linear<'a>(&self, units: &T, input: &'a Self::BatchLossInput,
-                                 output_scale: &'a Self::Scale)
+    fn batch_backward_linear<'a>(&self, units: &T, input: &'a Self::BatchLossInput)
                                  -> Result<Self::BatchLossOutput, TrainingError>;
     /// Calculate the gradient of the weights in batch
     /// # Arguments
@@ -1302,29 +1301,30 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
              Add<Output=U> +  Mul<Output=U> +
              AddAssign + Send + Sync + Shr<usize,Output=U> + MaxValue + Assume<i32> + 'static,
           W: Default + Clone + Copy + Debug +
-             Add<Output=W> + Mul<Output=W> + AddAssign + MaxValue + Assume<U> + Send + Sync + 'static,
+             Add<Output=W> + Mul<Output=W> + AddAssign + MaxValue + Assume<U> + Ord + Send + Sync + 'static,
           i32: From<U>,
           f32: Assume<W> + Debug + Default + Clone + Copy + Send + Sync,
-      I: BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + From<Arr<U,NI>> + Debug + 'static,
-      <I as BatchDataType>::Type: Debug + 'static,
-      <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
-      SerializedVec<U,Arr<U,NI>>: IntoConverter,
-      SerializedVec<f32,Arr<f32,NO>>: From<Vec<Arr<f32,NO>>>,
-      <Arr<f32,NI> as BatchDataType>::Type: From<Vec<Arr<f32,NI>>>,
-      Arr<U,NO>: InputTensorScalar + OutputTensorScalar<Scalar=U> + OutputTensorSize<NO>,
-      Arr2<f32,NI,NO>: Quantizable<W,Quantized=Arr2<W,NI,NO>>,
-      Arr<f32,NO>: Quantizable<W,Quantized=Arr<W,NO>> + TryFrom<Vec<f32>,Error=TypeConvertError>,
-      Arr<f32,NI>: OutputTensorScalar<Scalar=f32> + BatchDataType<Type=SerializedVec<f32,Arr<f32,NI>>>,
-      <Arr<f32,NI> as BatchDataType>::Type: Debug + OutputTensorScalar<Scalar=f32> + 'static,
-      [();NI]: TensorSize,
-      [();NO]: TensorSize,
-      f32: From<U> + Assume<U>,
-      i32: From<U> + Assume<U>,
-      for<'a> ArrView<'a,U,NI>: From<&'a I>,
-      for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
-      for<'a> SerializedVecView<'a,f32,Arr<f32,NI>>: TryFrom<&'a <Arr<f32,NI> as BatchDataType>::Type,Error=TypeConvertError>,
-      Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO> {
+          I: BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + From<Arr<U,NI>> + Debug + 'static,
+          <I as BatchDataType>::Type: Debug + 'static,
+          <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          SerializedVec<U,Arr<U,NI>>: IntoConverter,
+          SerializedVec<f32,Arr<f32,NO>>: From<Vec<Arr<f32,NO>>>,
+          <Arr<f32,NI> as BatchDataType>::Type: From<Vec<Arr<f32,NI>>>,
+          Arr<U,NO>: InputTensorScalar + OutputTensorScalar<Scalar=U> + OutputTensorSize<NO>,
+          Arr2<f32,NI,NO>: Quantizable<W,Quantized=Arr2<W,NI,NO>>,
+          Arr<f32,NO>: Quantizable<W,Quantized=Arr<W,NO>> + TryFrom<Vec<f32>,Error=TypeConvertError>,
+          Arr<f32,NI>: OutputTensorScalar<Scalar=f32> + BatchDataType<Type=SerializedVec<f32,Arr<f32,NI>>>,
+          <Arr<f32,NI> as BatchDataType>::Type: Debug + OutputTensorScalar<Scalar=f32> + 'static,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize,
+          f32: From<U> + Assume<U>,
+          i32: From<U> + Assume<U>,
+          for<'a> ArrView<'a,U,NI>: From<&'a I>,
+          for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> SerializedVecView<'a,f32,Arr<f32,NI>>: TryFrom<&'a <Arr<f32,NI> as BatchDataType>::Type,Error=TypeConvertError>,
+          Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO> {
     type Scale = Arr<f32,NO>;
+    type Shift = Arr<usize,NO>;
     type Output = Arr<U,NO>;
     type BatchOutput = <Arr<U,NO> as BatchDataType>::Type;
     type LossInput = Arr<f32,NO>;
@@ -1340,14 +1340,8 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
         Ok(scale)
     }
     #[inline]
-    fn quantization(&self, units: &Arr2<f32, NI, NO>, bias: &Arr<f32, NO>, shift: u32, max_input_value: usize) -> Result<(Self::Scale, f32, <Arr2<f32, NI, NO> as Quantizable<W>>::Quantized, <Arr<f32, NO> as Quantizable<W>>::Quantized, usize), SpecializationError> {
-        let mut max_u:Arr<f32,NO> = Arr::new();
-
-        for it in units.iter() {
-            for (w,m) in it.iter().zip(max_u.iter_mut()) {
-                *m = m.max(w.abs());
-            }
-        }
+    fn quantization(&self, units: &Arr2<f32, NI, NO>, bias: &Arr<f32, NO>, max_input_value: usize) -> Result<(Self::Scale, f32, Self::Shift, <Arr2<f32, NI, NO> as Quantizable<W>>::Quantized, <Arr<f32, NO> as Quantizable<W>>::Quantized, usize), SpecializationError> {
+        let scale_input = max_input_value as f32 / W::max_value().assume().assume() as f32;
 
         let mut scale:Arr<f32,NO> = Arr::new();
         let scale_mean;
@@ -1355,12 +1349,9 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
         let mut qunits:Arr2<W,NI,NO> = Arr2::new();
         let mut qbias:Arr<W,NO> = Arr::new();
 
-        for (&m,s) in max_u.iter().zip(scale.iter_mut()) {
-            if m == 0.0 {
-                *s = 1.0;
-            } else {
-                *s = m / W::max_value().assume().assume() as f32;
-            }
+        for (j,s) in scale.iter_mut().enumerate() {
+            let rms = (units.iter().map(|it| it[j] * it[j]).sum::<f32>() / NI as f32).sqrt();
+            *s = 2.0 * rms / W::max_value().assume().assume() as f32;
         }
 
         scale_mean = scale.iter().sum::<f32>() / NO as f32;
@@ -1379,35 +1370,49 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
             ).assume();
         }
 
-        let scale = scale.iter().map(|&s| {
-            s * (1 << shift) as f32
+        let mut shift = Arr::<usize,NO>::new();
+
+        for (sh,&scale) in shift.iter_mut().zip(scale.iter()) {
+            let s = scale_input as f32 * scale;
+            *sh = s.log2().ceil() as usize
+        }
+
+        let scale = scale.iter().zip(shift.iter()).map(|(s,sh)| {
+            s * (1 << sh) as f32
         }).collect::<Vec<f32>>().try_into()?;
 
-        let next_input_max = (NI * max_input_value * W::max_value().assume().assume() as usize) >> shift as usize;
+        let shift_max = shift.iter().copied().max().unwrap();
 
-        Ok((scale,scale_mean * (1 << shift) as f32,qunits,qbias,next_input_max >> 2))
+        let q_unit_max = qunits.iter().map(|it| it.iter().copied().max().unwrap()).max().unwrap();
+
+        let next_input_max = (NI * max_input_value * q_unit_max.assume().assume() as usize) >> shift_max;
+
+        Ok((scale,scale_mean * (1 << shift.iter().copied().max().unwrap()) as f32,shift,qunits,qbias,next_input_max))
     }
     #[inline]
-    fn forward_linear<'a>(&self, shift: usize, bias: &Arr<W,NO>, units: &Arr2<W,NI,NO>, input: &'a I) -> Result<Arr<U,NO>, EvaluateError> {
+    fn forward_linear<'a>(&self, shift: &Arr<usize,NO>, bias: &Arr<W,NO>, units: &Arr2<W,NI,NO>, input: &'a I) -> Result<Arr<U,NO>, EvaluateError> {
         let mut o = Arr::<i32,NO>::new();
 
         for (&input,r) in ArrView::<'a,U,NI>::from(input).iter().zip(units.iter()) {
-            for ((o,&w),&b) in o.iter_mut().zip(r.iter()).zip(bias.iter()) {
-                *o += input.assume() * w.assume().assume() + b.assume().assume();
+            for (o,&w) in o.iter_mut().zip(r.iter()) {
+                *o += input.assume() * w.assume().assume();
             }
         }
 
-        Ok(o.iter().map(|&o| {
-            (o >> shift).assume()
+        for (o,&b) in o.iter_mut().zip(bias.iter()) {
+            *o += b.assume().assume();
+        }
+
+        Ok(o.iter().zip(shift.iter()).map(|(&o,sh)| {
+            (o >> sh).assume()
         }).collect::<Vec<U>>().try_into().map_err(|e| EvaluateError::from(e))?)
     }
 
     #[inline]
-    fn backward_linear<'a>(&self, units: &Arr2<f32,NI,NO>, input: &'a Arr<f32,NO>,
-                           output_scale: &'a Arr<f32,NO>) -> Result<Arr<f32,NI>, TrainingError> {
+    fn backward_linear<'a>(&self, units: &Arr2<f32,NI,NO>, input: &'a Arr<f32,NO>) -> Result<Arr<f32,NI>, TrainingError> {
         Ok(Arr::<f32,NI>::try_from(units.iter().map(|u| {
-            u.iter().zip(input.iter()).zip(output_scale.iter())
-                .map(|((&w,&l),&s)| w * l * s).fold(0.0, |acc,g|{
+            u.iter().zip(input.iter())
+                .map(|(&w,&l)| w * l).fold(0.0, |acc,g|{
                 acc + g
             })
         }).collect::<Vec<f32>>()).map_err(|e| TrainingError::from(e))?.into())
@@ -1428,13 +1433,12 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
     }
     #[inline]
     fn batch_backward_linear<'a>(&self, units: &Arr2<f32,NI,NO>,
-                                 input: &'a SerializedVec<f32,Arr<f32,NO>>,
-                                 output_scale: &'a Arr<f32,NO>)
+                                 input: &'a SerializedVec<f32,Arr<f32,NO>>)
                                  -> Result<<Arr<f32,NI> as BatchDataType>::Type, TrainingError> {
         Ok(SerializedVec::<f32,Arr<f32,NI>>::from(input.par_iter().map(|l| {
             units.iter().map(|u| {
-                u.iter().zip(l.iter()).zip(output_scale.iter())
-                    .map(|((&w,&l),&s)| w * l * s).fold(0., |acc,g| {
+                u.iter().zip(l.iter())
+                    .map(|(&w,&l)| w * l).fold(0., |acc,g| {
                     acc + g
                 })
             }).collect::<Vec<f32>>().try_into()
@@ -1442,20 +1446,24 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
     }
 
     #[inline]
-    fn batch_forward_linear<'a>(&self,shift: usize,bias: &Arr<W,NO>, units: &Arr2<W,NI,NO>,
+    fn batch_forward_linear<'a>(&self,shift: &Arr<usize,NO>,bias: &Arr<W,NO>, units: &Arr2<W,NI,NO>,
                                 input: &'a <I as BatchDataType>::Type)
                                 -> Result<SerializedVec<U,Arr<U,NO>>,TrainingError> {
         Ok(SerializedVecView::<'a,U,Arr<U,NI>>::try_from(input)?.par_iter().map(|input| {
             let mut o = Arr::<i32,NO>::new();
 
             for (&input,r) in input.iter().zip(units.iter()) {
-                for ((o,&w),&b) in o.iter_mut().zip(r.iter()).zip(bias.iter()) {
-                    *o += input.assume() * w.assume().assume() + b.assume().assume();
+                for (o,&w) in o.iter_mut().zip(r.iter()) {
+                    *o += input.assume() * w.assume().assume();
                 }
             }
 
-            o.iter().map(|&o| {
-                (o >> shift).assume()
+            for (o,&b) in o.iter_mut().zip(bias.iter()) {
+                *o += b.assume().assume();
+            }
+
+            o.iter().zip(shift.iter()).map(|(&o,&sh)| {
+                (o >> sh).assume()
             }).collect::<Vec<U>>().try_into().map_err(|e| EvaluateError::from(e))
         }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.into())
     }

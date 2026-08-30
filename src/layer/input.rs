@@ -241,9 +241,10 @@ impl<U,O,LI,D> OutputScale for InputLayer<U,O,LI,D>
     type ScalingDevice = D;
     type Scale = <D as DeviceInput<U,O>>::Output;
     type ScaledOutput = <D as DeviceInput<U,O>>::Output;
+    type ScalingInput = <D as DeviceInput<U,O>>::Output;
     type Mapper<'a> = IdentityMapper<'a,<D as DeviceInput<U,O>>::Output,Self::ScalingDevice> where Self: 'a;
 
-    fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+    fn scaling_mapper<'a>(&'a self, input: &'a <D as DeviceInput<U,O>>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
         Ok(IdentityMapper::new(input))
     }
 }
@@ -254,10 +255,12 @@ impl<U,O,LI,D> BatchOutputScale for InputLayer<U,O,LI,D>
           D: Device<U> + DeviceInput<U,O,BatchOutput=<<D as DeviceInput<U,O>>::Output as BatchDataType>::Type>,
           <D as DeviceInput<U,O>>::Output: Debug + BatchDataType + 'static,
           <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
-          <O as BatchDataType>::Type: Debug + 'static {
+          <O as BatchDataType>::Type: Debug + 'static,
+          <D as DeviceInput<U,O>>::Output: Debug + BatchDataType + 'static {
     type BatchMapper<'a> = BatchIdentityMapper<'a,<D as DeviceInput<U,O>>::Output,Self::ScalingDevice> where Self: 'a;
 
-    fn batch_scaling_mapper<'a>(&'a self, input: &'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
+    fn batch_scaling_mapper<'a>(&'a self, input: &'a <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type)
+        -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
         Ok(BatchIdentityMapper::new(input))
     }
 }
@@ -473,6 +476,7 @@ impl<U,O,DI,PO,LI,D> OutputScale for DiffInputLayer<U,O,DI,PO,LI,D>
     type ScalingDevice = D;
     type Scale = <D as DeviceInput<U,O>>::Output;
     type ScaledOutput = <D as DeviceInput<U,O>>::Output;
+    type ScalingInput = <D as DeviceInput<U,O>>::Output;
     type Mapper<'a> = IdentityMapper<'a,<D as DeviceInput<U,O>>::Output,Self::ScalingDevice> where Self: 'a;
 
     fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
@@ -713,6 +717,7 @@ impl<U,O,LI,D,const M: usize> OutputScale for QuantizedInputLayer<U,O,LI,D,M>
     type ScalingDevice = D;
     type Scale = <D as DeviceInput<U,O>>::Output;
     type ScaledOutput = <D as DeviceInput<U,O>>::Output;
+    type ScalingInput = <D as DeviceInput<U,O>>::Output;
     type Mapper<'a> = IdentityMapper<'a,<D as DeviceInput<U,O>>::Output,Self::ScalingDevice> where Self: 'a;
 
     fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {

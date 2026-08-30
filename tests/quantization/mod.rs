@@ -29,7 +29,7 @@ fn test_mnist_for_quntization_cpu() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:QuantizedInputLayer<i16,Arr<i16,{ 28*28 }>,_,_,3200> = QuantizedInputLayer::new(&device);
+    let net:QuantizedInputLayer<i16,Arr<i16,{ 28*28 }>,_,_,255> = QuantizedInputLayer::new(&device);
 
     let optimizer_builder = AdamWBuilder::new(&device).lr(0.001).weight_decay(0.0001);
 
@@ -113,6 +113,28 @@ fn test_mnist_for_quntization_cpu() {
                                                             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
+        let mut l = LoggingLayer::new(l,&device);
+
+        /*
+        l.add_batch_forward_logger(move |l| {
+            dbg!(&l);
+
+            Ok(())
+        });
+
+        l.add_gradient_logger(move |g| {
+            dbg!(&g);
+
+            Ok(())
+        });
+        l.add_batch_backward_logger(move |l| {
+            dbg!(&l);
+
+            Ok(())
+        });
+        */
+        l
+    }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
@@ -126,6 +148,12 @@ fn test_mnist_for_quntization_cpu() {
         let mut l = LoggingLayer::new(l,&device);
 
         /*
+        l.add_batch_forward_logger(move |l| {
+            dbg!(&l);
+
+            Ok(())
+        });
+
         l.add_batch_backward_logger(move |l| {
             dbg!(&l);
 
@@ -164,6 +192,30 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_pre_train(&l);
 
         ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
+    }).add_layer(|l| {
+        let mut l = LoggingLayer::new(l,&device);
+
+        /*
+        l.add_batch_forward_logger(move |l| {
+            dbg!(&l);
+
+            Ok(())
+        });
+        */
+        /*
+        l.add_gradient_logger(move |g| {
+            dbg!(&g);
+
+            Ok(())
+        });
+
+        l.add_batch_backward_logger(move |l| {
+            dbg!(&l);
+
+            Ok(())
+        });
+         */
+        l
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
@@ -227,7 +279,7 @@ fn test_mnist_for_quntization_cpu() {
                 let mut input = Arr::<i16, 784>::new();
 
                 for (it, &p) in input.iter_mut().zip(pixels) {
-                    *it = (p as i32 * 4096 / 255) as i16;
+                    *it = p as i16;
                 }
 
                 let mut expected = Arr::new();
@@ -286,7 +338,7 @@ fn test_mnist_for_quntization_cpu() {
         let mut input = Arr::<i16, 784>::new();
 
         for (it, &p) in input.iter_mut().zip(pixels) {
-            *it = (p as i32 * 4096 / 255) as i16;
+            *it = p as i16;
         }
 
         let r = net.forward_all(input).unwrap();

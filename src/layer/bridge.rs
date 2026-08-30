@@ -288,8 +288,7 @@ impl<U,SO,P,I,PI,CI,D> BatchForward for BridgeLayer<U,SO,P,I,PI,CI,D>
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
           <CI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static {
+          <I as BatchDataType>::Type: Debug {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
         Ok(self.device.batch_bridge_forward(&self.parent.batch_forward(input)?)?)
     }
@@ -312,7 +311,6 @@ impl<U,SO,P,I,PI,CI,D> BatchPreTrainBase for BridgeLayer<U,SO,P,I,PI,CI,D>
           <CI as BatchDataType>::Type: Debug + 'static,
           <I as BatchDataType>::Type: Debug,
           for<'a> <CI as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static,
           for<'a> CI: Debug + 'static + BatchDataType {
     type BatchPreOutput = <CI as BatchDataType>::Type;
     type BatchOutStack = Cons<<P as BatchPreTrainBase>::BatchOutStack,<CI as BatchDataType>::Type>;
@@ -333,8 +331,7 @@ impl<U,SO,P,I,PI,CI,D> BatchPreTrain for BridgeLayer<U,SO,P,I,PI,CI,D>
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug + 'static,
           <CI as BatchDataType>::Type: Debug + 'static,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static {
+          <I as BatchDataType>::Type: Debug {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let s = self.parent.batch_pre_train(input)?;
 
@@ -360,7 +357,6 @@ impl<U,SO,P,I,PI,CI,D> BatchBackwardBase for BridgeLayer<U,SO,P,I,PI,CI,D>
           <CI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
           for<'a> <CI as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug {
     type BatchLossInput = <CI as BatchDataType>::Type;
@@ -473,7 +469,7 @@ impl<U,SO,P,I,PI,CI,D> InputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
 }
 impl<U,SO,P,I,PI,CI,D> OutputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale +
+             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale<Scale=PI,ScaledOutput=PI,ScalingInput=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -484,20 +480,22 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
           Self: ForwardAll<Output=PI>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
-    type ScalingDevice = D;
-    type Scale = ();
+    type ScalingDevice = <P as OutputScale>::ScalingDevice;
+    type Scale = PI;
     type ScaledOutput = PI;
-    type Mapper<'a> = IdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
-    fn scaling_mapper<'a>(&self, input: &'a PI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
-        Ok(IdentityMapper::new(input))
+    type ScalingInput = PI;
+    type Mapper<'a> = <P as OutputScale>::Mapper<'a> where Self: 'a;
+    fn scaling_mapper<'a>(&'a self, input:&'a PI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+        self.parent.scaling_mapper(input)
     }
 }
 impl<U,SO,P,I,PI,CI,D> BatchOutputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale +
+             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale<Scale=PI,ScaledOutput=PI,ScalingInput=PI> +
              InputTensorScalar + OutputTensorScalar +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchPreTrainBase + BatchBackward<U,BatchLossInput=<PI as BatchDataType>::Type>,
+             BatchOutputScale +
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceBridge<U,SO,PI,CI>,
@@ -509,9 +507,10 @@ impl<U,SO,P,I,PI,CI,D> BatchOutputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
           <I as BatchDataType>::Type: Debug + BatchSize + 'static,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
-    type BatchMapper<'a> = BatchIdentityMapper<'a, PI, Self::ScalingDevice> where Self: 'a;
-    fn batch_scaling_mapper<'a>(&self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
-        Ok(BatchIdentityMapper::new(input))
+    type BatchMapper<'a> = <P as BatchOutputScale>::BatchMapper<'a> where Self: 'a;
+
+    fn batch_scaling_mapper<'a>(&'a self, input:&'a <PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
+        self.parent.batch_scaling_mapper(input)
     }
 }
 /// Trait for BridgeLayer instance creation

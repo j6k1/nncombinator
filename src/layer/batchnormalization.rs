@@ -973,6 +973,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OutputScale for BatchNormalizationLayer<U,C,
     type ScalingDevice = D;
     type Scale = PI;
     type ScaledOutput = PI;
+    type ScalingInput = PI;
 
     type Mapper<'a> = IdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
 

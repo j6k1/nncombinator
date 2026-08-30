@@ -2,6 +2,18 @@
 pub trait Assume<T> {
     fn assume(self) -> T;
 }
+impl<T> Assume<T> for T {
+    #[inline]
+    fn assume(self) -> T {
+        self
+    }
+}
+impl<T> Assume<T> for &T where T: Assume<T> + Copy {
+    #[inline]
+    fn assume(self) -> T {
+        *self
+    }
+}
 impl Assume<f32> for f64 {
     #[inline]
     fn assume(self) -> f32 {

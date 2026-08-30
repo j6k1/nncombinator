@@ -85,10 +85,6 @@ pub trait BatchActivation<U,T,R,D>
     /// * [`TrainingError`]
     fn batch_derive<'a>(&self, device:&D, o:T, loss:T, u:T) -> Result<R, TrainingError>;
 }
-/// Trait partial defining activation functions
-pub trait ActivationPartial<U,D> where D: Device<U> {
-
-}
 /// A trait that defines a builder for generating pairs of activation functions
 pub trait ActivationBuilder<S,DS,D>
     where S: Default + Clone + Copy + Debug + Send + Sync + 'static,

@@ -591,15 +591,19 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OutputScale for BiasLayer<U,C,P,OP,D,I,PI,N>
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar,
-          D: Device<U> + DeviceBias<U,C,PI,N>,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
+          C: Debug,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,D>,
-          <PI as BatchDataType>::Type: Debug + BatchSize + 'static {
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type ScalingDevice = D;
     type Scale = PI;
     type ScaledOutput = PI;
+    type ScalingInput = PI;
     type Mapper<'a> = IdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
 
     fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
@@ -611,16 +615,21 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchOutputScale for BiasLayer<U,C,P,OP,D,I,
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain<PreOutput=PI> +
              InputTensorScalar + OutputTensorScalar +
-             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
-          D: Device<U> + DeviceBias<U,C,PI,N>,
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchBackwardBase<BatchLossInput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
+             BatchBackward<U>,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
+          C: Debug,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync + BatchDataType,
           PI: Debug + BatchDataType + 'static,
           OP: Optimizer<U,D>,
-          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-          <I as BatchDataType>::Type: Debug {
+          <PI as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
     type BatchMapper<'a> = BatchIdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
-
     fn batch_scaling_mapper<'a>(&'a self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
         Ok(BatchIdentityMapper::new(input))
     }

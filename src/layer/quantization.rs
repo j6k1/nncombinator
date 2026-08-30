@@ -11,7 +11,7 @@ use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
 use crate::device::bridge::DeviceBridge;
-use crate::mapper::{BatchIdentityMapper, IdentityMapper};
+use crate::mapper::{BatchIdentityMapper, DataMapper, IdentityMapper};
 
 /// Dequantize layer Implementation
 pub struct DequantizeLayer<U,SO,P,I,PI,CI,D>
@@ -472,7 +472,7 @@ impl<U,SO,P,I,PI,CI,D> InputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
 }
 impl<U,SO,P,I,PI,CI,D> OutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale +
+             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale<Scale=CI,ScaledOutput=CI,ScalingInput=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -482,19 +482,21 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
           I: Debug + Send + Sync,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
-    type ScalingDevice = D;
+    type ScalingDevice = <P as OutputScale>::ScalingDevice;
     type Scale = CI;
     type ScaledOutput = CI;
-    type Mapper<'a> = IdentityMapper<'a,CI,Self::ScalingDevice> where Self: 'a;
-
-    fn scaling_mapper<'a>(&self, input: &'a CI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
-        Ok(IdentityMapper::new(input))
+    type ScalingInput = PI;
+    type Mapper<'a> = <P as OutputScale>::Mapper<'a> where Self: 'a;
+    fn scaling_mapper<'a>(&'a self, input:&'a PI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+        self.parent.scaling_mapper(input)
     }
 }
-impl<U,SO,P,I,PI,CI,D> BatchOutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
+impl<U,SO,P,I,PI,CI,D> BatchOutputScale for DequantizeLayer<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             OutputScale<Scale=CI,ScaledOutput=CI,ScalingInput=PI> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchOutputScale +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -507,10 +509,10 @@ impl<U,SO,P,I,PI,CI,D> BatchOutputScale for DequantizeLayer<U, SO, P, I, PI, CI,
           <CI as BatchDataType>::Type: Debug + BatchSize + 'static,
           Self: ForwardAll<Output=CI>,
           Self: BatchForwardBase<BatchOutput=<CI as BatchDataType>::Type> {
-    type BatchMapper<'a> = BatchIdentityMapper<'a,CI,Self::ScalingDevice> where Self: 'a;
+    type BatchMapper<'a> = <P as BatchOutputScale>::BatchMapper<'a> where Self: 'a;
 
-    fn batch_scaling_mapper<'a>(&self, input: &'a <CI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
-        Ok(BatchIdentityMapper::new(input))
+    fn batch_scaling_mapper<'a>(&'a self, input:&'a <PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
+        self.parent.batch_scaling_mapper(input)
     }
 }
 /// Trait for DequantizeLayer instance creation

@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::bias::DeviceBias;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, PreTrainBase, OutputScale, BatchOutputScale, BackwardBase, BatchBackwardBase};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, PreTrainBase, Bridge, BatchBridge, BackwardBase, BatchBackwardBase, BridgeRepr, BatchBridgeRepr, BridgeBase};
 use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
@@ -586,7 +586,7 @@ impl<U,C,P,OP,D,I,PI,const N:usize> InputScale for BiasLayer<U,C,P,OP,D,I,PI,N>
         self.parent.scale_mean()
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> OutputScale for BiasLayer<U,C,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BridgeBase for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain<PreOutput=PI> +
@@ -600,17 +600,52 @@ impl<U,C,P,OP,D,I,PI,const N:usize> OutputScale for BiasLayer<U,C,P,OP,D,I,PI,N>
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
-    type ScalingDevice = D;
-    type Scale = PI;
-    type ScaledOutput = PI;
-    type ScalingInput = PI;
-    type Mapper<'a> = IdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
+    type UseDevice = D;
+    type RealScale = PI;
+    type RealOutput = PI;
+    type SourceInput = PI;
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> Bridge for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> +
+             InputTensorScalar + OutputTensorScalar,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
+          C: Debug,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType + 'static,
+          OP: Optimizer<U,D>,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+    type RealMapper<'a> = IdentityMapper<'a,PI,Self::UseDevice> where Self: 'a;
 
-    fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
+    fn as_real<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::RealMapper<'a>,EvaluateError> where Self: 'a {
         Ok(IdentityMapper::new(input))
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> BatchOutputScale for BiasLayer<U,C,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BridgeRepr for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> +
+             InputTensorScalar + OutputTensorScalar,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
+          C: Debug,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType + 'static,
+          OP: Optimizer<U,D>,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+    type RepresentationOutput = PI;
+    type ReprMapper<'a> = IdentityMapper<'a,PI,Self::UseDevice> where Self: 'a;
+    fn as_repr<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::ReprMapper<'a>,EvaluateError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchBridge for BiasLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrain<PreOutput=PI> +
@@ -629,8 +664,32 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchOutputScale for BiasLayer<U,C,P,OP,D,I,
           <I as BatchDataType>::Type: Debug,
           for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
           for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
-    type BatchMapper<'a> = BatchIdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
-    fn batch_scaling_mapper<'a>(&'a self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
+    type BatchRealMapper<'a> = BatchIdentityMapper<'a,PI,Self::UseDevice> where Self: 'a;
+    fn batch_as_real<'a>(&'a self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchRealMapper<'a>,EvaluateError> where Self: 'a {
+        Ok(BatchIdentityMapper::new(input))
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchBridgeRepr for BiasLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrain<PreOutput=PI> +
+             InputTensorScalar + OutputTensorScalar +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchBackwardBase<BatchLossInput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain +
+             BatchBackward<U>,
+          D: Device<U> + DeviceBias<U,C,PI,N> + DeviceBatchAveraging<C,U>,
+          C: Debug,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync + BatchDataType,
+          PI: Debug + BatchDataType + 'static,
+          OP: Optimizer<U,D>,
+          <PI as BatchDataType>::Type: Debug + BatchSize + IntoConverter + 'static,
+          <I as BatchDataType>::Type: Debug,
+          for<'a> &'a <OP as Optimizer<U,D>>::InternalType: From<&'a C>,
+          for<'a> <OP as Optimizer<U,D>>::InternalUpdateType<'a>: From<&'a mut C> {
+    type BatchReprMapper<'a> = BatchIdentityMapper<'a,PI,Self::UseDevice> where Self: 'a;
+    fn batch_as_repr<'a>(&'a self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchReprMapper<'a>,EvaluateError> where Self: 'a {
         Ok(BatchIdentityMapper::new(input))
     }
 }

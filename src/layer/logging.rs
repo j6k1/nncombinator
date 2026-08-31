@@ -5,19 +5,20 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, BatchOutputScale, MaxInputValue, PreTrainBase, BatchSize, BackwardBase, BatchBackwardBase, Loss, BatchLoss};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, BatchBridge, MaxInputValue, PreTrainBase, BatchSize, BackwardBase, BatchBackwardBase, Loss, BatchLoss, BridgeBase, BridgeRepr, BatchBridgeRepr};
 use crate::lossfunction::LossFunction;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::Stack;
 
 /// Logging layer Implementation
-pub struct LoggingLayer<U,P,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardBase +
+pub struct LoggingLayer<U,P,I,PI,LI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     parent:P,
@@ -25,55 +26,60 @@ pub struct LoggingLayer<U,P,I,PI,D>
     u:PhantomData<U>,
     i:PhantomData<I>,
     pi:PhantomData<PI>,
+    li:PhantomData<LI>,
     // Added logger fields
     forward_loggers: Vec<Box<dyn Fn(&PI) -> Result<(),EvaluateError> + 'static>>,
-    backward_loggers: Vec<Box<dyn Fn(&<P as BackwardBase>::LossInput) -> Result<(), TrainingError> + 'static>>,
+    backward_loggers: Vec<Box<dyn Fn(&LI) -> Result<(), TrainingError> + 'static>>,
     gradient_loggers: Vec<Box<dyn Fn(&<<P as UpdateWeight>::GradientStack as crate::Stack>::Head) -> Result<(),TrainingError> + 'static>>,
     batch_forward_loggers: Vec<Box<dyn Fn(&<PI as BatchDataType>::Type) -> Result<(),TrainingError> + 'static>>,
-    batch_backward_loggers: Vec<Box<dyn Fn(&<<P as BackwardBase>::LossInput as BatchDataType>::Type) -> Result<(),TrainingError> + 'static>>,
+    batch_backward_loggers: Vec<Box<dyn Fn(&<LI as BatchDataType>::Type) -> Result<(),TrainingError> + 'static>>,
 }
-impl<U,P,I,PI,D> InputTensorScalar for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> InputTensorScalar for LoggingLayer<U,P,I,PI,LI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardBase + PreTrainBase<PreOutput=PI> + PreTrain +
+             BackwardBase<LossInput=LI>  + PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     type Scalar = U;
 }
-impl<U,P,I,PI,D> OutputTensorScalar for LoggingLayer<U,P,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardBase +
+impl<U,P,I,PI,LI,D> OutputTensorScalar for LoggingLayer<U,P,I,PI,LI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     type Scalar = U;
 }
-impl<U,P,I,PI,D> LoggingLayer<U,P,I,PI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardBase +
+impl<U,P,I,PI,LI,D> LoggingLayer<U,P,I,PI,LI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U> +,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     /// Create and return an instance of LoggingLayer
     /// # Arguments
     /// * `parent` - upper layer
     /// * `device` - Device object used for neural network computation
-    pub fn new(parent:P,_:&D) -> LoggingLayer<U,P,I,PI,D> {
+    pub fn new(parent:P,_:&D) -> LoggingLayer<U,P,I,PI,LI,D> {
         LoggingLayer {
             parent:parent,
             device:PhantomData::<D>,
             u:PhantomData::<U>,
             i:PhantomData::<I>,
             pi:PhantomData::<PI>,
+            li:PhantomData::<LI>,
             forward_loggers: Vec::new(),
             backward_loggers: Vec::new(),
             gradient_loggers: Vec::new(),
@@ -85,7 +91,7 @@ impl<U,P,I,PI,D> LoggingLayer<U,P,I,PI,D>
         self.forward_loggers.push(Box::new(logger));
     }
 
-    pub fn add_backward_logger<F>(&mut self, logger: F) where F: Fn(&<P as BackwardBase>::LossInput) -> Result<(),TrainingError> + 'static {
+    pub fn add_backward_logger<F>(&mut self, logger: F) where F: Fn(&LI) -> Result<(),TrainingError> + 'static {
         self.backward_loggers.push(Box::new(logger));
     }
 
@@ -100,18 +106,19 @@ impl<U,P,I,PI,D> LoggingLayer<U,P,I,PI,D>
     }
 
     pub fn add_batch_backward_logger<F>(&mut self, logger: F)
-        where F: Fn(&<<P as BackwardBase>::LossInput as BatchDataType>::Type) -> Result<(),TrainingError> + 'static {
+        where F: Fn(&<LI as BatchDataType>::Type) -> Result<(),TrainingError> + 'static {
         self.batch_backward_loggers.push(Box::new(logger));
     }
 }
-impl<U,P,I,PI,D> Persistence<TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> Persistence<TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,LI,D>
     where P: ForwardAll<Input=I,Output=PI> + Persistence<TextFilePersistence,Specialized> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err>,
@@ -129,14 +136,15 @@ impl<U,P,I,PI,D> Persistence<TextFilePersistence,Specialized> for LoggingLayer<U
         Ok(())
     }
 }
-impl<T,U,P,I,PI,D> Persistence<T,Linear> for LoggingLayer<U,P,I,PI,D>
+impl<T,U,P,I,PI,LI,D> Persistence<T,Linear> for LoggingLayer<U,P,I,PI,LI,D>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> + Persistence<T,Linear> +
-             BackwardBase + PreTrainBase<PreOutput=PI> + PreTrain +
+             BackwardBase<LossInput=LI>  + PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
@@ -147,14 +155,15 @@ impl<T,U,P,I,PI,D> Persistence<T,Linear> for LoggingLayer<U,P,I,PI,D>
         self.parent.save(persistence)
     }
 }
-impl<U,P,I,PI,D> ForwardAll for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> ForwardAll for LoggingLayer<U,P,I,PI,LI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     type Input = I;
@@ -170,27 +179,29 @@ impl<U,P,I,PI,D> ForwardAll for LoggingLayer<U,P,I,PI,D>
         Ok(r)
     }
 }
-impl<U,P,I,PI,D> PreTrainBase for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> PreTrainBase for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     type PreOutput = PI;
     type OutStack = <P as PreTrainBase>::OutStack;
 }
-impl<U,P,I,PI,D> PreTrain for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> PreTrain for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
@@ -204,31 +215,33 @@ impl<U,P,I,PI,D> PreTrain for LoggingLayer<U,P,I,PI,D>
         Ok(s)
     }
 }
-impl<U,P,I,PI,D> BackwardBase for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BackwardBase for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
-    type LossInputScalar = <P as BackwardBase>::LossInputScalar;
+    type LossInputScalar = <LI as InputTensorScalar>::Scalar;
     type LossInput = <P as BackwardBase>::LossInput;
 }
-impl<U,P,I,PI,D> BackwardAll<<P as BackwardBase>::LossInputScalar> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BackwardAll<<LI as InputTensorScalar>::Scalar> for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase + BackwardAll<<P as BackwardBase>::LossInputScalar> +
+             BackwardBase<LossInput=LI>  + BackwardAll<<LI as InputTensorScalar>::Scalar> +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
-    type LossOutput = <P as BackwardAll<<P as BackwardBase>::LossInputScalar>>::LossOutput;
+    type LossOutput = <P as BackwardAll<<LI as InputTensorScalar>::Scalar>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)
-        -> Result<(<Self as BackwardAll<<P as BackwardBase>::LossInputScalar>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BackwardAll<<LI as InputTensorScalar>::Scalar>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         for logger in self.backward_loggers.iter() {
             logger(&input)?;
         }
@@ -236,31 +249,33 @@ impl<U,P,I,PI,D> BackwardAll<<P as BackwardBase>::LossInputScalar> for LoggingLa
         Ok(self.parent.backward_all(input, stack)?.into())
     }
 }
-impl<U,P,I,PI,D> Loss<<P as BackwardBase>::LossInputScalar> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> Loss<<LI as InputTensorScalar>::Scalar> for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase + BackwardAll<<P as BackwardBase>::LossInputScalar> +
-             Loss<<P as BackwardBase>::LossInputScalar> +
+             BackwardBase<LossInput=LI>  + BackwardAll<<LI as InputTensorScalar>::Scalar> +
+             Loss<<LI as InputTensorScalar>::Scalar> +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     fn loss(&mut self, loss: Self::LossInput, stack: Self::OutStack) -> Result<(Self::OutStack, Self::LossInput), TrainingError> {
         self.parent.loss(loss,stack)
     }
 
-    fn is_canonical_link<L: LossFunction<<P as BackwardBase>::LossInputScalar>>(&self, lossf: &L) -> bool {
+    fn is_canonical_link<L: LossFunction<<LI as InputTensorScalar>::Scalar>>(&self, lossf: &L) -> bool {
         self.parent.is_canonical_link(lossf)
     }
 }
-impl<U,P,I,PI,D> UpdateWeight for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> UpdateWeight for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     type GradientStack = <P as UpdateWeight>::GradientStack;
@@ -275,14 +290,15 @@ impl<U,P,I,PI,D> UpdateWeight for LoggingLayer<U,P,I,PI,D>
         Ok(self.parent.update_weight(stack,batch_size)?)
     }
 }
-impl<U,P,I,PI,D> PartialForward for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> PartialForward for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U> +
              PartialForward,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     type PartialInput = <P as PartialForward>::PartialInput;
@@ -298,14 +314,15 @@ impl<U,P,I,PI,D> PartialForward for LoggingLayer<U,P,I,PI,D>
         Ok(self.parent.partial_forward_by_diff(input,partial_input)?)
     }
 }
-impl<U,P,I,PI,D> ForwardDiff for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> ForwardDiff for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              PartialForward + ForwardDiff +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U>,
       PI: Debug + BatchDataType,
+      LI: Debug + 'static + BatchDataType + InputTensorScalar,
       I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     fn forward_diff(&self, input: Self::DiffInput, partial_input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
@@ -318,14 +335,15 @@ impl<U,P,I,PI,D> ForwardDiff for LoggingLayer<U,P,I,PI,D>
         Ok(r)
     }
 }
-impl<U,P,I,PI,D> ContinueForward for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> ContinueForward for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
           PartialForward + ContinueForward +
-          BackwardBase +
+          BackwardBase<LossInput=LI>  +
           InputTensorScalar + OutputTensorScalar<Scalar=U>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U>,
       PI: Debug + BatchDataType,
+      LI: Debug + 'static + BatchDataType + InputTensorScalar,
       I: Debug + Send + Sync,
       <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
@@ -338,37 +356,40 @@ impl<U,P,I,PI,D> ContinueForward for LoggingLayer<U,P,I,PI,D>
         Ok(r)
     }
 }
-impl<U,P,I,PI,D> BatchForwardBase for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BatchForwardBase for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             OutputScale<Scale=PI,ScaledOutput=PI,ScalingInput=PI> +
-             BackwardBase +
+             Bridge<RealScale=LI, RealOutput=LI, SourceInput=PI> +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase +
-             BatchBackwardBase<BatchLossInput=<<P as BackwardBase>::LossInput as BatchDataType>::Type>,
+             BatchBackwardBase<BatchLossInput=<LI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: BatchSize + Debug,
-          <I as BatchDataType>::Type: BatchSize + Debug,
-          <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
+          <LI as BatchDataType>::Type: BatchSize + Debug,
+          <I as BatchDataType>::Type: BatchSize + Debug {
     type BatchInput = <I as BatchDataType>::Type;
     type BatchOutput = <PI as BatchDataType>::Type;
 }
-impl<U,P,I,PI,D> BatchForward for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BatchForward for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             OutputScale<Scale=PI,ScaledOutput=PI,ScalingInput=PI> +
-             BackwardBase +
+             Bridge<RealScale=LI, RealOutput=LI, SourceInput=PI> +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackwardBase<BatchLossInput=<<P as BackwardBase>::LossInput as BatchDataType>::Type>,
+             BatchBackwardBase<BatchLossInput=<LI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           PI: Debug + BatchDataType,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: BatchSize + Debug,
+          <LI as BatchDataType>::Type: BatchSize + Debug,
           <I as BatchDataType>::Type: BatchSize + Debug,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
@@ -381,44 +402,43 @@ impl<U,P,I,PI,D> BatchForward for LoggingLayer<U,P,I,PI,D>
         Ok(r)
     }
 }
-impl<U,P,I,PI,D> BatchPreTrainBase for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BatchPreTrainBase for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackwardBase<BatchLossInput=<<P as BackwardBase>::LossInput as BatchDataType>::Type> +
-             BatchBackward<<<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar>,
+             BatchBackwardBase<BatchLossInput=<LI as BatchDataType>::Type> +
+             BatchBackward<<LI as InputTensorScalar>::Scalar>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          <P as BackwardBase>::LossInput: BatchDataType + OutputTensorScalar + Debug + 'static,
-          <<P as BackwardBase>::LossInput as BatchDataType>::Type: Debug + 'static,
-          <<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar: Debug + 'static {
+          <I as BatchDataType>::Type: Debug {
     type BatchPreOutput = <PI as BatchDataType>::Type;
     type BatchOutStack = <P as BatchPreTrainBase>::BatchOutStack;
 }
-impl<U,P,I,PI,D> BatchPreTrain for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BatchPreTrain for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             OutputScale<Scale=PI,ScaledOutput=PI,ScalingInput=PI> +
-             BackwardBase +
+             Bridge<RealScale=LI, RealOutput=LI, SourceInput=PI> +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackwardBase<BatchLossInput=<<P as BackwardBase>::LossInput as BatchDataType>::Type> +
-             BatchBackward<<<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar>,
+             BatchBackwardBase<BatchLossInput=<LI as BatchDataType>::Type> +
+             BatchBackward<<LI as InputTensorScalar>::Scalar>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: BatchSize + Debug,
+          <LI as BatchDataType>::Type: BatchSize + Debug,
           <I as BatchDataType>::Type: BatchSize + Debug,
           <P as BackwardBase>::LossInput: BatchDataType + OutputTensorScalar + Debug + 'static,
-          <<P as BackwardBase>::LossInput as BatchDataType>::Type: Debug + 'static,
-          <<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar: Debug + 'static {
+          <LI as InputTensorScalar>::Scalar: Debug + 'static {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let s = self.parent.batch_pre_train(input)?;
 
@@ -431,42 +451,44 @@ impl<U,P,I,PI,D> BatchPreTrain for LoggingLayer<U,P,I,PI,D>
         Ok(s)
     }
 }
-impl<U,P,I,PI,D> BatchBackwardBase for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BatchBackwardBase for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackwardBase<BatchLossInput=<<P as BackwardBase>::LossInput as BatchDataType>::Type> +
-             BatchBackward<<<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar>,
+             BatchBackwardBase<BatchLossInput=<LI as BatchDataType>::Type> +
+             BatchBackward<<LI as InputTensorScalar>::Scalar>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: Debug,
           <P as BackwardBase>::LossInput: BatchDataType + OutputTensorScalar + Debug + 'static,
-          <<P as BackwardBase>::LossInput as BatchDataType>::Type: Debug + 'static,
-          <<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar: Debug + 'static {
-    type BatchLossInput = <<P as BackwardBase>::LossInput as BatchDataType>::Type;
+          <LI  as BatchDataType>::Type: Debug + 'static,
+          <LI as InputTensorScalar>::Scalar: Debug + 'static {
+    type BatchLossInput = <LI as BatchDataType>::Type;
     type BatchLossOutput = <P as BatchBackwardBase>::BatchLossOutput;
 }
-impl<U,P,I,PI,D> BatchBackward<<<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BatchBackward<<LI as InputTensorScalar>::Scalar> for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackwardBase<BatchLossInput=<<P as BackwardBase>::LossInput as BatchDataType>::Type> +
-             BatchBackward<<<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar>,
+             BatchBackwardBase<BatchLossInput=<LI as BatchDataType>::Type> +
+             BatchBackward<<LI as InputTensorScalar>::Scalar>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: Debug,
           <P as BackwardBase>::LossInput: BatchDataType + OutputTensorScalar + Debug + 'static,
-          <<P as BackwardBase>::LossInput as BatchDataType>::Type: Debug + 'static {
+          <LI  as BatchDataType>::Type: Debug + 'static {
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
         -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         for logger in self.batch_backward_loggers.iter() {
@@ -478,37 +500,39 @@ impl<U,P,I,PI,D> BatchBackward<<<P as BackwardBase>::LossInput as OutputTensorSc
         Ok(r)
     }
 }
-impl<U,P,I,PI,D> BatchLoss<<<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar>
-    for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BatchLoss<<LI as InputTensorScalar>::Scalar>
+    for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              InputTensorScalar + OutputTensorScalar<Scalar=U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
-             BatchBackwardBase<BatchLossInput=<<P as BackwardBase>::LossInput as BatchDataType>::Type> +
-             BatchBackward<<<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar> +
-             BatchLoss<<<P as BackwardBase>::LossInput as OutputTensorScalar>::Scalar>,
+             BatchBackwardBase<BatchLossInput=<LI as BatchDataType>::Type> +
+             BatchBackward<<LI as InputTensorScalar>::Scalar> +
+             BatchLoss<<LI as InputTensorScalar>::Scalar>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync + BatchDataType,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: Debug,
           <P as BackwardBase>::LossInput: BatchDataType + OutputTensorScalar + Debug + 'static,
-          <<P as BackwardBase>::LossInput as BatchDataType>::Type: Debug + 'static {
+          <LI  as BatchDataType>::Type: Debug + 'static {
     fn batch_loss(&self, loss: Self::BatchLossInput, stack: Self::BatchOutStack) -> Result<(Self::BatchOutStack, Self::BatchLossInput), TrainingError> {
         self.parent.batch_loss(loss,stack)
     }
 }
-impl<U,P,I,PI,D> OnStep for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> OnStep for LoggingLayer<U,P,I,PI,LI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U> + OnStep,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
         Ok(self.parent.on_step(step)?)
@@ -517,14 +541,15 @@ impl<U,P,I,PI,D> OnStep for LoggingLayer<U,P,I,PI,D>
         Ok(self.parent.on_frequently_step(step,frequently_step)?)
     }
 }
-impl<U,P,I,PI,D> PersistProgress<TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> PersistProgress<TextFilePersistence,Specialized> for LoggingLayer<U,P,I,PI,LI,D>
     where P: ForwardAll<Input=I,Output=PI> +
              PersistProgress<TextFilePersistence,Specialized> +
-             BackwardBase + PreTrainBase<PreOutput=PI> + PreTrain +
+             BackwardBase<LossInput=LI>  + PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err>,
@@ -542,15 +567,16 @@ impl<U,P,I,PI,D> PersistProgress<TextFilePersistence,Specialized> for LoggingLay
         Ok(())
     }
 }
-impl<T,U,P,I,PI,D> PersistProgress<T,Linear> for LoggingLayer<U,P,I,PI,D>
+impl<T,U,P,I,PI,LI,D> PersistProgress<T,Linear> for LoggingLayer<U,P,I,PI,LI,D>
     where T: LinearPersistence<U>,
           P: ForwardAll<Input=I,Output=PI> +
              PersistProgress<T,Linear> +
-             BackwardBase + PreTrainBase<PreOutput=PI> + PreTrain +
+             BackwardBase<LossInput=LI>  + PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync,
           <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
@@ -561,69 +587,134 @@ impl<T,U,P,I,PI,D> PersistProgress<T,Linear> for LoggingLayer<U,P,I,PI,D>
         self.parent.save_progress(persistence)
     }
 }
-impl<U,P,I,PI,D> InputScale for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> InputScale for LoggingLayer<U,P,I,PI,LI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain + InputScale +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U>,
       PI: Debug + 'static + BatchDataType,
+      LI: Debug + 'static + BatchDataType + InputTensorScalar,
       I: Debug + Send + Sync,
       <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
     fn scale_mean(&self) -> f32 {
         self.parent.scale_mean()
     }
 }
-impl<U,P,I,PI,D> OutputScale for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BridgeBase for LoggingLayer<U,P,I,PI,LI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain +
-             OutputScale<Scale=PI,ScaledOutput=PI,ScalingInput=PI> +
+             BridgeBase<RealScale=LI, RealOutput=LI, SourceInput=PI> +
+             InputTensorScalar + OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
+          I: Debug + Send + Sync,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <LI as BatchDataType>::Type: Debug + BatchSize,
+          <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
+    type UseDevice = <P as BridgeBase>::UseDevice;
+    type RealScale = <P as BridgeBase>::RealScale;
+    type RealOutput = <P as BridgeBase>::RealOutput;
+    type SourceInput = <P as BridgeBase>::SourceInput;
+}
+impl<U,P,I,PI,LI,D> Bridge for LoggingLayer<U,P,I,PI,LI,D>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardBase<LossInput=LI>  +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             BridgeBase<RealScale=LI, RealOutput=LI, SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U>,
       PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
       I: Debug + Send + Sync,
       <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+      <LI as BatchDataType>::Type: BatchSize + Debug,
       <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
-    type ScalingDevice = <P as OutputScale>::ScalingDevice;
-    type Scale = <P as OutputScale>::Scale;
-    type ScaledOutput = <P as OutputScale>::ScaledOutput;
-    type ScalingInput = <P as OutputScale>::ScalingInput;
-    type Mapper<'a> = <P as OutputScale>::Mapper<'a> where Self: 'a;
-    fn scaling_mapper<'a>(&'a self, input:&'a PI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
-        self.parent.scaling_mapper(input)
+    type RealMapper<'a> = <P as Bridge>::RealMapper<'a> where Self: 'a;
+    fn as_real<'a>(&'a self, input:&'a PI) -> Result<Self::RealMapper<'a>,EvaluateError> where Self: 'a {
+        self.parent.as_real(input)
     }
 }
-impl<U,P,I,PI,D> BatchOutputScale for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BridgeRepr for LoggingLayer<U,P,I,PI,LI,D>
+    where P: ForwardAll<Input=I,Output=PI> +
+             BackwardBase<LossInput=LI> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             BridgeBase<RealScale=LI, RealOutput=LI, SourceInput=PI> +
+             BridgeRepr<RepresentationOutput=PI> +
+             InputTensorScalar + OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
+          I: Debug + Send + Sync,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <LI as BatchDataType>::Type: Debug + BatchSize,
+          <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
+    type RepresentationOutput = PI;
+    type ReprMapper<'a> = <P as BridgeRepr>::ReprMapper<'a> where Self: 'a;
+    fn as_repr<'a>(&'a self, input: &'a Self::RealOutput) -> Result<Self::ReprMapper<'a>, EvaluateError>
+        where Self: 'a {
+        self.parent.as_repr(input)
+    }
+}
+impl<U,P,I,PI,LI,D> BatchBridge for LoggingLayer<U,P,I,PI,LI,D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
-             OutputScale<Scale=PI,ScaledOutput=PI,ScalingInput=PI> +
-             InputTensorScalar + OutputTensorScalar<Scalar=U> + BatchOutputScale +
+             BackwardBase<LossInput=LI>  +
+             BridgeBase<RealScale=LI, RealOutput=LI, SourceInput=PI> + Bridge +
+             BatchBridge +
+             InputTensorScalar + OutputTensorScalar<Scalar=U> +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase +
-             BatchBackwardBase<BatchLossInput=<<P as BackwardBase>::LossInput as BatchDataType>::Type>,
+             BatchBackwardBase<BatchLossInput=<LI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: BatchSize + Debug,
-          <I as BatchDataType>::Type: BatchSize + Debug,
-          <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
-    type BatchMapper<'a> = <P as BatchOutputScale>::BatchMapper<'a> where Self: 'a;
-    fn batch_scaling_mapper<'a>(&'a self, input:&'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
-        self.parent.batch_scaling_mapper(input)
+          <LI as BatchDataType>::Type: BatchSize + Debug,
+          <I as BatchDataType>::Type: BatchSize + Debug {
+    type BatchRealMapper<'a> = <P as BatchBridge>::BatchRealMapper<'a> where Self: 'a;
+    fn batch_as_real<'a>(&'a self, input:&'a <Self as BatchForwardBase>::BatchOutput) -> Result<Self::BatchRealMapper<'a>,EvaluateError> where Self: 'a {
+        self.parent.batch_as_real(input)
     }
 }
-impl<U,P,I,PI,D> MaxInputValue for LoggingLayer<U,P,I,PI,D>
+impl<U,P,I,PI,LI,D> BatchBridgeRepr for LoggingLayer<U,P,I,PI,LI,D>
+    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
+             BackwardBase<LossInput=LI>  +
+             BridgeBase<RealScale=LI, RealOutput=LI, SourceInput=PI> + BridgeRepr<RepresentationOutput=PI> +
+             InputTensorScalar + OutputTensorScalar<Scalar=U> + BatchBridgeRepr +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchPreTrainBase +
+             BatchBackwardBase<BatchLossInput=<LI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + BatchDataType,
+          LI: Debug + 'static + BatchDataType + InputTensorScalar,
+          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: BatchSize + Debug,
+          <LI as BatchDataType>::Type: Debug + BatchSize,
+          <I as BatchDataType>::Type: BatchSize + Debug,
+          <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
+    type BatchReprMapper<'a> = <P as BatchBridgeRepr>::BatchReprMapper<'a> where Self: 'a;
+    fn batch_as_repr<'a>(&'a self, input: &'a <LI as BatchDataType>::Type) -> Result<Self::BatchReprMapper<'a>,EvaluateError> where Self: 'a {
+        self.parent.batch_as_repr(input)
+    }
+}
+impl<U,P,I,PI,LI,D> MaxInputValue for LoggingLayer<U,P,I,PI,LI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardBase +
+             BackwardBase<LossInput=LI>  +
              PreTrainBase<PreOutput=PI> + PreTrain + InputScale + MaxInputValue +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U>,
       PI: Debug + 'static + BatchDataType,
+      LI: Debug + 'static + BatchDataType + InputTensorScalar,
       I: Debug + Send + Sync,
       <P as BackwardBase>::LossInput: BatchDataType + OutputTensorScalar + Debug + 'static {
     type Scalar = <P as MaxInputValue>::Scalar;

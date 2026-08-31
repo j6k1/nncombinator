@@ -24,7 +24,7 @@ pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
           D: Device<U>,
-          PI: Debug + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + 'static,
           I: Debug + Send + Sync {
     u:PhantomData<U>,
     i:PhantomData<I>,
@@ -43,7 +43,7 @@ impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
           D: Device<U>,
-          PI: Debug + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + 'static,
           I: Debug + Send + Sync {
     /// Create and return an instance of LinearOutputLayer
     /// # Arguments
@@ -74,7 +74,7 @@ impl<U,P,D,I,PI,const N:usize> InputTensorScalar for LinearOutputLayer<U,P,D,I,P
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo + FromStr + Sized,
           D: Device<U>,
-          PI: Debug + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + 'static,
           I: Debug + Send + Sync,
           TextFilePersistence: VerifyEof {
     type Scalar = U;
@@ -87,7 +87,7 @@ impl<U,P,D,I,PI,const N:usize> OutputTensorScalar for LinearOutputLayer<U,P,D,I,
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign +
              FromPrimitive + 'static + DataTypeInfo + FromStr + Sized,
           D: Device<U>,
-          PI: Debug + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + 'static,
           I: Debug + Send + Sync,
           TextFilePersistence: VerifyEof {
     type Scalar = U;
@@ -101,7 +101,7 @@ impl<U,P,D,I,PI,const N:usize> Persistence<TextFilePersistence,Specialized> for 
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo + FromStr + Sized,
           D: Device<U>,
-          PI: Debug + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + 'static,
           I: Debug + Send + Sync,
           TextFilePersistence: VerifyEof {
     fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
@@ -122,7 +122,7 @@ impl<T,U,P,D,I,PI,const N:usize> Persistence<T,Linear> for LinearOutputLayer<U,P
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
           D: Device<U>,
-          PI: Debug + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + 'static,
           I: Debug + Send + Sync {
     fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
         self.parent.load(persistence)?;
@@ -140,7 +140,7 @@ impl<U,P,D,I,PI,const N:usize> ForwardAll for LinearOutputLayer<U,P,D,I,PI,N>
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
@@ -156,7 +156,7 @@ impl<U,P,D,I,PI,const N:usize> PreTrainBase for LinearOutputLayer<U,P,D,I,PI,N>
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
           Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
@@ -169,7 +169,7 @@ impl<U,P,D,I,PI,const N:usize> PreTrain for LinearOutputLayer<U,P,D,I,PI,N>
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
@@ -184,7 +184,7 @@ impl<U,P,D,I,PI,const N:usize> BackwardBase for LinearOutputLayer<U,P,D,I,PI,N>
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
           Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
@@ -198,7 +198,7 @@ impl<U,P,D,I,PI,const N:usize> BackwardAll<U> for LinearOutputLayer<U,P,D,I,PI,N
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
@@ -216,7 +216,7 @@ impl<U,P,D,I,PI,const N:usize> UpdateWeight for LinearOutputLayer<U,P,D,I,PI,N>
              InputTensorScalar + OutputTensorScalar + UpdateWeight,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
@@ -233,7 +233,7 @@ impl<U,P,D,I,PI,const N:usize> PartialForward for LinearOutputLayer<U,P,D,I,PI,N
              PartialForward,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
@@ -257,7 +257,7 @@ impl<U,P,D,I,PI,const N:usize> ForwardDiff for LinearOutputLayer<U,P,D,I,PI,N>
           PartialForward,
       U: Default + Clone + Copy + Debug + Send + Sync +
          Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-      PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+      PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
       I: Debug + Send + Sync,
       <PI as ToHost<U>>::Output: Debug + 'static,
       for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
@@ -272,7 +272,7 @@ impl<U,P,D,I,PI,const N:usize> ContinueForward for LinearOutputLayer<U,P,D,I,PI,
           PartialForward + ContinueForward,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI> {
@@ -285,7 +285,7 @@ impl<U,P,D,I,PI,L,const N:usize> Train<U,L> for LinearOutputLayer<U,P,D,I,PI,N>
              PreTrainBase<PreOutput=PI> + PreTrain + Loss<U> + InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync,
           <PI as ToHost<U>>::Output: Debug + 'static,
           for<'a> D: Device<U> + DeviceLinearOutput<'a,U,N,IO=PI>,
@@ -323,7 +323,7 @@ impl<U,P,D,I,PI,const N:usize> BatchForwardBase for LinearOutputLayer<U,P,D,I,PI
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug + ToHost<U,Output=SerializedVec<U,Arr<U,N>>>,
           <PI as ToHost<U>>::Output: Debug + 'static,
@@ -340,7 +340,7 @@ impl<U,P,D,I,PI,const N:usize> BatchForward for LinearOutputLayer<U,P,D,I,PI,N>
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> + BatchForward,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug + ToHost<U,Output=SerializedVec<U,Arr<U,N>>>,
           <PI as ToHost<U>>::Output: Debug + 'static,
@@ -359,7 +359,7 @@ impl<U,P,D,I,PI,const N:usize> BatchPreTrainBase for LinearOutputLayer<U,P,D,I,P
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug + ToHost<U,Output=SerializedVec<U,Arr<U,N>>>,
           <PI as ToHost<U>>::Output: Debug + 'static,
@@ -377,7 +377,7 @@ impl<U,P,D,I,PI,const N:usize> BatchPreTrain for LinearOutputLayer<U,P,D,I,PI,N>
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> + BatchPreTrain,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug + ToHost<U,Output=SerializedVec<U,Arr<U,N>>>,
           <PI as ToHost<U>>::Output: Debug + 'static,
@@ -397,7 +397,7 @@ impl<U,P,D,I,PI,const N:usize> BatchBackwardBase for LinearOutputLayer<U,P,D,I,P
              BatchBackward<U> + UpdateWeight + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync +
           Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug + ToHost<U,Output=SerializedVec<U,Arr<U,N>>>,
           <PI as ToHost<U>>::Output: Debug + 'static,
@@ -416,7 +416,7 @@ impl<U,P,D,I,PI,const N:usize> BatchBackward<U> for LinearOutputLayer<U,P,D,I,PI
              BatchBackward<U> + UpdateWeight + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug + ToHost<U,Output=SerializedVec<U,Arr<U,N>>>,
           <PI as ToHost<U>>::Output: Debug + 'static,
@@ -437,7 +437,7 @@ impl<U,P,D,I,PI,L,const N:usize> BatchTrain<U,D,L> for LinearOutputLayer<U,P,D,I
              BatchBackward<U> + UpdateWeight + BatchLoss<U,BatchLossInput=<PI as BatchDataType>::Type>,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
-          PI: Debug + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + BatchDataType + ToHost<U,Output=Arr<U,N>> + 'static,
           I: Debug + Send + Sync + BatchDataType,
           <PI as BatchDataType>::Type: Debug + ToHost<U,Output=SerializedVec<U,Arr<U,N>>> +
                                        InputTensorScalar<Scalar=U> +
@@ -492,7 +492,7 @@ impl<U,P,D,I,PI,const N:usize> Step for LinearOutputLayer<U,P,D,I,PI,N>
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
           D: Device<U>,
-          PI: Debug + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + 'static,
           I: Debug + Send + Sync {
     fn step(&mut self) -> Result<(),TrainingError> {
         self.step_count += 1;
@@ -514,7 +514,7 @@ impl<U,P,D,I,PI,const N:usize> PersistProgress<TextFilePersistence,Specialized> 
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign +
              FromPrimitive + 'static + DataTypeInfo + FromStr + Sized,
           D: Device<U>,
-          PI: Debug + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + 'static,
           I: Debug + Send + Sync,
           TextRecord: From<U> + From<u64>,
           ModelLoadError: From<<U as FromStr>::Err> + From<<u64 as FromStr>::Err> {
@@ -555,7 +555,7 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + DataTypeInfo,
           D: Device<U>,
-          PI: Debug + 'static,
+          PI: Debug + InputTensorScalar<Scalar=U> + 'static,
           I: Debug + Send + Sync {
     fn load_progress(&mut self, persistence: &mut T) -> Result<(), TrainingError> {
         self.parent.load_progress(persistence)?;

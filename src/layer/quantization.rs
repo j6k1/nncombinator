@@ -2,15 +2,17 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::str::FromStr;
 use crate::arr::{MakeView, MakeViewMut, SliceSize};
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, OutputScale, BatchOutputScale, PreTrainBase, BatchSize, BackwardBase, BatchBackwardBase};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, BatchBridge, PreTrainBase, BatchSize, BackwardBase, BatchBackwardBase, BridgeBase, BridgeRepr, BatchBridgeRepr};
 use crate::mem::AsRawSlice;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
 use crate::device::bridge::DeviceBridge;
+use crate::device::clone::DeviceClone;
 use crate::mapper::{BatchIdentityMapper, DataMapper, IdentityMapper};
 
 /// Dequantize layer Implementation
@@ -106,18 +108,26 @@ impl<T,U,SO,P,I,PI,CI,D> Persistence<T,Linear> for DequantizeLayer<U, SO, P, I, 
 impl<U,SO,P,I,PI,CI,D> ForwardAll for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
              PreTrainBase<PreOutput=PI> + PreTrain +
+             BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
-          I: Debug + Send + Sync {
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          I: Debug + Send + Sync,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> D: DeviceClone<'a,CI> {
     type Input = I;
     type Output = CI;
 
     fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
-        Ok(self.device.bridge_forward(&self.parent.forward_all(input)?)?)
+        let input = self.parent.forward_all(input)?;
+        let input = self.parent.as_real(&input)?;
+
+        Ok(self.device.cloned(&input)?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> PreTrainBase for DequantizeLayer<U, SO, P, I, PI, CI, D>
@@ -126,7 +136,7 @@ impl<U,SO,P,I,PI,CI,D> PreTrainBase for DequantizeLayer<U, SO, P, I, PI, CI, D>
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
           I: Debug + Send + Sync {
@@ -136,17 +146,24 @@ impl<U,SO,P,I,PI,CI,D> PreTrainBase for DequantizeLayer<U, SO, P, I, PI, CI, D>
 impl<U,SO,P,I,PI,CI,D> PreTrain for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
-          I: Debug + Send + Sync {
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          I: Debug + Send + Sync,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> D: DeviceClone<'a,CI> {
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
         let s = self.parent.pre_train(input)?;
 
-        let r = s.map(|o| self.device.bridge_forward(o))?;
+        let r = s.map(|o| {
+            self.parent.as_real(o).map(|o| self.device.cloned(&o))
+        })??;
 
         Ok(s.push(r))
     }
@@ -157,7 +174,7 @@ impl<U,SO,P,I,PI,CI,D> BackwardBase for DequantizeLayer<U, SO, P, I, PI, CI, D>
              InputTensorScalar + OutputTensorScalar,
           U: Debug + Debug + Default + Clone + Copy + Send + Sync + 'static,
           SO : Debug + Debug + Default + Clone + Copy + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
           I: Debug + Send + Sync {
@@ -170,14 +187,14 @@ impl<U,SO,P,I,PI,CI,D> BackwardAll<SO> for DequantizeLayer<U, SO, P, I, PI, CI, 
              InputTensorScalar + OutputTensorScalar,
           U: Debug + Debug + Default + Clone + Copy + Send + Sync + 'static,
           SO : Debug + Debug + Default + Clone + Copy + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
           I: Debug + Send + Sync {
     type LossOutput = <P as BackwardAll<SO>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)
-                    -> Result<(<Self as BackwardAll<SO>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BackwardAll<SO>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
 
         Ok(self.parent.backward_all(input, s)?)
@@ -189,7 +206,7 @@ impl<U,SO,P,I,PI,CI,D> UpdateWeight for DequantizeLayer<U, SO, P, I, PI, CI, D>
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + BatchDataType + 'static,
           CI: Debug + BatchDataType + 'static,
           I: Debug + Send + Sync {
@@ -202,13 +219,18 @@ impl<U,SO,P,I,PI,CI,D> UpdateWeight for DequantizeLayer<U, SO, P, I, PI, CI, D>
 impl<U,SO,P,I,PI,CI,D> PartialForward for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              PartialForward + InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + BatchDataType + InputTensorScalar + 'static,
           CI: Debug + BatchDataType + 'static + OutputTensorScalar,
-          I: Debug + Send + Sync {
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          I: Debug + Send + Sync,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> D: DeviceClone<'a,CI> {
     type PartialInput = <P as PartialForward>::PartialInput;
     type PartialOutput = <P as PartialForward>::PartialOutput;
     type DiffInput = <P as PartialForward>::DiffInput;
@@ -226,71 +248,96 @@ impl<U,SO,P,I,PI,CI,D> ForwardDiff for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              PartialForward + ForwardDiff +
              BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + BatchDataType + InputTensorScalar + 'static,
           CI: Debug + BatchDataType + 'static + OutputTensorScalar,
-          I: Debug + Send + Sync {
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          I: Debug + Send + Sync,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> D: DeviceClone<'a,CI> {
     fn forward_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::Output, EvaluateError> {
-        Ok(self.device.bridge_forward(&self.parent.forward_diff(input,partial_input)?)?)
+        let input = &self.parent.forward_diff(input,partial_input)?;
+        let input = self.parent.as_real(input)?;
+
+        Ok(self.device.cloned(&input)?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> ContinueForward for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              PartialForward + ContinueForward +
              BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + BatchDataType + 'static + InputTensorScalar,
           CI: Debug + BatchDataType + 'static + OutputTensorScalar,
-          I: Debug + Send + Sync {
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          I: Debug + Send + Sync,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> D: DeviceClone<'a,CI> {
     fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
-        Ok(self.device.bridge_forward(&self.parent.continue_forward(input)?)?)
+        let input = self.parent.continue_forward(input)?;
+        let input = self.parent.as_real(&input)?;
+
+        Ok(self.device.cloned(&input)?)
     }
 }
 
 impl<U,SO,P,I,PI,CI,D> BatchForwardBase for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase + BatchBackward<SO,BatchLossInput=<CI as BatchDataType>::Type> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + BatchDataType + InputTensorScalar + 'static,
           CI: Debug + BatchDataType + OutputTensorScalar + 'static,
           I: Debug + Send + Sync + BatchDataType,
-          <PI as BatchDataType>::Type: Debug,
-          <CI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static {
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> D: DeviceClone<'a,CI>,
+          <I as BatchDataType>::Type: Debug {
     type BatchInput = <I as BatchDataType>::Type;
     type BatchOutput = <CI as BatchDataType>::Type;
 }
 impl<U,SO,P,I,PI,CI,D> BatchForward for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchForward + BatchPreTrainBase + BatchPreTrain<BatchPreOutput=<PI as BatchDataType>::Type> +
              BatchBackward<SO,BatchLossInput=<CI as BatchDataType>::Type> +
+             BatchBridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + BatchDataType + InputTensorScalar + 'static,
           CI: Debug + BatchDataType + OutputTensorScalar + 'static,
           I: Debug + Send + Sync + BatchDataType,
-          <PI as BatchDataType>::Type: Debug,
-          <CI as BatchDataType>::Type: Debug,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static {
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> <P as BatchBridge>::BatchRealMapper<'a>: Deref<Target=<CI as BatchDataType>::Type>,
+          for<'a> D: DeviceClone<'a,CI> + DeviceClone<'a,<CI as BatchDataType>::Type>,
+          <I as BatchDataType>::Type: Debug {
     fn batch_forward(&self, input: Self::BatchInput) -> Result<Self::BatchOutput, TrainingError> {
-        Ok(self.device.batch_bridge_forward(&self.parent.batch_forward(input)?)?)
+        let input = self.parent.batch_forward(input)?;
+        let input = self.parent.batch_as_real(&input)?;
+
+        Ok(self.device.cloned(input.deref())?)
     }
 }
 impl<U,SO,P,I,PI,CI,D> BatchPreTrainBase for DequantizeLayer<U, SO, P, I, PI, CI, D>
@@ -303,41 +350,43 @@ impl<U,SO,P,I,PI,CI,D> BatchPreTrainBase for DequantizeLayer<U, SO, P, I, PI, CI
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + BatchDataType + InputTensorScalar + 'static,
           CI: Debug + BatchDataType + OutputTensorScalar + 'static,
           I: Debug + Send + Sync + BatchDataType,
-          <PI as BatchDataType>::Type: Debug + 'static,
-          <CI as BatchDataType>::Type: Debug + 'static,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> <CI as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static,
-          for<'a> CI: Debug + 'static + BatchDataType {
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static {
     type BatchPreOutput = <CI as BatchDataType>::Type;
     type BatchOutStack = Cons<<P as BatchPreTrainBase>::BatchOutStack,Self::BatchPreOutput>;
 }
 impl<U,SO,P,I,PI,CI,D> BatchPreTrain for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
              BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
              BatchPreTrainBase<BatchPreOutput=<PI as BatchDataType>::Type> +
              BatchPreTrain +
              BatchBackward<SO,BatchLossInput=<CI as BatchDataType>::Type> +
+             BatchBridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + BatchDataType + InputTensorScalar + 'static,
           CI: Debug + BatchDataType + OutputTensorScalar + 'static,
           I: Debug + Send + Sync + BatchDataType,
-          <PI as BatchDataType>::Type: Debug + 'static,
-          <CI as BatchDataType>::Type: Debug + 'static,
-          <I as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static {
+          <I as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> <P as BatchBridge>::BatchRealMapper<'a>: Deref<Target=<CI as BatchDataType>::Type>,
+          for<'a> D: DeviceClone<'a,CI> + DeviceClone<'a,<CI as BatchDataType>::Type> {
     fn batch_pre_train(&self, input: Self::BatchInput) -> Result<Self::BatchOutStack, TrainingError> {
         let s = self.parent.batch_pre_train(input)?;
 
-        let r = s.map(|o| self.device.batch_bridge_forward(o))?;
+        let r = s.map(|o| {
+            self.parent.batch_as_real(o).map(|o| self.device.cloned(o.deref()))
+        })??;
 
         Ok(s.push(r))
     }
@@ -352,15 +401,15 @@ impl<U,SO,P,I,PI,CI,D> BatchBackwardBase for DequantizeLayer<U, SO, P, I, PI, CI
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
+          I: Debug + Send + Sync + BatchDataType + 'static,
           PI: Debug + BatchDataType + InputTensorScalar + 'static,
           CI: Debug + BatchDataType + OutputTensorScalar + 'static,
           <PI as BatchDataType>::Type: Debug,
           <CI as BatchDataType>::Type: Debug,
           <I as BatchDataType>::Type: Debug,
-          for<'a> <CI as BatchDataType>::Type: Debug,
-          for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static,
-          I: Debug + Send + Sync + BatchDataType,
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
           <I as BatchDataType>::Type: Debug {
     type BatchLossInput = <CI as BatchDataType>::Type;
     type BatchLossOutput = <P as BatchBackwardBase>::BatchLossOutput;
@@ -375,7 +424,8 @@ impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for DequantizeLayer<U, SO, P, I, PI, CI
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
+          I: Debug + Send + Sync + BatchDataType + 'static,
           PI: Debug + BatchDataType + InputTensorScalar + 'static,
           CI: Debug + BatchDataType + OutputTensorScalar + 'static,
           <PI as BatchDataType>::Type: Debug,
@@ -384,7 +434,9 @@ impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for DequantizeLayer<U, SO, P, I, PI, CI
           for<'a> <CI as BatchDataType>::Type: Debug,
           for<'a> CI: Debug + SliceSize + AsRawSlice<SO> + MakeView<'a,SO> + MakeViewMut<'a,SO> + 'static,
           I: Debug + Send + Sync + BatchDataType,
-          <I as BatchDataType>::Type: Debug {
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <I as BatchDataType>::Type: Debug + 'static {
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
                       -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s,_) = stack.pop();
@@ -462,7 +514,7 @@ impl<U,SO,P,I,PI,CI,D> InputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          D: Device<U>,
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
           I: Debug + Send + Sync {
@@ -470,9 +522,30 @@ impl<U,SO,P,I,PI,CI,D> InputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
         self.parent.scale_mean()
     }
 }
-impl<U,SO,P,I,PI,CI,D> OutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
+impl<U,SO,P,I,PI,CI,D> BridgeBase for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain + OutputScale<Scale=CI,ScaledOutput=CI,ScalingInput=PI> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             BridgeBase<RealScale=CI, RealOutput=CI, SourceInput=PI> + Bridge +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + 'static + BatchDataType + InputTensorScalar,
+          CI: Debug + 'static + BatchDataType + OutputTensorScalar,
+          I: Debug + Send + Sync,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <CI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> D: DeviceClone<'a,CI> {
+    type UseDevice = <P as BridgeBase>::UseDevice;
+    type RealScale = CI;
+    type RealOutput = CI;
+    type SourceInput = CI;
+}
+impl<U,SO,P,I,PI,CI,D> Bridge for DequantizeLayer<U, SO, P, I, PI, CI, D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             BridgeBase<RealScale=CI, RealOutput=CI, SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -481,22 +554,43 @@ impl<U,SO,P,I,PI,CI,D> OutputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
           I: Debug + Send + Sync,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-          <CI as BatchDataType>::Type: Debug + BatchSize + 'static {
-    type ScalingDevice = <P as OutputScale>::ScalingDevice;
-    type Scale = CI;
-    type ScaledOutput = CI;
-    type ScalingInput = PI;
-    type Mapper<'a> = <P as OutputScale>::Mapper<'a> where Self: 'a;
-    fn scaling_mapper<'a>(&'a self, input:&'a PI) -> Result<Self::Mapper<'a>,EvaluateError> where Self: 'a {
-        self.parent.scaling_mapper(input)
+          <CI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> D: DeviceClone<'a,CI> {
+    type RealMapper<'a> = IdentityMapper<'a,CI,Self::UseDevice> where Self: 'a;
+
+    fn as_real<'a>(&'a self, input: &'a CI) -> Result<Self::RealMapper<'a>, EvaluateError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
     }
 }
-impl<U,SO,P,I,PI,CI,D> BatchOutputScale for DequantizeLayer<U,SO,P,I,PI,CI,D>
+impl<U,SO,P,I,PI,CI,D> BridgeRepr for DequantizeLayer<U, SO, P, I, PI, CI, D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             PreTrainBase<PreOutput=PI> + PreTrain + BridgeBase<RealScale=CI, RealOutput=CI, SourceInput=PI> +
+             BridgeRepr<RepresentationOutput=PI> + Bridge +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+          PI: Debug + 'static + BatchDataType + InputTensorScalar,
+          CI: Debug + 'static + BatchDataType + OutputTensorScalar,
+          I: Debug + Send + Sync,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <CI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> D: DeviceClone<'a,CI> {
+    type RepresentationOutput = CI;
+    type ReprMapper<'a> = IdentityMapper<'a,CI,Self::UseDevice> where Self: 'a;
+
+    fn as_repr<'a>(&'a self, input: &'a CI) -> Result<Self::ReprMapper<'a>, EvaluateError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
+    }
+}
+impl<U,SO,P,I,PI,CI,D> BatchBridge for DequantizeLayer<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
              PreTrainBase<PreOutput=PI> + PreTrain +
-             OutputScale<Scale=CI,ScaledOutput=CI,ScalingInput=PI> +
+             BridgeBase<RealScale=CI, RealOutput=CI, SourceInput=PI> + Bridge +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
-             BatchOutputScale +
+             BatchBridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -508,11 +602,39 @@ impl<U,SO,P,I,PI,CI,D> BatchOutputScale for DequantizeLayer<U,SO,P,I,PI,CI,D>
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <CI as BatchDataType>::Type: Debug + BatchSize + 'static,
           Self: ForwardAll<Output=CI>,
-          Self: BatchForwardBase<BatchOutput=<CI as BatchDataType>::Type> {
-    type BatchMapper<'a> = <P as BatchOutputScale>::BatchMapper<'a> where Self: 'a;
+          Self: BatchForwardBase<BatchOutput=<CI as BatchDataType>::Type>,
+          for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+          for<'a> D: DeviceClone<'a,CI> {
+    type BatchRealMapper<'a> = BatchIdentityMapper<'a,CI,Self::UseDevice> where Self: 'a;
 
-    fn batch_scaling_mapper<'a>(&'a self, input:&'a <PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError> where Self: 'a {
-        self.parent.batch_scaling_mapper(input)
+    fn batch_as_real<'a>(&'a self, input: &'a <CI as BatchDataType>::Type) -> Result<Self::BatchRealMapper<'a>, EvaluateError> where Self: 'a {
+        Ok(BatchIdentityMapper::new(input))
+    }
+}
+impl<U,SO,P,I,PI,CI,D> BatchBridgeRepr for DequantizeLayer<U,SO,P,I,PI,CI,D>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             BridgeBase<RealScale=CI, RealOutput=CI, SourceInput=PI> + BridgeRepr<RepresentationOutput=PI> + Bridge +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type> +
+             BatchBridgeRepr +
+             InputTensorScalar + OutputTensorScalar,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      D: Device<U> + DeviceBridge<U,SO,PI,CI>,
+      PI: Debug + 'static + BatchDataType + InputTensorScalar,
+      CI: Debug + 'static + BatchDataType + OutputTensorScalar,
+      I: Debug + Send + Sync + BatchDataType,
+      <I as BatchDataType>::Type: Debug,
+      <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+      <CI as BatchDataType>::Type: Debug + BatchSize + 'static,
+      Self: ForwardAll<Output=CI>,
+      Self: BatchForwardBase<BatchOutput=<CI as BatchDataType>::Type>,
+      for<'a> <P as Bridge>::RealMapper<'a>: Deref<Target=CI>,
+      for<'a> D: DeviceClone<'a,CI> {
+    type BatchReprMapper<'a> = BatchIdentityMapper<'a,CI,Self::UseDevice> where Self: 'a;
+
+    fn batch_as_repr<'a>(&'a self, input: &'a <CI as BatchDataType>::Type) -> Result<Self::BatchReprMapper<'a>, EvaluateError> where Self: 'a {
+        Ok(BatchIdentityMapper::new(input))
     }
 }
 /// Trait for DequantizeLayer instance creation

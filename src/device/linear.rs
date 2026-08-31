@@ -209,6 +209,7 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
     type Shift: Debug + BatchDataType + OutputTensorScalar<Scalar=usize> + OutputTensorSize<NO> + 'static;
     type Output: BatchDataType + Debug + OutputTensorScalar<Scalar=U> + OutputTensorSize<NO> + 'static;
     type LossInput: BatchDataType + Debug + OutputTensorScalar<Scalar=f32> + OutputTensorSize<NO> + 'static;
+    type LossInputScalar: Default + Clone + Copy + Debug + Send + Sync + 'static;
     type BatchOutput: Debug + 'static;
     type BatchLossInput: Debug + OutputTensorScalar<Scalar=f32> + 'static;
     type LossOutput: BatchDataType + OutputTensorScalar<Scalar=f32> + Debug + 'static;
@@ -1328,6 +1329,7 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
     type Output = Arr<U,NO>;
     type BatchOutput = <Arr<U,NO> as BatchDataType>::Type;
     type LossInput = Arr<f32,NO>;
+    type LossInputScalar = f32;
     type BatchLossInput = <Arr<f32,NO> as BatchDataType>::Type;
     type LossOutput = Arr<f32,NI>;
     type BatchLossOutput = <Arr<f32,NI> as BatchDataType>::Type;

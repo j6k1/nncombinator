@@ -452,39 +452,83 @@ pub trait InputScale {
         1.
     }
 }
-/// A trait that represents the output scale
-pub trait OutputScale: ForwardAll
+/// A trait that represents types that use a trait for converting between internal representations and real numbers
+pub trait BridgeBase: ForwardAll
     where <Self as ForwardAll>::Output: BatchDataType + 'static,
-          <Self as OutputScale>::ScaledOutput: BatchDataType + 'static,
+          <Self as BridgeBase>::RealOutput: BatchDataType + 'static,
           <<Self as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
-          <Self as OutputScale>::ScalingInput: Debug + BatchDataType + 'static,
-          <Self::ScaledOutput as BatchDataType>::Type: Debug + BatchSize + 'static,
-          <Self::ScalingInput as BatchDataType>::Type: Debug + BatchSize + 'static {
-    /// Device used for scaling calculations
-    type ScalingDevice: 'static;
+          <Self as BridgeBase>::SourceInput: Debug + BatchDataType + 'static,
+          <Self::RealOutput as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <Self::SourceInput as BatchDataType>::Type: Debug + BatchSize + 'static {
+    /// Device used for bridge calculations
+    type UseDevice: 'static;
     /// output scale.
-    type Scale: Debug + 'static;
-    /// scaled output.
-    type ScaledOutput: Debug + BatchDataType + 'static;
-    /// scaling input.
-    type ScalingInput: Debug + BatchDataType + 'static;
-    /// Data Mapper for Scaling
-    type Mapper<'a>: DataMapper<'a,Self::ScalingInput,Self::ScaledOutput,Self::ScalingDevice>
+    type RealScale: Debug + 'static;
+    /// Outputting Real Numbers
+    type RealOutput: Debug + BatchDataType + 'static;
+    /// source input.
+    type SourceInput: Debug + BatchDataType + 'static;
+}
+/// A trait that represents the output value
+pub trait Bridge: ForwardAll + BridgeBase
+    where <Self as ForwardAll>::Output: BatchDataType + 'static,
+          Self::RealOutput: BatchDataType + 'static,
+          <<Self as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          Self::SourceInput: Debug + BatchDataType + 'static,
+          <Self::RealOutput as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <Self::SourceInput as BatchDataType>::Type: Debug + BatchSize + 'static {
+    /// The mapper used for conversion to real numbers
+    type RealMapper<'a>: DataMapper<'a,Self::SourceInput,Self::RealOutput,Self::UseDevice>
         where Self: 'a;
-    fn scaling_mapper<'a>(&'a self, input: &'a Self::ScalingInput) -> Result<Self::Mapper<'a>,EvaluateError>
+    /// Returns a mapper that converts a value to a real number representation
+    fn as_real<'a>(&'a self, input: &'a Self::SourceInput) -> Result<Self::RealMapper<'a>,EvaluateError>
         where Self: 'a;
 }
-/// A trait that represents the output scale
-pub trait BatchOutputScale: OutputScale + BatchForwardBase
-    where <Self as ForwardAll>::Output: Debug + BatchDataType + 'static,
-          <Self as OutputScale>::ScaledOutput: Debug + BatchDataType + 'static,
+/// A trait that converts values back from real values
+pub trait BridgeRepr: BridgeBase
+    where <Self as ForwardAll>::Output: BatchDataType + 'static,
+          <Self as BridgeBase>::RealOutput: BatchDataType + 'static,
           <<Self as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
-          <Self as OutputScale>::ScalingInput: Debug + BatchDataType + 'static,
-          <Self::ScaledOutput as BatchDataType>::Type: Debug + BatchSize + 'static,
-          <Self::ScalingInput as BatchDataType>::Type: Debug + BatchSize + 'static {    /// Data Mapper for Scaling for batch execution
-    type BatchMapper<'a>: BatchDataMapper<'a,Self::ScalingInput,Self::ScaledOutput,Self::ScalingDevice>
+          <Self as BridgeBase>::SourceInput: Debug + BatchDataType + 'static,
+          <Self::RealOutput as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <Self::SourceInput as BatchDataType>::Type: Debug + BatchSize + 'static {
+    /// Internal Representation of Values
+    type RepresentationOutput: Debug + BatchDataType + 'static;
+    /// The mapper used for conversion to internal representation
+    type ReprMapper<'a>: DataMapper<'a,Self::RealOutput,Self::RepresentationOutput,Self::UseDevice>
         where Self: 'a;
-    fn batch_scaling_mapper<'a>(&'a self, input: &'a <Self::ScalingInput as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>,EvaluateError>
+    /// Returns a mapper that converts values back to their internal representation
+    fn as_repr<'a>(&'a self, input: &'a Self::RealOutput) -> Result<Self::ReprMapper<'a>,EvaluateError>
+        where Self: 'a;
+}
+/// A trait that represents the output value for batch execution
+pub trait BatchBridge: Bridge + BatchForwardBase
+    where <Self as ForwardAll>::Output: Debug + BatchDataType + 'static,
+          Self::RealOutput: Debug + BatchDataType + 'static,
+          <<Self as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          Self::SourceInput: Debug + BatchDataType + 'static,
+          <Self::RealOutput as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <Self::SourceInput as BatchDataType>::Type: Debug + BatchSize + 'static {
+    /// Returns a mapper that converts a value to a real number representation for batch execution
+    type BatchRealMapper<'a>: BatchDataMapper<'a,Self::SourceInput,Self::RealOutput,Self::UseDevice>
+        where Self: 'a;
+    /// Returns a mapper that converts a value to a real number representation for batch execution
+    fn batch_as_real<'a>(&'a self, input: &'a <Self::SourceInput as BatchDataType>::Type) -> Result<Self::BatchRealMapper<'a>,EvaluateError>
+        where Self: 'a;
+}
+/// A trait that converts values back from real values for batch execution
+pub trait BatchBridgeRepr: BridgeRepr
+    where <Self as ForwardAll>::Output: BatchDataType + 'static,
+          <Self as BridgeBase>::RealOutput: BatchDataType + 'static,
+          <<Self as ForwardAll>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <Self as BridgeBase>::SourceInput: Debug + BatchDataType + 'static,
+          <Self::RealOutput as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <Self::SourceInput as BatchDataType>::Type: Debug + BatchSize + 'static {
+    /// The mapper used for conversion to internal representation for batch execution
+    type BatchReprMapper<'a>: BatchDataMapper<'a,Self::RealOutput,Self::RepresentationOutput,Self::UseDevice>
+        where Self: 'a;
+    /// Returns a mapper that converts values back to their internal representation for batch execution
+    fn batch_as_repr<'a>(&'a self, input: &'a <Self::RealOutput as BatchDataType>::Type) -> Result<Self::BatchReprMapper<'a>,EvaluateError>
         where Self: 'a;
 }
 /// A trait that represents the maximum value of the input passed from this layer to the next layer

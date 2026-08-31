@@ -369,7 +369,9 @@ pub enum TypeConvertError {
     /// Error in cudnn processing
     #[cfg(feature = "cuda")]
     CudnnError(rcudnn::Error),
-}
+    /// An error that will never be instantiated.
+    /// Used in implementations where the result of `TryFrom` and similar methods will never fail.
+    Infallible(Infallible)}
 impl fmt::Display for TypeConvertError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -379,6 +381,7 @@ impl fmt::Display for TypeConvertError {
             TypeConvertError::CudaError(e) => write!(f, "An error occurred in the process of cuda. ({})",e),
             #[cfg(feature = "cuda")]
             TypeConvertError::CudnnError(e) => write!(f, "An error occurred during the execution of a process in cudnn. ({})",e),
+            TypeConvertError::Infallible(_) => unreachable!(),
         }
     }
 }
@@ -391,6 +394,7 @@ impl error::Error for TypeConvertError {
             TypeConvertError::CudaError(_) => "An error occurred in the process of cuda.",
             #[cfg(feature = "cuda")]
             TypeConvertError::CudnnError(_) => "An error occurred during the execution of a process in cudnn.",
+            TypeConvertError::Infallible(_) => unreachable!(),
         }
     }
 
@@ -401,7 +405,8 @@ impl error::Error for TypeConvertError {
             #[cfg(feature = "cuda")]
             TypeConvertError::CudaError(e) => Some(e),
             #[cfg(feature = "cuda")]
-            TypeConvertError::CudnnError(e) => Some(e)
+            TypeConvertError::CudnnError(e) => Some(e),
+            TypeConvertError::Infallible(_) => None,
         }
     }
 }
@@ -425,6 +430,11 @@ impl From<CudaError> for TypeConvertError {
 impl From<rcudnn::Error> for TypeConvertError {
     fn from(err: rcudnn::Error) -> TypeConvertError {
         TypeConvertError::CudnnError(err)
+    }
+}
+impl From<Infallible> for TypeConvertError {
+    fn from(_: Infallible) -> TypeConvertError {
+        unreachable!()
     }
 }
 /// Error when accessing array out of range
@@ -487,7 +497,10 @@ pub enum EvaluateError {
     /// Error generated when type conversion fails
     TypeConvertError(TypeConvertError),
     /// Error raised if cast to fixed-length array fails
-    TryFromSliceError(TryFromSliceError)
+    TryFromSliceError(TryFromSliceError),
+    /// An error that will never be instantiated.
+    /// Used in implementations where the result of `TryFrom` and similar methods will never fail.
+    Infallible(Infallible)
 }
 impl fmt::Display for EvaluateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -504,7 +517,8 @@ impl fmt::Display for EvaluateError {
             EvaluateError::InvalidStateError(e) => write!(f,"Invalid state. ({})",e),
             EvaluateError::TypeCastError(s) => write!(f,"{}",s),
             EvaluateError::TypeConvertError(e) => write!(f,"{}",e),
-            EvaluateError::TryFromSliceError(e) => write!(f,"{}",e)
+            EvaluateError::TryFromSliceError(e) => write!(f,"{}",e),
+            EvaluateError::Infallible(_) => unreachable!(),
         }
     }
 }
@@ -523,7 +537,8 @@ impl error::Error for EvaluateError {
             EvaluateError::InvalidStateError(_) => "Invalid state.",
             EvaluateError::TypeCastError(_) => "Typecast failed.",
             EvaluateError::TypeConvertError(_) => "Type covert failed.",
-            EvaluateError::TryFromSliceError(_) => "Conversion to fixed-length array failed."
+            EvaluateError::TryFromSliceError(_) => "Conversion to fixed-length array failed.",
+            EvaluateError::Infallible(_) => unreachable!(),
         }
     }
 
@@ -541,7 +556,8 @@ impl error::Error for EvaluateError {
             EvaluateError::InvalidStateError(e) => Some(e),
             EvaluateError::TypeCastError(_) => None,
             EvaluateError::TypeConvertError(e) => Some(e),
-            EvaluateError::TryFromSliceError(e) => Some(e)
+            EvaluateError::TryFromSliceError(e) => Some(e),
+            EvaluateError::Infallible(_) => unreachable!(),
         }
     }
 }
@@ -587,6 +603,11 @@ impl From<InvalidStateError> for EvaluateError {
 impl From<TryFromSliceError> for EvaluateError {
     fn from(err: TryFromSliceError) -> EvaluateError {
         EvaluateError::TryFromSliceError(err)
+    }
+}
+impl From<Infallible> for EvaluateError {
+    fn from(_: Infallible) -> EvaluateError {
+        unreachable!()
     }
 }
 #[derive(Debug)]

@@ -80,14 +80,22 @@ impl<U,SO,PI,CI> DeviceBridge<U,SO,PI,CI> for DeviceCpu
 impl<U,SO,A,PI,CI> DeviceBridge<U,SO,PI,CI> for DeviceGpu<A>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator,
-          for<'a> PI: AsCudaView<'a>,
-          for<'a> CI: AsCudaView<'a>,
-          for<'a> PI: TryFrom<<CI as CudaView<'a>>::Type,Error=CudaError> + BatchDataType + Debug,
-          for<'a> CI: TryFrom<<PI as CudaView<'a>>::Type,Error=CudaError> + BatchDataType + Debug,
+          for<'a> &'a PI: AsCudaView<'a>,
+          for<'a> &'a CI: AsCudaView<'a>,
+          for<'a> PI: TryFrom<<&'a CI as CudaView<'a>>::Type> + BatchDataType + Debug,
+          for<'a> CI: TryFrom<<&'a PI as CudaView<'a>>::Type> + BatchDataType + Debug,
           for<'a> &'a <PI as BatchDataType>::Type: AsCudaView<'a>,
           for<'a> &'a <CI as BatchDataType>::Type: AsCudaView<'a>,
-          for<'a> <PI as BatchDataType>::Type: TryFrom<<&'a <CI as BatchDataType>::Type as CudaView<'a>>::Type,Error=TypeConvertError>,
-          for<'a> <CI as BatchDataType>::Type: TryFrom<<&'a <PI as BatchDataType>::Type as CudaView<'a>>::Type,Error=TypeConvertError> {
+          for<'a> <PI as BatchDataType>::Type: TryFrom<<&'a <CI as BatchDataType>::Type as CudaView<'a>>::Type>,
+          for<'a> <CI as BatchDataType>::Type: TryFrom<<&'a <PI as BatchDataType>::Type as CudaView<'a>>::Type>,
+          for<'a> EvaluateError: From<<<PI as BatchDataType>::Type as TryFrom<<&'a <CI as BatchDataType>::Type as CudaView<'a>>::Type>>::Error>,
+          for<'a> EvaluateError: From<<<CI as BatchDataType>::Type as TryFrom<<&'a <PI as BatchDataType>::Type as CudaView<'a>>::Type>>::Error>,
+          for<'a> TrainingError: From<<<PI as BatchDataType>::Type as TryFrom<<&'a <CI as BatchDataType>::Type as CudaView<'a>>::Type>>::Error>,
+          for<'a> TrainingError: From<<<CI as BatchDataType>::Type as TryFrom<<&'a <PI as BatchDataType>::Type as CudaView<'a>>::Type>>::Error>,
+          for<'a> EvaluateError: From<<PI as TryFrom<<&'a CI as CudaView<'a>>::Type>>::Error>,
+          for<'a> EvaluateError: From<<CI as TryFrom<<&'a PI as CudaView<'a>>::Type>>::Error>,
+          for<'a> TrainingError: From<<PI as TryFrom<<&'a CI as CudaView<'a>>::Type>>::Error>,
+          for<'a> TrainingError: From<<CI as TryFrom<<&'a PI as CudaView<'a>>::Type>>::Error> {
     fn bridge_forward<'a>(&self, input: &'a PI) -> Result<CI, EvaluateError> {
         Ok(input.as_cuda_view().try_into()?)
     }

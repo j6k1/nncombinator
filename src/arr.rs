@@ -10,7 +10,7 @@ use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
-use crate::ope::{Product, Sum};
+use crate::ope::{One, Product, Sum};
 #[cfg(feature = "cuda")]
 use crate::bridge::{ToHost};
 use crate::cast::Assume;
@@ -53,6 +53,9 @@ impl<'a,T> ShieldSlice<'a,T> {
     pub fn as_chunks_mut<const N:usize>(&'a mut self) -> (&'a mut [[T;N]], &'a mut [T]) {
         self.raw.as_chunks_mut()
     }
+}
+pub trait Ones {
+    fn ones() -> Self;
 }
 /// Fixed-length one-dimensional array implementation
 #[derive(Debug,Eq,PartialEq)]
@@ -279,6 +282,17 @@ impl<T,const N:usize> ToHost<T> for Arr<T,N> where T: Default + Clone + Copy + S
 }
 impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N;
+}
+impl<T,const N:usize> Ones for Arr<T,N>
+    where T: Default + Clone + Copy + One + Send {
+    fn ones() -> Self {
+        let mut arr = Arr::new();
+
+        for it in arr.iter_mut() {
+            *it = T::one();
+        }
+        arr
+    }
 }
 impl<T,const N:usize> Index<usize> for Arr<T,N> where T: Default + Clone + Copy + Send {
     type Output = T;

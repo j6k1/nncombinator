@@ -29,7 +29,7 @@ fn test_mnist_for_quntization_cpu() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:QuantizedInputLayer<i16,Arr<i16,{ 28*28 }>,_,_,255> = QuantizedInputLayer::new(&device);
+    let net:QuantizedInputLayer<i16,Arr<i16,{ 28*28 }>,_,_,255,{ 28*28 }> = QuantizedInputLayer::new(&device).unwrap();
 
     let optimizer_builder = AdamWBuilder::new(&device).lr(0.001).weight_decay(0.0001);
 
@@ -82,22 +82,6 @@ fn test_mnist_for_quntization_cpu() {
 
         ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
     }).add_layer(|l| {
-        let mut l = LoggingLayer::new(l,&device);
-
-        /*
-        l.add_gradient_logger(move |g| {
-            dbg!(&g);
-
-            Ok(())
-        });
-        l.add_batch_backward_logger(move |l| {
-            dbg!(&l);
-
-            Ok(())
-        });
-        */
-        l
-    }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
@@ -113,28 +97,6 @@ fn test_mnist_for_quntization_cpu() {
                                                             &optimizer_builder
         ).unwrap()
     }).add_layer(|l| {
-        let mut l = LoggingLayer::new(l,&device);
-
-        /*
-        l.add_batch_forward_logger(move |l| {
-            dbg!(&l);
-
-            Ok(())
-        });
-
-        l.add_gradient_logger(move |g| {
-            dbg!(&g);
-
-            Ok(())
-        });
-        l.add_batch_backward_logger(move |l| {
-            dbg!(&l);
-
-            Ok(())
-        });
-        */
-        l
-    }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
@@ -145,44 +107,6 @@ fn test_mnist_for_quntization_cpu() {
 
         DequantizeLayerBuilder::<f32,Arr<f32,10>>::new().build(l, &device).unwrap()
     }).add_layer(|l| {
-        let mut l = LoggingLayer::new(l,&device);
-
-        /*
-        l.add_batch_forward_logger(move |l| {
-            dbg!(&l);
-
-            Ok(())
-        });
-
-        l.add_batch_backward_logger(move |l| {
-            dbg!(&l);
-
-            Ok(())
-        });
-        */
-        l
-    }).add_layer(|l| {
-        assert_forward_all(&l);
-        assert_pre_train(&l);
-        assert_backward_all(&l);
-        assert_update_weight(&l);
-        assert_batch_forward(&l);
-        assert_batch_backward(&l);
-        assert_batch_pre_train(&l);
-
-        ScalingLayerBuilder::new().build(l,&device).unwrap()
-    }).add_layer(|l| {
-        let mut l = LoggingLayer::new(l,&device);
-
-        /*
-        l.add_batch_backward_logger(move |l| {
-            dbg!(&l);
-
-            Ok(())
-        });
-         */
-        l
-    }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);
         assert_backward_all(&l);
@@ -192,30 +116,6 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_pre_train(&l);
 
         ActivationLayer::new(l,SoftMaxBuilder::new(&device),&device)
-    }).add_layer(|l| {
-        let mut l = LoggingLayer::new(l,&device);
-
-        /*
-        l.add_batch_forward_logger(move |l| {
-            dbg!(&l);
-
-            Ok(())
-        });
-        */
-        /*
-        l.add_gradient_logger(move |g| {
-            dbg!(&g);
-
-            Ok(())
-        });
-
-        l.add_batch_backward_logger(move |l| {
-            dbg!(&l);
-
-            Ok(())
-        });
-         */
-        l
     }).add_layer(|l| {
         assert_forward_all(&l);
         assert_pre_train(&l);

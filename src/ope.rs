@@ -131,6 +131,18 @@ impl One for f32 {
         1f32
     }
 }
+impl One for i16 {
+    #[inline]
+    fn one() -> i16 {
+        1i16
+    }
+}
+impl One for i8 {
+    #[inline]
+    fn one() -> i8 {
+        1i8
+    }
+}
 /// Trait that returns the result of applying exp
 pub trait Exp {
     fn exp(&self) -> Self;

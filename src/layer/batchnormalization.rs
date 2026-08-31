@@ -8,7 +8,7 @@ use crate::{Cons, Stack};
 use crate::device::{Device, DeviceBatchAveraging};
 use crate::device::batchnormalization::DeviceBatchNorm;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, PreTrainBase, OutputScale, BatchSize, BatchOutputScale, BackwardBase, BatchBackwardBase};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, PreTrainBase, Bridge, BatchSize, BatchBridge, BackwardBase, BatchBackwardBase, BridgeRepr, BatchBridgeRepr, BridgeBase};
 use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 use crate::ope::One;
 use crate::optimizer::{Optimizer, OptimizerBuilder};
@@ -958,30 +958,62 @@ impl<U,C,P,OP,D,I,PI,const N:usize> InputScale for BatchNormalizationLayer<U,C,P
         self.parent.scale_mean()
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> OutputScale for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BridgeBase for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
-      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-      D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
-      I: Debug + Send + Sync,
-      PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          I: Debug + Send + Sync,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
           InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + 'static,
-      OP: Optimizer<U,D>,
-      <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
-      [();N]: TensorSize {
-    type ScalingDevice = D;
-    type Scale = PI;
-    type ScaledOutput = PI;
-    type ScalingInput = PI;
+          OP: Optimizer<U,D>,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          [();N]: TensorSize {
+    type UseDevice = D;
+    type RealScale = PI;
+    type RealOutput = PI;
+    type SourceInput = PI;
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> Bridge for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          I: Debug + Send + Sync,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+          InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + 'static,
+          OP: Optimizer<U,D>,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          [();N]: TensorSize {
+    type RealMapper<'a> = IdentityMapper<'a,PI,Self::UseDevice> where Self: 'a;
 
-    type Mapper<'a> = IdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
-
-    fn scaling_mapper<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::Mapper<'a>, EvaluateError> where Self: 'a {
+    fn as_real<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::RealMapper<'a>, EvaluateError> where Self: 'a {
         Ok(IdentityMapper::new(input))
     }
 }
-impl<U,C,P,OP,D,I,PI,const N:usize> BatchOutputScale for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+impl<U,C,P,OP,D,I,PI,const N:usize> BridgeRepr for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          I: Debug + Send + Sync,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + 'static,
+          OP: Optimizer<U,D>,
+          <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          [();N]: TensorSize {
+    type RepresentationOutput = PI;
+
+    type ReprMapper<'a> = IdentityMapper<'a,PI,Self::UseDevice> where Self: 'a;
+
+    fn as_repr<'a>(&'a self, input: &'a <Self as ForwardAll>::Output) -> Result<Self::ReprMapper<'a>, EvaluateError> where Self: 'a {
+        Ok(IdentityMapper::new(input))
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchBridge for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> + BackwardBase<LossInput=PI,LossInputScalar=U> +
              BackwardAll<U> +
              PreTrainBase<PreOutput=PI> + PreTrain +
@@ -998,9 +1030,32 @@ impl<U,C,P,OP,D,I,PI,const N:usize> BatchOutputScale for BatchNormalizationLayer
       <PI as BatchDataType>::Type: Debug + BatchSize +
                                    InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + 'static,
       [();N]: TensorSize {
-    type BatchMapper<'a> = BatchIdentityMapper<'a,PI,Self::ScalingDevice> where Self: 'a;
+    type BatchRealMapper<'a> = BatchIdentityMapper<'a,PI,Self::UseDevice> where Self: 'a;
 
-    fn batch_scaling_mapper<'a>(&'a self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchMapper<'a>, EvaluateError> where Self: 'a {
+    fn batch_as_real<'a>(&'a self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchRealMapper<'a>, EvaluateError> where Self: 'a {
+        Ok(BatchIdentityMapper::new(input))
+    }
+}
+impl<U,C,P,OP,D,I,PI,const N:usize> BatchBridgeRepr for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>
+    where P: ForwardAll<Input=I,Output=PI> + BackwardBase<LossInput=PI,LossInputScalar=U> +
+             BackwardAll<U> +
+             PreTrainBase<PreOutput=PI> + PreTrain +
+             InputTensorScalar + OutputTensorScalar +
+             BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceBatchNorm<U,C,PI,N>,
+          I: Debug + BatchDataType + Send + Sync,
+          PI: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
+          InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + 'static,
+          C: Debug,
+          OP: Optimizer<U,D>,
+          <I as BatchDataType>::Type: Debug + 'static,
+          <PI as BatchDataType>::Type: Debug + BatchSize +
+          InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + 'static,
+          [();N]: TensorSize {
+    type BatchReprMapper<'a> = BatchIdentityMapper<'a,PI,Self::UseDevice> where Self: 'a;
+
+    fn batch_as_repr<'a>(&'a self, input: &'a <PI as BatchDataType>::Type) -> Result<Self::BatchReprMapper<'a>, EvaluateError> where Self: 'a {
         Ok(BatchIdentityMapper::new(input))
     }
 }

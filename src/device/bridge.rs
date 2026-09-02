@@ -5,7 +5,7 @@ use crate::cast::Assume;
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::{AsCudaView, CudaView};
 use crate::device::{DeviceCpu, DeviceGpu};
-use crate::error::{CudaError, EvaluateError, TrainingError, TypeConvertError};
+use crate::error::{EvaluateError, TrainingError};
 use crate::layer::{BatchDataType};
 
 /// Trait that defines the implementation of various calculation processes in the bridge layer

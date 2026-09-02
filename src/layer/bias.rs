@@ -582,8 +582,8 @@ impl<U,C,P,OP,D,I,PI,const N:usize> InputScale for BiasLayer<U,C,P,OP,D,I,PI,N>
       OP: Optimizer<U,D>,
       <PI as BatchDataType>::Type: Debug + BatchSize + 'static
 {
-    fn scale_mean(&self) -> f32 {
-        self.parent.scale_mean()
+    fn input_scale(&self) -> f32 {
+        self.parent.input_scale()
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BridgeBase for BiasLayer<U,C,P,OP,D,I,PI,N>

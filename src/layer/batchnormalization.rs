@@ -954,8 +954,8 @@ impl<U,C,P,OP,D,I,PI,const N:usize> InputScale for BatchNormalizationLayer<U,C,P
       OP: Optimizer<U,D>,
       <PI as BatchDataType>::Type: Debug + 'static,
       [();N]: TensorSize {
-    fn scale_mean(&self) -> f32 {
-        self.parent.scale_mean()
+    fn input_scale(&self) -> f32 {
+        self.parent.input_scale()
     }
 }
 impl<U,C,P,OP,D,I,PI,const N:usize> BridgeBase for BatchNormalizationLayer<U,C,P,OP,D,I,PI,N>

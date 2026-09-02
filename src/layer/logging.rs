@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, BatchBridge, MaxInputValue, PreTrainBase, BatchSize, BackwardBase, BatchBackwardBase, Loss, BatchLoss, BridgeBase, BridgeRepr, BatchBridgeRepr};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, BatchBridge, InputMax, PreTrainBase, BatchSize, BackwardBase, BatchBackwardBase, Loss, BatchLoss, BridgeBase, BridgeRepr, BatchBridgeRepr};
 use crate::lossfunction::LossFunction;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::Stack;
@@ -598,8 +598,8 @@ impl<U,P,I,PI,LI,D> InputScale for LoggingLayer<U,P,I,PI,LI,D>
       LI: Debug + 'static + BatchDataType + InputTensorScalar,
       I: Debug + Send + Sync,
       <P as BackwardBase>::LossInput: BatchDataType + Debug + 'static {
-    fn scale_mean(&self) -> f32 {
-        self.parent.scale_mean()
+    fn input_scale(&self) -> f32 {
+        self.parent.input_scale()
     }
 }
 impl<U,P,I,PI,LI,D> BridgeBase for LoggingLayer<U,P,I,PI,LI,D>
@@ -706,10 +706,10 @@ impl<U,P,I,PI,LI,D> BatchBridgeRepr for LoggingLayer<U,P,I,PI,LI,D>
         self.parent.batch_as_repr(input)
     }
 }
-impl<U,P,I,PI,LI,D> MaxInputValue for LoggingLayer<U,P,I,PI,LI,D>
+impl<U,P,I,PI,LI,D> InputMax for LoggingLayer<U,P,I,PI,LI,D>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardBase<LossInput=LI>  +
-             PreTrainBase<PreOutput=PI> + PreTrain + InputScale + MaxInputValue +
+             PreTrainBase<PreOutput=PI> + PreTrain + InputScale + InputMax +
              InputTensorScalar + OutputTensorScalar<Scalar=U>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U>,
@@ -717,8 +717,8 @@ impl<U,P,I,PI,LI,D> MaxInputValue for LoggingLayer<U,P,I,PI,LI,D>
       LI: Debug + 'static + BatchDataType + InputTensorScalar,
       I: Debug + Send + Sync,
       <P as BackwardBase>::LossInput: BatchDataType + OutputTensorScalar + Debug + 'static {
-    type Scalar = <P as MaxInputValue>::Scalar;
-    fn max_input_value(&self) -> Self::Scalar {
-        self.parent.max_input_value()
+    type Scalar = <P as InputMax>::Scalar;
+    fn input_max(&self) -> Self::Scalar {
+        self.parent.input_max()
     }
 }

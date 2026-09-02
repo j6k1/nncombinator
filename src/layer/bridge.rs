@@ -463,8 +463,8 @@ impl<U,SO,P,I,PI,CI,D> InputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
       PI: Debug + 'static + BatchDataType + InputTensorScalar,
       CI: Debug + 'static + BatchDataType + OutputTensorScalar,
       I: Debug + Send + Sync {
-    fn scale_mean(&self) -> f32 {
-        self.parent.scale_mean()
+    fn input_scale(&self) -> f32 {
+        self.parent.input_scale()
     }
 }
 impl<U,SO,P,I,PI,CI,D> BridgeBase for BridgeLayer<U,SO,P,I,PI,CI,D>

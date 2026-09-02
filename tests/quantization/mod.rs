@@ -11,8 +11,6 @@ use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll};
 use nncombinator::layer::input::{QuantizedInputLayer};
 use nncombinator::layer::linear::{QuantizedLinearLayerBuilder};
-use nncombinator::layer::logging::LoggingLayer;
-use nncombinator::layer::scale::ScalingLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::layer::quantization::DequantizeLayerBuilder;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
@@ -31,7 +29,7 @@ fn test_mnist_for_quntization_cpu() {
 
     let net:QuantizedInputLayer<i16,Arr<i16,{ 28*28 }>,_,_,255,{ 28*28 }> = QuantizedInputLayer::new(&device).unwrap();
 
-    let optimizer_builder = AdamWBuilder::new(&device).lr(0.001).weight_decay(0.0001);
+    let optimizer_builder = AdamWBuilder::new(&device).lr(0.0001).weight_decay(0.0);
 
     let mut net = net.add_layer(|l| {
         assert_forward_all(&l);

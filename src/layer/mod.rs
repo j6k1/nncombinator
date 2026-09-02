@@ -448,7 +448,7 @@ pub trait Quantization<P,K> where K: PersistenceType {
 /// A trait that represents the input scale
 pub trait InputScale {
     /// output mean scale
-    fn scale_mean(&self) -> f32 {
+    fn input_scale(&self) -> f32 {
         1.
     }
 }
@@ -532,10 +532,10 @@ pub trait BatchBridgeRepr: BridgeRepr
         where Self: 'a;
 }
 /// A trait that represents the maximum value of the input passed from this layer to the next layer
-pub trait MaxInputValue {
+pub trait InputMax {
     type Scalar: Clone + Copy + Debug;
     /// maximum value of the input passed from this layer to the next layer.
-    fn max_input_value(&self) -> Self::Scalar;
+    fn input_max(&self) -> Self::Scalar;
 }
 /// A trait representing the weight type of inputs used in the implementation of various layers
 pub trait InputTensorScalar {

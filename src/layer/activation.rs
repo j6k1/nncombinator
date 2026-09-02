@@ -9,9 +9,8 @@ use crate::activation::ActivationBuilder;
 use crate::device::activation::DeviceActivation;
 use crate::device::clone::DeviceClone;
 use crate::device::Device;
-use crate::device::linear::DeviceQuantizedLinear;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, MaxInputValue, PreTrainBase, BatchBridge, BatchSize, BackwardBase, BatchBackwardBase, BridgeRepr, BatchBridgeRepr, BridgeBase};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, InputMax, PreTrainBase, BatchBridge, BatchSize, BackwardBase, BatchBackwardBase, BridgeRepr, BatchBridgeRepr, BridgeBase};
 use crate::lossfunction::LossFunction;
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
@@ -546,8 +545,8 @@ impl<U,P,A,DA,I,PI,LI,D,const N:usize> InputScale for ActivationLayer<U,P,A,DA,I
       LI: Debug + BatchDataType + OutputTensorScalar + 'static,
       I: Debug + Send + Sync,
       Self: ForwardAll<Output=PI> {
-    fn scale_mean(&self) -> f32 {
-        self.parent.scale_mean()
+    fn input_scale(&self) -> f32 {
+        self.parent.input_scale()
     }
 }
 impl<U,P,A,DA,I,PI,LI,D,const N:usize> BridgeBase for ActivationLayer<U,P,A,DA,I,PI,LI,D,N>
@@ -659,17 +658,17 @@ impl<U,P,A,DA,I,PI,LI,D,const N:usize> BatchBridgeRepr for ActivationLayer<U,P,A
         self.parent.batch_as_repr(input)
     }
 }
-impl<U,P,A,DA,I,PI,LI,D,const N:usize> MaxInputValue for ActivationLayer<U,P,A,DA,I,PI,LI,D,N>
+impl<U,P,A,DA,I,PI,LI,D,const N:usize> InputMax for ActivationLayer<U,P,A,DA,I,PI,LI,D,N>
     where P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<<LI as OutputTensorScalar>::Scalar,LossInput=LI> +
-             PreTrain + OutputTensorScalar<Scalar=U> + InputScale + MaxInputValue<Scalar=usize>,
+             PreTrain + OutputTensorScalar<Scalar=U> + InputScale + InputMax<Scalar=f32>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U> + DeviceActivation<U,PI,A,N>,
       PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
       LI: Debug + BatchDataType + OutputTensorScalar + 'static,
       I: Debug + Send + Sync {
-    type Scalar = usize;
-    fn max_input_value(&self) -> Self::Scalar {
-        self.parent.max_input_value()
+    type Scalar = f32;
+    fn input_max(&self) -> Self::Scalar {
+        self.parent.input_max()
     }
 }

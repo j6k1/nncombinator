@@ -51,7 +51,7 @@ pub struct ScalingMapper<'a,U,I,O,D,const N:usize>
     where I: Debug + Sized + BatchDataType + 'static,
           O: Debug + Sized + BatchDataType + 'static,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<U,O,N,Scale=O> + 'static,
+          D: DeviceScale<U,O,N> + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'static,
           <O as BatchDataType>::Type: BatchSize + Debug + 'static,
           Self: Sized {
@@ -65,11 +65,11 @@ impl<'a,U,I,O,D,const N:usize> ScalingMapper<'a,U,I,O,D,N>
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'static,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<U,O,N,Scale=O> + 'static,
+          D: DeviceScale<U,O,N> + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'static,
           Self: Sized {
-    pub fn new(device:&'a D ,_: &I, bridged: &O, scale: &O) -> Result<ScalingMapper<'a,U,I,O,D,N>,EvaluateError> {
+    pub fn new(device:&'a D ,_: &I, bridged: &O, scale: U) -> Result<ScalingMapper<'a,U,I,O,D,N>,EvaluateError> {
         Ok(ScalingMapper {
             u:PhantomData::<U>,
             i:PhantomData::<I>,
@@ -83,7 +83,7 @@ impl<'a,U,I,O,D,const N:usize> Deref for ScalingMapper<'a,U,I,O,D,N>
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'static,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<U,O,N,Scale=O> + 'static,
+          D: DeviceScale<U,O,N> + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'static,
           Self: Sized {
@@ -96,7 +96,7 @@ impl<'a,U,I,O,D,const N:usize> DataMapper<'a,I,O,D> for ScalingMapper<'a,U,I,O,D
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'static,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<U,O,N,Scale=O> + 'static,
+          D: DeviceScale<U,O,N> + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'static,
           Self: Sized {}
@@ -104,7 +104,7 @@ pub struct BatchScalingMapper<'a,U,I,O,D,const N:usize>
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'static,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<U,O,N,Scale=O> + 'static,
+          D: DeviceScale<U,O,N> + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'static,
           Self: Sized {
@@ -118,11 +118,11 @@ impl<'a,U,I,O,D,const N:usize> BatchScalingMapper<'a,U,I,O,D,N>
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'static,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<U,O,N,Scale=O> + 'static,
+          D: DeviceScale<U,O,N> + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'static,
           Self: Sized {
-    pub fn new(device:&'a D,_: &<I as BatchDataType>::Type, bridged: &<O as BatchDataType>::Type, scale: &O)
+    pub fn new(device:&'a D,_: &<I as BatchDataType>::Type, bridged: &<O as BatchDataType>::Type, scale: U)
         -> Result<BatchScalingMapper<'a,U,I,O,D,N>,EvaluateError> {
         Ok(BatchScalingMapper {
             i: PhantomData::<I>,
@@ -137,7 +137,7 @@ impl<'a,U,I,O,D,const N:usize> Deref for BatchScalingMapper<'a,U,I,O,D,N>
     where I: Debug + Sized + BatchDataType + 'a,
           O: Debug + Sized + BatchDataType + 'static,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<U,O,N,Scale=O> + 'static,
+          D: DeviceScale<U,O,N> + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug + 'a,
           <O as BatchDataType>::Type: BatchSize + Debug + 'static,
           Self: Sized {
@@ -150,7 +150,7 @@ impl<'a,U,I,O,D,const N:usize> BatchDataMapper<'a,I,O,D> for BatchScalingMapper<
     where I: Debug + Sized + BatchDataType,
           O: Debug + Sized + BatchDataType,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: DeviceScale<U,O,N,Scale=O> + 'static,
+          D: DeviceScale<U,O,N> + 'static,
           <I as BatchDataType>::Type: BatchSize + Debug,
           <O as BatchDataType>::Type: BatchSize + Debug,
           Self: Sized {}

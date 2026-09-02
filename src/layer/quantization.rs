@@ -13,7 +13,7 @@ use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, Te
 use crate::{Cons, Stack};
 use crate::device::bridge::DeviceBridge;
 use crate::device::clone::DeviceClone;
-use crate::mapper::{BatchIdentityMapper, DataMapper, IdentityMapper};
+use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 
 /// Dequantize layer Implementation
 pub struct DequantizeLayer<U,SO,P,I,PI,CI,D>
@@ -190,7 +190,10 @@ impl<U,SO,P,I,PI,CI,D> BackwardAll<SO> for DequantizeLayer<U, SO, P, I, PI, CI, 
           D: Device<U>,
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
-          I: Debug + Send + Sync {
+          I: Debug + Send + Sync,
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <CI as BatchDataType>::Type: BatchSize + Debug + 'static,
+          for<'a> D: DeviceClone<'a,CI> {
     type LossOutput = <P as BackwardAll<SO>>::LossOutput;
 
     fn backward_all(&mut self, input: Self::LossInput, stack:Self::OutStack)
@@ -518,8 +521,8 @@ impl<U,SO,P,I,PI,CI,D> InputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
           PI: Debug + 'static + BatchDataType + InputTensorScalar,
           CI: Debug + 'static + BatchDataType + OutputTensorScalar,
           I: Debug + Send + Sync {
-    fn scale_mean(&self) -> f32 {
-        self.parent.scale_mean()
+    fn input_scale(&self) -> f32 {
+        self.parent.input_scale()
     }
 }
 impl<U,SO,P,I,PI,CI,D> BridgeBase for DequantizeLayer<U, SO, P, I, PI, CI, D>

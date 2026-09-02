@@ -90,7 +90,7 @@ impl<U,P,D,I,PI,SO,const N:usize> Persistence<TextFilePersistence,Specialized> f
           SO: Debug + BatchDataType + 'static,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err>,
-          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+          D: Device<U> + DeviceScale<U,PI,N>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <SO as BatchDataType>::Type: Debug + BatchSize + 'static {
     fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
@@ -115,7 +115,7 @@ impl<T,U,P,D,I,PI,SO,const N:usize> Persistence<T,Linear> for ScalingLayer<U,P,D
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
           SO: Debug + BatchDataType + 'static,
-          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+          D: Device<U> + DeviceScale<U,PI,N>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <SO as BatchDataType>::Type: Debug + BatchSize + 'static {
     fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
@@ -539,7 +539,7 @@ impl<U,P,D,I,PI,SO,const N:usize> InputScale for ScalingLayer<U,P,D,I,PI,SO,N>
              BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              PreTrainBase<PreOutput=PI> + PreTrain + InputScale + Bridge<RealScale=SO, RealOutput=SO, SourceInput=PI> +
              InputTensorScalar + OutputTensorScalar,
-      D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+      D: Device<U> + DeviceScale<U,PI,N>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       I: Debug + Send + Sync,
       PI: Debug + BatchDataType + 'static,
@@ -548,8 +548,8 @@ impl<U,P,D,I,PI,SO,const N:usize> InputScale for ScalingLayer<U,P,D,I,PI,SO,N>
       <SO as BatchDataType>::Type: Debug + BatchSize + 'static,
       Self: ForwardAll<Output=SO>,
       for<'a> D: DeviceClone<'a,SO> {
-    fn scale_mean(&self) -> f32 {
-        self.parent.scale_mean()
+    fn input_scale(&self) -> f32 {
+        self.parent.input_scale()
     }
 }
 impl<U,P,D,I,PI,SO,const N:usize> BridgeBase for ScalingLayer<U,P,D,I,PI,SO,N>
@@ -558,7 +558,7 @@ impl<U,P,D,I,PI,SO,const N:usize> BridgeBase for ScalingLayer<U,P,D,I,PI,SO,N>
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar +
              BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI>,
-          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+          D: Device<U> + DeviceScale<U,PI,N>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
@@ -578,7 +578,7 @@ impl<U,P,D,I,PI,SO,const N:usize> Bridge for ScalingLayer<U,P,D,I,PI,SO,N>
              PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar +
              BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI> + Bridge,
-      D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+      D: Device<U> + DeviceScale<U,PI,N>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       I: Debug + Send + Sync,
       PI: Debug + BatchDataType + 'static,
@@ -600,7 +600,7 @@ impl<U,P,D,I,PI,SO,const N:usize> BridgeRepr for ScalingLayer<U,P,D,I,PI,SO,N>
              InputTensorScalar + OutputTensorScalar +
              BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI> +
              BridgeRepr<RepresentationOutput=PI>,
-          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+          D: Device<U> + DeviceScale<U,PI,N>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + 'static,
@@ -625,7 +625,7 @@ impl<U,P,D,I,PI,SO,const N:usize> BatchBridge for ScalingLayer<U,P,D,I,PI,SO,N>
              BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI> + Bridge +
              BatchBridge +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
-      D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+      D: Device<U> + DeviceScale<U,PI,N>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       I: Debug + Send + Sync + BatchDataType,
       PI: Debug + BatchDataType + 'static,
@@ -649,7 +649,7 @@ impl<U,P,D,I,PI,SO,const N:usize> BatchBridgeRepr for ScalingLayer<U,P,D,I,PI,SO
              BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI> + BridgeRepr<RepresentationOutput=PI> +
              BatchBridgeRepr +
              BatchForwardBase<BatchInput=<I as BatchDataType>::Type,BatchOutput=<PI as BatchDataType>::Type>,
-          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+          D: Device<U> + DeviceScale<U,PI,N>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync + BatchDataType,
           PI: Debug + BatchDataType + 'static,
@@ -674,7 +674,7 @@ impl<U,P,D,I,PI,SO,const N:usize> ScalingLayerInstantiation<U,P,D,I,PI,SO,N> for
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType,
           SO: Debug + BatchDataType,
-          D: Device<U> + DeviceScale<U,PI,N,Scale=PI>,
+          D: Device<U> + DeviceScale<U,PI,N>,
           <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <SO as BatchDataType>::Type: Debug + BatchSize + 'static {
     fn instantiation(parent: P, device: &D)

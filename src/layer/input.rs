@@ -10,7 +10,7 @@ use crate::device::input::DeviceInput;
 use crate::device::scale::DeviceScale;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight, InputMax, PreTrainBase, Bridge, BatchBridge, BackwardBase, BatchBackwardBase, BridgeBase, BridgeRepr, BatchBridgeRepr};
-use crate::mapper::{BatchIdentityMapper, BatchInternalReprMapper, IdentityMapper, InternalReprMapper};
+use crate::mapper::{BatchIdentityMapper, BatchInternalReprMapper, BatchScalingMapper, IdentityMapper, InternalReprMapper, ScalingMapper};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 pub struct InputLayer<U,O,LI,D>
@@ -562,6 +562,7 @@ pub struct QuantizedInputLayer<U,O,LI,D,const M:usize,const N:usize>
     u:PhantomData<U>,
     o:PhantomData<O>,
     l:PhantomData<LI>,
+    scale:f32,
     device:D
 }
 impl<U,O,LI,D,const M: usize,const N:usize> InputTensorScalar for QuantizedInputLayer<U,O,LI,D,M,N>
@@ -589,6 +590,7 @@ impl<U,O,LI,D,const M: usize,const N:usize> QuantizedInputLayer<U,O,LI,D,M,N>
             u:PhantomData::<U>,
             o:PhantomData::<O>,
             l:PhantomData::<LI>,
+            scale: 1. / M as f32,
             device:device.clone()
         })
     }
@@ -816,17 +818,22 @@ impl<U,O,LI,D,const M: usize,const N:usize> Bridge for QuantizedInputLayer<U,O,L
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           LI: Debug + BatchDataType + 'static,
-          D: Device<U> + DeviceInput<U,O> + DeviceBridge<U,f32,<D as DeviceInput<U,O>>::Output,LI>,
+          D: Device<U> + DeviceInput<U,O> +
+             DeviceBridge<U,f32,<D as DeviceInput<U,O>>::Output,LI> + DeviceScale<f32,LI,N>,
           O: Debug + BatchDataType + Ones + 'static,
           <O as BatchDataType>::Type: Debug + 'static,
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <D as DeviceInput<U,O>>::Output: Debug + BatchDataType + 'static,
           <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static {
-    type RealMapper<'a> = InternalReprMapper<'a,U,f32,<D as DeviceInput<U,O>>::Output,LI,D,N>
+    type RealMapper<'a> = ScalingMapper<'a,f32,<D as DeviceInput<U,O>>::Output,LI,D,N>
         where Self: 'a;
-    fn as_real<'a>(&'a self, input: &'a <D as DeviceInput<U,O>>::Output) -> Result<Self::RealMapper<'a>, EvaluateError>
+    fn as_real<'a>(&'a self, input: &'a <D as DeviceInput<U,O>>::Output)
+        -> Result<Self::RealMapper<'a>,EvaluateError>
         where Self: 'a {
-        InternalReprMapper::new(&self.device,input)
+
+        let o = self.device.bridge_forward(input)?;
+
+        ScalingMapper::new(&self.device,input,&o,self.scale)
     }
 }
 impl<U,O,LI,D,const M: usize,const N:usize> BridgeRepr for QuantizedInputLayer<U,O,LI,D,M,N>
@@ -858,12 +865,13 @@ impl<U,O,LI,D,const M: usize,const N:usize> BatchBridge for QuantizedInputLayer<
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <D as DeviceInput<U,O>>::Output: Debug + BatchDataType + 'static,
           <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static {
-    type BatchRealMapper<'a> = BatchInternalReprMapper<'a,U,f32,<D as DeviceInput<U,O>>::Output,LI,D,N>
-        where Self: 'a;
-    fn batch_as_real<'a>(&'a self, input: &'a <<D as DeviceInput<U,O>>::Output as BatchDataType>::Type)
-                         -> Result<Self::BatchRealMapper<'a>,EvaluateError>
+    type BatchRealMapper<'a> = BatchScalingMapper<'a,f32,<D as DeviceInput<U, O>>::Output,LI,D,N>;
+    fn batch_as_real<'a>(&'a self, input: &'a <<D as DeviceInput<U, O>>::Output as BatchDataType>::Type)
+        -> Result<Self::BatchRealMapper<'a>,EvaluateError>
         where Self: 'a {
-        Ok(BatchInternalReprMapper::new(&self.device,input)?)
+        let o = self.device.batch_bridge_forward(input)?;
+
+        Ok(BatchScalingMapper::new(&self.device,input,&o,self.scale)?)
     }
 }
 impl<U,O,LI,D,const M: usize,const N:usize> BatchBridgeRepr for QuantizedInputLayer<U,O,LI,D,M,N>

@@ -1374,9 +1374,9 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
             ).assume();
         }
 
-        let scale = scale / (1 << shift) as f32;
-        
-        let scale_input = scale_input / (1 << shift) as f32;
+        let scale = scale * (1 << shift) as f32;
+
+        let scale_input = scale_input * (1 << shift) as f32;
 
         Ok((scale,shift,scale_input,next_input_max,qunits,qbias))
     }

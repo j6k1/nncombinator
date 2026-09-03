@@ -1835,8 +1835,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchBackward<f32>
           for<'a> &'a <OP as Optimizer<f32,D>>::InternalType: From<&'a BC>,
           for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut C>,
           for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut BC>,
-          for<'a> <P as BatchBridge>::BatchRealMapper<'a>: Deref<Target=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchRealInput>,
-{
+          for<'a> <P as BatchBridge>::BatchRealMapper<'a>: Deref<Target=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchRealInput> {
     fn batch_backward(&mut self, input: Self::BatchLossInput, stack: Self::BatchOutStack)
         -> Result<(<Self as BatchBackwardBase>::BatchLossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         let (s, _) = stack.pop();

@@ -54,6 +54,15 @@ impl<'a,T> ShieldSlice<'a,T> {
         self.raw.as_chunks_mut()
     }
 }
+impl<'data,T> IntoParallelIterator for &'data mut ShieldSlice<'data,T>
+    where T: Send + Sync + 'data {
+    type Iter = rayon::slice::IterMut<'data,T>;
+    type Item = &'data mut T;
+
+    fn into_par_iter(self) -> Self::Iter {
+        <&mut [T]>::into_par_iter(self.raw)
+    }
+}
 pub trait Ones {
     fn ones() -> Self;
 }

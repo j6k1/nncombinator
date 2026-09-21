@@ -27,7 +27,7 @@ fn test_mnist_for_quntization_cpu() {
 
     let device = DeviceCpu::new().unwrap();
 
-    let net:QuantizedInputLayer<i16,Arr<i16,{ 28*28 }>,_,_,255,{ 28*28 }> = QuantizedInputLayer::new(&device).unwrap();
+    let net:QuantizedInputLayer<i8,Arr<i8,{ 28*28 }>,_,_,127,{ 28*28 }> = QuantizedInputLayer::new(&device).unwrap();
 
     let optimizer_builder = AdamWBuilder::new(&device).lr(0.0001).weight_decay(0.00001);
 
@@ -40,7 +40,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_backward(&l);
         assert_batch_pre_train(&l);
 
-        QuantizedLinearLayerBuilder::<i8,i16,{ 28*28 },512>::new().build(l,&device,
+        QuantizedLinearLayerBuilder::<i8,i8,{ 28*28 },512>::new().build(l,&device,
                                                          || n1.sample(&mut rnd), || 0.,
                                                          &optimizer_builder
         ).unwrap()
@@ -65,7 +65,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_pre_train(&l);
         assert_batch_loss(&l);
 
-        QuantizedLinearLayerBuilder::<i8,i16,512,256>::new().build(l,&device,
+        QuantizedLinearLayerBuilder::<i8,i8,512,256>::new().build(l,&device,
                                                    || n2.sample(&mut rnd), || 0.,
                                                    &optimizer_builder
         ).unwrap()
@@ -90,7 +90,7 @@ fn test_mnist_for_quntization_cpu() {
         assert_batch_pre_train(&l);
         assert_batch_loss(&l);
 
-        QuantizedLinearLayerBuilder::<i8,i16,256, 10>::new().build(l, &device,
+        QuantizedLinearLayerBuilder::<i8,i8,256, 10>::new().build(l, &device,
                                                             || n3.sample(&mut rnd), || 0.,
                                                             &optimizer_builder
         ).unwrap()
@@ -174,10 +174,10 @@ fn test_mnist_for_quntization_cpu() {
 
                 let n = *n;
 
-                let mut input = Arr::<i16, 784>::new();
+                let mut input = Arr::<i8, 784>::new();
 
                 for (it, &p) in input.iter_mut().zip(pixels) {
-                    *it = p as i16;
+                    *it = (p / 2) as i8;
                 }
 
                 let mut expected = Arr::new();
@@ -185,7 +185,7 @@ fn test_mnist_for_quntization_cpu() {
                 expected[n as usize] = 1.0;
 
                 (expected, input)
-            }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<i16, 784>>::new(), ), |mut acc, (e, i)| {
+            }).fold((Vec::<Arr<f32, 10>>::new(), Vec::<Arr<i8, 784>>::new(), ), |mut acc, (e, i)| {
                 acc.0.push(e);
                 acc.1.push(i);
                 acc
@@ -233,10 +233,10 @@ fn test_mnist_for_quntization_cpu() {
 
         let n = *n;
 
-        let mut input = Arr::<i16, 784>::new();
+        let mut input = Arr::<i8, 784>::new();
 
         for (it, &p) in input.iter_mut().zip(pixels) {
-            *it = p as i16;
+            *it = (p / 2) as i8;
         }
 
         let r = net.forward_all(input).unwrap();

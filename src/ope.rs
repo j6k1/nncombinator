@@ -72,6 +72,12 @@ impl Max for i16 {
         (*self).max(*other)
     }
 }
+impl Max for i8 {
+    #[inline]
+    fn max(&self,other:&i8) -> i8 {
+        (*self).max(*other)
+    }
+}
 /// Trait to calculate the maximum value defined for the type
 pub trait MaxValue {
     fn max_value() -> Self;

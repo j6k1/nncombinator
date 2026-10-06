@@ -1,7 +1,7 @@
 //! Definition and implementation of optimizers to be used during training
 
 use std::marker::PhantomData;
-use crate::device::{Device, DeviceCpu};
+use crate::device::{Device, DeviceCpu, DeviceSimd};
 use crate::arr::ShieldSlice;
 use crate::error::{ModelLoadError, OptimizerBuildError, PersistenceError, TrainingError};
 use crate::scheduler::{Scheduler, IdentityLR};
@@ -2229,6 +2229,101 @@ impl<U,SD> Optimizer<U,DeviceCpu> for AdamW<U,DeviceCpu,SD>
         Ok(())
     }
 }
+impl<U> AdamW<U,DeviceSimd,IdentityLR>
+where U: Default + Clone + Copy + Debug + FromPrimitive +
+Send + Sync + 'static {
+    /// Create an instance of AdamW
+    /// # Arguments
+    /// * `size` - input size
+    pub fn new(device:&DeviceSimd,size:usize) -> AdamW<U,DeviceSimd,IdentityLR> {
+        Self::with_lr(device,size,U::from_f64(0.001f64).expect("Error in type conversion from f64."))
+    }
+
+    /// Create an instance of AdamW with Learning rate
+    /// # Arguments
+    /// * `size` - input size
+    /// * `lr` - Learning rate
+    pub fn with_lr(device:&DeviceSimd,size:usize,lr:U) -> AdamW<U,DeviceSimd,IdentityLR> {
+        AdamW::<U,DeviceSimd,IdentityLR>::with_params(device,size,
+                                                      lr,
+                                                      U::default(),
+                                                      U::from_f64(0.9f64).expect("Error in type conversion from f64."),
+                                                      U::from_f64(0.999f64).expect("Error in type conversion from f64."),
+                                                      IdentityLR)
+    }
+}
+impl<U,SD> AdamW<U,DeviceSimd,SD>
+where U: Default + Clone + Copy + Debug + FromPrimitive +
+Send + Sync + 'static,
+      SD: Scheduler<U> + Clone {
+    /// Create an instance of AdamW with additional parameters other than the default values
+    /// # Arguments
+    /// * `size` - input size
+    /// * `lr` - Learning rate
+    /// * `b1` - beta1
+    /// * `b2` - beta2
+    pub fn with_params(_:&DeviceSimd,size:usize,lr:U,weight_decay:U,b1:U,b2:U, scheduler: SD) -> AdamW<U,DeviceSimd,SD> {
+        AdamW {
+            d:PhantomData::<DeviceSimd>,
+            size:size,
+            lr:lr,
+            weight_decay:weight_decay,
+            mt:vec![U::default();size].into_boxed_slice(),
+            vt:vec![U::default();size].into_boxed_slice(),
+            b1:b1,
+            b2:b2,
+            b1t:b1,
+            b2t:b2,
+            eps:U::from_f64(1e-8f64).expect("Error in type conversion from f64."),
+            scheduler
+        }
+    }
+}
+impl<U,SD> Optimizer<U,DeviceSimd> for AdamW<U,DeviceSimd,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
+             One + Sqrt +
+             Send + Sync + 'static,
+          SD: Scheduler<U> {
+    type InternalType = [U];
+    type InternalUpdateType<'a> = ShieldSlice<'a,U>;
+
+    #[inline]
+    fn update<'a>(&mut self, e: &'a [U], w: Self::InternalUpdateType<'a>) -> Result<(),TrainingError> {
+        let mut w = w;
+        let a = self.lr;
+        let weight_decay = self.weight_decay;
+        let b1 = self.b1;
+        let b2 = self.b2;
+        let b1t = self.b1t;
+        let b2t = self.b2t;
+
+        for ((w,&e),(mt,vt)) in w.iter_mut().zip(e.iter()).zip(self.mt.iter_mut().zip(self.vt.iter_mut())) {
+            *w = *w - weight_decay * *w;
+
+            *mt = b1 * *mt + (U::one() - self.b1) * e;
+            *vt = b2 * *vt + (U::one() - self.b2) * e * e;
+
+            *w = *w - a * (*mt / (U::one() - b1t)) / ((*vt / (U::one() - b2t)) + self.eps).sqrt();
+        }
+
+        self.b1t = b1t * b1;
+        self.b2t = b2t * b2;
+
+        Ok(())
+    }
+
+    fn on_step(&mut self, step: usize) -> Result<(),TrainingError> {
+        self.lr = self.scheduler.schedule(self.lr, step)?;
+        Ok(())
+    }
+
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.lr = self.scheduler.schedule_frequently(self.lr, step, frequently_step)?;
+        Ok(())
+    }
+}
 #[cfg(feature = "cuda")]
 impl<U,A> AdamW<U,DeviceGpu<A>,IdentityLR>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
@@ -2338,6 +2433,13 @@ impl<U,SD> OptimizerState<U,DeviceCpu> for AdamW<U,DeviceCpu,SD>
           DeviceCpu: Device<U> {
     type Type = Box<[U]>;
 }
+impl<U,SD> OptimizerState<U,DeviceSimd> for AdamW<U,DeviceSimd,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          SD: Scheduler<U>,
+          DeviceSimd: Device<U> {
+    type Type = Box<[U]>;
+}
 #[cfg(feature = "cuda")]
 impl<U,A,SD> OptimizerState<U,DeviceGpu<A>> for AdamW<U,DeviceGpu<A>,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
@@ -2397,6 +2499,86 @@ impl<T,U,SD> Persistence<T,Linear> for AdamW<U,DeviceCpu,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
+          SD: Scheduler<U> {
+    fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        for &mt in self.mt.iter() {
+            persistence.write(mt)?;
+        }
+
+        for &vt in self.vt.iter() {
+            persistence.write(vt)?;
+        }
+
+        persistence.write(self.b1t)?;
+        persistence.write(self.b2t)?;
+
+        Ok(())
+    }
+
+    fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
+        for mt in self.mt.iter_mut() {
+            *mt = persistence.read()?;
+        }
+
+        for vt in self.vt.iter_mut() {
+            *vt = persistence.read()?;
+        }
+
+        self.b1t = persistence.read()?;
+        self.b2t = persistence.read()?;
+
+        Ok(())
+    }
+}
+impl<U,SD> Persistence<TextFilePersistence,Specialized> for AdamW<U,DeviceSimd,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static + FromStr,
+          SD: Scheduler<U>,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        persistence.write_units_start();
+
+        for &mt in self.mt.iter() {
+            persistence.write(mt);
+        }
+
+        persistence.write_units_start();
+
+        for &vt in self.vt.iter() {
+            persistence.write(vt);
+        }
+
+        persistence.write_units_start();
+
+        persistence.write(self.b1t);
+
+        persistence.write_units_start();
+
+        persistence.write(self.b2t);
+
+        Ok(())
+    }
+
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
+        for mt in self.mt.iter_mut() {
+            *mt = persistence.read()?;
+        }
+
+        for vt in self.vt.iter_mut() {
+            *vt = persistence.read()?;
+        }
+
+        self.b1t = persistence.read()?;
+        self.b2t = persistence.read()?;
+
+        Ok(())
+    }
+}
+impl<T,U,SD> Persistence<T,Linear> for AdamW<U,DeviceSimd,SD>
+    where T: LinearPersistence<U>,
+          U: Default + Clone + Copy + Debug + FromPrimitive +
+          Send + Sync + 'static,
           SD: Scheduler<U> {
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         for &mt in self.mt.iter() {
@@ -2665,4 +2847,16 @@ impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<A>> for AdamWBuilder<U,DeviceGpu<A>,SD
         AdamW::<_,DeviceGpu<A>,SD>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2,self.scheduler.clone())
     }
 }
+impl<U,SD> OptimizerBuilder<U,DeviceSimd> for AdamWBuilder<U,DeviceSimd,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          SD: Scheduler<U> + Clone,
+          AdamW<U,DeviceSimd,SD>: Optimizer<U,DeviceSimd> {
+    type Output = AdamW<U,DeviceSimd,SD>;
+
+    fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
+        Ok(AdamW::<_,DeviceSimd,SD>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2,self.scheduler.clone()))
+    }
+}
+
 

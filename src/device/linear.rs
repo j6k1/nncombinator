@@ -1188,7 +1188,6 @@ impl<I,A,const NI: usize, const NO: usize> DeviceLinear<f64,CudaTensor2dPtr<f64,
         self.reduce(loss)
     }
 }
-
 /// Trait that defines the implementation of various computational processes in the differentially applicable linear layer
 pub trait DeviceDiffLinear<'a,U,I,T,const NI: usize,const NO: usize>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static, {
@@ -1295,6 +1294,7 @@ impl<W,const NI: usize,const NO: usize> DeviceQuantizedLinearBase<W,Arr2<W,NI,NO
         Ok(bias)
     }
 }
+
 impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,NI,NO>,Arr<f32,NO>,I,NI,NO> for DeviceCpu
     where U: Default + Clone + Copy + Debug +
              Add<Output=U> +  Mul<Output=U> +
@@ -1484,5 +1484,187 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
     #[inline]
     fn batch_backward_bias_gradient<'a>(&self, loss: &'a SerializedVec<f32,Arr<f32,NO>>) -> Result<Arr<f32,NO>,TrainingError> {
         Ok(self.reduce(&loss)?)
+    }
+}
+pub mod simd {
+    use std::fmt::Debug;
+    use std::ops::{Add, AddAssign};
+    use rayon::prelude::{IndexedParallelIterator,IntoParallelRefIterator};
+    use rayon::prelude::ParallelIterator;
+    use crate::arr::{Arr, Arr2, ArrView, IntoConverter, SerializedVec, SerializedVecView};
+    use crate::device::{DeviceReduce, DeviceSimd};
+    use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
+    use crate::layer::{BatchDataType, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, TensorSize};
+    use simdoperator::error::InstantiationError;
+    use simdoperator::{ColumnMajorMatrix, Matrix, MatrixMut, MatrixView, OwnedColumnMajorMatrix, OwnedMatrix, OwnedVector, Vector, VectorMut};
+    use simdoperator::backend::autoselect::AutoSelect;
+    use simdoperator::traits::{BindBackend, Product, ToColumnMajor};
+    use crate::device::linear::DeviceLinear;
+    use crate::mem::AsRawSlice;
+
+    impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,I,NI,NO> for DeviceSimd
+    where U: Default + Clone + Copy + Add<U,Output=U> + Debug + Send + Sync + 'static,
+          I: BatchDataType + InputTensorSize<NI> + InputTensorScalar + From<Arr<U,NI>> + Debug + 'static,
+          I: TryFrom<Box<[U]>,Error=TypeConvertError>,
+          <I as BatchDataType>::Type: Debug + 'static,
+          <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
+          SerializedVec<U,Arr<U,NI>>: IntoConverter,
+          Arr<U,NO>: InputTensorScalar + OutputTensorScalar + OutputTensorSize<NO>,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize,
+          Box<[U]>: From<OwnedMatrix<U,NI,NO>>,
+          Box<[U]>: From<OwnedVector<U,NI>>,
+          Box<[U]>: From<OwnedVector<U,NO>>,
+          for<'a> &'a OwnedVector<U,NO>: BindBackend<'a,Output<AutoSelect>=Vector<'a,U,NO>>,
+          for<'a> ColumnMajorMatrix<'a,U,NI,NO>: TryFrom<&'a [U],Error=InstantiationError>,
+          for<'a> ColumnMajorMatrix<'a,U,NI,NO>: From<&'a OwnedColumnMajorMatrix<U,NI,NO>>,
+          for<'a> ColumnMajorMatrix<'a,U,NO,NI>: TryFrom<&'a [U],Error=InstantiationError>,
+          for<'a> ArrView<'a,U,NI>: From<&'a I>,
+          for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+          for<'a> Vector<'a,U,NI>: TryFrom<&'a [U],Error=InstantiationError>,
+          for<'a> Vector<'a,U,NI>: Product<&'a ColumnMajorMatrix<'a,U,NI,NO>,OwnedVector<U,NO>>,
+          for<'a> Vector<'a,U,NO>: TryFrom<&'a [U],Error=InstantiationError>,
+          for<'a> VectorMut<'a,U,NO>: TryFrom<&'a mut [U],Error=InstantiationError>,
+          for<'a> Vector<'a,U,NO>: Product<&'a ColumnMajorMatrix<'a,U,NO,NI>,OwnedVector<U,NI>>,
+          for<'a> Vector<'a,U,NI>: Product<&'a Vector<'a,U,NO>,OwnedMatrix<U,NI,NO>>,
+          for<'a> &'a Vector<'a,U,NO>: Add<&'a Vector<'a,U,NO>,Output=OwnedVector<U,NO>>,
+          for<'a> Matrix<'a,U,NI,NO>: TryFrom<&'a [U],Error=InstantiationError>,
+          for<'a> MatrixView<'a,U,NI,NO>: From<&'a Matrix<'a,U,NI,NO>>,
+          for<'a> MatrixMut<'a,U,NI,NO>: TryFrom<&'a mut [U],Error=InstantiationError>,
+          for<'a> MatrixMut<'a,U,NI,NO>: AddAssign<&'a Matrix<'a,U,NI,NO>>,
+          Self: DeviceReduce<SerializedVec<U,Arr<U,NO>>,Arr<U,NO>,U,NO> {
+        type Output = Arr<U,NO>;
+        type BatchOutput = <Arr<U,NO> as BatchDataType>::Type;
+        type LossOutput = I;
+        type BatchLossOutput = <I as BatchDataType>::Type;
+        #[inline]
+        fn generalization_units(&self, units: &Arr2<U,NI,NO>) -> Result<Arr2<U,NI,NO>, GeneralizationError> {
+            Ok(units.clone())
+        }
+        #[inline]
+        fn generalization_bias(&self, bias: &Arr<U,NO>) -> Result<Arr<U,NO>, GeneralizationError> {
+            Ok(bias.clone())
+        }
+        #[inline]
+        fn specialization_units(&self, units: Arr2<U,NI,NO>) -> Result<Arr2<U,NI,NO>, SpecializationError> {
+            Ok(units)
+        }
+        #[inline]
+        fn specialization_bias(&self, bias: Arr<U,NO>) -> Result<Arr<U,NO>, SpecializationError> {
+            Ok(bias)
+        }
+        #[inline]
+        fn forward_linear<'a>(&self, bias: &Arr<U,NO>, units: &Arr2<U,NI,NO>, input: &'a I) -> Result<Arr<U,NO>, EvaluateError> {
+            let input = ArrView::try_from(input)?;
+            let input = Vector::<U,NI>::try_from(input.as_raw_slice())?;
+            let bias = Vector::<U,NO>::try_from(bias.as_raw_slice())?;
+            let units = Matrix::<U,NI,NO>::try_from(units.as_raw_slice()).map_err(|e| {
+                EvaluateError::from(InstantiationError::from(e))
+            })?.to_column_major();
+
+            Ok(<Box<[U]>>::from(&input.product(&<ColumnMajorMatrix<U,NI,NO>>::from(&units)).bind_auto()? + &bias).try_into()?)
+        }
+
+        #[inline]
+        fn backward_linear<'a>(&self, units: &Arr2<U,NI,NO>, input: &'a Arr<U,NO>) -> Result<I, TrainingError> {
+            let input = ArrView::try_from(input)?;
+            let input = Vector::<U,NO>::try_from(input.as_raw_slice())?;
+            let units = ColumnMajorMatrix::<U,NO,NI>::try_from(units.as_raw_slice())?;
+            let output = input.product(&units);
+
+            Ok(<Box<[U]>>::from(output).try_into()?)
+        }
+
+        #[inline]
+        fn backward_weight_gradient<'a>(&self, o: &'a I, loss: &'a Arr<U,NO>) -> Result<Arr2<U,NI,NO>, TrainingError> {
+            let o = ArrView::try_from(o)?;
+            let o = o.as_raw_slice();
+            let o = Vector::<U,NI>::try_from(o)?;
+            let loss = ArrView::try_from(loss)?;
+            let loss = Vector::<U,NO>::try_from(loss.as_raw_slice())?;
+
+            Ok(<Box<[U]>>::from(o.product(&loss)).to_vec().try_into()?)
+        }
+
+        fn backward_bias_weight_gradient<'a>(&self, loss: Self::Output) -> Result<Arr<U,NO>, TrainingError> {
+            Ok(loss.into())
+        }
+        #[inline]
+        fn batch_backward_linear<'a>(&self, units: &Arr2<U,NI,NO>, input: &'a SerializedVec<U,Arr<U,NO>>)
+                                     -> Result<<I as BatchDataType>::Type, TrainingError> {
+            let units = ColumnMajorMatrix::<U,NO,NI>::try_from(units.as_raw_slice())?;
+
+            Ok(SerializedVec::<U,Arr<U,NI>>::from(input.par_iter().map(|l| {
+                let l = Vector::<U,NO>::try_from(l.as_raw_slice())?;
+                let output = l.product(&units);
+
+                <Box<[U]>>::from(output).try_into().map_err(|e| TrainingError::from(e))
+            }).collect::<Result<Vec<Arr<U,NI>>,TrainingError>>()?).into_converter().try_into()?)
+        }
+
+        #[inline]
+        fn batch_forward_linear<'a>(&self,bias: &Arr<U,NO>, units: &Arr2<U,NI,NO>, input: &'a <I as BatchDataType>::Type)
+                                    -> Result<SerializedVec<U,Arr<U,NO>>,TrainingError> {
+            let units = Matrix::<U,NI,NO>::try_from(units.as_raw_slice()).map_err(|e| {
+                EvaluateError::from(InstantiationError::from(e))
+            })?.to_column_major();
+
+            Ok(SerializedVecView::<'a,U,Arr<U,NI>>::try_from(input)?.par_iter().map(|input| {
+                let input = ArrView::try_from(input)?;
+                let input = Vector::<U,NI>::try_from(input.as_raw_slice())?;
+                let bias = Vector::<U,NO>::try_from(bias.as_raw_slice())?;
+
+                Ok(<Box<[U]>>::from(&input.product(&<ColumnMajorMatrix<U,NI,NO>>::from(&units)).bind_auto()? + &bias).try_into()?)
+            }).collect::<Result<Vec<Arr<U,NO>>,EvaluateError>>()?.into())
+        }
+
+        #[inline]
+        fn batch_backward_weight_gradient<'a>(&self, o: &'a <I as BatchDataType>::Type, loss: &'a SerializedVec<U,Arr<U,NO>>)
+                                              -> Result<Arr2<U,NI,NO>, TrainingError> {
+            Ok(SerializedVecView::<'a,U,Arr<U,NI>>::try_from(o)?.par_iter().zip(loss.par_iter()).map(|(o,l)| {
+                let o = o.as_raw_slice();
+                let o = Vector::<U,NI>::try_from(o)?;
+                let loss = Vector::<U,NO>::try_from(l.as_raw_slice())?;
+
+                <Box<[U]>>::from(o.product(&loss)).to_vec().try_into().map_err(|e| TrainingError::from(e))
+            }).fold(|| Ok(vec![U::default();NI*NO]), | acc, g | {
+                acc.and_then(|mut acc| {
+                    g.and_then(move |g:Arr2<U,NI,NO>| {
+                        {
+                            let mut acc = MatrixMut::<U,NI,NO>::try_from(acc.as_mut())?;
+
+                            let g = Matrix::try_from(g.as_raw_slice()).map_err(|e| {
+                                TrainingError::from(e)
+                            })?;
+
+                            acc += &g;
+                        }
+
+                        Ok(acc)
+                    })
+                })
+            }).reduce(|| Ok(vec![U::default();NI*NO]), | acc, g | {
+                acc.and_then(|mut acc| {
+                    g.and_then(move |g| {
+                        {
+                            let mut acc = MatrixMut::<U,NI,NO>::try_from(acc.as_mut())?;
+
+                            let g = Matrix::try_from(&g).map_err(|e| {
+                                TrainingError::from(e)
+                            })?;
+
+                            acc += &g;
+                        }
+
+                        Ok(acc)
+                    })
+                })
+            })?.try_into()?)
+        }
+
+        #[inline]
+        fn batch_linear_reduce<'a>(&self, loss: &'a SerializedVec<U,Arr<U,NO>>) -> Result<Arr<U,NO>,TrainingError> {
+            self.reduce(loss)
+        }
     }
 }

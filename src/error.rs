@@ -10,6 +10,7 @@ use std::fmt::{Debug};
 use std::num::{ParseFloatError, ParseIntError};
 #[cfg(feature = "cuda")]
 use cuda_runtime_sys::cudaError_t;
+use simdoperator::error::InstantiationError;
 use try_from_primitive::error::FromPrimitiveError;
 
 /// Errors made during neural network training
@@ -58,6 +59,8 @@ pub enum TrainingError {
     ModelLoadError(ModelLoadError),
     /// Error in specialization
     SpecializationError(SpecializationError),
+    /// An error that occurs during the instantiation of a SIMD arithmetic backend.
+    SimdInstantiationError(InstantiationError),
     /// An error that will never be instantiated.
     /// Used in implementations where the result of `TryFrom` and similar methods will never fail.
     Infallible(Infallible)
@@ -87,6 +90,7 @@ impl fmt::Display for TrainingError {
             TrainingError::FromPrimitiveError(e) => write!(f,"{}",e),
             TrainingError::ModelLoadError(e) => write!(f,"{}",e),
             TrainingError::SpecializationError(e) => write!(f,"{}",e),
+            TrainingError::SimdInstantiationError(e) => write!(f,"{}",e),
             TrainingError::Infallible(_) => unreachable!(),
         }
     }
@@ -116,6 +120,7 @@ impl error::Error for TrainingError {
             TrainingError::FromPrimitiveError(_) => "Conversion from primitive type failed.",
             TrainingError::ModelLoadError(_) => "An error occurred when loading the model.",
             TrainingError::SpecializationError(_) => "Specialization failed.",
+            TrainingError::SimdInstantiationError(_) => "SIMD instantiation failed.",
             TrainingError::Infallible(_) => unreachable!(),
         }
     }
@@ -144,6 +149,7 @@ impl error::Error for TrainingError {
             TrainingError::FromPrimitiveError(e) => Some(e),
             TrainingError::ModelLoadError(e) => Some(e),
             TrainingError::SpecializationError(e) => Some(e),
+            TrainingError::SimdInstantiationError(e) => Some(e),
             TrainingError::Infallible(_) => None,
         }
     }
@@ -265,6 +271,11 @@ impl From<ModelLoadError> for TrainingError {
 impl From<SpecializationError> for TrainingError {
     fn from(err: SpecializationError) -> TrainingError {
         TrainingError::SpecializationError(err)
+    }
+}
+impl From<InstantiationError> for TrainingError {
+    fn from(err: InstantiationError) -> TrainingError {
+        TrainingError::SimdInstantiationError(err)
     }
 }
 impl From<Infallible> for TrainingError {
@@ -498,6 +509,8 @@ pub enum EvaluateError {
     TypeConvertError(TypeConvertError),
     /// Error raised if cast to fixed-length array fails
     TryFromSliceError(TryFromSliceError),
+    /// An error that occurs during the instantiation of a SIMD arithmetic backend.
+    SimdInstantiationError(InstantiationError),
     /// An error that will never be instantiated.
     /// Used in implementations where the result of `TryFrom` and similar methods will never fail.
     Infallible(Infallible)
@@ -518,6 +531,7 @@ impl fmt::Display for EvaluateError {
             EvaluateError::TypeCastError(s) => write!(f,"{}",s),
             EvaluateError::TypeConvertError(e) => write!(f,"{}",e),
             EvaluateError::TryFromSliceError(e) => write!(f,"{}",e),
+            EvaluateError::SimdInstantiationError(e) => write!(f,"{}",e),
             EvaluateError::Infallible(_) => unreachable!(),
         }
     }
@@ -538,6 +552,7 @@ impl error::Error for EvaluateError {
             EvaluateError::TypeCastError(_) => "Typecast failed.",
             EvaluateError::TypeConvertError(_) => "Type covert failed.",
             EvaluateError::TryFromSliceError(_) => "Conversion to fixed-length array failed.",
+            EvaluateError::SimdInstantiationError(_) => "An error occurred during the instantiation of a SIMD arithmetic backend.",
             EvaluateError::Infallible(_) => unreachable!(),
         }
     }
@@ -557,6 +572,7 @@ impl error::Error for EvaluateError {
             EvaluateError::TypeCastError(_) => None,
             EvaluateError::TypeConvertError(e) => Some(e),
             EvaluateError::TryFromSliceError(e) => Some(e),
+            EvaluateError::SimdInstantiationError(e) => Some(e),
             EvaluateError::Infallible(_) => unreachable!(),
         }
     }
@@ -603,6 +619,11 @@ impl From<InvalidStateError> for EvaluateError {
 impl From<TryFromSliceError> for EvaluateError {
     fn from(err: TryFromSliceError) -> EvaluateError {
         EvaluateError::TryFromSliceError(err)
+    }
+}
+impl From<InstantiationError> for EvaluateError {
+    fn from(err: InstantiationError) -> EvaluateError {
+        EvaluateError::SimdInstantiationError(err)
     }
 }
 impl From<Infallible> for EvaluateError {

@@ -10,7 +10,7 @@ pub mod bridge;
 pub mod clone;
 
 use std::fmt::Debug;
-use std::ops::{Add, Div};
+use std::ops::{Add, AddAssign, Div};
 use num_traits::FromPrimitive;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 #[cfg(feature = "cuda")]
@@ -25,10 +25,12 @@ use rcublas::api::PointerMode;
 use rcudnn::{Cudnn};
 #[cfg(feature = "cuda")]
 use rcudnn_sys::cudnnHandle_t;
-use crate::arr::{Arr, SerializedVecView};
+use simdoperator::{Vector, VectorMut};
+use simdoperator::error::InstantiationError;
+use crate::arr::{Arr, ArrView, SerializedVecView};
 use crate::error::{TrainingError, TypeConvertError};
 use crate::error::EvaluateError::TypeCastError;
-use crate::mem::AsRawSlice;
+use crate::mem::{AsRawSlice};
 use crate::error::{DeviceError};
 #[cfg(feature = "cuda")]
 use crate::layer::BatchSize;
@@ -112,7 +114,7 @@ impl<T,U> DeviceBatchAveraging<T,U> for DeviceCpu
             format!("Failed to convert batch size type.")
         ))?;
 
-        Ok(input.as_raw_slice().par_iter().cloned().map(|i| i / batch_size).collect::<Vec<U>>().try_into()?)
+        Ok(input.as_raw_slice().iter().cloned().map(|i| i / batch_size).collect::<Vec<U>>().try_into()?)
     }
 }
 impl Clone for DeviceCpu {
@@ -378,5 +380,73 @@ impl<A> Clone for DeviceGpu<A>
             cudnn:self.cudnn.clone(),
             allocator:self.allocator.clone()
         }
+    }
+}
+pub struct DeviceSimd {
+
+}
+impl DeviceSimd {
+    pub fn new() -> Result<DeviceSimd,DeviceError> {
+        Ok(DeviceSimd {
+        })
+    }
+}
+impl<U> Device<U> for DeviceSimd {
+
+}
+impl Clone for DeviceSimd {
+    fn clone(&self) -> DeviceSimd {
+        DeviceSimd {
+        }
+    }
+}
+impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceSimd
+    where U: Default + Clone + Copy + Debug + Send + Sync + Add<Output=U> + 'static,
+          T: BatchSize,
+          [();N]: TensorSize,
+          TrainingError: From<InstantiationError>,
+          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a T,Error=TypeConvertError>,
+          for<'a> ArrView<'a,U,N>: AsRawSlice<U>,
+          for<'a> VectorMut<'a,U,N>: TryFrom<&'a mut [U],Error=InstantiationError> + AddAssign<&'a Vector<'a,U,N>>,
+          for<'a> Vector<'a,U,N>: TryFrom<&'a [U],Error=InstantiationError> {
+    #[inline]
+    fn reduce<'a>(&self, input: &'a T) -> Result<Arr<U,N>,TrainingError> {
+        Ok(SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?.par_iter().fold(|| Ok(vec![U::default();N]), |acc:Result<_,TrainingError>,i| {
+            acc.and_then(|mut acc| {
+                {
+                    let mut acc = VectorMut::try_from(acc.as_mut())?;
+                    let i = Vector::try_from(i.as_raw_slice())?;
+
+                    acc += &i;
+                }
+
+                Ok(acc)
+            })
+        }).reduce(|| Ok(vec![U::default();N]), |acc:Result<_,TrainingError>,i| {
+            acc.and_then(|mut acc| {
+                i.and_then(|i| {
+                    {
+                        let mut acc = VectorMut::try_from(acc.as_mut())?;
+                        let i = Vector::try_from(&i)?;
+
+                        acc += &i;
+                    }
+
+                    Ok(acc)
+                })
+            })
+        })?.try_into()?)
+    }
+}
+impl<T,U> DeviceBatchAveraging<T,U> for DeviceSimd
+    where U: Default + Clone + Copy + Debug + Send + Sync + Div<Output=U> + 'static + FromPrimitive,
+          T: OutputTensorScalar + AsRawSlice<U> + TryFrom<Vec<U>,Error=TypeConvertError> {
+    #[inline]
+    fn batch_averaging<'a>(&self, input: T,batch_size:usize) -> Result<T,TrainingError> {
+        let batch_size = U::from_usize(batch_size).ok_or(TypeCastError(
+            format!("Failed to convert batch size type.")
+        ))?;
+
+        Ok(input.as_raw_slice().iter().cloned().map(|i| i / batch_size).collect::<Vec<U>>().try_into()?)
     }
 }

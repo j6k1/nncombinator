@@ -2,6 +2,7 @@
 
 extern crate libc;
 extern crate try_from_primitive;
+extern crate simdoperator;
 #[cfg(feature = "cuda")]
 extern crate cuda_runtime_sys;
 #[cfg(feature = "cuda")]

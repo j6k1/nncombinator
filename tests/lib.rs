@@ -32,6 +32,8 @@ use rand::{prelude, Rng, SeedableRng};
 use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
+use simdoperator::backend::autoselect::AutoSelect;
+use simdoperator::backend::common::Backend;
 use nncombinator::activation::{ClippedReLuBuilder, LeakyReLuBuilder, ReLuBuilder, SigmoidBuilder, SoftMaxBuilder, SwishBuilder, TanhBuilder};
 use nncombinator::arr::{Arr, DiffArr};
 use nncombinator::device::{DeviceCpu, DeviceGpu, DeviceSimd};
@@ -6177,7 +6179,7 @@ fn test_mnist_for_simd() {
     let n3 = Normal::<f32>::new(0.0, 1f32/(256f32).sqrt()).unwrap();
 
     let device = DeviceCpu::new().unwrap();
-    let device_simd = DeviceSimd::new().unwrap();
+    let device_simd = DeviceSimd::new(AutoSelect::new().unwrap()).unwrap();
 
     let net:InputLayer<f32,Arr<f32,{ 28*28 }>,_,_> = InputLayer::new(&device);
 

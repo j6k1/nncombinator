@@ -5,7 +5,10 @@ use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Deref, Div, Index, IndexMut, Mul, Neg, Sub};
 use std::slice::{IterMut};
 use rayon::iter::{plumbing};
-use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSliceMut};
+use simdoperator::backend::common::Backend;
+use simdoperator::error::InstantiationError;
+use simdoperator::{AccVector, OwnedColumnMajorMatrix, Vector};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize};
@@ -65,6 +68,11 @@ impl<'data,T> IntoParallelIterator for &'data mut ShieldSlice<'data,T>
 }
 pub trait Ones {
     fn ones() -> Self;
+}
+pub trait TryAsSimd<'a,BE> where BE: Backend {
+    type Output<'b> where 'a: 'b, Self: 'a;
+    type Error;
+    fn try_as_simd<'b>(&'b self) -> Result<Self::Output<'b>, Self::Error>;
 }
 /// Fixed-length one-dimensional array implementation
 #[derive(Debug,Eq,PartialEq)]
@@ -289,6 +297,26 @@ impl<T,const N:usize> ToHost<T> for Arr<T,N> where T: Default + Clone + Copy + S
         Ok(self)
     }
 }
+impl<'a,T,BE,const N: usize> TryAsSimd<'a,BE> for &'a Arr<T,N>
+    where T: Default + Clone + Copy + Send + 'static,
+          BE: Backend {
+    type Output<'b> = Vector<'b,T,N,BE> where 'a: 'b, Self: 'a;
+    type Error = InstantiationError;
+
+    fn try_as_simd<'b>(&'b self) -> Result<Self::Output<'b>, Self::Error> {
+        Ok(Vector::<'b,T,N,BE>::try_from(self.as_raw_slice())?)
+    }
+}
+impl<'a,SS,SD,BE,const N: usize> From<Vector<'a,SS,N,BE>> for Arr<SD,N>
+    where SS: Default + Clone + Copy + Send,
+          SD: Default + Clone + Copy + Send,
+          BE: Backend,
+          AccVector<SD,N,BE>: From<Vector<'a,SS,N,BE>>,
+          Arr<SD,N>: From<Box<[SD]>> {
+    fn from(s: Vector<'a, SS, N, BE>) -> Self {
+        Arr::<SD,N>::from(AccVector::<SD,N,BE>::from(s).into())
+    }
+}
 impl<T,const N:usize> SliceSize for Arr<T,N> where T: Default + Clone + Copy + Send {
     const SIZE: usize = N;
 }
@@ -456,7 +484,8 @@ impl<'a,T,const N1:usize, const N2:usize> Product<&'a Arr2<T,N1,N2>> for &'a Arr
 pub struct Arr2<T,const N1:usize, const N2:usize> where T: Default {
     arr:Box<[T]>
 }
-impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2> where T: Default {
+impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2>
+    where T: Default {
     /// Create an instance of Arr2
     pub fn new() -> Arr2<T,N1,N2> {
         let mut arr = Vec::with_capacity(N1 * N2);
@@ -475,6 +504,45 @@ impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2> where T: Default {
     /// Obtaining a mutable iterator
     pub fn iter_mut<'a>(&'a mut self) -> Arr2IterMut<'a,T,N2> {
         Arr2IterMut(&mut *self.arr)
+    }
+}
+impl<T,const N1:usize, const N2:usize> Arr2<T,N1,N2>
+    where T: Send + Sync + Copy + Default + 'static {
+
+    /// Convert to column major order
+    #[inline(always)]
+    pub fn to_column_major(self) -> ColumnMajorArr2<T,N1,N2> {
+        let mut r = vec![T::default();N2*N1].into_boxed_slice();
+
+        const BLOCK:usize = 32;
+
+        r.par_chunks_exact_mut(N1 * BLOCK).zip(0..(N2 / BLOCK)).for_each(|(r,by)| {
+            for col in (0..((N1 + BLOCK - 1) / BLOCK * BLOCK)).step_by(BLOCK) {
+                for x in 0..BLOCK {
+                    for y in 0..BLOCK {
+                        if col + x >= N1 {
+                            continue;
+                        }
+                        r[y * N1 + (col + x)] = self.arr[(col + x) * N2 + (by * BLOCK + y)];
+                    }
+                }
+            }
+        });
+
+        let by = N2 / BLOCK;
+
+        for col in (0..((N1 + BLOCK - 1) / BLOCK * BLOCK)).step_by(BLOCK) {
+            for x in 0..BLOCK {
+                for y in 0..BLOCK {
+                    if col + x >= N1 || by * BLOCK + y >= N2 {
+                        continue;
+                    }
+                    r[(by * BLOCK + y) * N1 + (col + x)] = self.arr[(col + x) * N2 + (by * BLOCK + y)];
+                }
+            }
+        }
+
+        ColumnMajorArr2 { arr: r }
     }
 }
 impl<T,const N1:usize,const N2:usize> Arr2<T,N1,N2> where T: Default {
@@ -612,6 +680,55 @@ impl<T,const N1:usize,const N2:usize> InputTensorScalar for Arr2<T,N1,N2>
 impl<T,const N1:usize,const N2:usize> OutputTensorScalar for Arr2<T,N1,N2>
     where T: Debug + Default + Clone + Copy + Send {
     type Scalar = T;
+}
+/// Fixed-length 2D array implementation
+#[derive(Debug,Eq,PartialEq)]
+pub struct ColumnMajorArr2<T,const N1:usize, const N2:usize>
+    where T: Default + Clone + Copy + Send {
+    arr:Box<[T]>
+}
+impl<T,const N1:usize, const N2:usize> ColumnMajorArr2<T,N1,N2>
+    where T: Default + Clone + Copy + Send + Sync {
+
+    /// Create an instance of Arr2
+    pub fn new() -> ColumnMajorArr2<T,N1,N2> {
+        let mut arr = Vec::with_capacity(N1 * N2);
+        arr.resize_with(N1*N2,Default::default);
+
+        ColumnMajorArr2 {
+            arr:arr.into_boxed_slice()
+        }
+    }
+}
+impl<T,const N1: usize,const N2: usize> InputTensorScalar for ColumnMajorArr2<T,N1,N2>
+    where T: Default + Clone + Copy + Send + Debug {
+    type Scalar = T;
+}
+impl<T,const N1: usize,const N2: usize> TryFrom<Box<[T]>> for ColumnMajorArr2<T,N1,N2>
+    where T: Default + Clone + Copy + Send {
+    type Error = TypeConvertError;
+
+    fn try_from(arr: Box<[T]>) -> Result<Self, Self::Error> {
+        if arr.len() != N1 * N2 {
+            Err(TypeConvertError::SizeMismatchError(SizeMismatchError(arr.len(),N1 * N2)))
+        } else {
+            Ok(ColumnMajorArr2 {
+                arr: arr
+            })
+        }
+    }
+}
+impl<T,const N1: usize,const N2: usize> From<ColumnMajorArr2<T,N1,N2>> for Box<[T]>
+    where T: Default + Clone + Copy + Send {
+    fn from(value: ColumnMajorArr2<T, N1, N2>) -> Self {
+        value.arr
+    }
+}
+impl<T,const N1: usize,const N2: usize> AsRawSlice<T> for ColumnMajorArr2<T,N1,N2>
+    where T: Default + Clone + Copy + Send {
+    fn as_raw_slice(&self) -> &[T] {
+        &self.arr
+    }
 }
 /// Fixed-length 3D array implementation
 #[derive(Debug,Eq,PartialEq)]
@@ -859,6 +976,16 @@ impl<'a,T,const N:usize> TryFrom<&'a [T]> for ArrView<'a,T,N> where T: Default +
         } else {
             Ok(ArrView { arr: arr })
         }
+    }
+}
+impl<'a,T,BE,const N: usize> TryAsSimd<'a,BE> for ArrView<'a,T,N>
+    where T: Default + Clone + Copy + Send + 'static,
+          BE: Backend + 'static {
+    type Output<'b> = Vector<'b,T,N,BE> where 'a: 'b, Self: 'a;
+    type Error = InstantiationError;
+
+    fn try_as_simd<'b>(&'b self) -> Result<Self::Output<'b>, Self::Error> {
+        Ok(Vector::<'b,T,N,BE>::try_from(self.as_raw_slice())?)
     }
 }
 impl<'a,T,const N:usize> AsRawSlice<T> for ArrView<'a,T,N> where T: Default + Clone {
@@ -1654,6 +1781,20 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
                 u:PhantomData::<U>,
                 t: PhantomData::<Arr<U, N>>
             })
+        }
+    }
+}
+impl<'a,U,T> AsView<'a> for SerializedVec<U,T>
+    where U: Default + Clone + Copy + Send + 'a,
+          T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'a {
+    type ViewType = SerializedVecView<'a,U,T>;
+
+    fn as_view(&'a self) -> SerializedVecView<'a,U,T> {
+        SerializedVecView {
+            arr: &*self.arr,
+            len: self.len,
+            u: PhantomData::<U>,
+            t: PhantomData::<T>
         }
     }
 }

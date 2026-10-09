@@ -26,6 +26,7 @@ use rcudnn::{Cudnn};
 #[cfg(feature = "cuda")]
 use rcudnn_sys::cudnnHandle_t;
 use simdoperator::{Vector, VectorMut};
+use simdoperator::backend::common::Backend;
 use simdoperator::error::InstantiationError;
 use crate::arr::{Arr, ArrView, SerializedVecView};
 use crate::error::{TrainingError, TypeConvertError};
@@ -382,42 +383,44 @@ impl<A> Clone for DeviceGpu<A>
         }
     }
 }
-pub struct DeviceSimd {
-
+pub struct DeviceSimd<BE> where BE: Backend {
+    backend: BE
 }
-impl DeviceSimd {
-    pub fn new() -> Result<DeviceSimd,DeviceError> {
+impl<BE> DeviceSimd<BE> where BE: Backend {
+    pub fn new(backend:BE) -> Result<DeviceSimd<BE>,DeviceError> {
         Ok(DeviceSimd {
+            backend: backend
         })
     }
 }
-impl<U> Device<U> for DeviceSimd {
+impl<U,BE> Device<U> for DeviceSimd<BE> where BE: Backend + Clone {
 
 }
-impl Clone for DeviceSimd {
-    fn clone(&self) -> DeviceSimd {
+impl<BE> Clone for DeviceSimd<BE> where BE: Backend + Clone {
+    fn clone(&self) -> DeviceSimd<BE> {
         DeviceSimd {
+            backend: self.backend.clone()
         }
     }
 }
-impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceSimd
+impl<T,U,BE:Backend,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceSimd<BE>
     where U: Default + Clone + Copy + Debug + Send + Sync + Add<Output=U> + 'static,
           T: BatchSize,
           [();N]: TensorSize,
           TrainingError: From<InstantiationError>,
           for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a T,Error=TypeConvertError>,
           for<'a> ArrView<'a,U,N>: AsRawSlice<U>,
-          for<'a> VectorMut<'a,U,N>: TryFrom<&'a mut [U],Error=InstantiationError> + AddAssign<&'a Vector<'a,U,N>>,
-          for<'a> Vector<'a,U,N>: TryFrom<&'a [U],Error=InstantiationError> {
-    #[inline]
+          for<'a> Vector<'a,U,N>: TryFrom<&'a [U],Error=InstantiationError>,
+          for<'a,'b> VectorMut<'a,U,N>: AddAssign<Vector<'b,U,N>> {
     fn reduce<'a>(&self, input: &'a T) -> Result<Arr<U,N>,TrainingError> {
         Ok(SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?.par_iter().fold(|| Ok(vec![U::default();N]), |acc:Result<_,TrainingError>,i| {
             acc.and_then(|mut acc| {
                 {
-                    let mut acc = VectorMut::try_from(acc.as_mut())?;
+                    let acc: &mut [U] = acc.as_mut();
+                    let mut acc = VectorMut::try_from(acc)?;
                     let i = Vector::try_from(i.as_raw_slice())?;
 
-                    acc += &i;
+                    acc += i;
                 }
 
                 Ok(acc)
@@ -426,10 +429,11 @@ impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceSimd
             acc.and_then(|mut acc| {
                 i.and_then(|i| {
                     {
-                        let mut acc = VectorMut::try_from(acc.as_mut())?;
+                        let acc: &mut [U] = acc.as_mut();
+                        let mut acc = VectorMut::try_from(acc)?;
                         let i = Vector::try_from(&i)?;
 
-                        acc += &i;
+                        acc += i;
                     }
 
                     Ok(acc)
@@ -438,7 +442,7 @@ impl<T,U,const N:usize> DeviceReduce<T,Arr<U,N>,U,N> for DeviceSimd
         })?.try_into()?)
     }
 }
-impl<T,U> DeviceBatchAveraging<T,U> for DeviceSimd
+impl<T,U,BE: Backend + Clone> DeviceBatchAveraging<T,U> for DeviceSimd<BE>
     where U: Default + Clone + Copy + Debug + Send + Sync + Div<Output=U> + 'static + FromPrimitive,
           T: OutputTensorScalar + AsRawSlice<U> + TryFrom<Vec<U>,Error=TypeConvertError> {
     #[inline]

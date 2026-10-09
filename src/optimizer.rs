@@ -9,6 +9,7 @@ use std::str::FromStr;
 use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Div, Mul, Sub};
 use num_traits::FromPrimitive;
+use simdoperator::backend::common::Backend;
 #[cfg(feature = "cuda")]
 use crate::cuda::{CudaMutPtr, CudaPtr, kernel, Kernel, WriteMemory};
 #[cfg(feature = "cuda")]
@@ -2229,13 +2230,14 @@ impl<U,SD> Optimizer<U,DeviceCpu> for AdamW<U,DeviceCpu,SD>
         Ok(())
     }
 }
-impl<U> AdamW<U,DeviceSimd,IdentityLR>
-where U: Default + Clone + Copy + Debug + FromPrimitive +
-Send + Sync + 'static {
+impl<U,BE> AdamW<U,DeviceSimd<BE>,IdentityLR>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          BE: Backend + Clone {
     /// Create an instance of AdamW
     /// # Arguments
     /// * `size` - input size
-    pub fn new(device:&DeviceSimd,size:usize) -> AdamW<U,DeviceSimd,IdentityLR> {
+    pub fn new(device:&DeviceSimd<BE>,size:usize) -> AdamW<U,DeviceSimd<BE>,IdentityLR> {
         Self::with_lr(device,size,U::from_f64(0.001f64).expect("Error in type conversion from f64."))
     }
 
@@ -2243,8 +2245,8 @@ Send + Sync + 'static {
     /// # Arguments
     /// * `size` - input size
     /// * `lr` - Learning rate
-    pub fn with_lr(device:&DeviceSimd,size:usize,lr:U) -> AdamW<U,DeviceSimd,IdentityLR> {
-        AdamW::<U,DeviceSimd,IdentityLR>::with_params(device,size,
+    pub fn with_lr(device:&DeviceSimd<BE>,size:usize,lr:U) -> AdamW<U,DeviceSimd<BE>,IdentityLR> {
+        AdamW::<U,DeviceSimd<BE>,IdentityLR>::with_params(device,size,
                                                       lr,
                                                       U::default(),
                                                       U::from_f64(0.9f64).expect("Error in type conversion from f64."),
@@ -2252,19 +2254,20 @@ Send + Sync + 'static {
                                                       IdentityLR)
     }
 }
-impl<U,SD> AdamW<U,DeviceSimd,SD>
-where U: Default + Clone + Copy + Debug + FromPrimitive +
-Send + Sync + 'static,
-      SD: Scheduler<U> + Clone {
+impl<U,BE,SD> AdamW<U,DeviceSimd<BE>,SD>
+    where U: Default + Clone + Copy + Debug + FromPrimitive +
+             Send + Sync + 'static,
+          SD: Scheduler<U> + Clone,
+          BE: Backend + Clone {
     /// Create an instance of AdamW with additional parameters other than the default values
     /// # Arguments
     /// * `size` - input size
     /// * `lr` - Learning rate
     /// * `b1` - beta1
     /// * `b2` - beta2
-    pub fn with_params(_:&DeviceSimd,size:usize,lr:U,weight_decay:U,b1:U,b2:U, scheduler: SD) -> AdamW<U,DeviceSimd,SD> {
+    pub fn with_params(_:&DeviceSimd<BE>,size:usize,lr:U,weight_decay:U,b1:U,b2:U, scheduler: SD) -> AdamW<U,DeviceSimd<BE>,SD> {
         AdamW {
-            d:PhantomData::<DeviceSimd>,
+            d:PhantomData::<DeviceSimd<BE>>,
             size:size,
             lr:lr,
             weight_decay:weight_decay,
@@ -2279,12 +2282,13 @@ Send + Sync + 'static,
         }
     }
 }
-impl<U,SD> Optimizer<U,DeviceSimd> for AdamW<U,DeviceSimd,SD>
+impl<U,BE,SD> Optimizer<U,DeviceSimd<BE>> for AdamW<U,DeviceSimd<BE>,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> +
              One + Sqrt +
              Send + Sync + 'static,
-          SD: Scheduler<U> {
+          SD: Scheduler<U>,
+          BE: Backend + Clone {
     type InternalType = [U];
     type InternalUpdateType<'a> = ShieldSlice<'a,U>;
 
@@ -2433,11 +2437,12 @@ impl<U,SD> OptimizerState<U,DeviceCpu> for AdamW<U,DeviceCpu,SD>
           DeviceCpu: Device<U> {
     type Type = Box<[U]>;
 }
-impl<U,SD> OptimizerState<U,DeviceSimd> for AdamW<U,DeviceSimd,SD>
+impl<U,BE,SD> OptimizerState<U,DeviceSimd<BE>> for AdamW<U,DeviceSimd<BE>,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
           SD: Scheduler<U>,
-          DeviceSimd: Device<U> {
+          BE: Backend + Clone,
+          DeviceSimd<BE>: Device<U> {
     type Type = Box<[U]>;
 }
 #[cfg(feature = "cuda")]
@@ -2530,10 +2535,11 @@ impl<T,U,SD> Persistence<T,Linear> for AdamW<U,DeviceCpu,SD>
         Ok(())
     }
 }
-impl<U,SD> Persistence<TextFilePersistence,Specialized> for AdamW<U,DeviceSimd,SD>
+impl<U,BE,SD> Persistence<TextFilePersistence,Specialized> for AdamW<U,DeviceSimd<BE>,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static + FromStr,
           SD: Scheduler<U>,
+          BE: Backend + Clone,
           TextRecord: From<U>,
           ModelLoadError: From<<U as FromStr>::Err> {
     fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
@@ -2575,11 +2581,12 @@ impl<U,SD> Persistence<TextFilePersistence,Specialized> for AdamW<U,DeviceSimd,S
         Ok(())
     }
 }
-impl<T,U,SD> Persistence<T,Linear> for AdamW<U,DeviceSimd,SD>
+impl<T,U,BE,SD> Persistence<T,Linear> for AdamW<U,DeviceSimd<BE>,SD>
     where T: LinearPersistence<U>,
           U: Default + Clone + Copy + Debug + FromPrimitive +
           Send + Sync + 'static,
-          SD: Scheduler<U> {
+          SD: Scheduler<U>,
+          BE: Backend + Clone {
     fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
         for &mt in self.mt.iter() {
             persistence.write(mt)?;
@@ -2847,15 +2854,16 @@ impl<U,A,SD> OptimizerBuilder<U,DeviceGpu<A>> for AdamWBuilder<U,DeviceGpu<A>,SD
         AdamW::<_,DeviceGpu<A>,SD>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2,self.scheduler.clone())
     }
 }
-impl<U,SD> OptimizerBuilder<U,DeviceSimd> for AdamWBuilder<U,DeviceSimd,SD>
+impl<U,BE,SD> OptimizerBuilder<U,DeviceSimd<BE>> for AdamWBuilder<U,DeviceSimd<BE>,SD>
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Send + Sync + 'static,
           SD: Scheduler<U> + Clone,
-          AdamW<U,DeviceSimd,SD>: Optimizer<U,DeviceSimd> {
-    type Output = AdamW<U,DeviceSimd,SD>;
+          BE: Backend + Clone,
+          AdamW<U,DeviceSimd<BE>,SD>: Optimizer<U,DeviceSimd<BE>> {
+    type Output = AdamW<U,DeviceSimd<BE>,SD>;
 
     fn build(&self,size:usize) -> Result<Self::Output,OptimizerBuildError> {
-        Ok(AdamW::<_,DeviceSimd,SD>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2,self.scheduler.clone()))
+        Ok(AdamW::<_,DeviceSimd<BE>,SD>::with_params(&self.device,size,self.lr,self.weight_decay,self.b1,self.b2,self.scheduler.clone()))
     }
 }
 

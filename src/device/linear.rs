@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Mul, Shr};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator};
 use rayon::prelude::ParallelIterator;
-use crate::arr::{Arr, Arr2, ArrView, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
+use crate::arr::{Arr, Arr2, ArrView, ColumnMajorArr2, DiffArr, IntoConverter, SerializedVec, SerializedVecView};
 use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::ope::{MaxValue, Product};
@@ -201,7 +201,6 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
           B: Quantizable<W>,
           I: BatchDataType + InputTensorSize<NI>,
           Self: DeviceQuantizedLinearBase<f32,T,B,NI,NO>,
-          Self: DeviceQuantizedLinearBase<W,<T as Quantizable<W>>::Quantized,<B as Quantizable<W>>::Quantized,NI,NO>,
           <Self::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -1294,7 +1293,6 @@ impl<W,const NI: usize,const NO: usize> DeviceQuantizedLinearBase<W,Arr2<W,NI,NO
         Ok(bias)
     }
 }
-
 impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,NI,NO>,Arr<f32,NO>,I,NI,NO> for DeviceCpu
     where U: Default + Clone + Copy + Debug +
              Add<Output=U> +  Mul<Output=U> +
@@ -1390,6 +1388,13 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
             }
         }
 
+        /*
+        for (o,u) in o.iter_mut().zip(units.as_raw_slice().chunks_exact(NI)) {
+            *o = ArrView::<'a,U,NI>::from(input).iter().zip(u.iter()).fold(0, |acc,(&i,&w)| {
+                acc + i.assume() * w.assume().assume()
+            })
+        }
+        */
         for (o,&b) in o.iter_mut().zip(bias.iter()) {
             *o += b.assume().assume();
         }
@@ -1448,6 +1453,13 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
                 }
             }
 
+            /*
+            for (o,u) in o.iter_mut().zip(units.as_raw_slice().chunks_exact(NI)) {
+                *o = input.iter().zip(u.iter()).fold(0, |acc,(&i,&w)| {
+                    acc + i.assume() * w.assume().assume()
+                })
+            }
+            */
             for (o,&b) in o.iter_mut().zip(bias.iter()) {
                 *o += b.assume().assume();
             }
@@ -1496,43 +1508,41 @@ pub mod simd {
     use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
     use crate::layer::{BatchDataType, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, TensorSize};
     use simdoperator::error::InstantiationError;
-    use simdoperator::{ColumnMajorMatrix, Matrix, MatrixMut, MatrixView, OwnedColumnMajorMatrix, OwnedMatrix, OwnedVector, Vector, VectorMut};
+    use simdoperator::{AccMatrix, AccVector, ColumnMajorMatrix, Matrix, MatrixMut, MatrixView, OwnedColumnMajorMatrix, OwnedMatrix, OwnedVector, Vector};
     use simdoperator::backend::autoselect::AutoSelect;
+    use simdoperator::backend::common::Backend;
     use simdoperator::traits::{BindBackend, Product, ToColumnMajor};
     use crate::device::linear::DeviceLinear;
     use crate::mem::AsRawSlice;
 
-    impl<U,I,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,I,NI,NO> for DeviceSimd
-    where U: Default + Clone + Copy + Add<U,Output=U> + Debug + Send + Sync + 'static,
-          I: BatchDataType + InputTensorSize<NI> + InputTensorScalar + From<Arr<U,NI>> + Debug + 'static,
-          I: TryFrom<Box<[U]>,Error=TypeConvertError>,
-          <I as BatchDataType>::Type: Debug + 'static,
-          <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
-          SerializedVec<U,Arr<U,NI>>: IntoConverter,
-          Arr<U,NO>: InputTensorScalar + OutputTensorScalar + OutputTensorSize<NO>,
-          [();NI]: TensorSize,
-          [();NO]: TensorSize,
-          Box<[U]>: From<OwnedMatrix<U,NI,NO>>,
-          Box<[U]>: From<OwnedVector<U,NI>>,
-          Box<[U]>: From<OwnedVector<U,NO>>,
-          for<'a> &'a OwnedVector<U,NO>: BindBackend<'a,Output<AutoSelect>=Vector<'a,U,NO>>,
-          for<'a> ColumnMajorMatrix<'a,U,NI,NO>: TryFrom<&'a [U],Error=InstantiationError>,
-          for<'a> ColumnMajorMatrix<'a,U,NI,NO>: From<&'a OwnedColumnMajorMatrix<U,NI,NO>>,
-          for<'a> ColumnMajorMatrix<'a,U,NO,NI>: TryFrom<&'a [U],Error=InstantiationError>,
-          for<'a> ArrView<'a,U,NI>: From<&'a I>,
-          for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
-          for<'a> Vector<'a,U,NI>: TryFrom<&'a [U],Error=InstantiationError>,
-          for<'a> Vector<'a,U,NI>: Product<&'a ColumnMajorMatrix<'a,U,NI,NO>,OwnedVector<U,NO>>,
-          for<'a> Vector<'a,U,NO>: TryFrom<&'a [U],Error=InstantiationError>,
-          for<'a> VectorMut<'a,U,NO>: TryFrom<&'a mut [U],Error=InstantiationError>,
-          for<'a> Vector<'a,U,NO>: Product<&'a ColumnMajorMatrix<'a,U,NO,NI>,OwnedVector<U,NI>>,
-          for<'a> Vector<'a,U,NI>: Product<&'a Vector<'a,U,NO>,OwnedMatrix<U,NI,NO>>,
-          for<'a> &'a Vector<'a,U,NO>: Add<&'a Vector<'a,U,NO>,Output=OwnedVector<U,NO>>,
-          for<'a> Matrix<'a,U,NI,NO>: TryFrom<&'a [U],Error=InstantiationError>,
-          for<'a> MatrixView<'a,U,NI,NO>: From<&'a Matrix<'a,U,NI,NO>>,
-          for<'a> MatrixMut<'a,U,NI,NO>: TryFrom<&'a mut [U],Error=InstantiationError>,
-          for<'a> MatrixMut<'a,U,NI,NO>: AddAssign<&'a Matrix<'a,U,NI,NO>>,
-          Self: DeviceReduce<SerializedVec<U,Arr<U,NO>>,Arr<U,NO>,U,NO> {
+    impl<U,I,BE: Backend,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,I,NI,NO> for DeviceSimd<BE>
+        where U: Default + Clone + Copy + Add<U,Output=U> + Debug + Send + Sync + 'static,
+              I: BatchDataType + InputTensorSize<NI> + InputTensorScalar + From<Arr<U,NI>> + Debug + 'static,
+              I: TryFrom<Box<[U]>,Error=TypeConvertError>,
+              <I as BatchDataType>::Type: Debug + 'static,
+              <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
+              SerializedVec<U,Arr<U,NI>>: IntoConverter,
+              Arr<U,NO>: InputTensorScalar + OutputTensorScalar + OutputTensorSize<NO>,
+              [();NI]: TensorSize,
+              [();NO]: TensorSize,
+              Box<[U]>: From<OwnedMatrix<U,NI,NO>>,
+              Box<[U]>: From<OwnedVector<U,NI>>,
+              Box<[U]>: From<OwnedVector<U,NO>>,
+              for<'a> ColumnMajorMatrix<'a,U,NI,NO>: TryFrom<&'a [U],Error=InstantiationError>,
+              for<'a> ColumnMajorMatrix<'a,U,NI,NO>: From<&'a OwnedColumnMajorMatrix<U,NI,NO>>,
+              for<'a> ColumnMajorMatrix<'a,U,NO,NI>: TryFrom<&'a [U],Error=InstantiationError>,
+              for<'a> ArrView<'a,U,NI>: From<&'a I>,
+              for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+              for<'a> Vector<'a,U,NI>: TryFrom<&'a [U],Error=InstantiationError>,
+              for<'a> Vector<'a,U,NI>: Product<ColumnMajorMatrix<'a,U,NI,NO>,AccVector<U,NO>>,
+              for<'a> Vector<'a,U,NO>: TryFrom<&'a [U],Error=InstantiationError>,
+              for<'a> Vector<'a,U,NO>: Product<ColumnMajorMatrix<'a,U,NO,NI>,AccVector<U,NI>>,
+              for<'a> Vector<'a,U,NI>: Product<Vector<'a,U,NO>,AccMatrix<U,NI,NO>>,
+              for<'a> AccVector<U,NO>: Add<Vector<'a,U,NO>,Output=AccVector<U,NO>>,
+              for<'a> Matrix<'a,U,NI,NO>: TryFrom<&'a [U],Error=InstantiationError>,
+              for<'a> MatrixView<'a,U,NI,NO>: From<&'a Matrix<'a,U,NI,NO>>,
+              for<'a,'b> MatrixMut<'a,U,NI,NO>: AddAssign<Matrix<'b,U,NI,NO>>,
+              Self: DeviceReduce<SerializedVec<U,Arr<U,NO>>,Arr<U,NO>,U,NO> {
         type Output = Arr<U,NO>;
         type BatchOutput = <Arr<U,NO> as BatchDataType>::Type;
         type LossOutput = I;
@@ -1562,7 +1572,7 @@ pub mod simd {
                 EvaluateError::from(InstantiationError::from(e))
             })?.to_column_major();
 
-            Ok(<Box<[U]>>::from(&input.product(&<ColumnMajorMatrix<U,NI,NO>>::from(&units)).bind_auto()? + &bias).try_into()?)
+            Ok(<Box<[U]>>::from(input.product(<ColumnMajorMatrix<U,NI,NO>>::from(&units)) + bias).try_into()?)
         }
 
         #[inline]
@@ -1570,7 +1580,7 @@ pub mod simd {
             let input = ArrView::try_from(input)?;
             let input = Vector::<U,NO>::try_from(input.as_raw_slice())?;
             let units = ColumnMajorMatrix::<U,NO,NI>::try_from(units.as_raw_slice())?;
-            let output = input.product(&units);
+            let output = input.product(units);
 
             Ok(<Box<[U]>>::from(output).try_into()?)
         }
@@ -1583,7 +1593,7 @@ pub mod simd {
             let loss = ArrView::try_from(loss)?;
             let loss = Vector::<U,NO>::try_from(loss.as_raw_slice())?;
 
-            Ok(<Box<[U]>>::from(o.product(&loss)).to_vec().try_into()?)
+            Ok(<Box<[U]>>::from(o.product(loss)).to_vec().try_into()?)
         }
 
         fn backward_bias_weight_gradient<'a>(&self, loss: Self::Output) -> Result<Arr<U,NO>, TrainingError> {
@@ -1592,11 +1602,11 @@ pub mod simd {
         #[inline]
         fn batch_backward_linear<'a>(&self, units: &Arr2<U,NI,NO>, input: &'a SerializedVec<U,Arr<U,NO>>)
                                      -> Result<<I as BatchDataType>::Type, TrainingError> {
-            let units = ColumnMajorMatrix::<U,NO,NI>::try_from(units.as_raw_slice())?;
-
             Ok(SerializedVec::<U,Arr<U,NI>>::from(input.par_iter().map(|l| {
+                let units = ColumnMajorMatrix::<U,NO,NI>::try_from(units.as_raw_slice())?;
+
                 let l = Vector::<U,NO>::try_from(l.as_raw_slice())?;
-                let output = l.product(&units);
+                let output = l.product(units);
 
                 <Box<[U]>>::from(output).try_into().map_err(|e| TrainingError::from(e))
             }).collect::<Result<Vec<Arr<U,NI>>,TrainingError>>()?).into_converter().try_into()?)
@@ -1614,7 +1624,7 @@ pub mod simd {
                 let input = Vector::<U,NI>::try_from(input.as_raw_slice())?;
                 let bias = Vector::<U,NO>::try_from(bias.as_raw_slice())?;
 
-                Ok(<Box<[U]>>::from(&input.product(&<ColumnMajorMatrix<U,NI,NO>>::from(&units)).bind_auto()? + &bias).try_into()?)
+                Ok(<Box<[U]>>::from(input.product(<ColumnMajorMatrix<U,NI,NO>>::from(&units)) + bias).try_into()?)
             }).collect::<Result<Vec<Arr<U,NO>>,EvaluateError>>()?.into())
         }
 
@@ -1626,18 +1636,19 @@ pub mod simd {
                 let o = Vector::<U,NI>::try_from(o)?;
                 let loss = Vector::<U,NO>::try_from(l.as_raw_slice())?;
 
-                <Box<[U]>>::from(o.product(&loss)).to_vec().try_into().map_err(|e| TrainingError::from(e))
+                <Box<[U]>>::from(o.product(loss)).to_vec().try_into().map_err(|e| TrainingError::from(e))
             }).fold(|| Ok(vec![U::default();NI*NO]), | acc, g | {
                 acc.and_then(|mut acc| {
                     g.and_then(move |g:Arr2<U,NI,NO>| {
                         {
-                            let mut acc = MatrixMut::<U,NI,NO>::try_from(acc.as_mut())?;
+                            let acc: &mut [U] = acc.as_mut();
+                            let mut acc = MatrixMut::<U,NI,NO,AutoSelect>::try_from(acc)?;
 
                             let g = Matrix::try_from(g.as_raw_slice()).map_err(|e| {
                                 TrainingError::from(e)
                             })?;
 
-                            acc += &g;
+                            acc += g;
                         }
 
                         Ok(acc)
@@ -1647,13 +1658,14 @@ pub mod simd {
                 acc.and_then(|mut acc| {
                     g.and_then(move |g| {
                         {
-                            let mut acc = MatrixMut::<U,NI,NO>::try_from(acc.as_mut())?;
+                            let acc: &mut [U] = acc.as_mut();
+                            let mut acc = MatrixMut::<U,NI,NO,AutoSelect>::try_from(acc)?;
 
                             let g = Matrix::try_from(&g).map_err(|e| {
                                 TrainingError::from(e)
                             })?;
 
-                            acc += &g;
+                            acc += g;
                         }
 
                         Ok(acc)

@@ -1351,18 +1351,10 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
 
         let scale = w_max / W::max_value().assume().assume() as f32;
 
-        let raw_input_max = NI as f32 * input_max;
-
-        let shift = raw_input_max.log2().ceil() as usize;
-
-        let scale_input = input_max / U::max_value().assume() as f32;
-
-        let next_input_max = raw_input_max / (1 << shift) as f32;
-
         for (w,mut q) in units.iter().zip(qunits.iter_mut()) {
             for (&w,q) in w.iter().zip(q.iter_mut()) {
                 *q = (w / scale).round().clamp(-W::max_value().assume().assume() as f32,
-                                           W::max_value().assume().assume() as f32).assume();
+                                               W::max_value().assume().assume() as f32).assume();
             }
         }
 
@@ -1372,6 +1364,26 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
                 W::max_value().assume().assume() as f32
             ).assume();
         }
+
+        let mut raw_next_input_max = 0.0;
+
+        for i in 0..NO {
+            let ws = qunits.iter().fold(0.0, |acc, q| {
+                acc + q[i].assume().assume().abs() as f32
+            }) / (NI as f32).sqrt();
+
+            let o = ws * input_max + qbias[i].assume().assume().abs() as f32;
+
+            if o > raw_next_input_max {
+                raw_next_input_max = o;
+            }
+        }
+
+        let shift = (raw_next_input_max / U::max_value().assume() as f32).max(1.0).log2().ceil() as usize;
+
+        let scale_input = input_max / U::max_value().assume() as f32;
+
+        let next_input_max = raw_next_input_max / (1 << shift) as f32;
 
         let scale = scale * (1 << shift) as f32;
 
@@ -1512,7 +1524,7 @@ pub mod simd {
     use simdoperator::{AccMatrix, AccVector, ColumnMajorMatrix, Matrix, MatrixMut, MatrixView, OwnedColumnMajorMatrix, OwnedMatrix, OwnedVector, Vector};
     use simdoperator::backend::autoselect::AutoSelect;
     use simdoperator::backend::common::Backend;
-    use simdoperator::traits::{BindBackend, Product, ToColumnMajor};
+    use simdoperator::traits::{Product, ToColumnMajor};
     use crate::device::linear::DeviceLinear;
     use crate::mem::AsRawSlice;
 

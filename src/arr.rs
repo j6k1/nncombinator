@@ -8,7 +8,7 @@ use rayon::iter::{plumbing};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSliceMut};
 use simdoperator::backend::common::Backend;
 use simdoperator::error::InstantiationError;
-use simdoperator::{AccVector, OwnedColumnMajorMatrix, Vector};
+use simdoperator::{AccVector, Vector};
 use crate::{derive_arithmetic, derive_arr_like_arithmetic};
 use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize};

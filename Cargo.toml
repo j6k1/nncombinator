@@ -54,6 +54,3 @@ lto = "fat"
 overflow-checks = false
 [profile.test]
 opt-level = 3
-codegen-units = 1
-lto = "fat"
-overflow-checks = false

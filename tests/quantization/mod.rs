@@ -29,7 +29,7 @@ fn test_mnist_for_quntization_cpu() {
 
     let net:QuantizedInputLayer<i8,Arr<i8,{ 28*28 }>,_,_,127,{ 28*28 }> = QuantizedInputLayer::new(&device).unwrap();
 
-    let optimizer_builder = AdamWBuilder::new(&device).lr(0.0001).weight_decay(0.00001);
+    let optimizer_builder = AdamWBuilder::new(&device).lr(0.00001).weight_decay(0.000001);
 
     let mut net = net.add_layer(|l| {
         assert_forward_all(&l);
@@ -148,7 +148,7 @@ fn test_mnist_for_quntization_cpu() {
         }
     }
 
-    let mut rng = rand::thread_rng();
+    let mut rng = prelude::thread_rng();
 
     teachers.shuffle(&mut rng);
 

@@ -201,6 +201,7 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
           B: Quantizable<W>,
           I: BatchDataType + InputTensorSize<NI>,
           Self: DeviceQuantizedLinearBase<f32,T,B,NI,NO>,
+          Self: DeviceQuantizedLinearBase<W,<T as Quantizable<W>>::Quantized,<B as Quantizable<W>>::Quantized,NI,NO>,
           <Self::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -1350,7 +1351,7 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
 
         let scale = w_max / W::max_value().assume().assume() as f32;
 
-        let raw_input_max = NI as f32 * input_max * w_max;
+        let raw_input_max = NI as f32 * input_max;
 
         let shift = raw_input_max.log2().ceil() as usize;
 

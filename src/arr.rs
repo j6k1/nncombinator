@@ -1784,20 +1784,6 @@ impl<U,const N:usize> TryFrom<Vec<U>> for SerializedVec<U,Arr<U,N>> where U: Def
         }
     }
 }
-impl<'a,U,T> AsView<'a> for SerializedVec<U,T>
-    where U: Default + Clone + Copy + Send + 'a,
-          T: SliceSize + AsRawSlice<U> + MakeView<'a,U> + MakeViewMut<'a,U> + 'a {
-    type ViewType = SerializedVecView<'a,U,T>;
-
-    fn as_view(&'a self) -> SerializedVecView<'a,U,T> {
-        SerializedVecView {
-            arr: &*self.arr,
-            len: self.len,
-            u: PhantomData::<U>,
-            t: PhantomData::<T>
-        }
-    }
-}
 #[cfg(feature = "cuda")]
 impl<U,T,A> ToCuda<U,A> for SerializedVec<U,T>
     where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,

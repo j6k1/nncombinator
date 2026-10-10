@@ -1466,7 +1466,7 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
             }
 
             o.iter().map(|&o| {
-                (o >> shift.assume()).assume()
+                (o >> shift).assume()
             }).collect::<Vec<U>>().try_into().map_err(|e| EvaluateError::from(e))
         }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.into())
     }

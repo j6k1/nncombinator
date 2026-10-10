@@ -590,7 +590,7 @@ impl<U,O,LI,D,const M: usize,const N:usize> QuantizedInputLayer<U,O,LI,D,M,N>
             u:PhantomData::<U>,
             o:PhantomData::<O>,
             l:PhantomData::<LI>,
-            scale: 1. / M as f32,
+            scale: 1.,
             device:device.clone()
         })
     }

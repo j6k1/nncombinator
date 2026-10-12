@@ -1,7 +1,8 @@
 //! Implementation of the calculation process for input layers
 
 use std::fmt::Debug;
-use crate::device::{Device, DeviceCpu};
+use simdoperator::backend::common::Backend;
+use crate::device::{Device, DeviceCpu, DeviceSimd};
 use crate::error::{TypeConvertError};
 use crate::layer::BatchDataType;
 #[cfg(feature = "cuda")]
@@ -42,7 +43,6 @@ pub trait DeviceInput<U,I>: Device<U>
     ///
     fn batch_forward_input(&self,input: <I as BatchDataType>::Type) -> Result<Self::BatchOutput,TypeConvertError>;
 }
-
 impl<U,I> DeviceInput<U,I> for DeviceCpu
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: BatchDataType + Debug + 'static,
@@ -77,5 +77,21 @@ impl<U,I,A> DeviceInput<U,I> for DeviceGpu<A>
 
     fn batch_forward_input(&self, input: <I as BatchDataType>::Type) -> Result<Self::BatchOutput, TypeConvertError> {
         input.to_cuda(self)
+    }
+}
+impl<U,I,BE> DeviceInput<U,I> for DeviceSimd<BE>
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: BatchDataType + Debug + 'static,
+          <I as BatchDataType>::Type: Debug + 'static,
+          BE: Backend + Clone {
+    type Output = I;
+    type BatchOutput = <I as BatchDataType>::Type;
+
+    fn forward_input(&self,input: I) -> Result<Self::Output,TypeConvertError> {
+        Ok(input)
+    }
+
+    fn batch_forward_input(&self,input: <I as BatchDataType>::Type) -> Result<Self::BatchOutput,TypeConvertError> {
+        Ok(input)
     }
 }

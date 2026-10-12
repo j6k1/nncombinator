@@ -15,6 +15,7 @@ use crate::mem::AsRawSlice;
 use crate::layer::{BatchSize};
 #[cfg(feature = "cuda")]
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
+use simdoperator::backend::common::Backend;
 use crate::cast::Assume;
 #[cfg(feature = "cuda")]
 use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaPtr, AsCudaReadOnlyPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize, MemoryType, ReadMemory};
@@ -26,6 +27,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
+use crate::fast_exp_f64;
 use crate::quantization::Quantizable;
 
 /// Trait that defines the implementation of various calculation processes in the linear layer
@@ -201,7 +203,6 @@ pub trait DeviceQuantizedLinear<U,W,T,B,I,const NI: usize,const NO: usize>
           B: Quantizable<W>,
           I: BatchDataType + InputTensorSize<NI>,
           Self: DeviceQuantizedLinearBase<f32,T,B,NI,NO>,
-          Self: DeviceQuantizedLinearBase<W,<T as Quantizable<W>>::Quantized,<B as Quantizable<W>>::Quantized,NI,NO>,
           <Self::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -1309,7 +1310,7 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
           SerializedVec<f32,Arr<f32,NO>>: From<Vec<Arr<f32,NO>>>,
           <Arr<f32,NI> as BatchDataType>::Type: From<Vec<Arr<f32,NI>>>,
           Arr<U,NO>: InputTensorScalar + OutputTensorScalar<Scalar=U> + OutputTensorSize<NO>,
-          Arr2<f32,NI,NO>: Quantizable<W,Quantized=Arr2<W,NI,NO>>,
+          Arr2<f32,NI,NO>: Quantizable<W,Quantized=ColumnMajorArr2<W,NI,NO>>,
           Arr<f32,NO>: Quantizable<W,Quantized=Arr<W,NO>> + TryFrom<Vec<f32>,Error=TypeConvertError>,
           Arr<f32,NI>: OutputTensorScalar<Scalar=f32> + BatchDataType<Type=SerializedVec<f32,Arr<f32,NI>>>,
           <Arr<f32,NI> as BatchDataType>::Type: Debug + OutputTensorScalar<Scalar=f32> + 'static,
@@ -1389,25 +1390,18 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
 
         let scale_input = scale_input * (1 << shift) as f32;
 
-        Ok((scale,shift,scale_input,next_input_max,qunits,qbias))
+        Ok((scale,shift,scale_input,next_input_max,qunits.to_column_major(),qbias))
     }
     #[inline]
-    fn forward_linear<'a>(&self, shift: usize, bias: &Arr<W,NO>, units: &Arr2<W,NI,NO>, input: &'a I) -> Result<Arr<U,NO>, EvaluateError> {
+    fn forward_linear<'a>(&self, shift: usize, bias: &Arr<W,NO>, units: &ColumnMajorArr2<W,NI,NO>, input: &'a I) -> Result<Arr<U,NO>, EvaluateError> {
         let mut o = Arr::<i32,NO>::new();
 
-        for (&input,r) in ArrView::<'a,U,NI>::from(input).iter().zip(units.iter()) {
-            for (o,&w) in o.iter_mut().zip(r.iter()) {
-                *o += input.assume() * w.assume().assume();
-            }
-        }
-
-        /*
         for (o,u) in o.iter_mut().zip(units.as_raw_slice().chunks_exact(NI)) {
             *o = ArrView::<'a,U,NI>::from(input).iter().zip(u.iter()).fold(0, |acc,(&i,&w)| {
                 acc + i.assume() * w.assume().assume()
             })
         }
-        */
+
         for (o,&b) in o.iter_mut().zip(bias.iter()) {
             *o += b.assume().assume();
         }
@@ -1454,25 +1448,18 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
     }
 
     #[inline]
-    fn batch_forward_linear<'a>(&self,shift: usize,bias: &Arr<W,NO>, units: &Arr2<W,NI,NO>,
+    fn batch_forward_linear<'a>(&self,shift: usize,bias: &Arr<W,NO>, units: &ColumnMajorArr2<W,NI,NO>,
                                 input: &'a <I as BatchDataType>::Type)
                                 -> Result<SerializedVec<U,Arr<U,NO>>,TrainingError> {
         Ok(SerializedVecView::<'a,U,Arr<U,NI>>::try_from(input)?.par_iter().map(|input| {
             let mut o = Arr::<i32,NO>::new();
 
-            for (&input,r) in input.iter().zip(units.iter()) {
-                for (o,&w) in o.iter_mut().zip(r.iter()) {
-                    *o += input.assume() * w.assume().assume();
-                }
-            }
-
-            /*
             for (o,u) in o.iter_mut().zip(units.as_raw_slice().chunks_exact(NI)) {
                 *o = input.iter().zip(u.iter()).fold(0, |acc,(&i,&w)| {
                     acc + i.assume() * w.assume().assume()
                 })
             }
-            */
+
             for (o,&b) in o.iter_mut().zip(bias.iter()) {
                 *o += b.assume().assume();
             }
@@ -1513,10 +1500,10 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
 }
 pub mod simd {
     use std::fmt::Debug;
-    use std::ops::{Add, AddAssign};
+    use std::ops::{Add, AddAssign, Mul, Shr};
     use rayon::prelude::{IndexedParallelIterator,IntoParallelRefIterator};
     use rayon::prelude::ParallelIterator;
-    use crate::arr::{Arr, Arr2, ArrView, IntoConverter, SerializedVec, SerializedVecView};
+    use crate::arr::{Arr, Arr2, ArrView, ColumnMajorArr2, IntoConverter, SerializedVec, SerializedVecView};
     use crate::device::{DeviceReduce, DeviceSimd};
     use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
     use crate::layer::{BatchDataType, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, TensorSize};
@@ -1524,9 +1511,12 @@ pub mod simd {
     use simdoperator::{AccMatrix, AccVector, ColumnMajorMatrix, Matrix, MatrixMut, MatrixView, OwnedColumnMajorMatrix, OwnedMatrix, OwnedVector, Vector};
     use simdoperator::backend::autoselect::AutoSelect;
     use simdoperator::backend::common::Backend;
-    use simdoperator::traits::{Product, ToColumnMajor};
-    use crate::device::linear::DeviceLinear;
+    use simdoperator::traits::{Demote, Product, Promote, ToColumnMajor};
+    use crate::cast::Assume;
+    use crate::device::linear::{DeviceLinear, DeviceQuantizedLinear, DeviceQuantizedLinearBase};
     use crate::mem::AsRawSlice;
+    use crate::ope::MaxValue;
+    use crate::quantization::Quantizable;
 
     impl<U,I,BE: Backend,const NI: usize,const NO: usize> DeviceLinear<U,Arr2<U,NI,NO>,Arr<U,NO>,I,NI,NO> for DeviceSimd<BE>
         where U: Default + Clone + Copy + Add<U,Output=U> + Debug + Send + Sync + 'static,
@@ -1690,6 +1680,236 @@ pub mod simd {
         #[inline]
         fn batch_linear_reduce<'a>(&self, loss: &'a SerializedVec<U,Arr<U,NO>>) -> Result<Arr<U,NO>,TrainingError> {
             self.reduce(loss)
+        }
+    }
+    impl<W,BE,const NI: usize,const NO: usize> DeviceQuantizedLinearBase<W,Arr2<W,NI,NO>,Arr<W,NO>,NI,NO> for DeviceSimd<BE>
+    where W: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          BE: Backend,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+        #[inline]
+        fn generalization_units(&self, units: &Arr2<W,NI,NO>) -> Result<Arr2<W,NI,NO>, GeneralizationError> {
+            Ok(units.clone())
+        }
+        #[inline]
+        fn generalization_bias(&self, bias: &Arr<W,NO>) -> Result<Arr<W,NO>, GeneralizationError> {
+            Ok(bias.clone())
+        }
+        #[inline]
+        fn specialization_units(&self, units: Arr2<W,NI,NO>) -> Result<Arr2<W,NI,NO>, SpecializationError> {
+            Ok(units)
+        }
+        #[inline]
+        fn specialization_bias(&self, bias: Arr<W,NO>) -> Result<Arr<W,NO>,SpecializationError> {
+            Ok(bias)
+        }
+    }
+    impl<U,W,BE,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,NI,NO>,Arr<f32,NO>,I,NI,NO> for DeviceSimd<BE>
+        where U: Default + Clone + Copy + Debug +
+                 Add<Output=U> +  Mul<Output=U> +
+                 AddAssign + Send + Sync + Shr<usize,Output=U> + MaxValue + Assume<i32> + 'static,
+              W: Default + Clone + Copy + Debug +
+              Add<Output=W> + Mul<Output=W> + AddAssign + MaxValue + Assume<U> + Ord + Send + Sync + 'static,
+              BE: Backend + Send + Sync + 'static,
+              i32: From<U>,
+              f32: Assume<W> + Debug + Default + Clone + Copy + Send + Sync,
+              I: BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + From<Arr<U,NI>> + Debug + 'static,
+              <I as BatchDataType>::Type: Debug + 'static,
+              <I as BatchDataType>::Type: TryFrom<<SerializedVec<U,Arr<U,NI>> as IntoConverter>::Converter,Error=TypeConvertError>,
+              SerializedVec<U,Arr<U,NI>>: IntoConverter,
+              SerializedVec<f32,Arr<f32,NO>>: From<Vec<Arr<f32,NO>>>,
+              <Arr<f32,NI> as BatchDataType>::Type: From<Vec<Arr<f32,NI>>>,
+              Arr<U,NO>: InputTensorScalar + OutputTensorScalar<Scalar=U> + OutputTensorSize<NO>,
+              Arr2<f32,NI,NO>: Quantizable<W,Quantized=ColumnMajorArr2<W,NI,NO>>,
+              Arr<f32,NO>: Quantizable<W,Quantized=Arr<W,NO>> + TryFrom<Vec<f32>,Error=TypeConvertError>,
+              Arr<f32,NI>: OutputTensorScalar<Scalar=f32> + BatchDataType<Type=SerializedVec<f32,Arr<f32,NI>>>,
+              <Arr<f32,NI> as BatchDataType>::Type: Debug + OutputTensorScalar<Scalar=f32> + 'static,
+              [();NI]: TensorSize,
+              [();NO]: TensorSize,
+              f32: From<U> + Assume<U>,
+              i32: From<U> + Assume<U>,
+              AccVector<i32,NO,BE>: Shr<usize,Output=AccVector<i32,NO,BE>> +
+                                    Add<AccVector<i32,NO,BE>,Output=AccVector<i32,NO,BE>> +
+                                    Demote<AccVector<U,NO,BE>>,
+              for<'a> ArrView<'a,U,NI>: From<&'a I>,
+              for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
+              for<'a> SerializedVecView<'a,f32,Arr<f32,NI>>: TryFrom<&'a <Arr<f32,NI> as BatchDataType>::Type,Error=TypeConvertError>,
+              for<'a,'b> Vector<'a,U,NI,BE>: Product<ColumnMajorMatrix<'b,W,NI,NO>,AccVector<i32,NO,BE>>,
+              for<'a> Vector<'a,W,NO,BE>: Promote<AccVector<i32,NO,BE>>,
+              Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO> {
+        type Scale = Arr<f32,NO>;
+        type RealInput = Arr<f32,NI>;
+        type BatchRealInput = SerializedVec<f32,Arr<f32,NI>>;
+        type Output = Arr<U,NO>;
+        type BatchOutput = <Arr<U,NO> as BatchDataType>::Type;
+        type LossInput = Arr<f32,NO>;
+        type LossInputScalar = f32;
+        type BatchLossInput = <Arr<f32,NO> as BatchDataType>::Type;
+        type LossOutput = Arr<f32,NI>;
+        type BatchLossOutput = <Arr<f32,NI> as BatchDataType>::Type;
+        #[inline]
+        fn generalization_scale(&self, scale: &Arr<f32,NO>) -> Result<Arr<f32,NO>, GeneralizationError> {
+            Ok(scale.clone())
+        }
+        #[inline]
+        fn specialization_scale(&self, scale: Arr<f32, NO>) -> Result<Arr<f32,NO>, SpecializationError> {
+            Ok(scale)
+        }
+        #[inline]
+        fn quantization(&self, units: &Arr2<f32, NI, NO>, bias: &Arr<f32, NO>, input_max: f32)
+                        -> Result<(f32, usize, f32, f32, <Arr2<f32, NI, NO> as Quantizable<W>>::Quantized, <Arr<f32, NO> as Quantizable<W>>::Quantized), SpecializationError> {
+            let mut qunits:Arr2<W,NI,NO> = Arr2::new();
+            let mut qbias:Arr<W,NO> = Arr::new();
+
+            let w_max = units.iter().map(|it| {
+                it.iter().map(|&w| w.abs()).fold(0.0, f32::max)
+            }).fold(0.0, f32::max);
+
+            let scale = w_max / W::max_value().assume().assume() as f32;
+
+            for (w,mut q) in units.iter().zip(qunits.iter_mut()) {
+                for (&w,q) in w.iter().zip(q.iter_mut()) {
+                    *q = (w / scale).round().clamp(-W::max_value().assume().assume() as f32,
+                                                   W::max_value().assume().assume() as f32).assume();
+                }
+            }
+
+            for (&w,q) in bias.iter().zip(qbias.iter_mut()) {
+                *q = (w / scale).round().clamp(
+                    -W::max_value().assume().assume() as f32,
+                    W::max_value().assume().assume() as f32
+                ).assume();
+            }
+
+            let mut raw_next_input_max = 0.0;
+
+            for i in 0..NO {
+                let ws = qunits.iter().fold(0.0, |acc, q| {
+                    acc + q[i].assume().assume().abs() as f32
+                }) / (NI as f32).sqrt();
+
+                let o = ws * input_max + qbias[i].assume().assume().abs() as f32;
+
+                if o > raw_next_input_max {
+                    raw_next_input_max = o;
+                }
+            }
+
+            let shift = (raw_next_input_max / U::max_value().assume() as f32).max(1.0).log2().ceil() as usize;
+
+            let scale_input = input_max / U::max_value().assume() as f32;
+
+            let next_input_max = raw_next_input_max / (1 << shift) as f32;
+
+            let scale = scale * (1 << shift) as f32;
+
+            let scale_input = scale_input * (1 << shift) as f32;
+
+            Ok((scale,shift,scale_input,next_input_max,qunits.to_column_major(),qbias))
+        }
+        #[inline]
+        fn forward_linear<'a>(&self, shift: usize, bias: &Arr<W,NO>, units: &ColumnMajorArr2<W,NI,NO>, input: &'a I) -> Result<Arr<U,NO>, EvaluateError> {
+            let units: &[W] = units.as_raw_slice();
+            let units = ColumnMajorMatrix::<W,NI,NO>::try_from(units)?;
+
+            let bias: &[W] = bias.as_raw_slice();
+            let bias = Vector::<W,NO,BE>::try_from(bias)?;
+
+            let input = ArrView::from(input);
+
+            let input: &[U] = input.as_raw_slice();
+
+            let input = Vector::<U,NI,BE>::try_from(input)?;
+
+            let o = (input.product(units) + bias.promotion()) >> shift;
+
+            Ok(Box::<[U]>::from(o.demotion()).try_into()?)
+        }
+
+        #[inline]
+        fn backward_linear<'a>(&self, units: &Arr2<f32,NI,NO>, input: &'a Arr<f32,NO>) -> Result<Arr<f32,NI>, TrainingError> {
+            Ok(Arr::<f32,NI>::try_from(units.iter().map(|u| {
+                u.iter().zip(input.iter())
+                    .map(|(&w,&l)| w * l).fold(0.0, |acc,g|{
+                    acc + g
+                })
+            }).collect::<Vec<f32>>()).map_err(|e| TrainingError::from(e))?.into())
+        }
+
+        #[inline]
+        fn backward_weight_gradient<'a>(&self, o: &'a Arr<f32,NI>, loss: &'a Arr<f32,NO>) -> Result<Arr2<f32,NI,NO>, TrainingError> {
+            Ok(o.iter().cloned().map(|o| {
+                loss.iter().cloned().map(|l| {
+                    (o * l).into()
+                }).collect::<Vec<f32>>().try_into()
+            }).collect::<Result<Vec<Arr<f32,NO>>,_>>()?.try_into().map_err(|e| TrainingError::from(e))?)
+        }
+
+        fn backward_bias_weight_gradient<'a>(&self, loss: Arr<f32,NO>) -> Result<Arr<f32,NO>, TrainingError> {
+            Ok(loss)
+        }
+        #[inline]
+        fn batch_backward_linear<'a>(&self, units: &Arr2<f32,NI,NO>,
+                                     input: &'a SerializedVec<f32,Arr<f32,NO>>)
+                                     -> Result<<Arr<f32,NI> as BatchDataType>::Type, TrainingError> {
+            Ok(SerializedVec::<f32,Arr<f32,NI>>::from(input.par_iter().map(|l| {
+                units.iter().map(|u| {
+                    u.iter().zip(l.iter())
+                        .map(|(&w,&l)| w * l).fold(0., |acc,g| {
+                        acc + g
+                    })
+                }).collect::<Vec<f32>>().try_into()
+            }).collect::<Result<Vec<Arr<f32,NI>>,_>>()?).into())
+        }
+
+        #[inline]
+        fn batch_forward_linear<'a>(&self,shift: usize,bias: &Arr<W,NO>, units: &ColumnMajorArr2<W,NI,NO>,
+                                    input: &'a <I as BatchDataType>::Type)
+                                    -> Result<SerializedVec<U,Arr<U,NO>>,TrainingError> {
+            let units: &[W] = units.as_raw_slice();
+            let bias: &[W] = bias.as_raw_slice();
+
+            Ok(SerializedVecView::<'a,U,Arr<U,NI>>::try_from(input)?.par_iter().map(|input| {
+                let units = ColumnMajorMatrix::<W,NI,NO>::try_from(units)?;
+
+                let bias = Vector::<W,NO,BE>::try_from(bias)?;
+
+                let input: &[U] = input.as_raw_slice();
+
+                Vector::<U,NI,BE>::try_from(input).map_err(|e| TrainingError::from(e)).and_then(|input| {
+                    let o = (input.product(units) + bias.promotion()) >> shift;
+
+                    Box::<[U]>::from(o.demotion()).try_into().map_err(|e| TrainingError::from(e))
+                })
+            }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.into())
+        }
+
+        #[inline]
+        fn batch_backward_weight_gradient<'a>(&self, o: &'a SerializedVec<f32,Arr<f32,NI>>,
+                                              loss: &'a SerializedVec<f32,Arr<f32,NO>>)
+                                              -> Result<Arr2<f32,NI,NO>, TrainingError> {
+            Ok(o.par_iter().zip(loss.par_iter()).map(|(o,l)| {
+                o.iter().cloned().map(|o| {
+                    l.iter().cloned().map(|l| {
+                        o * l
+                    }).collect::<Vec<f32>>().try_into()
+                }).collect::<Result<Vec<Arr<f32,NO>>,_>>()?.try_into()
+            }).reduce(|| Ok(Arr2::<f32,NI,NO>::new()), | acc, g | {
+                acc.and_then(| mut acc | g.and_then(|g| {
+                    for (mut acc,g) in acc.iter_mut().zip(g.iter()) {
+                        for (acc,&g) in acc.iter_mut().zip(g.iter()) {
+                            *acc += g
+                        }
+                    }
+
+                    Ok(acc)
+                }))
+            })?)
+        }
+
+        #[inline]
+        fn batch_backward_bias_gradient<'a>(&self, loss: &'a SerializedVec<f32,Arr<f32,NO>>) -> Result<Arr<f32,NO>,TrainingError> {
+            Ok(self.reduce(&loss)?)
         }
     }
 }

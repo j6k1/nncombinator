@@ -1,8 +1,9 @@
 //! Implementation of the calculation process for clone layers
 
+use simdoperator::backend::common::Backend;
 use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::TryClone;
-use crate::device::{DeviceCpu, DeviceGpu};
+use crate::device::{DeviceCpu, DeviceGpu, DeviceSimd};
 use crate::error::{EvaluateError};
 
 pub trait DeviceClone<'a,T> where T: 'static {
@@ -19,6 +20,13 @@ pub trait DeviceClone<'a,T> where T: 'static {
 }
 impl<'a,T> DeviceClone<'a,T> for DeviceCpu
     where T: Clone + 'static {
+    fn cloned(&self, source: &'a T) -> Result<T, EvaluateError> {
+        Ok(source.clone())
+    }
+}
+impl<'a,T,BE> DeviceClone<'a,T> for DeviceSimd<BE>
+    where T: Clone + 'static,
+          BE: Backend {
     fn cloned(&self, source: &'a T) -> Result<T, EvaluateError> {
         Ok(source.clone())
     }

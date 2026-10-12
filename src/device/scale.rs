@@ -120,24 +120,20 @@ impl<U,IO,const N:usize> DeviceScale<U,IO,N> for DeviceCpu
         Ok(input.clone())
     }
 }
-impl<U,IO,BE:Backend,const N:usize> DeviceScale<U,IO,N> for DeviceSimd<BE>
-    where U: Default + Clone + Copy + One + Div<U,Output=U> + Debug + Send + Sync + 'static,
-          IO: BatchDataType + Debug + Clone + AsRawSlice<U> + From<Box<[U]>>,
-          <IO as BatchDataType>::Type: BatchSize + Debug + From<Vec<Arr<U,N>>> + Clone,
-          for<'a> SerializedVecView<'a,U,Arr<U,N>>: TryFrom<&'a <IO as BatchDataType>::Type,Error=TypeConvertError>,
-          for<'b> Vector<'b,U,N>: Mul<U,Output=AccVector<U,N>> {
+impl<U,IO,BE,const N:usize> DeviceScale<U,IO,N> for DeviceSimd<BE>
+where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      IO: BatchDataType + Debug + Clone,
+      BE: Backend,
+      for<'a> &'a IO: Mul<U,Output=IO> + Div<U,Output=IO>,
+      <IO as BatchDataType>::Type: BatchSize + Debug + Clone,
+      for<'a> &'a <IO as BatchDataType>::Type: Mul<U,Output=<IO as BatchDataType>::Type> +
+      Div<U,Output=<IO as BatchDataType>::Type> {
     fn inverse_scaling<'a>(&self, scale: U, input: &'a IO) -> Result<IO, EvaluateError> {
-        let i = Vector::try_from(input.as_raw_slice())?;
-        let s = i * (U::one() / scale);
-
-        Ok(IO::try_from(Box::from(s))?)
+        Ok(input / scale)
     }
 
     fn scaling<'a>(&self, scale: U, input: &'a IO) -> Result<IO, EvaluateError> {
-        let i = Vector::try_from(input.as_raw_slice())?;
-        let s = i * scale;
-
-        Ok(IO::try_from(Box::from(s))?)
+        Ok(input * scale)
     }
 
     fn identity<'a>(&self, input: &'a IO) -> Result<IO, EvaluateError> {
@@ -146,32 +142,12 @@ impl<U,IO,BE:Backend,const N:usize> DeviceScale<U,IO,N> for DeviceSimd<BE>
 
     fn batch_inverse_scaling<'a>(&self, scale: U, input: &'a <IO as BatchDataType>::Type)
                                  -> Result<<IO as BatchDataType>::Type, EvaluateError> {
-        Ok(SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?.par_iter().map(|input| {
-            let i = Vector::try_from(input.as_raw_slice()).map_err(|e| {
-                EvaluateError::from(e)
-            })?;
-
-            let s = i * (U::one() / scale);
-
-            Box::<[U]>::from(s).try_into().map_err(|e| {
-                EvaluateError::from(e)
-            })
-        }).collect::<Result<Vec<Arr<U,N>>, _>>()?.into())
+        Ok(input / scale)
     }
 
     fn batch_scaling<'a>(&self, scale: U, input: &'a <IO as BatchDataType>::Type)
                          -> Result<<IO as BatchDataType>::Type, EvaluateError> {
-        Ok(SerializedVecView::<'a,U,Arr<U,N>>::try_from(input)?.par_iter().map(|input| {
-            let i = Vector::try_from(input.as_raw_slice()).map_err(|e| {
-                EvaluateError::from(e)
-            })?;
-
-            let s = i * scale;
-
-            Box::<[U]>::from(s).try_into().map_err(|e| {
-                EvaluateError::from(e)
-            })
-        }).collect::<Result<Vec<Arr<U,N>>, _>>()?.into())
+        Ok(input * scale)
     }
 
     fn batch_identity<'a>(&self, input: &'a <IO as BatchDataType>::Type)

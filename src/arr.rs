@@ -69,12 +69,6 @@ impl<'data,T> IntoParallelIterator for &'data mut ShieldSlice<'data,T>
 pub trait Ones {
     fn ones() -> Self;
 }
-pub trait TryAsSimd<'a,BE> where BE: Backend {
-    type Output<'b> where 'a: 'b, Self: 'a;
-    type Error;
-    fn try_as_simd<'b>(&'b self) -> Result<Self::Output<'b>, Self::Error>;
-}
-/// Fixed-length one-dimensional array implementation
 #[derive(Debug,Eq,PartialEq)]
 pub struct Arr<T,const N:usize> where T: Default + Clone + Copy + Send {
     arr:Box<[T]>
@@ -295,16 +289,6 @@ impl<T,const N:usize> ToHost<T> for Arr<T,N> where T: Default + Clone + Copy + S
 
     fn to_host(self) -> Result<Self::Output, TypeConvertError> {
         Ok(self)
-    }
-}
-impl<'a,T,BE,const N: usize> TryAsSimd<'a,BE> for &'a Arr<T,N>
-    where T: Default + Clone + Copy + Send + 'static,
-          BE: Backend {
-    type Output<'b> = Vector<'b,T,N,BE> where 'a: 'b, Self: 'a;
-    type Error = InstantiationError;
-
-    fn try_as_simd<'b>(&'b self) -> Result<Self::Output<'b>, Self::Error> {
-        Ok(Vector::<'b,T,N,BE>::try_from(self.as_raw_slice())?)
     }
 }
 impl<'a,SS,SD,BE,const N: usize> From<Vector<'a,SS,N,BE>> for Arr<SD,N>
@@ -612,10 +596,10 @@ impl<T,const N1:usize, const N2:usize> IndexMut<usize> for Arr2<T,N1,N2> where T
     }
 }
 impl<const N1:usize, const N2:usize> Quantizable<i8> for Arr2<f32,N1,N2> {
-    type Quantized = Arr2<i8,N1,N2>;
+    type Quantized = ColumnMajorArr2<i8,N1,N2>;
 }
 impl<const N1:usize, const N2:usize> Quantizable<i16> for Arr2<f32,N1,N2> {
-    type Quantized = Arr2<i16,N1,N2>;
+    type Quantized = ColumnMajorArr2<i16,N1,N2>;
 }
 impl<'a,T,const N1:usize, const N2: usize> AsRawSlice<T> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     fn as_raw_slice(&self) -> &[T] {
@@ -976,16 +960,6 @@ impl<'a,T,const N:usize> TryFrom<&'a [T]> for ArrView<'a,T,N> where T: Default +
         } else {
             Ok(ArrView { arr: arr })
         }
-    }
-}
-impl<'a,T,BE,const N: usize> TryAsSimd<'a,BE> for ArrView<'a,T,N>
-    where T: Default + Clone + Copy + Send + 'static,
-          BE: Backend + 'static {
-    type Output<'b> = Vector<'b,T,N,BE> where 'a: 'b, Self: 'a;
-    type Error = InstantiationError;
-
-    fn try_as_simd<'b>(&'b self) -> Result<Self::Output<'b>, Self::Error> {
-        Ok(Vector::<'b,T,N,BE>::try_from(self.as_raw_slice())?)
     }
 }
 impl<'a,T,const N:usize> AsRawSlice<T> for ArrView<'a,T,N> where T: Default + Clone {

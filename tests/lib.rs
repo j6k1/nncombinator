@@ -184,6 +184,8 @@ fn test_mnist_for_cpu() {
 
     let count = tests.len();
 
+    let start_eval_time = Instant::now();
+
     for (n, path) in tests.iter() {
         let img = image::io::Reader::open(path).unwrap().decode().unwrap();
 
@@ -211,6 +213,12 @@ fn test_mnist_for_cpu() {
             correct_answers += 1;
         }
     }
+
+    let elapsed = start_eval_time.elapsed();
+
+    let elapsed = elapsed.as_secs() as u64 * 1000 + elapsed.subsec_millis() as u64;
+
+    println!("eval processing time is {} secs.",elapsed as f64 / 1000.);
 
     println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
 

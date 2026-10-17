@@ -1501,17 +1501,18 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
 pub mod simd {
     use std::fmt::Debug;
     use std::ops::{Add, AddAssign, Mul, Shr};
-    use rayon::prelude::{IndexedParallelIterator,IntoParallelRefIterator};
+    use std::process::Output;
+    use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator};
     use rayon::prelude::ParallelIterator;
     use crate::arr::{Arr, Arr2, ArrView, ColumnMajorArr2, IntoConverter, SerializedVec, SerializedVecView};
     use crate::device::{DeviceReduce, DeviceSimd};
     use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
     use crate::layer::{BatchDataType, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, TensorSize};
     use simdoperator::error::InstantiationError;
-    use simdoperator::{AccMatrix, AccVector, ColumnMajorMatrix, Matrix, MatrixMut, MatrixView, OwnedColumnMajorMatrix, OwnedMatrix, OwnedVector, Vector};
+    use simdoperator::{AccMatrix, AccVector, ColumnMajorMatrix, Matrix, MatrixMut, MatrixView, OwnedColumnMajorMatrix, OwnedMatrix, OwnedVector, Vector, VectorView};
     use simdoperator::backend::autoselect::AutoSelect;
-    use simdoperator::backend::common::Backend;
-    use simdoperator::traits::{Demote, Product, Promote, ToColumnMajor};
+    use simdoperator::backend::common::{Backend, Extent, LoaderMapper, LoaderMappperBuilder, VectorLoader};
+    use simdoperator::traits::{Demote, MapProduct, Product, Promote, ToColumnMajor};
     use crate::cast::Assume;
     use crate::device::linear::{DeviceLinear, DeviceQuantizedLinear, DeviceQuantizedLinearBase};
     use crate::mem::AsRawSlice;
@@ -1709,9 +1710,9 @@ pub mod simd {
                  Add<Output=U> +  Mul<Output=U> +
                  AddAssign + Send + Sync + Shr<usize,Output=U> + MaxValue + Assume<i32> + 'static,
               W: Default + Clone + Copy + Debug +
-              Add<Output=W> + Mul<Output=W> + AddAssign + MaxValue + Assume<U> + Ord + Send + Sync + 'static,
+                 Add<Output=W> + Mul<Output=W> + AddAssign + MaxValue + Assume<U> + Ord + Send + Sync + 'static,
               BE: Backend + Send + Sync + 'static,
-              i32: From<U>,
+              i32: From<U> + Assume<U>,
               f32: Assume<W> + Debug + Default + Clone + Copy + Send + Sync,
               I: BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + From<Arr<U,NI>> + Debug + 'static,
               <I as BatchDataType>::Type: Debug + 'static,
@@ -1727,15 +1728,12 @@ pub mod simd {
               [();NI]: TensorSize,
               [();NO]: TensorSize,
               f32: From<U> + Assume<U>,
-              i32: From<U> + Assume<U>,
-              AccVector<i32,NO,BE>: Shr<usize,Output=AccVector<i32,NO,BE>> +
-                                    Add<AccVector<i32,NO,BE>,Output=AccVector<i32,NO,BE>> +
-                                    Demote<AccVector<U,NO,BE>>,
+              i32: From<U> + From<W> + Add<i32,Output=i32> + Shr<usize,Output=i32> + Assume<U>,
               for<'a> ArrView<'a,U,NI>: From<&'a I>,
               for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
               for<'a> SerializedVecView<'a,f32,Arr<f32,NI>>: TryFrom<&'a <Arr<f32,NI> as BatchDataType>::Type,Error=TypeConvertError>,
-              for<'a,'b> Vector<'a,U,NI,BE>: Product<ColumnMajorMatrix<'b,W,NI,NO>,AccVector<i32,NO,BE>>,
-              for<'a> Vector<'a,W,NO,BE>: Promote<AccVector<i32,NO,BE>>,
+              for<'a,'b> Vector<'a,U,NI,BE>: MapProduct<ColumnMajorMatrix<'b,W,NI,NO>,i32,Output<U>=AccVector<U,NO,BE>,Dim=Extent<NO>>,
+              for<'a> VectorView<'a,W,NO>: From<&'a Vector<'a,W,NO,BE>>,
               Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO> {
         type Scale = Arr<f32,NO>;
         type RealInput = Arr<f32,NI>;
@@ -1821,9 +1819,13 @@ pub mod simd {
 
             let input = Vector::<U,NI,BE>::try_from(input)?;
 
-            let o = (input.product(units) + bias.promotion()) >> shift;
+            let mapper = LoaderMappperBuilder::new().build(VectorLoader::new(VectorView::<W,NO>::from(&bias)),|o:i32,b:W| {
+                ((o + i32::from(b)) >> shift).assume()
+            });
 
-            Ok(Box::<[U]>::from(o.demotion()).try_into()?)
+            let o = input.map_product(units, mapper);
+
+            Ok(Box::<[U]>::from(o).try_into()?)
         }
 
         #[inline]
@@ -1877,9 +1879,14 @@ pub mod simd {
                 let input: &[U] = input.as_raw_slice();
 
                 Vector::<U,NI,BE>::try_from(input).map_err(|e| TrainingError::from(e)).and_then(|input| {
-                    let o = (input.product(units) + bias.promotion()) >> shift;
+                    let mapper = LoaderMappperBuilder::new().build(VectorLoader::new(VectorView::<W,NO>::from(&bias)),|o:i32,b:W| {
+                        ((o + i32::from(b)) >> shift).assume()
+                    });
 
-                    Box::<[U]>::from(o.demotion()).try_into().map_err(|e| TrainingError::from(e))
+                    let o = input.map_product(units, mapper);
+
+
+                    Ok(Box::<[U]>::from(o).try_into()?)
                 })
             }).collect::<Result<Vec<Arr<U,NO>>,_>>()?.into())
         }

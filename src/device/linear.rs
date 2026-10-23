@@ -15,7 +15,6 @@ use crate::mem::AsRawSlice;
 use crate::layer::{BatchSize};
 #[cfg(feature = "cuda")]
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};
-use simdoperator::backend::common::Backend;
 use crate::cast::Assume;
 #[cfg(feature = "cuda")]
 use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsCudaPtr, AsCudaReadOnlyPtr, AsCudaView, AsKernelPtr, AsMutPtr, AsPtr, CudaMutPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaTensor2dPtr, CudaVec, CudaVecView, CudaView, MemorySize, MemoryType, ReadMemory};
@@ -27,7 +26,6 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{AddBias, AddBiasArgs, AddBiasBatch, AddBiasBatchArgs, DiffLinearForward, DiffLinearForwardArgs, ForwardLinear, ForwardLinearArgs, LinearGradient, LinearGradientArgs, ReduceLinearBatch, ReduceLinearBatchArgs};
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
-use crate::fast_exp_f64;
 use crate::quantization::Quantizable;
 
 /// Trait that defines the implementation of various calculation processes in the linear layer
@@ -1501,7 +1499,6 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,N
 pub mod simd {
     use std::fmt::Debug;
     use std::ops::{Add, AddAssign, Mul, Shr};
-    use std::process::Output;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator};
     use rayon::prelude::ParallelIterator;
     use crate::arr::{Arr, Arr2, ArrView, ColumnMajorArr2, IntoConverter, SerializedVec, SerializedVecView};
@@ -1511,8 +1508,9 @@ pub mod simd {
     use simdoperator::error::InstantiationError;
     use simdoperator::{AccMatrix, AccVector, ColumnMajorMatrix, Matrix, MatrixMut, MatrixView, OwnedColumnMajorMatrix, OwnedMatrix, OwnedVector, Vector, VectorView};
     use simdoperator::backend::autoselect::AutoSelect;
-    use simdoperator::backend::common::{Backend, Extent, LoaderMapper, LoaderMappperBuilder, VectorLoader};
-    use simdoperator::traits::{Demote, MapProduct, Product, Promote, ToColumnMajor};
+    use simdoperator::backend::avx2::Avx2;
+    use simdoperator::backend::common::{AddOperator, Backend, DemoteOperator, ShrOperator};
+    use simdoperator::traits::{BinaryOperator, BinaryQuery, Product, SimdBinaryOperator, SimdCombinationQueryVector, ToColumnMajor, ToSimdBinaryOperator};
     use crate::cast::Assume;
     use crate::device::linear::{DeviceLinear, DeviceQuantizedLinear, DeviceQuantizedLinearBase};
     use crate::mem::AsRawSlice;
@@ -1712,7 +1710,7 @@ pub mod simd {
               W: Default + Clone + Copy + Debug +
                  Add<Output=W> + Mul<Output=W> + AddAssign + MaxValue + Assume<U> + Ord + Send + Sync + 'static,
               BE: Backend + Send + Sync + 'static,
-              i32: From<U> + Assume<U>,
+              i32: From<U> + Assume<U> + Copy,
               f32: Assume<W> + Debug + Default + Clone + Copy + Send + Sync,
               I: BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + From<Arr<U,NI>> + Debug + 'static,
               <I as BatchDataType>::Type: Debug + 'static,
@@ -1732,9 +1730,15 @@ pub mod simd {
               for<'a> ArrView<'a,U,NI>: From<&'a I>,
               for<'a> SerializedVecView<'a,U,Arr<U,NI>>: TryFrom<&'a <I as BatchDataType>::Type,Error=TypeConvertError>,
               for<'a> SerializedVecView<'a,f32,Arr<f32,NI>>: TryFrom<&'a <Arr<f32,NI> as BatchDataType>::Type,Error=TypeConvertError>,
-              for<'a,'b> Vector<'a,U,NI,BE>: MapProduct<ColumnMajorMatrix<'b,W,NI,NO>,i32,Output<U>=AccVector<U,NO,BE>,Dim=Extent<NO>>,
+              for<'a,'b> Vector<'a,U,NI,BE>: Product<ColumnMajorMatrix<'b,W,NI,NO>,AccVector<i32,NO,BE>>,
+              for<'a,'b> Vector<'a,i32,NO,BE>: BinaryQuery<Vector<'b,W,NO,BE>,i32,W,U,Output=AccVector<U,NO,BE>>,
+              for<'a> AccVector<i32,NO,BE>: BinaryQuery<Vector<'a,W,NO,BE>,i32,W,U,Output=AccVector<U,NO,BE>>,
               for<'a> VectorView<'a,W,NO>: From<&'a Vector<'a,W,NO,BE>>,
-              Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO> {
+              Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO>,
+              DemoteOperator<ShrOperator<AddOperator<i32,W,i32>,i32>,U>: BinaryOperator<Lhs=i32,Rhs=W,Output=U>,
+              DemoteOperator<ShrOperator<AddOperator<i32,W,i32>,i32>,U>: ToSimdBinaryOperator<Avx2>,
+              <DemoteOperator<ShrOperator<AddOperator<i32,W,i32>,i32>,U> as ToSimdBinaryOperator<Avx2>>::NativeOperator: SimdBinaryOperator<Avx2,i32,W,ScalarOutput=U>,
+              Avx2: SimdCombinationQueryVector<<DemoteOperator<ShrOperator<AddOperator<i32,W,i32>,i32>,U> as ToSimdBinaryOperator<Avx2>>::NativeOperator,i32,W,U> {
         type Scale = Arr<f32,NO>;
         type RealInput = Arr<f32,NI>;
         type BatchRealInput = SerializedVec<f32,Arr<f32,NI>>;
@@ -1819,11 +1823,13 @@ pub mod simd {
 
             let input = Vector::<U,NI,BE>::try_from(input)?;
 
-            let mapper = LoaderMappperBuilder::new().build(VectorLoader::new(VectorView::<W,NO>::from(&bias)),|o:i32,b:W| {
-                ((o + i32::from(b)) >> shift).assume()
+            let o = input.product(units);
+
+            let operator = AddOperator::<i32,W,i32>::new().compose(|p| {
+                ShrOperator::<_,i32>::new(p,shift).compose(|p| DemoteOperator::<_,U>::new(p))
             });
 
-            let o = input.map_product(units, mapper);
+            let o = o.query(bias,operator);
 
             Ok(Box::<[U]>::from(o).try_into()?)
         }
@@ -1878,13 +1884,14 @@ pub mod simd {
 
                 let input: &[U] = input.as_raw_slice();
 
-                Vector::<U,NI,BE>::try_from(input).map_err(|e| TrainingError::from(e)).and_then(|input| {
-                    let mapper = LoaderMappperBuilder::new().build(VectorLoader::new(VectorView::<W,NO>::from(&bias)),|o:i32,b:W| {
-                        ((o + i32::from(b)) >> shift).assume()
-                    });
+                let operator = AddOperator::<i32,W,i32>::new().compose(|p| {
+                    ShrOperator::<_,i32>::new(p,shift).compose(|p| DemoteOperator::<_,U>::new(p))
+                });
 
-                    let o = input.map_product(units, mapper);
+                Vector::<U,NI,BE>::try_from(input).map_err(|e| TrainingError::from(e)).and_then(move |input| {
+                    let o = input.product(units);
 
+                    let o = o.query(bias,operator);
 
                     Ok(Box::<[U]>::from(o).try_into()?)
                 })

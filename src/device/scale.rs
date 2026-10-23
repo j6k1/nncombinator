@@ -2,16 +2,10 @@
 
 use std::fmt::Debug;
 use std::ops::{Mul, Div};
-use rayon::prelude::{IntoParallelRefIterator};
-use rayon::prelude::ParallelIterator;
-use simdoperator::{AccVector, Vector};
 use simdoperator::backend::common::Backend;
-use crate::arr::{Arr, SerializedVecView};
 use crate::device::{DeviceCpu, DeviceSimd};
-use crate::error::{EvaluateError, TypeConvertError};
+use crate::error::{EvaluateError};
 use crate::layer::{BatchDataType, BatchSize};
-use crate::mem::AsRawSlice;
-use crate::ope::One;
 
 /// Trait that defines the implementation of inverse scaling processes in the scale layer.
 pub trait DeviceScale<U,IO,const N: usize>

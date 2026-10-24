@@ -10,7 +10,9 @@ use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLuBuilder, SigmoidBuilder, SoftMaxBuilder};
 use nncombinator::arr::{Arr};
-use nncombinator::device::{DeviceCpu, DeviceGpu};
+#[cfg(feature = "cuda")]
+use nncombinator::device::{DeviceGpu};
+use nncombinator::device::{DeviceCpu};
 use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll, PersistProgress, Step};
 use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::batchnormalization::BatchNormalizationLayerBuilder;
@@ -23,7 +25,9 @@ use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropyMulticlass};
 use nncombinator::optimizer::{AdagradBuilder, AdamBuilder, AdamWBuilder, MomentumSGDBuilder, RMSpropBuilder, SGDBuilder};
 use nncombinator::persistence::{BinFilePersistence, Persistence, SaveToFile, TextFilePersistence};
-use crate::common::{assert_text_persist_progress, SHARED_MEMORY_POOL};
+use crate::common::{assert_text_persist_progress};
+#[cfg(feature = "cuda")]
+use crate::common::SHARED_MEMORY_POOL;
 
 /*
 #[test]

@@ -175,7 +175,7 @@ impl Stack for Nil {
 
 #[cfg(test)]
 mod tests {
-    use crate::activation::{ReLu, ReLuBuilder};
+    use crate::activation::{ReLuBuilder};
     use crate::arr::Arr;
     use crate::device::DeviceCpu;
     use crate::layer::{AddLayer, TryAddLayer};

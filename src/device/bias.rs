@@ -11,7 +11,6 @@ use crate::collection::Broadcast;
 use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::layer::{BatchDataType, BatchSize};
-use crate::mem::AsRawSlice;
 #[cfg(feature = "cuda")]
 use crate::cuda::{AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVec, CudaVecView, ReadMemory, WriteMemory, MemoryMoveTo, AsCudaMutPtr, CudaMutPtr, AsCudaPtr, Kernel};
 #[cfg(feature = "cuda")]
@@ -20,6 +19,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{AddBiasBatch, AddBiasBatchArgs};
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
+use crate::mem::AsRawSlice;
 
 /// Trait that defines the implementation of various calculation processes in the bias layer
 pub trait DeviceBias<U,T,IO,const N: usize>

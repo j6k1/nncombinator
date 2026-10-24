@@ -9,7 +9,6 @@ use crate::lossfunction::*;
 use crate::error::{TypeConvertError};
 #[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
-use crate::cuda::DataTypeInfo;
 #[cfg(feature = "cuda")]
 use crate::cuda::ToCuda;
 use crate::mapper::{BatchDataMapper, DataMapper};
@@ -70,7 +69,7 @@ impl<'a,T,O> BatchDataType for DiffInput<'a,T,O>
 }
 #[cfg(feature = "cuda")]
 impl<'a,T,O,U,A> ToCuda<U,A> for DiffInput<'a,T,O>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           T: Debug,
           O: Debug + 'a,
           A: CudaAllocator + 'static {
@@ -82,7 +81,7 @@ impl<'a,T,O,U,A> ToCuda<U,A> for DiffInput<'a,T,O>
 }
 #[cfg(feature = "cuda")]
 impl<'a,T,O,U,A> ToCuda<U,A> for Vec<DiffInput<'a,T,O>>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           T: Debug,
           O: Debug + 'a,
           A: CudaAllocator + 'static {
@@ -358,7 +357,7 @@ pub trait BatchPreTrain: BatchPreTrainBase + BatchForwardBase + BatchForward {
 }
 /// Trait that defines the implementation of neural network training by batch processing.
 pub trait BatchTrain<SO,D,L>: BatchPreTrainBase + BatchPreTrain + BatchBackward<SO> + PreTrain
-    where SO: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
+    where SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<SO>,
           L: LossFunction<SO> {
     /// Train neural networks.

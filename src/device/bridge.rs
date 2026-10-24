@@ -3,9 +3,13 @@
 use std::fmt::Debug;
 use simdoperator::backend::common::Backend;
 use crate::cast::Assume;
+#[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::{AsCudaView, CudaView};
-use crate::device::{DeviceCpu, DeviceGpu, DeviceSimd};
+#[cfg(feature = "cuda")]
+use crate::device::DeviceGpu;
+use crate::device::{DeviceCpu, DeviceSimd};
 use crate::error::{EvaluateError, TrainingError};
 use crate::layer::{BatchDataType};
 
@@ -78,6 +82,7 @@ impl<U,SO,PI,CI> DeviceBridge<U,SO,PI,CI> for DeviceCpu
         Ok(input.into())
     }
 }
+#[cfg(feature = "cuda")]
 impl<U,SO,A,PI,CI> DeviceBridge<U,SO,PI,CI> for DeviceGpu<A>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           A: CudaAllocator,

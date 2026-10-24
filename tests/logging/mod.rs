@@ -1,27 +1,50 @@
+#[allow(unused)]
 use std::cell::RefCell;
+#[allow(unused)]
 use std::fs::File;
+#[allow(unused)]
 use std::io::{BufRead, BufReader};
+#[allow(unused)]
 use std::ops::DerefMut;
+#[allow(unused)]
 use std::path::Path;
+#[allow(unused)]
 use std::rc::Rc;
+#[allow(unused)]
 use rand::{prelude, Rng, SeedableRng};
+#[allow(unused)]
 use rand::prelude::{Distribution, SliceRandom};
+#[allow(unused)]
 use rand_distr::Normal;
+#[allow(unused)]
 use rand_xorshift::XorShiftRng;
+#[allow(unused)]
 use nncombinator::activation::{ReLuBuilder, SigmoidBuilder};
+#[allow(unused)]
 use nncombinator::arr::Arr;
+#[cfg(feature = "cuda")]
 use nncombinator::device::{DeviceGpu};
+#[allow(unused)]
 use nncombinator::layer::activation::ActivationLayer;
+#[allow(unused)]
 use nncombinator::layer::{AddLayer, BatchTrain, Train};
+#[allow(unused)]
 use nncombinator::layer::input::InputLayer;
+#[allow(unused)]
 use nncombinator::layer::linear::LinearLayerBuilder;
+#[allow(unused)]
 use nncombinator::layer::logging::{LoggingLayer};
+#[allow(unused)]
 use nncombinator::layer::output::LinearOutputLayer;
+#[allow(unused)]
 use nncombinator::lossfunction::CrossEntropy;
+#[allow(unused)]
 use nncombinator::optimizer::MomentumSGDBuilder;
+#[cfg(feature = "cuda")]
 use crate::common::SHARED_MEMORY_POOL;
 
 #[test]
+#[cfg(feature = "cuda")]
 fn test_logger() {
     let (sender,receiver) = std::sync::mpsc::channel();
 

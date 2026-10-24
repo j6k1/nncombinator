@@ -13,6 +13,7 @@ pub mod logging;
 pub mod scheduler;
 pub mod persistence;
 
+#[cfg(feature = "cuda")]
 pub mod cuda;
 pub mod quantization;
 
@@ -36,7 +37,9 @@ use simdoperator::backend::autoselect::AutoSelect;
 use simdoperator::backend::common::Backend;
 use nncombinator::activation::{ClippedReLuBuilder, LeakyReLuBuilder, ReLuBuilder, SigmoidBuilder, SoftMaxBuilder, SwishBuilder, TanhBuilder};
 use nncombinator::arr::{Arr, DiffArr};
-use nncombinator::device::{DeviceCpu, DeviceGpu, DeviceSimd};
+#[cfg(feature = "cuda")]
+use nncombinator::device::{DeviceGpu};
+use nncombinator::device::{DeviceCpu, DeviceSimd};
 use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll, ForwardDiff, PartialForward, ContinueForward, Train};
 use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::input::{DiffInputLayer, InputLayer};
@@ -44,9 +47,13 @@ use nncombinator::layer::linear::{DiffLinearLayerBuilder, LinearLayerBuilder};
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::{CrossEntropy, CrossEntropyMulticlass, Mse};
 use nncombinator::optimizer::{AdagradBuilder, AdamBuilder, AdamWBuilder, MomentumSGDBuilder, SGDBuilder};
+#[cfg(feature = "cuda")]
 use nncombinator::cuda::allocator::{DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
+#[cfg(feature = "cuda")]
 use nncombinator::cuda::{CudaTensor1dPtr, ReadMemory};
-use crate::common::{assert_backward_all, assert_continue_forward, assert_forward_all, assert_forward_diff, assert_loss, assert_partial_forward, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL};
+#[cfg(feature = "cuda")]
+use crate::common::SHARED_MEMORY_POOL;
+use crate::common::{assert_backward_all, assert_continue_forward, assert_forward_all, assert_forward_diff, assert_loss, assert_partial_forward, assert_pre_train, assert_update_weight};
 
 #[test]
 fn test_mnist_for_cpu() {
@@ -384,6 +391,7 @@ fn test_fashion_mnist_for_cpu() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_mnist_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -546,6 +554,7 @@ fn test_mnist_for_gpu() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 90.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_mnist_for_gpu_double() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -708,6 +717,7 @@ fn test_mnist_for_gpu_double() {
     debug_assert!(correct_answers as f64 / count as f64 * 100. > 80.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_mnist_for_gpu_adam() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -872,6 +882,7 @@ fn test_mnist_for_gpu_adam() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 90.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_mnist_for_gpu_adamw() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -1036,6 +1047,7 @@ fn test_mnist_for_gpu_adamw() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 90.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_fashion_mnist_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -1205,6 +1217,7 @@ fn test_fashion_mnist_for_gpu() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_fashion_mnist_for_gpu_double() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -1954,6 +1967,7 @@ fn test_weather_batch_train() {
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_weather_batch_train_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -2141,6 +2155,7 @@ fn test_weather_batch_train_for_gpu() {
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_weather_batch_train_for_gpu_double() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -2544,6 +2559,7 @@ fn test_penguins() {
     debug_assert!(rate > 26.);
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_penguins_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -2763,6 +2779,7 @@ fn test_penguins_for_gpu() {
 }
 
 #[test]
+#[cfg(feature = "cuda")]
 fn test_weather_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -2927,6 +2944,7 @@ fn test_weather_for_gpu() {
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_weather_by_forward_diff_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -3125,6 +3143,7 @@ fn test_weather_by_forward_diff_for_gpu() {
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -3349,6 +3368,7 @@ fn test_weather_by_forward_diff_for_gpu_for_continue_forward() {
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_penguins_for_gpu_double() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -3568,6 +3588,7 @@ fn test_penguins_for_gpu_double() {
 }
 
 #[test]
+#[cfg(feature = "cuda")]
 fn test_weather_for_gpu_double() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -3732,6 +3753,7 @@ fn test_weather_for_gpu_double() {
     debug_assert!(correct_answers as f64 / tests.len() as f64 * 100. >= 73.);
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_weather_by_forward_diff_for_gpu_double() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -4086,6 +4108,7 @@ fn test_mnist_sigmoid_and_crossentropy() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_mnist_sigmoid_and_crossentropy_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -4402,6 +4425,7 @@ fn test_mnist_tanh_and_relu_and_mse() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_mnist_tanh_and_relu_and_mse_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -4717,6 +4741,7 @@ fn test_mnist_tanh_and_swish_and_mse() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -4876,6 +4901,7 @@ fn test_mnist_tanh_and_swish_and_mse_for_gpu() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. >= 80.);
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_fashion_mnist_for_gpu_with_local_allocator() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -5527,6 +5553,7 @@ fn test_weather_by_forward_diff_for_continue_forward() {
     debug_assert!(correct_answers as f32 / tests.len() as f32 * 100. >= 73.);
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_fashion_mnist_for_gpu_with_leaky_relu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -6016,6 +6043,7 @@ fn test_mnist_for_cpu_with_clipped_relu() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 90.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_mnist_for_gpu_with_clipped_relu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));

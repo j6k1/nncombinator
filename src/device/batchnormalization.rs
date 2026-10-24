@@ -139,7 +139,7 @@ impl<U,I,const N:usize> DeviceBatchNorm<U,Arr<U,N>,I,N> for DeviceCpu
     where U: Default + Clone + Copy + Debug + FromPrimitive +
              Add<Output=U> + Mul<Output=U> + Div<Output=U> + Sub<Output=U> + AddAssign + Neg<Output=U> +
              One + Sqrt +
-             Send + Sync + DataTypeInfo + 'static,
+             Send + Sync + 'static,
           I: BatchDataType + InputTensorSize<N> + OutputTensorSize<N> + Debug +
              InputTensorScalar + OutputTensorScalar + From<Arr<U,N>> + 'static,
           <I as BatchDataType>::Type: Debug + 'static,

@@ -13,13 +13,13 @@ use crate::error::{IndexOutBoundError, IndivisibleError, SizeMismatchError, Type
 use crate::layer::{BatchDataType, BatchSize, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize};
 use crate::mem::{AsRawMutSlice, AsRawSlice};
 use crate::ope::{One, Product, Sum};
-#[cfg(feature = "cuda")]
 use crate::bridge::{ToHost};
 use crate::cast::Assume;
 #[cfg(feature = "cuda")]
 use crate::cuda::{AsConstKernelPtr, AsKernelPtr, CudaTensor1dPtr, CudaVec, WriteMemory, MemorySize, ToCuda, AsMutPtr, AsCudaMutPtr, CudaMutPtr, CudaPtr};
 #[cfg(feature = "cuda")]
 use crate::cuda::allocator::CudaAllocator;
+#[cfg(feature = "cuda")]
 use crate::cuda::DataTypeInfo;
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
@@ -1801,6 +1801,7 @@ impl<'a,U,T,A> ToCuda<U,A> for &'a SerializedVec<U,T>
         }
     }
 }
+
 impl<U,T> ToHost<U> for SerializedVec<U,T> where U: Default + Clone + Copy + Send {
     type Output = SerializedVec<U,T>;
 

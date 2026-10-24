@@ -10,7 +10,9 @@ use rand_distr::Normal;
 use rand_xorshift::XorShiftRng;
 use nncombinator::activation::{ReLuBuilder, SoftMaxBuilder};
 use nncombinator::arr::Arr;
-use nncombinator::device::{DeviceCpu, DeviceGpu};
+#[cfg(feature = "cuda")]
+use nncombinator::device::{DeviceGpu};
+use nncombinator::device::{DeviceCpu};
 use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll};
 use nncombinator::layer::activation::ActivationLayer;
 use nncombinator::layer::batchnormalization::{BatchNormalizationLayerBuilder};
@@ -19,7 +21,9 @@ use nncombinator::layer::linear::LinearLayerBuilder;
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::optimizer::{MomentumSGDBuilder};
-use crate::common::{assert_device, assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight, SHARED_MEMORY_POOL, assert_bridge, assert_batch_bridge};
+#[cfg(feature = "cuda")]
+use crate::common::{assert_device,SHARED_MEMORY_POOL};
+use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight, assert_bridge, assert_batch_bridge};
 
 #[test]
 fn test_mnist_batch_norm() {
@@ -784,6 +788,7 @@ fn test_fashion_mnist_batch_norm_double() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_mnist_batch_norm_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -1036,6 +1041,7 @@ fn test_mnist_batch_norm_for_gpu() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_fashion_mnist_batch_norm_for_gpu() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -1203,6 +1209,7 @@ fn test_fashion_mnist_batch_norm_for_gpu() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_mnist_batch_norm_for_gpu_double() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));
@@ -1371,6 +1378,7 @@ fn test_mnist_batch_norm_for_gpu_double() {
     debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_fashion_mnist_batch_norm_for_gpu_double() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));

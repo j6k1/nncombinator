@@ -1,13 +1,17 @@
 use std::fmt::Debug;
+#[cfg(feature = "cuda")]
 use lazy_static::lazy_static;
 use rand::Rng;
 use nncombinator::arr::{Arr, Arr2, SerializedVec};
 use nncombinator::device::input::DeviceInput;
 use nncombinator::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchLoss, BatchBridge, BatchPreTrain, BatchSize, ContinueForward, ForwardAll, ForwardDiff, Loss, OnStep, Bridge, PartialForward, PersistProgress, PreTrain, Step, UpdateWeight};
+#[cfg(feature = "cuda")]
 use nncombinator::cuda::allocator::{CudaAllocator, DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
+#[cfg(feature = "cuda")]
 use nncombinator::cuda::{AsCudaMutPtr, AsCudaView, CudaMutPtr, CudaTensor1dPtr, CudaTensor2dPtr, CudaVec, WriteMemory};
 use nncombinator::persistence::{Specialized, TextFilePersistence};
 
+#[cfg(feature = "cuda")]
 lazy_static! {
     pub static ref SHARED_MEMORY_POOL:MemoryPoolAllocator<DeviceAlloc> = MemoryPoolAllocator::with_size(8 * 1024 * 1024 * 1024,DeviceAlloc).unwrap();
 }
@@ -98,6 +102,7 @@ pub fn approx_eq_slice(a: &[f64],b: &[f64],eps: f64) {
     }
 }
 
+#[cfg(feature = "cuda")]
 pub fn upload_inputs_to_device<A: MemoryPoolAllocatorInstantiation<DeviceAlloc> + CudaAllocator + 'static>(
     alloc: &A,
     bias: &Arr<f64,NO>,units: &Arr2<f64,NI,NO>,

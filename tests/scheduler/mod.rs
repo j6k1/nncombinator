@@ -1,26 +1,51 @@
+#[allow(unused)]
 use std::cell::RefCell;
+#[allow(unused)]
 use std::fs::File;
+#[allow(unused)]
 use std::io::{BufRead, BufReader};
+#[allow(unused)]
 use std::ops::DerefMut;
+#[allow(unused)]
 use std::path::Path;
+#[allow(unused)]
 use std::rc::Rc;
+#[allow(unused)]
 use rand::{prelude, Rng, SeedableRng};
+#[allow(unused)]
 use rand::prelude::{Distribution, SliceRandom};
+#[allow(unused)]
 use rand_distr::Normal;
+#[allow(unused)]
 use rand_xorshift::XorShiftRng;
+#[allow(unused)]
 use nncombinator::activation::{ReLuBuilder, SigmoidBuilder};
+#[allow(unused)]
 use nncombinator::arr::Arr;
-use nncombinator::device::DeviceGpu;
+#[cfg(feature = "cuda")]
+use nncombinator::device::{DeviceGpu};
+#[allow(unused)]
 use nncombinator::layer::activation::ActivationLayer;
+#[allow(unused)]
 use nncombinator::layer::{AddLayer, BatchTrain, Step};
+#[allow(unused)]
 use nncombinator::layer::input::InputLayer;
+#[allow(unused)]
 use nncombinator::layer::linear::LinearLayerBuilder;
+#[allow(unused)]
 use nncombinator::layer::logging::LoggingLayer;
+#[allow(unused)]
 use nncombinator::layer::output::LinearOutputLayer;
+#[allow(unused)]
 use nncombinator::lossfunction::CrossEntropy;
+#[allow(unused)]
 use nncombinator::optimizer::MomentumSGDBuilder;
+#[allow(unused)]
 use nncombinator::scheduler::{LambdaLR, LinearWarmupLR, Scheduler};
-use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_on_step, assert_pre_train, assert_step, assert_update_weight, SHARED_MEMORY_POOL};
+#[cfg(feature = "cuda")]
+use crate::common::SHARED_MEMORY_POOL;
+#[allow(unused)]
+use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_on_step, assert_pre_train, assert_step, assert_update_weight};
 
 #[test]
 fn test_scheduler_seq() {
@@ -45,6 +70,7 @@ fn test_scheduler_seq() {
     assert_eq!(scheduler.schedule(0.05, 29).unwrap(), 0.05);
 }
 #[test]
+#[cfg(feature = "cuda")]
 fn test_scheduler() {
     let mut rnd = prelude::thread_rng();
     let rnd_base = Rc::new(RefCell::new(XorShiftRng::from_seed(rnd.gen())));

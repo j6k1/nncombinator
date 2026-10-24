@@ -267,14 +267,14 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for IdentityBuilder<S,DS,D>
 }
 /// Sigmoid Implementation
 pub struct Sigmoid<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>,
     c:HashSet<&'static str>
 }
 impl<U,D> Sigmoid<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> {
     /// Create an instance of Sigmoid
     pub fn new(_:&D) -> Sigmoid<U,D> {
@@ -289,7 +289,7 @@ impl<U,D> Sigmoid<U,D>
     }
 }
 impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu> for Sigmoid<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + Mul<Output=U> + Neg<Output=U> + One + Exp + Sqrt,
           Arr<U,N>: Deref<Target=Box<[U]>> {
 
@@ -306,7 +306,7 @@ impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu> for Sigmoid<U,D
     }
 }
 impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu> for Sigmoid<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + Mul<Output=U> + Neg<Output=U> + One + Exp + Sqrt,
           Arr<U,N>: Deref<Target=Box<[U]>> {
 
@@ -323,7 +323,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu> for Si
     }
 }
 impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu> for Sigmoid<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              Div<Output=U> + Mul<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
              One + Exp + Sqrt,
           I: Iterator<Item=U> + Clone {
@@ -389,7 +389,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
     }
 }
 impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu> for Sigmoid<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + 'static + DataTypeInfo +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              Div<Output=U> + Mul<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
              One + Exp + Sqrt,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
@@ -407,7 +407,7 @@ impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec
     }
 }
 impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu> for Sigmoid<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              Div<Output=U> + Mul<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
              One + Exp + Sqrt,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
@@ -489,8 +489,8 @@ impl<S,DS,D> SigmoidBuilder<S,DS,D> where D: Device<S> + Device<DS> {
     }
 }
 impl<S,DS,D> ActivationBuilder<S,DS,D> for SigmoidBuilder<S,DS,D>
-    where S: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
-          DS: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static,
+    where S: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          DS: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<S> + Device<DS> {
     type ForwardActivation = Sigmoid<S,D>;
     type BackwardActivation = Sigmoid<DS,D>;
@@ -1209,14 +1209,14 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for LeakyReLuBuilder<S,DS,D>
 }
 /// Swish Implementation
 pub struct Swish<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg + FromPrimitive,
           D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>
 }
 impl<U,D> Swish<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg<Output=U> +
              Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Neg<Output=U> + FromPrimitive,
           D: Device<U> {
@@ -1229,7 +1229,7 @@ impl<U,D> Swish<U,D>
     }
 }
 impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu> for Swish<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> +
              Neg<Output=U> + FromPrimitive,
           Arr<U,N>: Deref<Target=Box<[U]>> {
@@ -1246,7 +1246,7 @@ impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu> for Swish<U,Dev
     }
 }
 impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu> for Swish<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              Exp + One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
              FromPrimitive,
           Arr<U,N>: Deref<Target=Box<[U]>> {
@@ -1263,7 +1263,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu> for Sw
     }
 }
 impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu> for Swish<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
              Exp + FromPrimitive,
           I: Iterator<Item=U> + Clone {
@@ -1331,7 +1331,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
     }
 }
 impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu> for Swish<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
              Exp + FromPrimitive,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
@@ -1349,7 +1349,7 @@ impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec
     }
 }
 impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu> for Swish<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              One + Mul<Output=U> + Div<Output=U> + Add<Output=U> + Sub<Output=U> + Neg<Output=U> +
              Exp + FromPrimitive,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
@@ -1440,10 +1440,10 @@ impl<S,DS,D> SwishBuilder<S,DS,D> where D: Device<S> + Device<DS> {
 impl<S,DS,D> ActivationBuilder<S,DS,D> for SwishBuilder<S,DS,D>
     where S: Default + Clone + Copy + Debug +
              One + Mul<Output=S> + Div<Output=S> + Add<Output=S> + Neg<Output=S> +
-             FromPrimitive + Exp + Send + Sync + Send + Sync + DataTypeInfo + 'static,
+             FromPrimitive + Exp + Send + Sync + Send + Sync + 'static,
           DS: Default + Clone + Copy + Debug +
               One + Mul<Output=DS> + Div<Output=DS> + Add<Output=DS> + Neg<Output=DS> +
-              FromPrimitive + Exp + Send + Sync + Send + Sync + DataTypeInfo + 'static,
+              FromPrimitive + Exp + Send + Sync + Send + Sync + 'static,
           D: Device<S> + Device<DS> {
     type ForwardActivation = Swish<S,D>;
     type BackwardActivation = Swish<DS,D>;
@@ -1453,14 +1453,14 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for SwishBuilder<S,DS,D>
 }
 /// Tanh Implementation
 pub struct Tanh<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              One + Mul<Output=U> + Sub<Output=U> +
              ope::Tanh, D: Device<U> {
     u:PhantomData<U>,
     d:PhantomData<D>
 }
 impl<U,D> Tanh<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              One + Mul<Output=U> + Sub<Output=U> +
              ope::Tanh, D: Device<U> {
     /// Create an instance of Tanh
@@ -1472,7 +1472,7 @@ impl<U,D> Tanh<U,D>
     }
 }
 impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu> for Tanh<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              One + Mul<Output=U> + Sub<Output=U> +
              ope::Tanh,
           Arr<U,N>: Deref<Target=Box<[U]>> {
@@ -1489,7 +1489,7 @@ impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu> for Tanh<U,Devi
     }
 }
 impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu> for Tanh<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              One + Mul<Output=U> + Sub<Output=U> +
              ope::Tanh,
           Arr<U,N>: Deref<Target=Box<[U]>> {
@@ -1506,7 +1506,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu> for Ta
     }
 }
 impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu> for Tanh<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              One + Mul<Output=U> + Sub<Output=U> +
              ope::Tanh,
           I: Iterator<Item=U> + Clone {
@@ -1577,7 +1577,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
     }
 }
 impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu> for Tanh<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              One + ope::Tanh + Mul<Output=U> + Sub<Output=U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
     fn batch_apply(&self, device: &DeviceCpu, input: &SerializedVec<U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -1593,7 +1593,7 @@ impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec
     }
 }
 impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu> for Tanh<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              One + ope::Tanh + Mul<Output=U> + Sub<Output=U>,
           Vec<Arr<U,N>>: FromParallelIterator<Arr<U,N>> {
     fn batch_apply(&self, device: &DeviceCpu, input: SerializedVecView<'a,U, Arr<U,N>>) -> Result<SerializedVec<U, Arr<U, N>>, TrainingError> {
@@ -1678,9 +1678,9 @@ impl<S,DS,D> TanhBuilder<S,DS,D> where D: Device<S> + Device<DS> {
 }
 impl<S,DS,D> ActivationBuilder<S,DS,D> for TanhBuilder<S,DS,D>
     where S: Default + Clone + Copy + Debug + One + ope::Tanh +
-             Mul<Output=S> + Sub<Output=S> + Send + Sync + DataTypeInfo + 'static,
+             Mul<Output=S> + Sub<Output=S> + Send + Sync + 'static,
           DS: Default + Clone + Copy + Debug + One + ope::Tanh + Mul<Output=DS> + Sub<Output=DS> +
-              Send + Sync + DataTypeInfo + 'static,
+              Send + Sync + 'static,
           D: Device<S> + Device<DS> {
     type ForwardActivation = Tanh<S,D>;
     type BackwardActivation = Tanh<DS,D>;
@@ -1690,7 +1690,7 @@ impl<S,DS,D> ActivationBuilder<S,DS,D> for TanhBuilder<S,DS,D>
 }
 /// SoftMax Implementation
 pub struct SoftMax<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              Max + InitialMaxValue + One + Exp +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              FromPrimitive,
@@ -1700,7 +1700,7 @@ pub struct SoftMax<U,D>
     c:HashSet<&'static str>
 }
 impl<U,D> SoftMax<U,D>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              Max + InitialMaxValue + One + Exp +
     Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              FromPrimitive,
@@ -1718,7 +1718,7 @@ impl<U,D> SoftMax<U,D>
     }
 }
 impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu> for SoftMax<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              Max + InitialMaxValue + One + Exp +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              FromPrimitive,
@@ -1736,7 +1736,7 @@ impl<U,const N:usize> Activation<U,&Arr<U,N>,Arr<U,N>,DeviceCpu> for SoftMax<U,D
     }
 }
 impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu> for SoftMax<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              Max + InitialMaxValue + One + Exp +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              FromPrimitive,
@@ -1755,7 +1755,7 @@ impl<'a,U,const N:usize> Activation<U,ArrView<'a,U,N>,Arr<U,N>,DeviceCpu> for So
     }
 }
 impl<'a,U,I,const N:usize> Activation<U,&'a I,Arr<U,N>,DeviceCpu> for SoftMax<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              Max + InitialMaxValue + One + Exp +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              FromPrimitive,
@@ -1847,7 +1847,7 @@ impl<'a,U,I,AC,const N:usize> Activation<U,&'a I,CudaTensor1dPtr<U,AC,N>,DeviceG
     }
 }
 impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu> for SoftMax<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'static +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static +
              Max + InitialMaxValue + One + Exp +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              FromPrimitive,
@@ -1866,7 +1866,7 @@ impl<U,const N:usize> BatchActivation<U,&SerializedVec<U,Arr<U,N>>,SerializedVec
     }
 }
 impl<'a,U,const N:usize> BatchActivation<U,SerializedVecView<'a,U,Arr<U,N>>,SerializedVec<U,Arr<U,N>>,DeviceCpu> for SoftMax<U,DeviceCpu>
-    where U: Default + Clone + Copy + Debug + Send + Sync + DataTypeInfo + 'a +
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'a +
              Max + InitialMaxValue + One + Exp +
              Add<Output=U> + Sub<Output=U> + Mul<Output=U> + Div<Output=U> + Neg<Output=U> +
              FromPrimitive,
@@ -1956,10 +1956,10 @@ impl<S,DS,D> SoftMaxBuilder<S,DS,D> where D: Device<S> + Device<DS> {
 impl<S,DS,D> ActivationBuilder<S,DS,D> for SoftMaxBuilder<S,DS,D>
     where S: Default + Clone + Copy + Debug + Max + InitialMaxValue + One + Exp +
              Add<Output=S> + Sub<Output=S> + Mul<Output=S> + Div<Output=S> + Neg<Output=S> +
-             FromPrimitive + Send + Sync + DataTypeInfo + 'static,
+             FromPrimitive + Send + Sync + 'static,
           DS: Default + Clone + Copy + Debug + Max + InitialMaxValue + One + Exp +
               Add<Output=DS> + Sub<Output=DS> + Mul<Output=DS> + Div<Output=DS> + Neg<Output=DS> +
-              FromPrimitive + Send + Sync + DataTypeInfo + 'static,
+              FromPrimitive + Send + Sync + 'static,
           D: Device<S> + Device<DS> {
     type ForwardActivation = SoftMax<S,D>;
     type BackwardActivation = SoftMax<DS,D>;

@@ -9,9 +9,7 @@ use crate::device::{DeviceCpu, DeviceReduce};
 use crate::error::{EvaluateError, GeneralizationError, SpecializationError, TrainingError, TypeConvertError};
 use crate::ope::{MaxValue, Product};
 use crate::layer::{BatchDataType, InputTensorScalar, InputTensorSize, OutputTensorScalar, OutputTensorSize, TensorSize};
-#[cfg(feature = "cuda")]
 use crate::mem::AsRawSlice;
-#[cfg(feature = "cuda")]
 use crate::layer::{BatchSize};
 #[cfg(feature = "cuda")]
 use rcublas_sys::{cublasDgemm_v2, cublasOperation_t, cublasSgemm_v2, cublasStatus_t};

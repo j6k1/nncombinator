@@ -33,7 +33,6 @@ use crate::error::{TrainingError, TypeConvertError};
 use crate::error::EvaluateError::TypeCastError;
 use crate::mem::{AsRawSlice};
 use crate::error::{DeviceError};
-#[cfg(feature = "cuda")]
 use crate::layer::BatchSize;
 #[cfg(feature = "cuda")]
 use crate::cuda::{AsCudaMutPtr, AsMutPtr, AsPtr, CudaPtr, CudaTensor1dPtr, CudaTensor1dPtrView, CudaVecView, DataTypeInfo, Kernel, MemorySize};

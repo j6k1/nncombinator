@@ -1,3 +1,4 @@
+#[cfg(feature = "cuda")]
 use nncombinator::cuda::{CudaPtr, ReadMemory};
 use crate::common::SHARED_MEMORY_POOL;
 

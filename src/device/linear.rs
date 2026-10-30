@@ -1823,9 +1823,9 @@ pub mod simd {
 
             let o = input.product(units);
 
-            let operator = AddOperator::<i32,W,i32>::new().compose(|p| {
-                ShrOperator::<_,i32>::new(p,shift).compose(|p| DemoteOperator::<_,U>::new(p))
-            });
+            let operator = AddOperator::new().compose(|p| {
+                ShrOperator::new(p,shift)
+            }).compose(|p| DemoteOperator::new(p));
 
             let o = o.query(bias,operator);
 
@@ -1882,9 +1882,9 @@ pub mod simd {
 
                 let input: &[U] = input.as_raw_slice();
 
-                let operator = AddOperator::<i32,W,i32>::new().compose(|p| {
-                    ShrOperator::<_,i32>::new(p,shift).compose(|p| DemoteOperator::<_,U>::new(p))
-                });
+                let operator = AddOperator::new().compose(|p| {
+                    ShrOperator::new(p,shift)
+                }).compose(|p| DemoteOperator::new(p));
 
                 Vector::<U,NI,BE>::try_from(input).map_err(|e| TrainingError::from(e)).and_then(move |input| {
                     let o = input.product(units);

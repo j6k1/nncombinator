@@ -19,6 +19,7 @@ use crate::cuda::allocator::CudaAllocator;
 use crate::cuda::kernel::device::{AddBiasBatch, AddBiasBatchArgs};
 #[cfg(feature = "cuda")]
 use crate::device::{DeviceGpu, DeviceAllocator};
+#[allow(unused)]
 use crate::mem::AsRawSlice;
 
 /// Trait that defines the implementation of various calculation processes in the bias layer

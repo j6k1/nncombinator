@@ -101,22 +101,22 @@ impl<U,O,LI,D> PreTrain for InputLayer<U,O,LI,D>
 impl<U,O,LI,D> BackwardBase for InputLayer<U,O,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
-          LI: Debug,
+          LI: OutputTensorScalar + Debug,
           D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {
-    type LossInputScalar = U;
+    type LossInputScalar = <LI as OutputTensorScalar>::Scalar;
     type LossInput = LI;
 }
-impl<U,O,LI,D> BackwardAll<U> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> BackwardAll<<LI as OutputTensorScalar>::Scalar> for InputLayer<U,O,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
-          LI: Debug,
+          LI: OutputTensorScalar + Debug,
           D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {
     type LossOutput = LI;
 
     fn backward_all(&mut self, input: Self::LossInput, _:Self::OutStack)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BackwardAll<<LI as OutputTensorScalar>::Scalar>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
 }
@@ -174,17 +174,17 @@ impl<U,O,LI,D> BatchPreTrain for InputLayer<U,O,LI,D>
 impl<U,O,LI,D> BatchBackwardBase for InputLayer<U,O,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
-          LI: Debug + BatchDataType,
+          LI: OutputTensorScalar + Debug + BatchDataType,
           D: Device<U> + DeviceInput<U,O>,
           <LI as BatchDataType>::Type: Debug,
           <O as BatchDataType>::Type: Debug + 'static {
     type BatchLossInput = <LI as BatchDataType>::Type;
     type BatchLossOutput = <LI as BatchDataType>::Type;
 }
-impl<U,O,LI,D> BatchBackward<U> for InputLayer<U,O,LI,D>
+impl<U,O,LI,D> BatchBackward<<LI as OutputTensorScalar>::Scalar> for InputLayer<U,O,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
-          LI: Debug + BatchDataType,
+          LI: OutputTensorScalar + Debug + BatchDataType,
           D: Device<U> + DeviceInput<U,O>,
           <LI as BatchDataType>::Type: Debug,
           <O as BatchDataType>::Type: Debug + 'static {
@@ -435,24 +435,24 @@ impl<U,O,DI,PO,LI,D> BackwardBase for DiffInputLayer<U,O,DI,PO,LI,D>
           O: Debug + BatchDataType + Send + Sync + 'static,
           DI: Debug,
           PO: Debug,
-          LI: Debug,
+          LI: OutputTensorScalar + Debug,
           D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {
-    type LossInputScalar = U;
+    type LossInputScalar = <LI as OutputTensorScalar>::Scalar;
     type LossInput = LI;
 }
-impl<U,O,DI,PO,LI,D> BackwardAll<U> for DiffInputLayer<U,O,DI,PO,LI,D>
+impl<U,O,DI,PO,LI,D> BackwardAll<<LI as OutputTensorScalar>::Scalar> for DiffInputLayer<U,O,DI,PO,LI,D>
     where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           O: Debug + BatchDataType + Send + Sync + 'static,
           DI: Debug,
           PO: Debug,
-          LI: Debug,
+          LI: OutputTensorScalar + Debug,
           D: Device<U> + DeviceInput<U,O>,
           <O as BatchDataType>::Type: Debug + 'static {
     type LossOutput = LI;
 
     fn backward_all(&mut self, input: Self::LossInput, _:Self::OutStack)
-        -> Result<(<Self as BackwardAll<U>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
+        -> Result<(<Self as BackwardAll<<LI as OutputTensorScalar>::Scalar>>::LossOutput,<Self as UpdateWeight>::GradientStack), TrainingError> {
         Ok((input,Nil))
     }
 }

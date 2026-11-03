@@ -544,6 +544,9 @@ pub trait InputTensorScalar {
 pub trait OutputTensorScalar {
     type Scalar: Clone + Copy + Debug;
 }
+impl OutputTensorScalar for () {
+    type Scalar = ();
+}
 /// A characteristic that represents the size of the input weights used in the implementation of each layer
 pub trait TensorSize {
     const SIZE: usize;

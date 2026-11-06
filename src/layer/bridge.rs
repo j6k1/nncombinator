@@ -16,8 +16,6 @@ use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 /// Bridge layer Implementation
 pub struct BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Debug + Default + Clone + Copy + Send + Sync + 'static,
           SO : Debug + Default + Clone + Copy + Send + Sync + 'static,
@@ -35,8 +33,6 @@ pub struct BridgeLayer<U,SO,P,I,PI,CI,D>
 }
 impl<U,SO,P,I,PI,CI,D> InputTensorScalar for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -48,8 +44,6 @@ impl<U,SO,P,I,PI,CI,D> InputTensorScalar for BridgeLayer<U,SO,P,I,PI,CI,D>
 }
 impl<U,SO,P,I,PI,CI,D> OutputTensorScalar for BridgeLayer<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -104,8 +98,7 @@ impl<T,U,SO,P,I,PI,CI,D> Persistence<T,Linear> for BridgeLayer<U,SO,P,I,PI,CI,D>
     }
 }
 impl<U,SO,P,I,PI,CI,D> ForwardAll for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -202,8 +195,7 @@ impl<U,SO,P,I,PI,CI,D> UpdateWeight for BridgeLayer<U,SO,P,I,PI,CI,D>
     }
 }
 impl<U,SO,P,I,PI,CI,D> PartialForward for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
+    where P: ForwardAll<Input=I,Output=PI> +
              PartialForward + InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -225,9 +217,8 @@ impl<U,SO,P,I,PI,CI,D> PartialForward for BridgeLayer<U,SO,P,I,PI,CI,D>
     }
 }
 impl<U,SO,P,I,PI,CI,D> ForwardDiff for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
+    where P: ForwardAll<Input=I,Output=PI> +
              PartialForward + ForwardDiff +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -240,9 +231,8 @@ impl<U,SO,P,I,PI,CI,D> ForwardDiff for BridgeLayer<U,SO,P,I,PI,CI,D>
     }
 }
 impl<U,SO,P,I,PI,CI,D> ContinueForward for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
+    where P: ForwardAll<Input=I,Output=PI> +
              PartialForward + ContinueForward +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -454,8 +444,7 @@ impl<T,U,SO,P,I,PI,CI,D> PersistProgress<T,Linear> for BridgeLayer<U,SO,P,I,PI,C
     }
 }
 impl<U,SO,P,I,PI,CI,D> InputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain + InputScale +
+    where P: ForwardAll<Input=I,Output=PI> + InputScale +
              InputTensorScalar + OutputTensorScalar,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -468,8 +457,7 @@ impl<U,SO,P,I,PI,CI,D> InputScale for BridgeLayer<U,SO,P,I,PI,CI,D>
     }
 }
 impl<U,SO,P,I,PI,CI,D> BridgeBase for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -486,8 +474,7 @@ impl<U,SO,P,I,PI,CI,D> BridgeBase for BridgeLayer<U,SO,P,I,PI,CI,D>
     type SourceInput = CI;
 }
 impl<U,SO,P,I,PI,CI,D> Bridge for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -575,7 +562,6 @@ impl<U,SO,P,I,PI,CI,D> BatchBridgeRepr for BridgeLayer<U,SO,P,I,PI,CI,D>
 /// Trait for BridgeLayer instance creation
 pub trait BridgeLayerInstantiation<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -592,8 +578,7 @@ pub trait BridgeLayerInstantiation<U,SO,P,I,PI,CI,D>
     fn instantiation(parent:P,device:&D) -> Result<BridgeLayer<U,SO,P,I,PI,CI,D>,LayerInstantiationError>;
 }
 impl<U,SO,P,I,PI,CI,D> BridgeLayerInstantiation<U,SO,P,I,PI,CI,D> for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -644,7 +629,7 @@ impl<SO,CI> BridgeLayerBuilder<SO,CI>
     /// * [`LayerInstantiationError`]
     pub fn build<U,P,I,PI,D>(&self,parent:P,device:&D) -> Result<BridgeLayer<U,SO,P,I,PI,CI,D>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> +
-                 BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrainBase<PreOutput=PI> + PreTrain + InputTensorScalar + OutputTensorScalar,
+                 InputTensorScalar + OutputTensorScalar,
               U: Default + Clone + Copy + Debug + Send + Sync + 'static,
               SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
               D: Device<U>,

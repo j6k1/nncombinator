@@ -17,8 +17,6 @@ use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, Te
 /// Layer implementation of the output layer (linear layer)
 pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static,
@@ -36,8 +34,6 @@ pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>
 }
 impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + OnStep,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static,
@@ -67,8 +63,6 @@ impl<U,P,D,I,PI,const N:usize> LinearOutputLayer<U,P,D,I,PI,N>
 }
 impl<U,P,D,I,PI,const N:usize> InputTensorScalar for LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static + FromStr + Sized,
@@ -79,8 +73,7 @@ impl<U,P,D,I,PI,const N:usize> InputTensorScalar for LinearOutputLayer<U,P,D,I,P
     type Scalar = U;
 }
 impl<U,P,D,I,PI,const N:usize> OutputTensorScalar for LinearOutputLayer<U,P,D,I,PI,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign +
@@ -134,8 +127,6 @@ impl<T,U,P,D,I,PI,const N:usize> Persistence<T,Linear> for LinearOutputLayer<U,P
 }
 impl<U,P,D,I,PI,const N:usize> ForwardAll for LinearOutputLayer<U,P,D,I,PI,N>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static,
@@ -226,8 +217,7 @@ impl<U,P,D,I,PI,const N:usize> UpdateWeight for LinearOutputLayer<U,P,D,I,PI,N>
     }
 }
 impl<U,P,D,I,PI,const N:usize> PartialForward for LinearOutputLayer<U,P,D,I,PI,N>
-    where P: BackwardAll<U,LossInput=PI> +
-             ForwardAll<Input=I,Output=PI> + PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar +
              PartialForward,
           U: Default + Clone + Copy + Debug + Send + Sync +
@@ -250,9 +240,8 @@ impl<U,P,D,I,PI,const N:usize> PartialForward for LinearOutputLayer<U,P,D,I,PI,N
     }
 }
 impl<U,P,D,I,PI,const N:usize> ForwardDiff for LinearOutputLayer<U,P,D,I,PI,N>
-    where P: BackwardAll<U,LossInput=PI> +
-          ForwardAll<Input=I,Output=PI> + ForwardDiff +
-          PreTrainBase<PreOutput=PI> + PreTrain + InputTensorScalar + OutputTensorScalar +
+    where P: ForwardAll<Input=I,Output=PI> + ForwardDiff +
+          InputTensorScalar + OutputTensorScalar +
           PartialForward,
       U: Default + Clone + Copy + Debug + Send + Sync +
          Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static,
@@ -265,9 +254,8 @@ impl<U,P,D,I,PI,const N:usize> ForwardDiff for LinearOutputLayer<U,P,D,I,PI,N>
     }
 }
 impl<U,P,D,I,PI,const N:usize> ContinueForward for LinearOutputLayer<U,P,D,I,PI,N>
-    where P: BackwardAll<U,LossInput=PI> +
-          ForwardAll<Input=I,Output=PI> + ForwardDiff +
-          PreTrainBase<PreOutput=PI> + PreTrain + InputTensorScalar + OutputTensorScalar +
+    where P: ForwardAll<Input=I,Output=PI> + ForwardDiff +
+          InputTensorScalar + OutputTensorScalar +
           PartialForward + ContinueForward,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static,

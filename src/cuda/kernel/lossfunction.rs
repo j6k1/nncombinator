@@ -8,12 +8,12 @@ use crate::cuda::{AsConstKernelPtr, AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, C
 use crate::cuda::allocator::CudaAllocator;
 
 extern "C" {
-    fn loss_linear_batch_mse_derive_float(r: *const f32, t: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
-    fn loss_linear_batch_mse_derive_double(r: *const f64, t: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int) -> c_void;
-    fn loss_linear_batch_cross_entropy_derive_float(r: *const f32, t: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
-    fn loss_linear_batch_cross_entropy_derive_double(r: *const f64, t: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int) -> c_void;
-    fn loss_linear_batch_cross_entropy_multiclass_derive_float(r: *const f32, t: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
-    fn loss_linear_batch_cross_entropy_multiclass_derive_double(r: *const f64, t: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int) -> c_void;
+    fn loss_linear_batch_mse_derive_float(r: *const f32, t: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int);
+    fn loss_linear_batch_mse_derive_double(r: *const f64, t: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int);
+    fn loss_linear_batch_cross_entropy_derive_float(r: *const f32, t: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int);
+    fn loss_linear_batch_cross_entropy_derive_double(r: *const f64, t: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int);
+    fn loss_linear_batch_cross_entropy_multiclass_derive_float(r: *const f32, t: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int);
+    fn loss_linear_batch_cross_entropy_multiclass_derive_double(r: *const f64, t: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int);
 }
 /// Define a list to be passed to the cuda kernel function during mini-batch execution as the argument of mse.
 pub struct LinearBatchMseArgs<'a,T,A,const N:usize>

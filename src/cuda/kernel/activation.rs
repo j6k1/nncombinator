@@ -10,34 +10,34 @@ use crate::cuda::{AsCudaMutPtr, AsKernelPtr, AsMutKernelPtr, CudaConstPtr, CudaM
 use crate::cuda::allocator::CudaAllocator;
 
 extern "C" {
-    fn sigmoid_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
-    fn relu_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
-    fn clipped_relu_forward_float(input: *const f32, ceiling: f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
-    fn leaky_relu_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
-    fn swish_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
-    fn tanh_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t) -> c_void;
-    fn softmax_forward_float(input: *const f32, output: *mut f32, len: size_t, batch_size: size_t) -> c_void;
-    fn sigmoid_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
-    fn relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
-    fn clipped_relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, ceiling: f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
-    fn leaky_relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
-    fn swish_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
-    fn tanh_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
-    fn softmax_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t) -> c_void;
-    fn sigmoid_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
-    fn relu_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
-    fn clipped_relu_forward_double(input: *const f64, ceiling: f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
-    fn leaky_relu_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
-    fn swish_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
-    fn tanh_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t) -> c_void;
-    fn softmax_forward_double(input: *const f64, output: *mut f64, len: size_t, batch_size: size_t) -> c_void;
-    fn sigmoid_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
-    fn relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
-    fn clipped_relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, ceiling: f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
-    fn leaky_relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
-    fn swish_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
-    fn tanh_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
-    fn softmax_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t) -> c_void;
+    fn sigmoid_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t);
+    fn relu_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t);
+    fn clipped_relu_forward_float(input: *const f32, ceiling: f32, output: *mut f32, len: size_t, units_len: size_t);
+    fn leaky_relu_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t);
+    fn swish_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t);
+    fn tanh_forward_float(input: *const f32, output: *mut f32, len: size_t, units_len: size_t);
+    fn softmax_forward_float(input: *const f32, output: *mut f32, len: size_t, batch_size: size_t);
+    fn sigmoid_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t);
+    fn relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t);
+    fn clipped_relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, ceiling: f32, output: *mut f32, units_len: size_t, batch_size: size_t);
+    fn leaky_relu_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t);
+    fn swish_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t);
+    fn tanh_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t);
+    fn softmax_backward_float(o: *const f32, u: *const f32, loss: *const f32, output: *mut f32, units_len: size_t, batch_size: size_t);
+    fn sigmoid_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t);
+    fn relu_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t);
+    fn clipped_relu_forward_double(input: *const f64, ceiling: f64, output: *mut f64, len: size_t, units_len: size_t);
+    fn leaky_relu_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t);
+    fn swish_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t);
+    fn tanh_forward_double(input: *const f64, output: *mut f64, len: size_t, units_len: size_t);
+    fn softmax_forward_double(input: *const f64, output: *mut f64, len: size_t, batch_size: size_t);
+    fn sigmoid_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t);
+    fn relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t);
+    fn clipped_relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, ceiling: f64, output: *mut f64, units_len: size_t, batch_size: size_t);
+    fn leaky_relu_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t);
+    fn swish_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t);
+    fn tanh_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t);
+    fn softmax_backward_double(o: *const f64, u: *const f64, loss: *const f64, output: *mut f64, units_len: size_t, batch_size: size_t);
 }
 /// Defines the list of passed to the cuda kernel function for the arguments of the activation function.
 pub struct ActivationForwardArgs<'a,T,A,const N:usize>

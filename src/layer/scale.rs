@@ -16,7 +16,6 @@ use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, Te
 /// Trait for InverseScalingLayer instance creation.
 pub trait ScalingLayerInstantiation<U,P,D,I,PI,SO,const N:usize>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrain +
              InputTensorScalar + OutputTensorScalar + BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -35,8 +34,7 @@ pub trait ScalingLayerInstantiation<U,P,D,I,PI,SO,const N:usize>
 
 /// Inverse scaling layer implementation.
 pub struct ScalingLayer<U,P,D,I,PI,SO,const N:usize>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar +
              BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -54,8 +52,7 @@ pub struct ScalingLayer<U,P,D,I,PI,SO,const N:usize>
     li:PhantomData<SO>,
 }
 impl<U,P,D,I,PI,SO,const N:usize> InputTensorScalar for ScalingLayer<U,P,D,I,PI,SO,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar + BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -67,8 +64,7 @@ impl<U,P,D,I,PI,SO,const N:usize> InputTensorScalar for ScalingLayer<U,P,D,I,PI,
     type Scalar = U;
 }
 impl<U,P,D,I,PI,SO,const N:usize> OutputTensorScalar for ScalingLayer<U,P,D,I,PI,SO,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar + BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
@@ -127,8 +123,7 @@ impl<T,U,P,D,I,PI,SO,const N:usize> Persistence<T,Linear> for ScalingLayer<U,P,D
     }
 }
 impl<U,P,D,I,PI,SO,const N:usize> Forward<PI,Result<SO,EvaluateError>> for ScalingLayer<U,P,D,I,PI,SO,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar +
              BridgeBase<RealScale=SO,RealOutput=SO,SourceInput=PI> + Bridge,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -145,8 +140,6 @@ impl<U,P,D,I,PI,SO,const N:usize> Forward<PI,Result<SO,EvaluateError>> for Scali
 }
 impl<U,P,D,I,PI,SO,const N:usize> ForwardAll for ScalingLayer<U,P,D,I,PI,SO,N>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar +
              BridgeBase<RealScale=SO,RealOutput=SO,SourceInput=PI> + Bridge,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -271,7 +264,6 @@ impl<U,P,D,I,PI,SO,const N:usize> UpdateWeight for ScalingLayer<U,P,D,I,PI,SO,N>
 }
 impl<U,P,D,I,PI,SO,const N:usize> PartialForward for ScalingLayer<U,P,D,I,PI,SO,N>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI> +
              Bridge,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -299,7 +291,6 @@ impl<U,P,D,I,PI,SO,const N:usize> PartialForward for ScalingLayer<U,P,D,I,PI,SO,
 }
 impl<U,P,D,I,PI,SO,const N:usize> ForwardDiff for ScalingLayer<U,P,D,I,PI,SO,N>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward + ForwardDiff +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar + BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI> +
              Bridge,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -320,9 +311,7 @@ impl<U,P,D,I,PI,SO,const N:usize> ForwardDiff for ScalingLayer<U,P,D,I,PI,SO,N>
 }
 impl<U,P,D,I,PI,SO,const N:usize> ContinueForward for ScalingLayer<U,P,D,I,PI,SO,N>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward + ContinueForward +
-          BackwardAll<U,LossInput=PI,LossInputScalar=U> + PreTrainBase<PreOutput=PI> + PreTrain +
-          InputTensorScalar + OutputTensorScalar + Bridge<RealScale=SO, RealOutput=SO, SourceInput=PI> +
-          Bridge,
+          InputTensorScalar + OutputTensorScalar + Bridge<RealScale=SO, RealOutput=SO, SourceInput=PI>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       I: Debug + Send + Sync,
       PI: Debug + BatchDataType + 'static,
@@ -536,8 +525,7 @@ impl<T,U,P,D,I,PI,SO,const N:usize> PersistProgress<T,Linear> for ScalingLayer<U
 }
 impl<U,P,D,I,PI,SO,const N:usize> InputScale for ScalingLayer<U,P,D,I,PI,SO,N>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain + InputScale + Bridge<RealScale=SO, RealOutput=SO, SourceInput=PI> +
+             InputScale + Bridge<RealScale=SO, RealOutput=SO, SourceInput=PI> +
              InputTensorScalar + OutputTensorScalar,
       D: Device<U> + DeviceScale<U,PI,N>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -554,8 +542,6 @@ impl<U,P,D,I,PI,SO,const N:usize> InputScale for ScalingLayer<U,P,D,I,PI,SO,N>
 }
 impl<U,P,D,I,PI,SO,const N:usize> BridgeBase for ScalingLayer<U,P,D,I,PI,SO,N>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar +
              BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI>,
           D: Device<U> + DeviceScale<U,PI,N>,
@@ -574,8 +560,6 @@ impl<U,P,D,I,PI,SO,const N:usize> BridgeBase for ScalingLayer<U,P,D,I,PI,SO,N>
 }
 impl<U,P,D,I,PI,SO,const N:usize> Bridge for ScalingLayer<U,P,D,I,PI,SO,N>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar +
              BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI> + Bridge,
       D: Device<U> + DeviceScale<U,PI,N>,
@@ -666,8 +650,7 @@ impl<U,P,D,I,PI,SO,const N:usize> BatchBridgeRepr for ScalingLayer<U,P,D,I,PI,SO
     }
 }
 impl<U,P,D,I,PI,SO,const N:usize> ScalingLayerInstantiation<U,P,D,I,PI,SO,N> for ScalingLayer<U,P,D,I,PI,SO,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar +
              BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,

@@ -12,20 +12,20 @@ use crate::cuda::{AsKernelPtr, CudaConstPtr, CudaPtr, CudaTensor1dPtr, CudaTenso
 use crate::cuda::allocator::CudaAllocator;
 
 extern "C" {
-    fn reduce_linear_batch_float(input: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
-    fn reduce_linear_batch_double(input: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int) -> c_void;
-    fn forward_linear_batch_float(input: *const f32, units: *const f32, bias: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
-    fn forward_linear_batch_double(input: *const f64, units: *const f64, bias: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
-    fn backward_linear_batch_float(loss: *const f32, units: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
-    fn backward_linear_batch_double(loss: *const f64, units: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, batch_size: size_t) -> c_void;
-    fn linear_gradient_batch_float(loss: *const f32, input: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, units_size: size_t, batch_size: size_t) -> c_void;
-    fn linear_gradient_batch_double(loss: *const f64, input: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, units_size: size_t, batch_size: size_t) -> c_void;
-    fn loss_linear_batch_by_canonical_link_float(expected: *const f32, actual: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int) -> c_void;
-    fn loss_linear_batch_by_canonical_link_double(expected: *const f64, actual: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int) -> c_void;
-    fn forward_diff_linear_float(indexes: *const size_t, input: *const f32, units: *const f32, bias: *const f32, output: *mut f32, output_size: size_t, diff_len: size_t) -> c_void;
-    fn forward_diff_linear_double(indexes: *const size_t, input: *const f64, units: *const f64, bias: *const f32, output: *mut f64, output_size: size_t, diff_len: size_t) -> c_void;
-    fn addbias_batch_float(bias: *const f32, input_output: *mut f32, units_len: c_int, batch_size: c_int) -> c_void;
-    fn addbias_batch_double(bias: *const f64, input_output: *mut f64, units_len: c_int, batch_size: c_int) -> c_void;
+    fn reduce_linear_batch_float(input: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int);
+    fn reduce_linear_batch_double(input: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int);
+    fn forward_linear_batch_float(input: *const f32, units: *const f32, bias: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, batch_size: size_t);
+    fn forward_linear_batch_double(input: *const f64, units: *const f64, bias: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, batch_size: size_t);
+    fn backward_linear_batch_float(loss: *const f32, units: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, batch_size: size_t);
+    fn backward_linear_batch_double(loss: *const f64, units: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, batch_size: size_t);
+    fn linear_gradient_batch_float(loss: *const f32, input: *const f32, output: *mut f32, input_len: size_t, output_len: size_t, units_size: size_t, batch_size: size_t);
+    fn linear_gradient_batch_double(loss: *const f64, input: *const f64, output: *mut f64, input_len: size_t, output_len: size_t, units_size: size_t, batch_size: size_t);
+    fn loss_linear_batch_by_canonical_link_float(expected: *const f32, actual: *const f32, output: *mut f32, nlen: c_int, batch_size: c_int);
+    fn loss_linear_batch_by_canonical_link_double(expected: *const f64, actual: *const f64, output: *mut f64, nlen: c_int, batch_size: c_int);
+    fn forward_diff_linear_float(indexes: *const size_t, input: *const f32, units: *const f32, bias: *const f32, output: *mut f32, output_size: size_t, diff_len: size_t);
+    fn forward_diff_linear_double(indexes: *const size_t, input: *const f64, units: *const f64, bias: *const f32, output: *mut f64, output_size: size_t, diff_len: size_t);
+    fn addbias_batch_float(bias: *const f32, input_output: *mut f32, units_len: c_int, batch_size: c_int);
+    fn addbias_batch_double(bias: *const f64, input_output: *mut f64, units_len: c_int, batch_size: c_int);
 }
 /// Defines the list that is passed to the cuda kernel function as arguments for the convolution calculation.
 pub struct ReduceLinearBatchArgs<'a,T,A,const N:usize>

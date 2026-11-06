@@ -18,8 +18,6 @@ use crate::mapper::{BatchIdentityMapper, IdentityMapper};
 /// Dequantize layer Implementation
 pub struct DequantizeLayer<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
       U: Debug + Default + Clone + Copy + Send + Sync + 'static,
       SO : Debug + Default + Clone + Copy + Send + Sync + 'static,
@@ -37,8 +35,6 @@ pub struct DequantizeLayer<U,SO,P,I,PI,CI,D>
 }
 impl<U,SO,P,I,PI,CI,D> InputTensorScalar for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -50,8 +46,6 @@ impl<U,SO,P,I,PI,CI,D> InputTensorScalar for DequantizeLayer<U, SO, P, I, PI, CI
 }
 impl<U,SO,P,I,PI,CI,D> OutputTensorScalar for DequantizeLayer<U, SO, P, I, PI, CI, D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -106,8 +100,7 @@ impl<T,U,SO,P,I,PI,CI,D> Persistence<T,Linear> for DequantizeLayer<U, SO, P, I, 
     }
 }
 impl<U,SO,P,I,PI,CI,D> ForwardAll for DequantizeLayer<U, SO, P, I, PI, CI, D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> + 
              BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -220,8 +213,7 @@ impl<U,SO,P,I,PI,CI,D> UpdateWeight for DequantizeLayer<U, SO, P, I, PI, CI, D>
     }
 }
 impl<U,SO,P,I,PI,CI,D> PartialForward for DequantizeLayer<U, SO, P, I, PI, CI, D>
-    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
-             BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
+    where P: ForwardAll<Input=I,Output=PI> +
              BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              PartialForward + InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -248,9 +240,8 @@ impl<U,SO,P,I,PI,CI,D> PartialForward for DequantizeLayer<U, SO, P, I, PI, CI, D
     }
 }
 impl<U,SO,P,I,PI,CI,D> ForwardDiff for DequantizeLayer<U, SO, P, I, PI, CI, D>
-    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
+    where P: ForwardAll<Input=I,Output=PI> +
              PartialForward + ForwardDiff +
-             BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
              BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -271,9 +262,8 @@ impl<U,SO,P,I,PI,CI,D> ForwardDiff for DequantizeLayer<U, SO, P, I, PI, CI, D>
     }
 }
 impl<U,SO,P,I,PI,CI,D> ContinueForward for DequantizeLayer<U, SO, P, I, PI, CI, D>
-    where P: PreTrainBase<PreOutput=PI> + PreTrain + ForwardAll<Input=I,Output=PI> +
+    where P: ForwardAll<Input=I,Output=PI> +
              PartialForward + ContinueForward +
-             BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
              BridgeBase<RealScale=CI,RealOutput=CI,SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -512,8 +502,7 @@ impl<T,U,SO,P,I,PI,CI,D> PersistProgress<T,Linear> for DequantizeLayer<U, SO, P,
     }
 }
 impl<U,SO,P,I,PI,CI,D> InputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain + InputScale +
+    where P: ForwardAll<Input=I,Output=PI> + InputScale +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -526,8 +515,7 @@ impl<U,SO,P,I,PI,CI,D> InputScale for DequantizeLayer<U, SO, P, I, PI, CI, D>
     }
 }
 impl<U,SO,P,I,PI,CI,D> BridgeBase for DequantizeLayer<U, SO, P, I, PI, CI, D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              BridgeBase<RealScale=CI, RealOutput=CI, SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -546,8 +534,7 @@ impl<U,SO,P,I,PI,CI,D> BridgeBase for DequantizeLayer<U, SO, P, I, PI, CI, D>
     type SourceInput = CI;
 }
 impl<U,SO,P,I,PI,CI,D> Bridge for DequantizeLayer<U, SO, P, I, PI, CI, D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              BridgeBase<RealScale=CI, RealOutput=CI, SourceInput=PI> + Bridge +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -643,7 +630,6 @@ impl<U,SO,P,I,PI,CI,D> BatchBridgeRepr for DequantizeLayer<U,SO,P,I,PI,CI,D>
 /// Trait for DequantizeLayer instance creation
 pub trait DequantizeLayerInstantiation<U,SO,P,I,PI,CI,D>
     where P: ForwardAll<Input=I,Output=PI> +
-             BackwardAll<SO,LossInput=CI,LossInputScalar=SO> + PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -660,8 +646,7 @@ pub trait DequantizeLayerInstantiation<U,SO,P,I,PI,CI,D>
     fn instantiation(parent:P,device:&D) -> Result<DequantizeLayer<U, SO, P, I, PI, CI, D>,LayerInstantiationError>;
 }
 impl<U,SO,P,I,PI,CI,D> DequantizeLayerInstantiation<U, SO, P, I, PI, CI, D> for DequantizeLayer<U, SO, P, I, PI, CI, D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
@@ -712,7 +697,7 @@ impl<SO,CI> DequantizeLayerBuilder<SO, CI>
     /// * [`LayerInstantiationError`]
     pub fn build<U,P,I,PI,D>(&self,parent:P,device:&D) -> Result<DequantizeLayer<U, SO, P, I, PI, CI, D>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> +
-                 BackwardAll<SO,LossInput=CI,LossInputScalar=SO> + PreTrainBase<PreOutput=PI> + PreTrain + InputTensorScalar + OutputTensorScalar,
+                 InputTensorScalar + OutputTensorScalar,
               U: Default + Clone + Copy + Debug + Send + Sync + 'static,
               SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
               D: Device<U>,

@@ -219,7 +219,6 @@ pub trait DeviceQuantizedLinearQuantization<U,W,T,B,I,const NI: usize,const NO: 
           T: Quantizable<W>,
           B: Quantizable<W>,
           I: BatchDataType + InputTensorSize<NI>,
-          Self: DeviceQuantizedLinearBase<f32,T,B,NI,NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
 

@@ -1279,7 +1279,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> Forward<PI,Result<<S
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
           [();NI]: TensorSize,
@@ -1301,13 +1301,13 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> ForwardAll
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     type Input = I;
-    type Output = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output;
+    type Output = D::Output;
     fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
         self.forward(&self.parent.forward_all(input)?)
     }
@@ -1326,10 +1326,10 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> PreTrainBase
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
-    type PreOutput = <D as DeviceQuantizedLinear<U, W, C, BC, PI, NI, NO>>::Output;
+    type PreOutput = D::Output;
     type OutStack = Cons<<P as PreTrainBase>::OutStack, Self::PreOutput>;
 }
 impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> PreTrain
@@ -1346,7 +1346,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> PreTrain
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     fn pre_train(&self, input: Self::Input) -> Result<Self::OutStack, EvaluateError> {
@@ -1372,7 +1372,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize>
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     fn backward(&mut self, input: &<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossInput)
@@ -1408,7 +1408,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BackwardBase
           <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           for<'a> &'a <OP as Optimizer<f32,D>>::InternalType: From<&'a C>,
           for<'a> &'a <OP as Optimizer<f32,D>>::InternalType: From<&'a BC>,
           for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut C>,
@@ -1446,7 +1446,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BackwardAll<f32>
           <PI as BatchDataType>::Type: BatchSize + Debug + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           for<'a> &'a <OP as Optimizer<f32,D>>::InternalType: From<&'a C>,
           for<'a> &'a <OP as Optimizer<f32,D>>::InternalType: From<&'a BC>,
           for<'a> <OP as Optimizer<f32,D>>::InternalUpdateType<'a>: From<&'a mut C>,
@@ -1489,7 +1489,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> PartialForward
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
           [();NI]: TensorSize,
@@ -1521,12 +1521,12 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> ForwardDiff
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
-          Self: ForwardAll<Input=I,Output=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output> + PreTrain {
+          Self: ForwardAll<Input=I,Output=D::Output> + PreTrain {
     fn forward_diff(&self, input: Self::DiffInput, partial_input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.forward_diff(input,partial_input)?;
 
@@ -1547,10 +1547,10 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> ContinueForward
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
-          Self: ForwardAll<Input=I,Output=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output> + PreTrain {
+          Self: ForwardAll<Input=I,Output=D::Output> + PreTrain {
     fn continue_forward(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
         let input = self.parent.continue_forward(input)?;
 
@@ -1636,7 +1636,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchForwardBase
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: Debug,
           <LI as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -1666,7 +1666,7 @@ impl<U,W,C,BC,P,OP,D,I,PI,LI,const NI:usize,const NO:usize> BatchForward
           <LI as BatchDataType>::Type: BatchSize + Debug,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: BatchSize + Debug,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -1697,7 +1697,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchPreTrainBase
           <LI as BatchDataType>::Type: BatchSize + Debug,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
           Self::PreOutput: BatchDataType,
           <Self::PreOutput as BatchDataType>::Type: BatchSize + Debug,
@@ -1733,10 +1733,10 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchPreTrain
           <LI as BatchDataType>::Type: BatchSize + Debug,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
-          <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: BatchSize + Debug,
+          D::Output: OutputTensorSize<NO>,
+          <D::Output as BatchDataType>::Type: BatchSize + Debug,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -1775,13 +1775,13 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchBackwardBase
           <PI as BatchDataType>::Type: BatchSize + IntoConverter + Debug + 'static,
           <LI as BatchDataType>::Type: BatchSize + Debug,
           D: Device<U> + Device<f32> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO,LossInput=LI> +
-          DeviceBatchAveraging<C,f32> + DeviceBatchAveraging<BC,f32>,
+             DeviceBatchAveraging<C,f32> + DeviceBatchAveraging<BC,f32>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
-          <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: BatchSize + Debug,
+          D::Output: OutputTensorSize<NO>,
+          <D::Output as BatchDataType>::Type: BatchSize + Debug,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
@@ -1824,8 +1824,8 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchBackward<f32>
           <LI as BatchDataType>::Type: BatchSize + Debug,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: BatchDataType + OutputTensorSize<NO>,
-          <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: BatchSize + Debug,
+          D::Output: BatchDataType + OutputTensorSize<NO>,
+          <D::Output as BatchDataType>::Type: BatchSize + Debug,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::BatchOutput: Debug,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
@@ -1978,7 +1978,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> InputScale
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
           [();NI]: TensorSize,
@@ -2005,20 +2005,20 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BridgeBase
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
+          D::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale: Debug + BatchDataType + OutputTensorScalar + 'static,
-          <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <D::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
           C: Quantizable<W>,
           BC: Quantizable<W>,
           f32: Assume<U>,
-          Self: ForwardAll<Output=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output>,
+          Self: ForwardAll<Output=D::Output>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     type UseDevice = D;
     type RealScale = LI;
     type RealOutput = LI;
-    type SourceInput = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output;
+    type SourceInput = D::Output;
 }
 impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> Bridge
     for QuantizedLinearLayer<U,W,C,BC,P,D,I,PI,LI,OP,NI,NO>
@@ -2033,25 +2033,25 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> Bridge
           InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + 'static,
           LI: Debug + Sized + BatchDataType + InputTensorScalar + OutputTensorScalar + 'static,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO,LossInput=LI,Scale=LI> +
-             DeviceBridge<U,f32,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,LI> + DeviceScale<f32,LI,NO>,
+             DeviceBridge<U,f32,D::Output,LI> + DeviceScale<f32,LI,NO>,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize + IntoConverter + Debug + 'static,
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
+          D::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale: Debug + BatchDataType + OutputTensorScalar + 'static,
-          <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <D::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
           C: Quantizable<W>,
           BC: Quantizable<W>,
           f32: Assume<U>,
-          Self: ForwardAll<Output=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output>,
+          Self: ForwardAll<Output=D::Output>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
-    type RealMapper<'a> = ScalingMapper<'a,f32,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,LI,D,NO>
+    type RealMapper<'a> = ScalingMapper<'a,f32,D::Output,LI,D,NO>
         where Self: 'a;
-    fn as_real<'a>(&'a self, input: &'a <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output)
+    fn as_real<'a>(&'a self, input: &'a D::Output)
         -> Result<Self::RealMapper<'a>,EvaluateError>
         where Self: 'a {
 
@@ -2074,25 +2074,25 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BridgeRepr
           LI: Debug + Sized + BatchDataType + InputTensorScalar + OutputTensorScalar + 'static,
           D: Device<U> +
              DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO,LossInput=LI,Scale=LI> +
-             DeviceBridge<f32,U,LI,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output>,
+             DeviceBridge<f32,U,LI,D::Output>,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize + IntoConverter + Debug + 'static,
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
+          D::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale: Debug + BatchDataType + OutputTensorScalar + 'static,
-          <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <D::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
           C: Quantizable<W>,
           BC: Quantizable<W>,
           f32: Assume<U>,
-          Self: ForwardAll<Output=<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output>,
+          Self: ForwardAll<Output=D::Output>,
           for<'a> D: DeviceClone<'a,LI>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
-    type RepresentationOutput = <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output;
-    type ReprMapper<'a> = InternalReprMapper<'a,f32,U,LI,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,D,NO>
+    type RepresentationOutput = D::Output;
+    type ReprMapper<'a> = InternalReprMapper<'a,f32,U,LI,D::Output,D,NO>
     where Self: 'a;
 
     fn as_repr<'a>(&'a self, input: &'a Self::RealOutput) -> Result<Self::ReprMapper<'a>, EvaluateError>
@@ -2117,7 +2117,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchBridge
           LI: Debug + Sized + BatchDataType + InputTensorScalar + OutputTensorScalar + 'static,
           D: Device<U> +
              DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO,LossInput=LI,Scale=LI> +
-             DeviceBridge<U,f32,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,LI> +
+             DeviceBridge<U,f32,D::Output,LI> +
              DeviceScale<f32,LI,NO>,
           OP: 'static,
           <I as BatchDataType>::Type: Debug,
@@ -2125,9 +2125,9 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchBridge
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
+          D::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale: Debug + BatchDataType + OutputTensorScalar + 'static,
-          <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <D::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
           for<'a> C: Quantizable<W> + 'a,
           for<'a> BC: Quantizable<W> + 'a,
@@ -2135,8 +2135,8 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchBridge
           for<'a> D: DeviceClone<'a,LI> + DeviceClone<'a,<LI as BatchDataType>::Type>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
-    type BatchRealMapper<'a> = BatchScalingMapper<'a,f32,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,LI,D,NO>;
-    fn batch_as_real<'a>(&'a self, input: &'a <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type)
+    type BatchRealMapper<'a> = BatchScalingMapper<'a,f32,D::Output,LI,D,NO>;
+    fn batch_as_real<'a>(&'a self, input: &'a <D::Output as BatchDataType>::Type)
         -> Result<Self::BatchRealMapper<'a>,EvaluateError>
         where Self: 'a {
         let o = self.device.batch_bridge_forward(input)?;
@@ -2160,15 +2160,15 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchBridgeRepr
           LI: Debug + Sized + BatchDataType + InputTensorScalar + OutputTensorScalar + 'static,
           D: Device<U> +
              DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO,LossInput=LI,Scale=LI> +
-             DeviceBridge<f32,U,LI,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output>,
+             DeviceBridge<f32,U,LI,D::Output>,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize + IntoConverter + Debug + 'static,
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput: BatchDataType + Debug,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::LossOutput as BatchDataType>::Type: BatchSize + Debug,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
+          D::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
           <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale: Debug + BatchDataType + OutputTensorScalar + 'static,
-          <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
+          <D::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
           <<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Scale as BatchDataType>::Type: Debug + BatchSize + 'static,
           C: Quantizable<W>,
           BC: Quantizable<W>,
@@ -2176,7 +2176,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> BatchBridgeRepr
           for<'a> D: DeviceClone<'a,LI> + DeviceClone<'a,<LI as BatchDataType>::Type>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
-    type BatchReprMapper<'a> = BatchInternalReprMapper<'a,f32,U,LI,<D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output,D,NO> where Self: 'a;
+    type BatchReprMapper<'a> = BatchInternalReprMapper<'a,f32,U,LI,D::Output,D,NO> where Self: 'a;
     fn batch_as_repr<'a>(&'a self, input: &'a <Self::RealOutput as BatchDataType>::Type) -> Result<Self::BatchReprMapper<'a>, EvaluateError>
         where Self: 'a {
 
@@ -2195,7 +2195,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> InputMax
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
           D: Device<U> + DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>,
-          <D as DeviceQuantizedLinear<U,W,C,BC,PI,NI,NO>>::Output: OutputTensorSize<NO>,
+          D::Output: OutputTensorSize<NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
           [();NI]: TensorSize,

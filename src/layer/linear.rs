@@ -2327,10 +2327,13 @@ pub struct QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,LI,const NI:usize,co
              InputTensorScalar + OutputTensorScalar + InputMax<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C,BC,PI,NI,NO>,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,<C as Quantizable<W>>::Quantized,<BC as Quantizable<W>>::Quantized,PI,NI,NO>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     u:PhantomData<U>,
@@ -2338,8 +2341,8 @@ pub struct QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,LI,const NI:usize,co
     loss:PhantomData<LI>,
     parent:P,
     device:D,
-    units:C,
-    bias:BC,
+    units:<C as Quantizable<W>>::Quantized,
+    bias:<BC as Quantizable<W>>::Quantized,
     scale:f32,
     input_scale:f32,
     max_input:U,
@@ -2351,11 +2354,14 @@ impl<U,W,C,BC,P,D,I,PI,LI,const NI:usize,const NO:usize> OutputTensorScalar
              InputTensorScalar + OutputTensorScalar + InputMax<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
-          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C,BC,PI,NI,NO>,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,<C as Quantizable<W>>::Quantized,<BC as Quantizable<W>>::Quantized,PI,NI,NO>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + InputTensorSize<NI> +
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     type Scalar = U;
@@ -2522,7 +2528,10 @@ impl<U,W,C,BC,P,D,I,PI,LI,const NI:usize,const NO:usize> Forward<PI,Result<<Self
           PI: Debug + BatchDataType + InputTensorSize<NI> +
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
-          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,<C as Quantizable<W>>::Quantized,<BC as Quantizable<W>>::Quantized,PI,NI,NO>,
           D::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -2541,7 +2550,10 @@ impl<U,W,C,BC,P,D,I,PI,LI,const NI:usize,const NO:usize> ForwardAll
           PI: Debug + InputTensorSize<NI> + BatchDataType +
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
-          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,<C as Quantizable<W>>::Quantized,<BC as Quantizable<W>>::Quantized,PI,NI,NO>,
           D::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -2561,7 +2573,10 @@ impl<U,W,C,BC,P,D,I,PI,LI,const NI:usize,const NO:usize> PartialForward
           PI: Debug + InputTensorSize<NI> + BatchDataType +
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
-          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,<C as Quantizable<W>>::Quantized,<BC as Quantizable<W>>::Quantized,PI,NI,NO>,
           D::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
@@ -2589,7 +2604,10 @@ impl<U,W,C,BC,P,D,I,PI,LI,const NI:usize,const NO:usize> ForwardDiff
           PI: Debug + InputTensorSize<NI> + BatchDataType +
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
-          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,<C as Quantizable<W>>::Quantized,<BC as Quantizable<W>>::Quantized,PI,NI,NO>,
           D::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
@@ -2610,7 +2628,10 @@ impl<U,W,C,BC,P,D,I,PI,LI,const NI:usize,const NO:usize> ContinueForward
           PI: Debug + InputTensorSize<NI> + BatchDataType +
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
-          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,<C as Quantizable<W>>::Quantized,<BC as Quantizable<W>>::Quantized,PI,NI,NO>,
           D::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize,
@@ -2631,7 +2652,10 @@ impl<U,W,C,BC,P,D,I,PI,LI,const NI:usize,const NO:usize> InputMax
           PI: Debug + BatchDataType + InputTensorSize<NI> +
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           LI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
-          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C,BC,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,<C as Quantizable<W>>::Quantized,<BC as Quantizable<W>>::Quantized,PI,NI,NO>,
           D::Output: OutputTensorSize<NO>,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
@@ -2651,10 +2675,13 @@ impl<U,W,C,BC,P,D,I,PI,LI,const NI:usize,const NO:usize> BridgeBase
           PI: Debug + Sized + BatchDataType + InputTensorSize<NI> +
               InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + 'static,
           LI: Debug + Sized + BatchDataType + InputTensorScalar + OutputTensorScalar + 'static,
-          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C,BC,PI,NI,NO>,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,<C as Quantizable<W>>::Quantized,<BC as Quantizable<W>>::Quantized,PI,NI,NO>,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize + IntoConverter + Debug + 'static,
           <LI as BatchDataType>::Type: Debug + BatchSize + 'static,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
           D::Output: Debug + BatchDataType + OutputTensorSize<NO> + 'static,
           <D::Output as BatchDataType>::Type: Debug + BatchSize + 'static,
           f32: Assume<U>,
@@ -2674,9 +2701,12 @@ impl<U,W,C,BC,P,D,I,PI,LI,const NI:usize,const NO:usize> Bridge
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + BatchDataType + Send + Sync,
           PI: Debug + Sized + BatchDataType + InputTensorSize<NI> +
-          InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + 'static,
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + 'static,
           LI: Debug + Sized + BatchDataType + InputTensorScalar + OutputTensorScalar + 'static,
-          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C,BC,PI,NI,NO> +
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,<C as Quantizable<W>>::Quantized,<BC as Quantizable<W>>::Quantized,PI,NI,NO> +
              DeviceBridge<U,f32,D::Output,LI> + DeviceScale<f32,LI,NO>,
           <I as BatchDataType>::Type: Debug,
           <PI as BatchDataType>::Type: BatchSize + IntoConverter + Debug + 'static,

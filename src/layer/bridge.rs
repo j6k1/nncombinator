@@ -8,7 +8,7 @@ use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, PreTrainBase, BatchSize, BatchBridge, BackwardBase, BatchBackwardBase, BridgeRepr, BatchBridgeRepr, BridgeBase, Quantization};
 use crate::mem::AsRawSlice;
-use crate::persistence::{Linear, LinearPersistence, Persistence, PersistenceType, Specialized, TextFilePersistence, TextRecord};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
 use crate::device::bridge::DeviceBridge;
 use crate::mapper::{BatchIdentityMapper, IdentityMapper};
@@ -641,17 +641,17 @@ impl<SO,CI> BridgeLayerBuilder<SO,CI>
         BridgeLayer::<U,SO,P,I,PI,CI,D>::instantiation(parent,device)
     }
 }
-impl<K,U,SO,P,I,PI,CI,D> Quantization<P,K> for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where K: PersistenceType,
+impl<T,U,SO,P,I,PI,CI,D> Quantization<T,Linear> for BridgeLayer<U,SO,P,I,PI,CI,D>
+    where T: LinearPersistence<f32>,
           P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + Quantization<P,K>,
+             InputTensorScalar + OutputTensorScalar + Quantization<T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           PI: Debug + 'static,
           CI: Debug + 'static,
           I: Debug + Send + Sync {
-    fn quantization(&mut self, persistence:&mut P) -> Result<(),TrainingError> {
+    fn quantization(&mut self, persistence:&mut T) -> Result<(),TrainingError> {
         self.parent.quantization(persistence)
     }
 }

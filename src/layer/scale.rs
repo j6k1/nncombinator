@@ -11,7 +11,7 @@ use crate::device::scale::DeviceScale;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
 use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, PreTrainBase, BatchBridge, BackwardBase, BatchBackwardBase, BridgeBase, BridgeRepr, BatchBridgeRepr, Quantization};
 use crate::mapper::{BatchIdentityMapper, IdentityMapper};
-use crate::persistence::{Linear, LinearPersistence, Persistence, PersistenceType, Specialized, TextFilePersistence, TextRecord};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 /// Trait for InverseScalingLayer instance creation.
 pub trait ScalingLayerInstantiation<U,P,D,I,PI,SO,const N:usize>
@@ -708,12 +708,12 @@ impl ScalingLayerBuilder {
         ScalingLayer::instantiation(parent, device)
     }
 }
-impl<K,U,P,D,I,PI,SO,const N:usize> Quantization<P,K> for ScalingLayer<U,P,D,I,PI,SO,N>
-    where K: PersistenceType,
+impl<T,U,P,D,I,PI,SO,const N:usize> Quantization<T,Linear> for ScalingLayer<U,P,D,I,PI,SO,N>
+    where T: LinearPersistence<f32>,
           P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar +
              BridgeBase<RealScale=SO, RealOutput=SO, SourceInput=PI> +
-             Quantization<P,K>,
+             Quantization<T,Linear>,
       U: Default + Clone + Copy + Debug + Send + Sync + 'static,
       D: Device<U>,
       PI: Debug + BatchDataType + 'static,
@@ -721,7 +721,7 @@ impl<K,U,P,D,I,PI,SO,const N:usize> Quantization<P,K> for ScalingLayer<U,P,D,I,P
       <PI as BatchDataType>::Type: Debug + BatchSize + 'static,
       <SO as BatchDataType>::Type: Debug + BatchSize + 'static,
       I: Debug + Send + Sync {
-    fn quantization(&mut self, persistence:&mut P) -> Result<(),TrainingError> {
+    fn quantization(&mut self, persistence:&mut T) -> Result<(),TrainingError> {
         self.parent.quantization(persistence)
     }
 }

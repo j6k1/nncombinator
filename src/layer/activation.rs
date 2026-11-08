@@ -12,7 +12,7 @@ use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
 use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, ContinueForward, Forward, ForwardAll, ForwardDiff, Loss, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, InputMax, PreTrainBase, BatchBridge, BatchSize, BackwardBase, BatchBackwardBase, BridgeRepr, BatchBridgeRepr, BridgeBase, Quantization};
 use crate::lossfunction::LossFunction;
-use crate::persistence::{Linear, LinearPersistence, Persistence, PersistenceType, Specialized, TextFilePersistence, TextRecord};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
 /// Activation layer Implementation
 pub struct ActivationLayer<U,P,A,DA,I,PI,LI,D,const N:usize>
@@ -667,16 +667,16 @@ impl<U,P,A,DA,I,PI,LI,D,const N:usize> InputMax for ActivationLayer<U,P,A,DA,I,P
         self.parent.input_max()
     }
 }
-impl<P,K,U,P_,A,DA,I,PI,LI,D,const N:usize> Quantization<P,K> for ActivationLayer<U,P_,A,DA,I,PI,LI,D,N>
-    where K: PersistenceType,
-          P_: ForwardAll<Input=I,Output=PI> +
-             OutputTensorScalar<Scalar=U> + InputScale + InputMax<Scalar=f32> + Quantization<P,K>,
-      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
-      D: Device<U> + DeviceActivation<U,PI,A,N>,
-      PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
-      LI: Debug + BatchDataType + OutputTensorScalar + 'static,
-      I: Debug + Send + Sync {
-    fn quantization(&mut self, persistence:&mut P) -> Result<(),TrainingError> {
+impl<T,P,U,A,DA,I,PI,LI,D,const N:usize> Quantization<T,Linear> for ActivationLayer<U,P,A,DA,I,PI,LI,D,N>
+    where T: LinearPersistence<f32>,
+          P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U> + InputScale + InputMax<Scalar=f32> + Quantization<T,Linear>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          LI: Debug + BatchDataType + OutputTensorScalar + 'static,
+          I: Debug + Send + Sync {
+    fn quantization(&mut self, persistence:&mut T) -> Result<(),TrainingError> {
         self.parent.quantization(persistence)
     }
 }

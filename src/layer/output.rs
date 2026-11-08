@@ -12,7 +12,7 @@ use crate::device::output::DeviceLinearOutput;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, SizeMismatchError, TrainingError};
 use crate::layer::{BackwardAll, BackwardBase, BatchBackward, BatchBackwardBase, BatchDataType, BatchForward, BatchForwardBase, BatchLoss, BatchPreTrain, BatchPreTrainBase, BatchSize, BatchTrain, ContinueForward, ForwardAll, ForwardDiff, InputTensorScalar, Loss, OnStep, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, PreTrainBase, Step, Train, UpdateWeight, Quantization};
 use crate::lossfunction::{BatchLossFunctionLinear, LossFunction, LossFunctionLinear};
-use crate::persistence::{Linear, LinearPersistence, Persistence, PersistenceType, Specialized, TextFilePersistence, TextPersistence, TextRecord, VerifyEof};
+use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord, VerifyEof};
 
 /// Layer implementation of the output layer (linear layer)
 pub struct LinearOutputLayer<U,P,D,I,PI,const N:usize>
@@ -568,16 +568,16 @@ impl<T,U,P,D,I,PI,const N:usize> PersistProgress<T,Linear> for LinearOutputLayer
         Ok(())
     }
 }
-impl<K,U,P,D,I,PI,const N:usize> Quantization<P,K> for LinearOutputLayer<U,P,D,I,PI,N>
-    where K: PersistenceType,
+impl<T,U,P,D,I,PI,const N:usize> Quantization<T,Linear> for LinearOutputLayer<U,P,D,I,PI,N>
+    where T: LinearPersistence<f32>,
           P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + Quantization<P,K>,
+             InputTensorScalar + OutputTensorScalar + Quantization<T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync +
              Add<Output=U> + Sub<Output=U> + Div<Output=U> + AddAssign + FromPrimitive + 'static,
           D: Device<U>,
           PI: Debug + InputTensorScalar<Scalar=U> + 'static,
           I: Debug + Send + Sync {
-    fn quantization(&mut self, persistence:&mut P) -> Result<(),TrainingError> {
+    fn quantization(&mut self, persistence:&mut T) -> Result<(),TrainingError> {
         self.parent.quantization(persistence)
     }
 }

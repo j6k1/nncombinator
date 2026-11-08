@@ -7,9 +7,9 @@ use std::str::FromStr;
 use crate::arr::{MakeView, MakeViewMut, SliceSize};
 use crate::device::Device;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, BatchBridge, PreTrainBase, BatchSize, BackwardBase, BatchBackwardBase, BridgeBase, BridgeRepr, BatchBridgeRepr};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, ContinueForward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, InputScale, Bridge, BatchBridge, PreTrainBase, BatchSize, BackwardBase, BatchBackwardBase, BridgeBase, BridgeRepr, BatchBridgeRepr, Quantization};
 use crate::mem::AsRawSlice;
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
+use crate::persistence::{Linear, LinearPersistence, Persistence, PersistenceType, Specialized, TextFilePersistence, TextRecord};
 use crate::{Cons, Stack};
 use crate::device::bridge::DeviceBridge;
 use crate::device::clone::DeviceClone;
@@ -710,5 +710,17 @@ impl<SO,CI> DequantizeLayerBuilder<SO, CI>
         DequantizeLayer::<U,SO,P,I,PI,CI,D>::instantiation(parent, device)
     }
 }
-
-
+impl<K,U,SO,P,I,PI,CI,D> Quantization<P,K> for DequantizeLayer<U, SO, P, I, PI, CI, D>
+    where K: PersistenceType,
+          P: ForwardAll<Input=I,Output=PI> +
+             InputTensorScalar + OutputTensorScalar + Quantization<P,K>,
+      U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
+      D: Device<U>,
+      PI: Debug + 'static,
+      CI: Debug + 'static,
+      I: Debug + Send + Sync {
+    fn quantization(&mut self, persistence:&mut P) -> Result<(),TrainingError> {
+        self.parent.quantization(persistence)
+    }
+}

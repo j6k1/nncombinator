@@ -12,11 +12,11 @@ use crate::device::clone::DeviceClone;
 use crate::device::linear::{DeviceDiffLinear, DeviceLinear, DeviceQuantizedLinear, DeviceQuantizedLinearBase, DeviceQuantizedLinearEvaluation, DeviceQuantizedLinearQuantization};
 use crate::device::scale::DeviceScale;
 use crate::error::{ModelLoadError, EvaluateError, LayerInstantiationError, PersistenceError, TrainingError, TypeConvertError};
-use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, Bridge, BatchBridge, InputMax, PreTrainBase, BackwardBase, BatchBackwardBase, BridgeRepr, BridgeBase, BatchBridgeRepr};
+use crate::layer::{Backward, BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ContinueForward, Forward, ForwardAll, ForwardDiff, PartialForward, PreTrain, UpdateWeight, OnStep, PersistProgress, InputTensorScalar, OutputTensorScalar, TensorSize, OutputTensorSize, InputTensorSize, InputScale, Bridge, BatchBridge, InputMax, PreTrainBase, BackwardBase, BatchBackwardBase, BridgeRepr, BridgeBase, BatchBridgeRepr, Quantization};
 use crate::mapper::{BatchIdentityMapper, BatchInternalReprMapper, BatchScalingMapper, IdentityMapper, InternalReprMapper, ScalingMapper};
 use crate::ope::{MaxValue};
 use crate::optimizer::{Optimizer, OptimizerBuilder};
-use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextPersistence, TextRecord};
+use crate::persistence::{Linear, LinearPersistence, Persistence, PersistenceType, Specialized, TextFilePersistence, TextPersistence, TextRecord};
 use crate::quantization::Quantizable;
 
 /// Linear Layer Implementation
@@ -2574,6 +2574,24 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> Bridge
         let o = self.device.bridge_forward(input)?;
 
         ScalingMapper::new(&self.device,input,&o,self.scale)
+    }
+}
+impl<K,U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> Quantization<P,K> for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
+    where K: PersistenceType,
+          P: ForwardAll<Input=I,Output=PI> +
+          InputTensorScalar + OutputTensorScalar + InputMax<Scalar=U> + Quantization<P,K>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          W: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
+          RI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
+          D: Device<U> + DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO>,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    fn quantization(&mut self, persistence:&mut P) -> Result<(),TrainingError> {
+        self.parent.quantization(persistence)
     }
 }
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>

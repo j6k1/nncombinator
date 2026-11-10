@@ -2324,7 +2324,7 @@ impl<W,U,const NI:usize,const NO:usize> QuantizedLinearLayerBuilder<W,U,NI,NO>
 /// Quantized Evaluation Linear Layer Implementation - eval-only version with only Persistence, ForwardAll, PartialForward, ForwardDiff, ContinueForward, OutputTensorScalar, InputMax, BridgeBase, Bridge traits
 pub struct QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> +
@@ -2348,10 +2348,28 @@ pub struct QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,const NI:usize,co
     max_input:f32,
     shift:usize,
 }
+impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> InputTensorScalar
+    for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          W: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> +
+          DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO>,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType + InputTensorSize<NI> +
+          InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
+          RI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    type Scalar = U;
+}
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> OutputTensorScalar
     for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> +
@@ -2369,7 +2387,7 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> OutputTensorScalar
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> Forward<PI,Result<<Self as ForwardAll>::Output,EvaluateError>>
     for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -2391,7 +2409,7 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> Forward<PI,Result<<Self
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> ForwardAll
     for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -2414,7 +2432,7 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> ForwardAll
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> PartialForward
     for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -2445,7 +2463,7 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> PartialForward
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> ForwardDiff
     for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward + ForwardDiff +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -2469,7 +2487,7 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> ForwardDiff
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> ContinueForward
     for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> + PartialForward + ContinueForward +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -2493,7 +2511,7 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> ContinueForward
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> InputMax
     for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -2513,10 +2531,54 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> InputMax
         self.max_input
     }
 }
+impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> InputScale
+    for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> +
+             InputTensorScalar + OutputTensorScalar,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          W: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType + InputTensorSize<NI> +
+          InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
+          RI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          D: Device<U> +
+          DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO>,
+          D::Output: OutputTensorSize<NO>,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    fn input_scale(&self) -> f32 {
+        self.input_scale
+    }
+}
+impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> OnStep
+    for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
+    where P: ForwardAll<Input=I,Output=PI> +
+             InputTensorScalar + OutputTensorScalar + OnStep,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          W: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> +
+             DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO>,
+          I: Debug + Send + Sync,
+          PI: Debug + BatchDataType + InputTensorSize<NI> +
+              InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
+          RI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
+          C: Quantizable<W>,
+          BC: Quantizable<W>,
+          [();NI]: TensorSize,
+          [();NO]: TensorSize {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        self.parent.on_step(step)
+    }
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        self.parent.on_frequently_step(step,frequently_step)
+    }
+}
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> BridgeBase
     for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + Assume<f32> + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + BatchDataType + Send + Sync,
@@ -2544,7 +2606,7 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> BridgeBase
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> Bridge
     for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + Assume<f32> + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + BatchDataType + Send + Sync,
@@ -2629,17 +2691,18 @@ impl<T,U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> Quantization<T,Linear
 }
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> +
-             DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO> +
-             DeviceQuantizedLinearBase<W,C::Quantized,BC::Quantized,NI,NO>,
+             DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO>,
           I: Debug + Send + Sync,
           PI: Debug + BatchDataType + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           RI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
           C: Quantizable<W>,
           BC: Quantizable<W>,
+          <C as Quantizable<W>>::Quantized: Default,
+          <BC as Quantizable<W>>::Quantized: Default,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     /// Create and return an instance of QuantizedEvaluationLinearLayer from pre-computed quantization data
@@ -2647,11 +2710,8 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> QuantizedEvaluationLine
     /// * `parent` - upper layer
     /// * `device` - Device object used for neural network computation
     pub fn new(parent: P, device: &D) -> Result<Self,LayerInstantiationError> {
-        let units = Arr2::new();
-        let bias = Arr::new();
-
-        let units = device.specialization_units(units)?;
-        let bias = device.specialization_bias(bias)?;
+        let units = C::Quantized::default();
+        let bias = BC::Quantized::default();
 
         Ok(QuantizedEvaluationLinearLayer {
             u: PhantomData::<U>,
@@ -2671,20 +2731,18 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> QuantizedEvaluationLine
 /// Trait for QuantizedEvaluationLinearLayer instance creation
 pub trait QuantizedEvaluationLinearLayerInstantiation<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize>
     where P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
           RI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
           D: Device<U> +
-          DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO> +
-          DeviceQuantizedLinearBase<W,C::Quantized,BC::Quantized,NI,NO>,
-          D: Device<U> +
-             DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO> +
-             DeviceQuantizedLinearBase<W,C::Quantized,BC::Quantized,NI,NO>,
+             DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
+          <C as Quantizable<W>>::Quantized: Default,
+          <BC as Quantizable<W>>::Quantized: Default,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     /// Create an instance of QuantizedEvaluationLinearLayers
@@ -2697,17 +2755,18 @@ pub trait QuantizedEvaluationLinearLayerInstantiation<U,W,C,BC,P,D,I,PI,RI,const
 impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> QuantizedEvaluationLinearLayerInstantiation<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+             InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
           PI: Debug + InputTensorSize<NI> + BatchDataType + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U>,
           RI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
           D: Device<U> +
-             DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO> +
-             DeviceQuantizedLinearBase<W,C::Quantized,BC::Quantized,NI,NO>,
+             DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO>,
           C: Quantizable<W>,
           BC: Quantizable<W>,
+          <C as Quantizable<W>>::Quantized: Default,
+          <BC as Quantizable<W>>::Quantized: Default,
           [();NI]: TensorSize,
           [();NO]: TensorSize {
     fn instantiation(parent: P, device: &D)
@@ -2747,17 +2806,18 @@ impl<W,U,const NI:usize,const NO:usize> QuantizedEvaluationLinearLayerBuilder<W,
     pub fn build<C,BC,P,D,I,PI,RI>(&self,parent: P, device:&D)
         -> Result<QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> +
-                 InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32>,
+                 InputTensorScalar + OutputTensorScalar,
               U: Default + Clone + Copy + Debug + Send + Sync + 'static,
               W: Default + Clone + Copy + Debug + Send + Sync + 'static,
               I: Debug + Send + Sync,
               PI: Debug + InputTensorSize<NI> + InputTensorScalar<Scalar=U> + OutputTensorScalar<Scalar=U> + BatchDataType,
               RI: Debug + BatchDataType + InputTensorScalar + OutputTensorScalar,
               D: Device<U> +
-                 DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO> +
-                 DeviceQuantizedLinearBase<W,C::Quantized,BC::Quantized,NI,NO>,
+                 DeviceQuantizedLinearEvaluation<U,W,C::Quantized,BC::Quantized,PI,NI,NO>,
               C: Quantizable<W>,
               BC: Quantizable<W>,
+              <C as Quantizable<W>>::Quantized: Default,
+              <BC as Quantizable<W>>::Quantized: Default,
               [();NI]: TensorSize,
               [();NO]: TensorSize,
               QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>: QuantizedEvaluationLinearLayerInstantiation<U,W,C,BC,P,D,I,PI,RI,NI,NO> {

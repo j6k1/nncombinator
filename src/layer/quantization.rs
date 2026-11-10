@@ -438,8 +438,7 @@ impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for DequantizeLayer<U, SO, P, I, PI, CI
     }
 }
 impl<U,SO,P,I,PI,CI,D> OnStep for DequantizeLayer<U, SO, P, I, PI, CI, D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<SO,LossInput=CI,LossInputScalar=SO> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
+    where P: ForwardAll<Input=I,Output=PI> +
              InputTensorScalar + OutputTensorScalar + OnStep,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,

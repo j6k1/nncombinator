@@ -458,9 +458,9 @@ impl<U,P,D,I,PI,SO,const N:usize> BatchBackward<U> for ScalingLayer<U,P,D,I,PI,S
     }
 }
 impl<U,P,D,I,PI,SO,const N:usize> OnStep for ScalingLayer<U,P,D,I,PI,SO,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrain +
-             InputTensorScalar + OutputTensorScalar + Bridge<RealScale=SO, RealOutput=SO, SourceInput=PI> + OnStep,
+    where P: ForwardAll<Input=I,Output=PI> +
+             InputTensorScalar + OutputTensorScalar +
+             Bridge<RealScale=SO, RealOutput=SO, SourceInput=PI> + OnStep,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,
           I: Debug + Send + Sync,

@@ -66,6 +66,12 @@ impl Min for i16 {
         (*self).min(*other)
     }
 }
+impl Min for i8 {
+    #[inline]
+    fn min(&self,other:&i8) -> i8 {
+        (*self).min(*other)
+    }
+}
 impl Max for i16 {
     #[inline]
     fn max(&self,other:&i16) -> i16 {

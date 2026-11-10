@@ -380,9 +380,7 @@ impl<U,SO,P,I,PI,CI,D> BatchBackward<SO> for BridgeLayer<U,SO,P,I,PI,CI,D>
     }
 }
 impl<U,SO,P,I,PI,CI,D> OnStep for BridgeLayer<U,SO,P,I,PI,CI,D>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<U,LossInput=PI,LossInputScalar=U> +
-             PreTrainBase<PreOutput=PI> + PreTrain +
-             InputTensorScalar + OutputTensorScalar + OnStep,
+    where P: ForwardAll<Input=I,Output=PI> + InputTensorScalar + OutputTensorScalar + OnStep,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           SO: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,

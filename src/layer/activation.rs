@@ -480,8 +480,8 @@ impl<U,P,A,DA,I,PI,LI,D,const N:usize> BatchLoss<<LI as OutputTensorScalar>::Sca
 }
 
 impl<U,P,A,DA,I,PI,LI,D,const N:usize> OnStep for ActivationLayer<U,P,A,DA,I,PI,LI,D,N>
-    where P: ForwardAll<Input=I,Output=PI> + BackwardAll<<LI as OutputTensorScalar>::Scalar,LossInput=LI> +
-             PreTrain + OnStep + OutputTensorScalar<Scalar=U>,
+    where P: ForwardAll<Input=I,Output=PI> +
+             OnStep + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + 'static,
@@ -670,7 +670,7 @@ impl<U,P,A,DA,I,PI,LI,D,const N:usize> InputMax for ActivationLayer<U,P,A,DA,I,P
 impl<T,P,U,A,DA,I,PI,LI,D,const N:usize> Quantization<T,Linear> for ActivationLayer<U,P,A,DA,I,PI,LI,D,N>
     where T: LinearPersistence<f32>,
           P: ForwardAll<Input=I,Output=PI> +
-             OutputTensorScalar<Scalar=U> + InputScale + InputMax<Scalar=f32> + Quantization<T,Linear>,
+             OutputTensorScalar<Scalar=U> + Quantization<T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceActivation<U,PI,A,N>,
           PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,

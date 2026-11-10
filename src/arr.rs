@@ -600,6 +600,14 @@ impl<const N1:usize, const N2:usize> Quantizable<i8> for Arr2<f32,N1,N2> {
 impl<const N1:usize, const N2:usize> Quantizable<i16> for Arr2<f32,N1,N2> {
     type Quantized = ColumnMajorArr2<i16,N1,N2>;
 }
+impl<T,const N1: usize,const N2: usize> Default for Arr2<T,N1,N2>
+    where T: Default + Clone {
+    fn default() -> Self {
+        Self {
+            arr: vec![T::default(); N1 * N2].into_boxed_slice(),
+        }
+    }
+}
 impl<'a,T,const N1:usize, const N2: usize> AsRawSlice<T> for Arr2<T,N1,N2> where T: Default + Clone + Copy + Send {
     fn as_raw_slice(&self) -> &[T] {
         &self.arr
@@ -681,6 +689,12 @@ impl<T,const N1:usize, const N2:usize> ColumnMajorArr2<T,N1,N2>
         ColumnMajorArr2 {
             arr:arr.into_boxed_slice()
         }
+    }
+}
+impl<T,const N1:usize, const N2:usize> Default for ColumnMajorArr2<T,N1,N2>
+    where T: Default + Clone + Copy + Send + Sync {
+    fn default() -> ColumnMajorArr2<T,N1,N2> {
+        ColumnMajorArr2::new()
     }
 }
 impl<T,const N1: usize,const N2: usize> InputTensorScalar for ColumnMajorArr2<T,N1,N2>

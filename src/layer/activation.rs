@@ -680,3 +680,249 @@ impl<T,P,U,A,DA,I,PI,LI,D,const N:usize> Quantization<T,Linear> for ActivationLa
         self.parent.quantization(persistence)
     }
 }
+
+/// Evaluation Activation layer Implementation - eval-only version without training traits
+pub struct EvaluationActivationLayer<U,P,A,I,PI,D,const N:usize>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + BatchDataType + 'static,
+          I: Debug + Send + Sync {
+    parent:P,
+    f:A,
+    device:D,
+    u:PhantomData<U>,
+    i:PhantomData<I>,
+    pi:PhantomData<PI>,
+}
+impl<U,P,A,I,PI,D,const N:usize> EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + Send + Sync {
+    /// Create and return an instance of EvaluationActivationLayer
+    /// # Arguments
+    /// * `parent` - upper layer
+    /// * `f` - forward Activation Function
+    /// * `device` - Device object used for neural network computation
+    pub fn new(parent:P,f:A,device:&D) -> EvaluationActivationLayer<U,P,A,I,PI,D,N> {
+        EvaluationActivationLayer {
+            parent:parent,
+            f:f,
+            device:device.clone(),
+            u:PhantomData::<U>,
+            i:PhantomData::<I>,
+            pi:PhantomData::<PI>,
+        }
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> InputTensorScalar for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + Send + Sync {
+    type Scalar = U;
+}
+impl<U,P,A,I,PI,D,const N:usize> OutputTensorScalar for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + Send + Sync {
+    type Scalar = U;
+}
+impl<U,P,A,I,PI,D,const N:usize> Persistence<TextFilePersistence,Specialized> for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<TextFilePersistence,Specialized> +
+             OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static + std::str::FromStr,
+          D: Device<U>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + Send + Sync,
+          TextRecord: From<U>,
+          ModelLoadError: From<<U as FromStr>::Err> {
+    fn load(&mut self, persistence: &mut TextFilePersistence) -> Result<(), ModelLoadError> {
+        self.parent.load(persistence)
+    }
+
+    fn save(&mut self, persistence: &mut TextFilePersistence) -> Result<(), PersistenceError> {
+        self.parent.save(persistence)?;
+
+        persistence.write_layer_start();
+        persistence.write_layer_end();
+
+        Ok(())
+    }
+}
+impl<T,U,P,A,I,PI,D,const N:usize> Persistence<T,Linear> for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where T: LinearPersistence<U>,
+          P: ForwardAll<Input=I,Output=PI> + Persistence<T,Linear> +
+             OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + Send + Sync {
+    fn load(&mut self, persistence: &mut T) -> Result<(), ModelLoadError> {
+        self.parent.load(persistence)
+    }
+
+    fn save(&mut self, persistence: &mut T) -> Result<(), PersistenceError> {
+        self.parent.save(persistence)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> ForwardAll for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + Send + Sync {
+    type Input = I;
+    type Output = PI;
+
+    fn forward_all(&self, input: Self::Input) -> Result<Self::Output, EvaluateError> {
+        self.forward(&self.parent.forward_all(input)?)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> Forward<PI,Result<PI,EvaluateError>> for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + Send + Sync {
+    fn forward(&self, input: &PI) -> Result<PI,EvaluateError> {
+        self.device.apply(&self.f, &input)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> PartialForward for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             PartialForward +
+             OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+          I: Debug + Send + Sync {
+    type PartialInput = <P as PartialForward>::PartialInput;
+    type PartialOutput = <P as PartialForward>::PartialOutput;
+    type DiffInput = <P as PartialForward>::DiffInput;
+    fn partial_forward(&self, input: Self::Input) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward(input)?)
+    }
+
+    fn partial_forward_by_diff(&self, input:Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::PartialOutput, EvaluateError> {
+        Ok(self.parent.partial_forward_by_diff(input, partial_input)?)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> ForwardDiff for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             PartialForward + ForwardDiff + OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+          I: Debug + Send + Sync {
+    fn forward_diff(&self, input: Self::DiffInput, partial_input:&Self::PartialInput) -> Result<Self::Output, EvaluateError> {
+        let input = self.parent.forward_diff(input, partial_input)?;
+
+        Ok(self.forward(&input)?)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> ContinueForward for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             PartialForward + ContinueForward + OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U>,
+          I: Debug + Send + Sync {
+    fn continue_forward<'a>(&self, input: &Self::PartialInput) -> Result<Self::Output, EvaluateError> {
+        let input = self.parent.continue_forward(input)?;
+
+        Ok(self.forward(&input)?)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> OnStep for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OnStep + OutputTensorScalar<Scalar=U>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + 'static,
+          I: Debug + Send + Sync {
+    fn on_step(&mut self, step: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.on_step(step)?)
+    }
+
+    fn on_frequently_step(&mut self, step: usize, frequently_step: usize) -> Result<(), TrainingError> {
+        Ok(self.parent.on_frequently_step(step,frequently_step)?)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> InputScale for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U> + InputScale,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + Send + Sync,
+          Self: ForwardAll<Output=PI> {
+    fn input_scale(&self) -> f32 {
+        self.parent.input_scale()
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> BridgeBase for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U> + BridgeBase<SourceInput=PI> + Bridge + 'static,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + BatchDataType + Send + Sync + 'static,
+          <I as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static {
+    type UseDevice = <P as BridgeBase>::UseDevice;
+    type RealScale = <P as BridgeBase>::RealScale;
+    type RealOutput = <P as BridgeBase>::RealOutput;
+    type SourceInput = PI;
+}
+impl<U,P,A,I,PI,D,const N:usize> Bridge for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U> + BridgeBase<SourceInput=PI> + Bridge + 'static,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + BatchDataType + Send + Sync + 'static,
+          <I as BatchDataType>::Type: BatchSize + Debug + 'static,
+          <PI as BatchDataType>::Type: BatchSize + Debug + 'static {
+    type RealMapper<'a> = <P as Bridge>::RealMapper<'a> where Self: 'a;
+
+    fn as_real<'a>(&'a self, input:&'a PI) -> Result<Self::RealMapper<'a>,EvaluateError>
+        where Self: 'a {
+        self.parent.as_real(input)
+    }
+}
+impl<U,P,A,I,PI,D,const N:usize> InputMax for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U> + InputScale + InputMax<Scalar=f32>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + Send + Sync {
+    type Scalar = f32;
+    fn input_max(&self) -> Self::Scalar {
+        self.parent.input_max()
+    }
+}
+impl<T,P,U,A,I,PI,D,const N:usize> Quantization<T,Linear> for EvaluationActivationLayer<U,P,A,I,PI,D,N>
+    where T: LinearPersistence<f32>,
+          P: ForwardAll<Input=I,Output=PI> +
+             OutputTensorScalar<Scalar=U> + Quantization<T,Linear>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+          D: Device<U> + DeviceActivation<U,PI,A,N>,
+          PI: Debug + BatchDataType + OutputTensorScalar<Scalar=U> + InputTensorScalar<Scalar=U> + 'static,
+          I: Debug + Send + Sync {
+    fn quantization(&mut self, persistence:&mut T) -> Result<(),TrainingError> {
+        self.parent.quantization(persistence)
+    }
+}

@@ -175,11 +175,11 @@ impl Stack for Nil {
 
 #[cfg(test)]
 mod tests {
-    use crate::activation::{ReLuBuilder};
+    use crate::activation::{ReLu};
     use crate::arr::Arr;
     use crate::device::DeviceCpu;
     use crate::layer::{AddLayer, TryAddLayer};
-    use crate::layer::activation::ActivationLayer;
+    use crate::layer::activation::{EvaluationActivationLayer};
     use crate::layer::input::InputLayer;
     use crate::layer::linear::{LinearLayerBuilder};
     use crate::layer::output::LinearOutputLayer;
@@ -203,7 +203,7 @@ mod tests {
         let _l = i.add_layer(|l| {
             LinearLayerBuilder::<4,1>::new().build(l,&device,|| 1., || 0.,&optimizer_builder).unwrap()
         }).add_layer(|l| {
-            ActivationLayer::new(l,ReLuBuilder::new(&device),&device)
+            EvaluationActivationLayer::new(l,ReLu::new(&device),&device)
         }).try_add_layer(|l| LinearOutputLayer::new(l,&device)).unwrap();
     }
 }

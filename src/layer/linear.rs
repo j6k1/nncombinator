@@ -2775,35 +2775,37 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> QuantizedEvaluationLine
     }
 }
 /// Builder for QuantizedEvaluationLinearLayer instance creation
-pub struct QuantizedEvaluationLinearLayerBuilder<W,U,const NI:usize,const NO:usize>
+pub struct QuantizedEvaluationLinearLayerBuilder<W,U,RI,const NI:usize,const NO:usize>
     where [();NI]: TensorSize,
           [();NO]: TensorSize {
     w:PhantomData<W>,
     u:PhantomData<U>,
+    ri:PhantomData<RI>,
     ni:PhantomData<[();NI]>,
     no:PhantomData<[();NO]>
 }
-impl<W,U,const NI:usize,const NO:usize> QuantizedEvaluationLinearLayerBuilder<W,U,NI,NO>
+impl<W,U,RI,const NI:usize,const NO:usize> QuantizedEvaluationLinearLayerBuilder<W,U,RI,NI,NO>
     where[();NI]: TensorSize,
          [();NO]: TensorSize {
     /// Create an instance of QuantizedEvaluationLinearLayerBuilder
-    pub fn new() -> QuantizedEvaluationLinearLayerBuilder<W,U,NI,NO> {
+    pub fn new() -> QuantizedEvaluationLinearLayerBuilder<W,U,RI,NI,NO> {
         QuantizedEvaluationLinearLayerBuilder {
             w:PhantomData::<W>,
             u:PhantomData::<U>,
+            ri:PhantomData::<RI>,
             ni:PhantomData::<[();NI]>,
             no:PhantomData::<[();NO]>
         }
     }
 }
-impl<W,U,const NI:usize,const NO:usize> QuantizedEvaluationLinearLayerBuilder<W,U,NI,NO>
+impl<W,U,RI,const NI:usize,const NO:usize> QuantizedEvaluationLinearLayerBuilder<W,U,RI,NI,NO>
     where [();NI]: TensorSize,
           [();NO]: TensorSize {
     /// Create an instance of QuantizedEvaluationLinearLayers
     /// # Arguments
     /// * `parent` - upper layer
     /// * `device` - Device object used for neural network computation
-    pub fn build<C,BC,P,D,I,PI,RI>(&self,parent: P, device:&D)
+    pub fn build<C,BC,P,D,I,PI>(&self,parent: P, device:&D)
         -> Result<QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>,LayerInstantiationError>
         where P: ForwardAll<Input=I,Output=PI> +
                  InputTensorScalar + OutputTensorScalar,

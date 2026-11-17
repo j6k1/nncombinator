@@ -6,17 +6,18 @@ use rand::prelude::{Distribution, SliceRandom};
 use rand_distr::Normal;
 use simdoperator::backend::autoselect::AutoSelect;
 use simdoperator::backend::common::Backend;
-use nncombinator::activation::{ReLuBuilder, SoftMaxBuilder};
+use nncombinator::activation::{ReLu, ReLuBuilder, SoftMax, SoftMaxBuilder};
 use nncombinator::arr::Arr;
 use nncombinator::device::{DeviceCpu, DeviceSimd};
-use nncombinator::layer::activation::ActivationLayer;
-use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll};
+use nncombinator::layer::activation::{ActivationLayer, EvaluationActivationLayer};
+use nncombinator::layer::{AddLayer, BatchForward, BatchTrain, ForwardAll, Quantization};
 use nncombinator::layer::input::{QuantizedInputLayer};
-use nncombinator::layer::linear::{QuantizedLinearLayerBuilder};
+use nncombinator::layer::linear::{QuantizedEvaluationLinearLayerBuilder, QuantizedLinearLayerBuilder};
 use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::layer::quantization::DequantizeLayerBuilder;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::optimizer::AdamWBuilder;
+use nncombinator::persistence::BinFilePersistence;
 use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight};
 
 #[test]
@@ -473,6 +474,96 @@ fn test_mnist_for_quantization_cpu_for_simd() {
             tests.push((n, path));
         }
     }
+
+    tests.shuffle(&mut rng);
+
+    let count = tests.len();
+
+    let start_eval_time = Instant::now();
+
+    for (n, path) in tests.iter() {
+        let img = image::io::Reader::open(path).unwrap().decode().unwrap();
+
+        let pixels = img.as_bytes();
+
+        let n = *n;
+
+        let mut input = Arr::<i8, 784>::new();
+
+        for (it, &p) in input.iter_mut().zip(pixels) {
+            *it = (p / 2) as i8;
+        }
+
+        let r = net.forward_all(input).unwrap();
+
+        let r = r.iter().enumerate().fold((0, 0.0), |acc, (n, &t)| {
+            if t > acc.1 {
+                (n, t)
+            } else {
+                acc
+            }
+        }).0;
+
+        if n == r {
+            correct_answers += 1;
+        }
+    }
+
+    let elapsed = start_eval_time.elapsed();
+
+    let elapsed = elapsed.as_secs() as u64 * 1000 + elapsed.subsec_millis() as u64;
+
+    println!("eval processing time is {} secs.",elapsed as f64 / 1000.);
+
+    println!("correct_answers = {},{}%",correct_answers,correct_answers as f32 / count as f32 * 100.);
+
+    debug_assert!(correct_answers as f32 / count as f32 * 100. > 80.)
+}
+#[test]
+fn test_mnist_for_evaluation_quantization_cpu_for_simd() {
+    let device = DeviceCpu::new().unwrap();
+    let device_simd = DeviceSimd::new(AutoSelect::new().unwrap()).unwrap();
+
+    let net:QuantizedInputLayer<i8,Arr<i8,{ 28*28 }>,Arr<f32,{ 28*28 }>,_,127,{ 28*28 }> = QuantizedInputLayer::new(&device_simd).unwrap();
+
+    let mut net = net.add_layer(|l| {
+        QuantizedEvaluationLinearLayerBuilder::<i8,i8,Arr<f32,512>,{ 28*28 },512>::new().build(l,&device_simd).unwrap()
+    }).add_layer(|l| {
+        EvaluationActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        QuantizedEvaluationLinearLayerBuilder::<i8,i8,Arr<f32,256>,512,256>::new().build(l,&device_simd).unwrap()
+    }).add_layer(|l| {
+        EvaluationActivationLayer::new(l,ReLu::new(&device),&device)
+    }).add_layer(|l| {
+        QuantizedEvaluationLinearLayerBuilder::<i8,i8,Arr<f32,10>,256,10>::new().build(l, &device_simd).unwrap()
+    }).add_layer(|l| {
+        DequantizeLayerBuilder::<f32,Arr<f32,10>>::new().build(l, &device).unwrap()
+    }).add_layer(|l| {
+        EvaluationActivationLayer::new(l,SoftMax::new(&device),&device)
+    }).add_layer(|l| {
+        LinearOutputLayer::new(l,&device).unwrap()
+    });
+
+    let mut p = BinFilePersistence::new(Path::new("data").join("tmp").join("mnist_for_gpu.bin")).unwrap();
+
+    net.quantization(&mut p).unwrap();
+
+    let mut tests: Vec<(usize, PathBuf)> = Vec::new();
+
+    for n in 0..10 {
+        for entry in fs::read_dir(Path::new("mnist")
+            .join("mnist_png")
+            .join("testing")
+            .join(n.to_string())).unwrap() {
+            let path = entry.unwrap().path();
+
+            tests.push((n, path));
+        }
+    }
+
+    let mut rng = prelude::thread_rng();
+
+    let mut correct_answers = 0;
 
     tests.shuffle(&mut rng);
 

@@ -51,6 +51,7 @@ use nncombinator::optimizer::{AdagradBuilder, AdamBuilder, AdamWBuilder, Momentu
 use nncombinator::cuda::allocator::{DeviceAlloc, MemoryPoolAllocator, MemoryPoolAllocatorInstantiation};
 #[cfg(feature = "cuda")]
 use nncombinator::cuda::{CudaTensor1dPtr, ReadMemory};
+use nncombinator::persistence::{BinFilePersistence, Persistence, SaveToFile};
 #[cfg(feature = "cuda")]
 use crate::common::SHARED_MEMORY_POOL;
 use crate::common::{assert_backward_all, assert_continue_forward, assert_forward_all, assert_forward_diff, assert_loss, assert_partial_forward, assert_pre_train, assert_update_weight};
@@ -504,6 +505,16 @@ fn test_mnist_for_gpu() {
         println!("loss_average = {}", total_loss as f32 / count as f32);    
     }
 
+    /*
+    let nn_path = Path::new("data").join("tmp").join("mnist_for_gpu.bin");
+
+    let mut p = BinFilePersistence::new(&nn_path).unwrap();
+
+    net.save(&mut p).unwrap();
+
+    p.save(&nn_path).unwrap();
+    */
+    
     let mut tests: Vec<(usize, PathBuf)> = Vec::new();
 
     for n in 0..10 {

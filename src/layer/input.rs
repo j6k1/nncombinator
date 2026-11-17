@@ -4,12 +4,14 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use crate::{Cons, Never, Nil};
 use crate::arr::{Ones};
+use crate::device::activation::DeviceActivation;
 use crate::device::bridge::DeviceBridge;
 use crate::device::Device;
 use crate::device::input::DeviceInput;
 use crate::device::scale::DeviceScale;
 use crate::error::{ModelLoadError, EvaluateError, PersistenceError, TrainingError};
-use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight, InputMax, PreTrainBase, Bridge, BatchBridge, BackwardBase, BatchBackwardBase, BridgeBase, BridgeRepr, BatchBridgeRepr};
+use crate::layer::{BackwardAll, BatchBackward, BatchDataType, BatchForward, BatchForwardBase, BatchPreTrain, BatchPreTrainBase, BatchSize, ForwardAll, InputTensorScalar, OnStep, InputScale, OutputTensorScalar, PartialForward, PersistProgress, PreTrain, UpdateWeight, InputMax, PreTrainBase, Bridge, BatchBridge, BackwardBase, BatchBackwardBase, BridgeBase, BridgeRepr, BatchBridgeRepr, Quantization};
+use crate::layer::activation::EvaluationActivationLayer;
 use crate::mapper::{BatchIdentityMapper, BatchInternalReprMapper, BatchScalingMapper, IdentityMapper, InternalReprMapper, ScalingMapper};
 use crate::persistence::{Linear, LinearPersistence, Persistence, Specialized, TextFilePersistence, TextRecord};
 
@@ -900,5 +902,15 @@ impl<U,O,LI,D,const M: usize,const N:usize> InputMax for QuantizedInputLayer<U,O
     type Scalar = f32;
     fn input_max(&self) -> f32 {
         M as f32
+    }
+}
+impl<T,U,O,LI,D,const M: usize,const N:usize> Quantization<T,Linear> for QuantizedInputLayer<U,O,LI,D,M,N>
+    where T: LinearPersistence<f32>,
+          U: Default + Clone + Copy + Debug + Send + Sync + 'static + FromStr + Sized,
+          D: Device<U> + DeviceInput<U,O>,
+          O: Debug + BatchDataType + Ones + 'static,
+          <O as BatchDataType>::Type: Debug + 'static {
+    fn quantization(&mut self, _:&mut T) -> Result<(),TrainingError> {
+        Ok(())
     }
 }

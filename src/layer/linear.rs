@@ -1089,7 +1089,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> QuantizedLinearLayer
         let bias = device.specialization_bias(bias)?;
 
         let (scale,shift,input_scale,max_input,qunits,qbias) = {
-            device.quantization(&units, &bias, parent.input_max())?
+            device.quantization(&units, &bias, parent.input_scale(),parent.input_max())?
         };
 
         Ok(QuantizedLinearLayer {
@@ -1152,7 +1152,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> Persistence<TextFile
         let bias = self.device.specialization_bias(bias)?;
 
         let (scale,shift,input_scale,max_input,qunits,qbias) = {
-            self.device.quantization(&units, &bias, self.parent.input_max())?
+            self.device.quantization(&units, &bias, self.parent.input_scale(),self.parent.input_max())?
         };
 
         self.units = units;
@@ -1233,7 +1233,7 @@ impl<T,U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> Persistence<T,Line
         let bias = self.device.specialization_bias(bias)?;
 
         let (scale,shift,input_scale,max_input,qunits,qbias) = {
-            self.device.quantization(&units, &bias, self.parent.input_max())?
+            self.device.quantization(&units, &bias, self.parent.input_scale(), self.parent.input_max())?
         };
 
         self.units = units;
@@ -1605,7 +1605,7 @@ impl<U,W,C,BC,P,D,I,PI,LI,OP,const NI:usize,const NO:usize> UpdateWeight
         let r = self.parent.update_weight(s,batch_size)?;
 
         let (scale,shift,input_scale,max_input,qunits,qbias) = {
-            self.device.quantization(&self.units, &self.bias, self.parent.input_max())?
+            self.device.quantization(&self.units, &self.bias, self.parent.input_scale(), self.parent.input_max())?
         };
 
         self.scale = scale;
@@ -2641,7 +2641,7 @@ impl<U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> Bridge
 impl<T,U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> Quantization<T,Linear> for QuantizedEvaluationLinearLayer<U,W,C,BC,P,D,I,PI,RI,NI,NO>
     where T: LinearPersistence<f32>,
           P: ForwardAll<Input=I,Output=PI> +
-             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32> + Quantization<T,Linear>,
+             InputTensorScalar + OutputTensorScalar + InputMax<Scalar=f32> + InputScale + Quantization<T,Linear>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           W: Default + Clone + Copy + Debug + Send + Sync + 'static,
           I: Debug + Send + Sync,
@@ -2676,7 +2676,7 @@ impl<T,U,W,C,BC,P,D,I,PI,RI,const NI:usize,const NO:usize> Quantization<T,Linear
         let bias = self.device.specialization_bias(bias)?;
 
         let (scale,shift,input_scale,max_input,qunits,qbias) = {
-            self.device.quantization(&units, &bias, self.parent.input_max())?
+            self.device.quantization(&units, &bias, self.parent.input_scale(), self.parent.input_max())?
         };
 
         self.units = qunits;

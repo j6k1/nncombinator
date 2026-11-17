@@ -226,14 +226,14 @@ pub trait DeviceQuantizedLinearQuantization<U,W,T,B,I,const NI: usize,const NO: 
     /// # Arguments
     /// * `units` - unit weights
     /// * `bias` - bias weights
-    /// * `shift` - shift value
+    /// * `input_scale` - scale value of parent layer output
     /// * `max_input_value` - maximum value of the input
     ///
     /// # Errors
     ///
     /// This function may return the following errors
     /// * [`TrainingError`]
-    fn quantization(&self, units:&T, bias:&B, input_max:f32)
+    fn quantization(&self, units:&T, bias:&B, input_scale: f32, input_max:f32)
                     -> Result<(f32,usize,f32,f32,
                                <T as Quantizable<W>>::Quantized,
                                <B as Quantizable<W>>::Quantized), SpecializationError>;
@@ -1377,7 +1377,7 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinearQuantization<U,
           Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO> {
 
     #[inline]
-    fn quantization(&self, units: &Arr2<f32, NI, NO>, bias: &Arr<f32, NO>, input_max: f32)
+    fn quantization(&self, units: &Arr2<f32, NI, NO>, bias: &Arr<f32, NO>, input_scale: f32, input_max: f32)
                     -> Result<(f32, usize, f32, f32, <Arr2<f32, NI, NO> as Quantizable<W>>::Quantized, <Arr<f32, NO> as Quantizable<W>>::Quantized), SpecializationError> {
         let mut qunits:Arr2<W,NI,NO> = Arr2::new();
         let mut qbias:Arr<W,NO> = Arr::new();
@@ -1418,15 +1418,11 @@ impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinearQuantization<U,
 
         let shift = (raw_next_input_max / U::max_value().assume() as f32).max(1.0).log2().ceil() as usize;
 
-        let scale_input = input_max / U::max_value().assume() as f32;
-
         let next_input_max = raw_next_input_max / (1 << shift) as f32;
 
-        let scale = scale * (1 << shift) as f32;
+        let scale = input_scale / scale / (1 << shift) as f32;
 
-        let scale_input = scale_input * (1 << shift) as f32;
-
-        Ok((scale,shift,scale_input,next_input_max,qunits.to_column_major(),qbias))
+        Ok((1. / scale,shift,scale,next_input_max,qunits.to_column_major(),qbias))
     }
 }
 impl<U,W,I,const NI: usize,const NO: usize> DeviceQuantizedLinear<U,W,Arr2<f32,NI,NO>,Arr<f32,NO>,I,NI,NO> for DeviceCpu
@@ -1850,7 +1846,7 @@ pub mod simd {
               for<'a> VectorView<'a,W,NO>: From<&'a Vector<'a,W,NO,BE>>,
               Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO> {
         #[inline]
-        fn quantization(&self, units: &Arr2<f32, NI, NO>, bias: &Arr<f32, NO>, input_max: f32)
+        fn quantization(&self, units: &Arr2<f32, NI, NO>, bias: &Arr<f32, NO>, input_scale: f32, input_max: f32)
                         -> Result<(f32, usize, f32, f32, <Arr2<f32, NI, NO> as Quantizable<W>>::Quantized, <Arr<f32, NO> as Quantizable<W>>::Quantized), SpecializationError> {
             let mut qunits:Arr2<W,NI,NO> = Arr2::new();
             let mut qbias:Arr<W,NO> = Arr::new();
@@ -1891,15 +1887,11 @@ pub mod simd {
 
             let shift = (raw_next_input_max / U::max_value().assume() as f32).max(1.0).log2().ceil() as usize;
 
-            let scale_input = input_max / U::max_value().assume() as f32;
-
             let next_input_max = raw_next_input_max / (1 << shift) as f32;
 
-            let scale = scale * (1 << shift) as f32;
+            let scale = input_scale / scale / (1 << shift) as f32;
 
-            let scale_input = scale_input * (1 << shift) as f32;
-
-            Ok((scale,shift,scale_input,next_input_max,qunits.to_column_major(),qbias))
+            Ok((1. / scale,shift,scale,next_input_max,qunits.to_column_major(),qbias))
         }
     }
     impl<U, W, BE, I, const NI: usize, const NO: usize> DeviceQuantizedLinear<U, W, Arr2<f32, NI, NO>, Arr<f32, NO>, I, NI, NO> for DeviceSimd<BE>

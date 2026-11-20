@@ -1570,7 +1570,7 @@ pub mod simd {
     use simdoperator::{AccMatrix, AccVector, ColumnMajorMatrix, Matrix, MatrixMut, MatrixView, OwnedColumnMajorMatrix, OwnedMatrix, OwnedVector, Vector, VectorView};
     use simdoperator::backend::autoselect::AutoSelect;
     use simdoperator::backend::avx2::Avx2;
-    use simdoperator::backend::common::{AddOperator, Backend, DemoteOperator, ShrOperator};
+    use simdoperator::backend::common::{AddOperator, Backend, DemoteOperator, ScalarAddOperator, ShrOperator};
     use simdoperator::traits::{BinaryOperator, BinaryQuery, Product, SimdBinaryOperator, SimdCombinationQueryVector, ToColumnMajor, ToSimdBinaryOperator};
     use crate::cast::Assume;
     use crate::device::linear::{DeviceLinear, DeviceQuantizedLinear, DeviceQuantizedLinearBase, DeviceQuantizedLinearEvaluation, DeviceQuantizedLinearQuantization};
@@ -1785,7 +1785,11 @@ pub mod simd {
               DemoteOperator<ShrOperator<AddOperator<i32, W, i32>, i32>, U>: BinaryOperator<Lhs=i32, Rhs=W, Output=U>,
               DemoteOperator<ShrOperator<AddOperator<i32, W, i32>, i32>, U>: ToSimdBinaryOperator<Avx2>,
               <DemoteOperator<ShrOperator<AddOperator<i32, W, i32>, i32>, U> as ToSimdBinaryOperator<Avx2>>::NativeOperator: SimdBinaryOperator<Avx2, i32, W, ScalarOutput=U>,
-              Avx2: SimdCombinationQueryVector<<DemoteOperator<ShrOperator<AddOperator<i32, W, i32>, i32>, U> as ToSimdBinaryOperator<Avx2>>::NativeOperator, i32, W, U> {
+              DemoteOperator<ShrOperator<ScalarAddOperator<AddOperator<i32, W, i32>, i32>, i32>, U>: BinaryOperator<Lhs=i32, Rhs=W, Output=U>,
+              DemoteOperator<ShrOperator<ScalarAddOperator<AddOperator<i32, W, i32>, i32>, i32>, U>: ToSimdBinaryOperator<Avx2>,
+              <DemoteOperator<ShrOperator<ScalarAddOperator<AddOperator<i32, W, i32>, i32>, i32>, U> as ToSimdBinaryOperator<Avx2>>::NativeOperator: SimdBinaryOperator<Avx2, i32, W, ScalarOutput=U>,
+              Avx2: SimdCombinationQueryVector<<DemoteOperator<ShrOperator<AddOperator<i32, W, i32>, i32>, U> as ToSimdBinaryOperator<Avx2>>::NativeOperator, i32, W, U>,
+              Avx2: SimdCombinationQueryVector<<DemoteOperator<ShrOperator<ScalarAddOperator<AddOperator<i32, W, i32>, i32>, i32>, U> as ToSimdBinaryOperator<Avx2>>::NativeOperator, i32, W, U> {
         type Output = Arr<U,NO>;
         #[inline]
         fn forward_linear<'a>(&self, shift: usize, bias: &Arr<W,NO>, units: &ColumnMajorArr2<W,NI,NO>, input: &'a I) -> Result<Arr<U,NO>, EvaluateError> {
@@ -1803,11 +1807,21 @@ pub mod simd {
 
             let o = input.product(units);
 
-            let operator = AddOperator::new().compose(|p| {
-                ShrOperator::new(p,shift)
-            }).compose(|p| DemoteOperator::new(p));
+            let o = if shift > 0 {
+                let operator = AddOperator::new().compose(|p| {
+                    ScalarAddOperator::new(p, 1 << (shift - 1))
+                }).compose(|p| {
+                    ShrOperator::new(p, shift)
+                }).compose(|p| DemoteOperator::new(p));
 
-            let o = o.query(bias,operator);
+                o.query(bias, operator)
+            } else {
+                let operator = AddOperator::new().compose(|p| {
+                    ShrOperator::new(p, shift)
+                }).compose(|p| DemoteOperator::new(p));
+
+                o.query(bias, operator)
+            };
 
             Ok(Box::<[U]>::from(o).try_into()?)
         }
@@ -1865,7 +1879,7 @@ pub mod simd {
             }
 
             for (&w,q) in bias.iter().zip(qbias.iter_mut()) {
-                *q = (w / scale).round().clamp(
+                *q = (w / (input_scale * scale)).round().clamp(
                     -W::max_value().assume().assume() as f32,
                     W::max_value().assume().assume() as f32
                 ).assume();
@@ -1926,10 +1940,14 @@ pub mod simd {
               for<'a> AccVector<i32,NO,BE>: BinaryQuery<Vector<'a,W,NO,BE>,i32,W,U,Output=AccVector<U,NO,BE>>,
               for<'a> VectorView<'a,W,NO>: From<&'a Vector<'a,W,NO,BE>>,
               Self: DeviceReduce<SerializedVec<f32,Arr<f32,NO>>,Arr<f32,NO>,f32,NO>,
-              DemoteOperator<ShrOperator<AddOperator<i32,W,i32>,i32>,U>: BinaryOperator<Lhs=i32,Rhs=W,Output=U>,
-              DemoteOperator<ShrOperator<AddOperator<i32,W,i32>,i32>,U>: ToSimdBinaryOperator<Avx2>,
-              <DemoteOperator<ShrOperator<AddOperator<i32,W,i32>,i32>,U> as ToSimdBinaryOperator<Avx2>>::NativeOperator: SimdBinaryOperator<Avx2,i32,W,ScalarOutput=U>,
-              Avx2: SimdCombinationQueryVector<<DemoteOperator<ShrOperator<AddOperator<i32,W,i32>,i32>,U> as ToSimdBinaryOperator<Avx2>>::NativeOperator,i32,W,U> {
+              DemoteOperator<ShrOperator<AddOperator<i32, W, i32>, i32>, U>: BinaryOperator<Lhs=i32, Rhs=W, Output=U>,
+              DemoteOperator<ShrOperator<AddOperator<i32, W, i32>, i32>, U>: ToSimdBinaryOperator<Avx2>,
+              <DemoteOperator<ShrOperator<AddOperator<i32, W, i32>, i32>, U> as ToSimdBinaryOperator<Avx2>>::NativeOperator: SimdBinaryOperator<Avx2, i32, W, ScalarOutput=U>,
+              DemoteOperator<ShrOperator<ScalarAddOperator<AddOperator<i32, W, i32>, i32>, i32>, U>: BinaryOperator<Lhs=i32, Rhs=W, Output=U>,
+              DemoteOperator<ShrOperator<ScalarAddOperator<AddOperator<i32, W, i32>, i32>, i32>, U>: ToSimdBinaryOperator<Avx2>,
+              <DemoteOperator<ShrOperator<ScalarAddOperator<AddOperator<i32, W, i32>, i32>, i32>, U> as ToSimdBinaryOperator<Avx2>>::NativeOperator: SimdBinaryOperator<Avx2, i32, W, ScalarOutput=U>,
+              Avx2: SimdCombinationQueryVector<<DemoteOperator<ShrOperator<AddOperator<i32, W, i32>, i32>, U> as ToSimdBinaryOperator<Avx2>>::NativeOperator, i32, W, U>,
+              Avx2: SimdCombinationQueryVector<<DemoteOperator<ShrOperator<ScalarAddOperator<AddOperator<i32, W, i32>, i32>, i32>, U> as ToSimdBinaryOperator<Avx2>>::NativeOperator, i32, W, U> {
         type Scale = Arr<f32,NO>;
         type RealInput = Arr<f32,NI>;
         type BatchRealInput = SerializedVec<f32,Arr<f32,NI>>;

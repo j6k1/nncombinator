@@ -106,8 +106,7 @@ impl<U,P,A,DA,I,PI,LI,D,const N:usize> Persistence<TextFilePersistence,Specializ
     }
 }
 impl<T,U,P,A,DA,I,PI,LI,D,const N:usize> Persistence<T,Linear> for ActivationLayer<U,P,A,DA,I,PI,LI,D,N>
-    where T: LinearPersistence<U>,
-          P: ForwardAll<Input=I,Output=PI> + Persistence<T,Linear> +
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<T,Linear> +
              PreTrain + OutputTensorScalar<Scalar=U>,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U>,

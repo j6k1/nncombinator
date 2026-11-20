@@ -81,8 +81,7 @@ impl<U,SO,P,I,PI,CI,D> Persistence<TextFilePersistence,Specialized> for Dequanti
     }
 }
 impl<T,U,SO,P,I,PI,CI,D> Persistence<T,Linear> for DequantizeLayer<U, SO, P, I, PI, CI, D>
-    where T: LinearPersistence<U>,
-          P: ForwardAll<Input=I,Output=PI> + Persistence<T,Linear> +
+    where P: ForwardAll<Input=I,Output=PI> + Persistence<T,Linear> +
              BackwardAll<SO,LossInput=CI,LossInputScalar=SO> + PreTrainBase<PreOutput=PI> + PreTrain +
              InputTensorScalar + OutputTensorScalar,
           U: Default + Clone + Copy + Debug + Send + Sync + 'static,

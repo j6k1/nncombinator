@@ -609,8 +609,7 @@ impl<U,O,LI,D,const M: usize,const N:usize> Persistence<TextFilePersistence,Spec
     }
 }
 impl<T,U,O,LI,D,const M: usize,const N: usize> Persistence<T,Linear> for QuantizedInputLayer<U,O,LI,D,M,N>
-    where T: LinearPersistence<U>,
-          U: Default + Clone + Copy + Debug + Send + Sync + 'static,
+    where U: Default + Clone + Copy + Debug + Send + Sync + 'static,
           D: Device<U> + DeviceInput<U,O>,
           O: Debug + BatchDataType + Ones + 'static,
           <O as BatchDataType>::Type: Debug + 'static {

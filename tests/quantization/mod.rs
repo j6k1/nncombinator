@@ -17,7 +17,7 @@ use nncombinator::layer::output::LinearOutputLayer;
 use nncombinator::layer::quantization::DequantizeLayerBuilder;
 use nncombinator::lossfunction::CrossEntropyMulticlass;
 use nncombinator::optimizer::AdamWBuilder;
-use nncombinator::persistence::BinFilePersistence;
+use nncombinator::persistence::{BinFilePersistence, Persistence, SaveToFile};
 use crate::common::{assert_backward_all, assert_batch_backward, assert_batch_forward, assert_batch_loss, assert_batch_pre_train, assert_forward_all, assert_loss, assert_pre_train, assert_update_weight};
 
 #[test]
@@ -456,6 +456,15 @@ fn test_mnist_for_quantization_cpu_for_simd() {
         println!("loss_average = {}", total_loss as f32 / count as f32);
     }
 
+    /*
+    let nn_path = Path::new("data").join("tmp").join("mnist_for_quantization_cpu_for_simd.bin");
+
+    let mut p = BinFilePersistence::new(&nn_path).unwrap();
+
+    net.save(&mut p).unwrap();
+
+    p.save(&nn_path).unwrap();
+    */
     let elapsed = start_time.elapsed();
 
     let elapsed = elapsed.as_secs() as u64 * 1000 + elapsed.subsec_millis() as u64;

@@ -106,7 +106,7 @@ impl<U,P,D,I,PI,const N:usize> Persistence<TextFilePersistence,Specialized> for 
     }
 }
 impl<T,U,P,D,I,PI,const N:usize> Persistence<T,Linear> for LinearOutputLayer<U,P,D,I,PI,N>
-    where T: LinearPersistence<U> + VerifyEof,
+    where T: VerifyEof,
           P: ForwardAll<Input=I,Output=PI> +
              BackwardAll<U,LossInput=PI> +
              PreTrainBase<PreOutput=PI> + PreTrain + Persistence<T,Linear> +
